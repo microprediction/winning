@@ -469,10 +469,108 @@ function bulkWindow(Mall, sd, points, delta, fn = null) {
       `further out than ${points} points can resolve, so the window is ` +
       `${(hi - lo).toPrecision(3)} units wide at the relaxed delta and ` +
       "exact there. Raise points= to tighten it.");
+  if (!fn || fn === BASES.normal)
+    [lo, hi, points] = rareWinnerEdges(muLo, muHi, sd, lo, hi, points);
   const out = new Array(points);
   const step = (hi - lo) / (points - 1);
   for (let t = 0; t < points; t++) out[t] = lo + t * step;
   return out;
+}
+
+/* Post-check of the bulk window's edges against each runner's OWN win
+   integrand -- port of python's races._rare_winner_edges (#97). The bulk
+   quantiles bound every share's error by delta absolutely, not
+   relatively: at mu = [0, 20, 40] the middle runner wins near x = 10,
+   past the right edge, and came back at 0.099 of its 1.04e-45 at any
+   point count (#723). For a log-concave (normal) integrand the mass
+   beyond an edge is at most g(edge) / |slope| (tangent bound) and the
+   mass inside at least a chord integral next to the edge (best of a
+   geometric ladder); a runner whose ratio reaches EDGE_REL_TOL, or whose
+   integrand still rises at the edge, is truncated. The edge then moves
+   out until every runner passes, the point count growing to keep the
+   spacing, up to EDGE_POINTS_CAP times the request; past the cap the
+   window stops there with a warning. One O(7 n) probe per edge:
+   ordinary fields pass it and their lattice is unchanged. */
+const EDGE_REL_TOL = 1e-6, EDGE_POINTS_CAP = 4;
+const LOG_SQRT_2PI = 0.5 * Math.log(2 * Math.PI);
+let EDGE_WARNED = false;
+function rareWinnerEdges(muLo, muHi, sd, lo, hi, points) {
+  const n = sd.length;
+  const width0 = hi - lo;
+  if (!(width0 > 0) || n < 2) return [lo, hi, points];
+  const spacing = width0 / Math.max(points - 1, 1);
+  const maxWidth = spacing * (EDGE_POINTS_CAP * points - 1);
+  const ws = [], logWs = [];
+  for (let k = 0; k < 6; k++) { ws.push(0.5 * width0 * 0.25 ** k); logWs.push(Math.log(ws[k])); }
+  const logSd = sd.map(Math.log);
+  // log g_i = log f_i + sum_{j != i} log S_j and its slope, at x
+  const terms = (x, m) => {
+    const z = new Array(n), logS = new Array(n), logphi = new Array(n), haz = new Array(n);
+    let sumLogS = 0, sumHaz = 0;
+    for (let i = 0; i < n; i++) {
+      z[i] = (x - m[i]) / sd[i];
+      logS[i] = logndtr(-z[i]);
+      logphi[i] = -0.5 * z[i] * z[i] - LOG_SQRT_2PI;
+      haz[i] = Math.exp(logphi[i] - logS[i]) / sd[i];
+      sumLogS += logS[i]; sumHaz += haz[i];
+    }
+    const logg = new Array(n), slope = new Array(n);
+    for (let i = 0; i < n; i++) {
+      logg[i] = logphi[i] - logSd[i] + sumLogS - logS[i];
+      slope[i] = -z[i] / sd[i] - sumHaz + haz[i];
+    }
+    return { logg, slope };
+  };
+  const bad = (edge, m, sign) => {
+    // sign +1: right edge (the integrand must FALL outward), -1: left
+    const at = terms(edge, m);
+    const inner = ws.map(w => terms(edge - sign * w, m).logg);
+    for (let i = 0; i < n; i++) {
+      const g = at.logg[i], out = sign * at.slope[i];
+      if (out >= 0) return true;
+      const tail = g - Math.log(Math.max(-out, 1e-300));
+      let cmax = -Infinity;
+      for (let k = 0; k < ws.length; k++) {
+        const gi = inner[k][i], d = Math.abs(gi - g);
+        const c = d < 1e-12
+          ? g + logWs[k]
+          : Math.max(gi, g) + logWs[k] + Math.log(-Math.expm1(-d)) - Math.log(Math.max(d, 1e-300));
+        cmax = Math.max(cmax, c);
+      }
+      // NaN (an unrepresentable field) is not evidence of truncation
+      if (tail - cmax >= Math.log(EDGE_REL_TOL)) return true;
+    }
+    return false;
+  };
+  let newLo = lo, newHi = hi;
+  for (const [sign, m] of [[+1, muHi], [-1, muLo]]) {
+    let edge = sign > 0 ? newHi : newLo;
+    if (!bad(edge, m, sign)) continue;
+    let step = maxOf(sd);
+    for (let it = 0; it < 60; it++) {
+      const cand = edge + sign * step;
+      if (Math.max(newHi, cand) - Math.min(newLo, cand) > maxWidth) {
+        edge = sign > 0 ? newLo + maxWidth : newHi - maxWidth;
+        if (!EDGE_WARNED && typeof console !== "undefined") {
+          EDGE_WARNED = true;
+          console.warn(
+            "bulk window: a rare winner's integrand extends past the window " +
+            `even at ${EDGE_POINTS_CAP}x the point budget, so its share is ` +
+            "truncated (relatively; the absolute error stays below delta). " +
+            'Raise points= or use window: "span" for relative accuracy on ' +
+            "such shares.");
+        }
+        break;
+      }
+      edge = cand;
+      if (!bad(edge, m, sign)) break;
+      step *= 2;
+    }
+    if (sign > 0) newHi = edge; else newLo = edge;
+  }
+  if (newLo === lo && newHi === hi) return [lo, hi, points];
+  const pts = Math.ceil((newHi - newLo) / spacing) + 1;
+  return [newLo, newHi, Math.max(points, Math.min(pts, EDGE_POINTS_CAP * points))];
 }
 
 /* Each race API declares its OWN keys: one shared union let each accept

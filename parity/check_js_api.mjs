@@ -2754,5 +2754,16 @@ accepts("dividendImpliedAbility keeps the favourite first at unit 0.1 (#649)",
   } finally { console.warn = keep; }
 }
 
+{
+  // the bulk window bracketed only the winner envelope: the middle runner
+  // of [0, 20, 40] wins near x = 10, past its right edge, and came back at
+  // 0.099 of Phi(-20/sqrt 2) at any point count (#723, python's #97)
+  const exact = 1.0442437918812723e-45;
+  let worst = 0;
+  for (const points of [257, 4097])
+    worst = Math.max(worst, Math.abs(races.raceProbabilities([0, 20, 40], { D: [1, 1, 1], points })[1] / exact - 1));
+  holds("default bulk window keeps a 1e-45 middle runner (#723)", worst < 1e-6, worst.toExponential(2));
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");
