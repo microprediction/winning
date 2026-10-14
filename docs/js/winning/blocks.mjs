@@ -438,6 +438,50 @@ export function blockRaceProbabilities(mu, cluster, loading, D, opts = {}) {
   return checkedMass(p, "block race");
 }
 
+/* (V, D) of a two-runner Blocks, Nested or Tree race as a factor model
+   with the same covariance, after the grammar's own doors (port of
+   python's structures._pair_factor, #86): one column block per cluster
+   holding the member loadings, Nested's coupling scaled by gamma, and one
+   column per tree node holding its strength for every runner beneath. */
+export function pairFactor(mu, s) {
+  const where = `${s.kind} race`;
+  if (s.kind === "Tree") {
+    const a = blockArgs(mu, treeCluster(s), s.loading, s.D, where);
+    if (a.L[0].length > 1)
+      throw new Error("tree races take scalar (rank-one) leaf-cluster loadings; rank-r " +
+                      "leaf effects are supported by the block grammar only.");
+    const inv = clusterIndex(a.cluster);
+    const nC = Math.max(...inv) + 1;
+    const tv = validateTree(s.parent, s.strength, nC, where);
+    const nT = tv.parent.length;
+    const V = a.mu.map((_, i) => {
+      const row = new Array(nC + nT).fill(0);
+      row[inv[i]] = a.L[i][0];
+      for (let u = inv[i]; tv.parent[u] >= 0; u = tv.parent[u])
+        row[nC + tv.parent[u]] = tv.strength[tv.parent[u]];
+      return row;
+    });
+    return { V, D: a.D };
+  }
+  if (s.kind !== "Blocks" && s.kind !== "Nested") throw new Error("unknown structure " + s.kind);
+  const a = blockArgs(mu, s.cluster, s.loading, s.D, where);
+  const inv = clusterIndex(a.cluster), r = a.L[0].length;
+  const nC = Math.max(...inv) + 1;
+  const V = a.L.map((li, i) => {
+    const row = new Array(nC * r).fill(0);
+    for (let j = 0; j < r; j++) row[inv[i] * r + j] = li[j];
+    return row;
+  });
+  if (s.kind === "Nested") {
+    asGamma(s.gamma, "nestedRaceProbabilities");
+    if (s.coupling != null && s.gamma !== 0) {
+      const g = canonicalCoupling(asLoadings(s.coupling, 2, "coupling"));
+      g.forEach((gi, i) => { for (const v of gi) V[i].push(s.gamma * v); });
+    }
+  }
+  return { V, D: a.D };
+}
+
 function asGamma(gamma, where) {
   if (typeof gamma !== "number" || !Number.isFinite(gamma))
     throw new Error(`${where}: gamma must be a finite number; got ${typeof gamma === "string" ? JSON.stringify(gamma) : String(gamma)}`);

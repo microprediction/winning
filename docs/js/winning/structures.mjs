@@ -2,7 +2,7 @@
 import { raceProbabilities, abilitiesFromRace, _setDispatch } from "./races.mjs";
 import { blockRaceProbabilities, nestedRaceProbabilities, treeRaceProbabilities,
          abilitiesFromBlockRace, validateTree, withoutCommonShock,
-         treeCluster, withTrialMassTolerance } from "./blocks.mjs";
+         treeCluster, withTrialMassTolerance, pairFactor } from "./blocks.mjs";
 import { mean, asIterations, asTolerance, asFiniteVector, isVector, rescaledTarget,
          asLoadings, asIdio, gaugeCenter } from "./core.mjs";
 
@@ -226,6 +226,13 @@ function dp(mu, s, opts) {
     return raceProbabilities(mu, { V: s.V, D: s.D, base, points, returnSlopes, window: win, delta });
   refuseHierarchical(s.kind, opts);
   if (returnSlopes) throw new Error("returnSlopes: Independent/Factor only");
+  if (isVector(mu) && mu.length === 2) {
+    // a two-runner Gaussian race is one contrast under every grammar: as
+    // its factor equivalent it takes the closed form (python's dispatch);
+    // the hierarchical lattices put a 20-sd pair at 0.107x (#86)
+    const f = pairFactor(mu, s);
+    return raceProbabilities(mu, { V: f.V, D: f.D, points });
+  }
   if (s.kind === "Blocks")
     return blockRaceProbabilities(mu, s.cluster, s.loading, s.D, { points, qa });
   if (s.kind === "Nested")

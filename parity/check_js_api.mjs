@@ -2910,5 +2910,40 @@ accepts("dividendImpliedAbility keeps the favourite first at unit 0.1 (#649)",
   holds("a two-cluster common part still prices (#471)", gap(q0, q1) > 1e-3);
 }
 
+{
+  // a normal pair is one Gaussian contrast: every grammar takes the
+  // closed form, as python and R do; Blocks/Nested/Tree integrated their
+  // own lattices and put a 20-sd pair at 0.098x (#86)
+  const D = [1, 1];
+  const models = [
+    ["V/D", { D }],
+    ["Independent", { structure: structures.Independent(D) }],
+    ["Factor", { structure: structures.Factor([[0], [0]], D) }],
+    ["Blocks", { structure: structures.Blocks([0, 1], [0, 0], D) }],
+    ["Nested", { structure: structures.Nested([0, 1], [0, 0], D, [0, 0], 0.5) }],
+    ["Tree", { structure: structures.Tree([0, 1], [0, 0], D, [2, 2, -1], [0, 0, 0]) }],
+  ];
+  let worst = 0, perm = 0;
+  for (const gap of [16, 20]) {
+    const exact = core.ndtr(-gap / Math.SQRT2);
+    for (const [, o] of models) {
+      const p = races.raceProbabilities([0, gap], { ...o, points: 8193 });
+      const q = races.raceProbabilities([gap, 0], { ...o, points: 8193 });
+      worst = Math.max(worst, Math.abs(p[1] / exact - 1));
+      perm = Math.max(perm, Math.abs(p[0] - q[1]), Math.abs(p[1] - q[0]));
+    }
+  }
+  holds("every grammar prices a 16/20-sd pair tail exactly (#86)", worst < 1e-12, worst.toExponential(2));
+  holds("the pair is exactly permutation-equivariant (#86)", perm === 0, String(perm));
+  const J = polish.raceJacobian([0, 12 * Math.SQRT2], { D, points: 501 });
+  const d = Math.exp(-72) / Math.sqrt(2 * Math.PI) / Math.SQRT2;
+  holds("raceJacobian of a 12-sd pair is the closed form's (#86)",
+        Math.abs(J[0][1] / d - 1) < 1e-12 && J[0][0] === -J[0][1], J[0][1].toExponential(6));
+  const Jb = polish.raceJacobian([0, 12 * Math.SQRT2], { structure: structures.Blocks([0, 1], [0, 0], D) });
+  holds("a structured pair Jacobian is the closed form's too (#86)", Math.abs(Jb[0][1] / d - 1) < 1e-12);
+  rejects(races.raceProbabilities, [[0, 1], { structure: structures.Tree([0, 1, 2], [1, 1, 1], [1, 1, 1], [3, 3, 4, 4, -1], [0, 0, 0, 0.5, 0.7]) }],
+          "a three-leaf Tree is refused for a pair (#86)");
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");

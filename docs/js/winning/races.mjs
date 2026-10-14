@@ -709,6 +709,46 @@ export function collapseStructure(structure, V, D, F, W, where) {
   return { structure, V, D };
 }
 
+/* A two-runner normal race is ONE Gaussian contrast, priced in closed
+   form as python's race_probabilities (and R) do: the lattice put a
+   20-sd pair tail at 0.107x its exact 1.04e-45 (#86). Under a caller's
+   nodes F/W the contrast variance is dV' Cov_W(F) dV + D0 + D1, with the
+   node mean shifting the contrast; the default rule stands for the
+   standard normal, so dV' dV. Each tail directly (ndtr(u), ndtr(-u)):
+   full relative precision, and exactly permutation-equivariant. */
+function pairClosedForm(st, nodesGiven, returnSlopes) {
+  const { mu, V, D, F, W } = st;
+  const dV = V[0].map((v, j) => v - V[1][j]);
+  let sdD, shift = 0;
+  if (nodesGiven) {
+    // relative weights, through the max (#415)
+    let wmax = 0;
+    for (const w of W) wmax = Math.max(wmax, w);
+    const wr = W.map(w => w / wmax), ws = wr.reduce((a, b) => a + b, 0);
+    const proj = F.map(f => f.reduce((acc, x, j) => acc + x * dV[j], 0));
+    for (let q = 0; q < F.length; q++) shift += (wr[q] / ws) * proj[q];
+    let v = D[0] + D[1];
+    for (let q = 0; q < F.length; q++) v += (wr[q] / ws) * (proj[q] - shift) ** 2;
+    sdD = Math.sqrt(Math.max(v, 0));
+  } else {
+    // in units of the largest term: no overflow, no absolute floor (#100)
+    let big = Math.max(Math.sqrt(D[0]), Math.sqrt(D[1]));
+    for (const v of dV) big = Math.max(big, Math.abs(v));
+    let v = 0;
+    if (big > 0) {
+      for (const x of dV) v += (x / big) ** 2;
+      v += D[0] / big / big + D[1] / big / big;
+    }
+    sdD = big * Math.sqrt(v);
+  }
+  if (!(sdD > 0)) sdD = 1e-150;     // an exactly deterministic contrast
+  const u = (mu[1] - mu[0] + shift) / sdD;
+  const p = [ndtr(u), ndtr(-u)];
+  if (!returnSlopes) return p;
+  const dens = npdf(u) / sdD;       // dp_i/dmu_i, equal and negative
+  return { p, slopes: [-dens, -dens] };
+}
+
 export function raceProbabilities(mu, opts = {}) {
   const { V = null, D = null, F = null, W = null, base = "normal",
           points = 257, returnSlopes = false, window: win = "bulk",
@@ -725,6 +765,10 @@ export function raceProbabilities(mu, opts = {}) {
     return dispatchProbabilities(mu, c.structure, { base, points, qa, qf, returnSlopes, window: win, delta });
   }
   const st = setup(mu, c.V, c.D, F, W, base);
+  if (base === "normal" && st.mu.length === 2) {
+    asPoints(points);
+    return pairClosedForm(st, F != null, returnSlopes);
+  }
   const n = st.mu.length;
   const sd = st.D.map(Math.sqrt);
   const Mall = condMeans(st.mu, st.V, st.F);
