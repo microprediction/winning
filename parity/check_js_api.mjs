@@ -3067,5 +3067,73 @@ accepts("dividendImpliedAbility keeps the favourite first at unit 0.1 (#649)",
         Math.abs(big.contrastResidualMax / d.contrastResidualMax - 1) < 1e-12, String(big.contrastResidualMax));
 }
 
+{
+  // Round 7: ordinary inputs next to each fix are unchanged. Values pinned
+  // from origin/main 9b29ddef (before #722/#86/#725/#461/#505 here).
+  const close = (a, b) => a.length === b.length && a.every((x, i) => Math.abs(x - b[i]) <= 1e-15 * Math.max(1, Math.abs(b[i])));
+  const mu5 = [-0.4, -0.1, 0.2, 0.5, 0.8], cl = [0, 0, 1, 1, 2], ld = [0.4, 0.2, 0.3, 0.5, 0.1];
+  const D5 = [0.7, 0.8, 0.9, 1, 1.1], g = [-0.4, 0.1, 0.4, -0.2, 0.1];
+  accepts("ordinary Nested forward unchanged (#722)",
+          () => blocks.nestedRaceProbabilities(mu5, cl, ld, D5, { coupling: g, gamma: 0.8 }),
+          p => close(p, [0.38432227045253287, 0.2369657345443022, 0.1832837205047436, 0.12254165848578556, 0.07288661601263577]), p => String(p));
+  accepts("ordinary Nested inverse unchanged (#722)",
+          () => races.abilitiesFromRace([0.3, 0.25, 0.2, 0.15, 0.1], { structure: structures.Nested(cl, ld, D5, g, 0.8) }),
+          m => close(m, [-0.3591375700446748, -0.28170740253620297, -0.023065245258169144, 0.21186843954857346, 0.4520417782904735]), m => String(m));
+  // python's nested_race_probabilities (fixed in #733) at coupling 1e308,
+  // gamma 0.8e-308, points 257, qa 9, qf 15
+  accepts("Nested at coupling 1e308 matches python (#722)",
+          () => blocks.nestedRaceProbabilities(mu5, cl, ld, D5, { coupling: g.map(x => x * 1e308), gamma: 0.8 / 1e308, points: 257, qa: 9, qf: 15 }),
+          p => p.every((x, i) => Math.abs(x - [0.38432227045253237, 0.2369657345443024, 0.1832837205047439,
+                                                0.1225416584857855, 0.07288661601263582][i]) < 1e-14), p => String(p));
+  accepts("a W < L classic field is unchanged (#725)",
+          () => classic.abilityImpliedStatePrices([0, 0.7, 1.3, 2.1], classic.skewNormalDensity(200, 0.1, { a: 0 }), { unit: 0.1 }),
+          p => close(p, [0.6049811058833535, 0.2601479044907512, 0.1086783458341974, 0.026192643791697244]), p => String(p));
+  accepts("a pair under a centred node law is unchanged (#86)",
+          () => races.raceProbabilities([0.3, -1.2], { V: [[0.4], [-0.3]], D: [1, 2], F: [[-1], [1]], W: [0.5, 0.5] }),
+          p => close(p, [0.21100713763708207, 0.7889928623629179]), p => String(p));
+  accepts("a rank-two V/D pair is unchanged (#86)",
+          () => races.raceProbabilities([0.3, -1.2], { V: [[0.4, 0.1], [-0.3, 0.2]], D: [0.5, 1.5] }),
+          p => close(p, [0.17139085557395572, 0.8286091444260443]), p => String(p));
+  accepts("an ordinary rescaledTarget is unchanged (#461)",
+          () => core.rescaledTarget([0.2, 0.3, 0.5]), x => close(x, [0.2, 0.3, 0.5]), x => String(x));
+  const B = [[0.8, 0.1], [0.4, -0.3], [-0.2, 0.6], [-0.5, -0.1]], DD = [0.4, 0.7, 0.5, 0.6];
+  const C4 = B.map((bi, i) => B.map((bj, j) => bi[0] * bj[0] + bi[1] * bj[1] + (i === j ? DD[i] : 0)));
+  accepts("an ordinary fitGrammar V/D is unchanged and spreads as {V, D} (#505)",
+          () => demo.fitGrammar(C4, 1, 1),
+          f => close(f.V.flat(), [0.7095358236959877, 0.3054231473674566, 0.5371510603993788, -0.37505008127009926, -0.5253351404855342, 0.4285964657625485, -0.7213517436098326, -0.3840532394829272]) && close(f.D, [0.2243577846045471, 0.39648769393078787, 0.4453730286243346, 0.2294107192843008])
+               && JSON.stringify(Object.keys({ ...f })) === '["V","D"]', f => JSON.stringify(f));
+  // the #505 convergence check stays quiet on ordinary covariances:
+  // sample covariances of true k-factor models (fixed seed) and the
+  // demo's dense generators, default and ipaf fits
+  const r = demo.rng(2026);
+  const sampleCov = (V, D, T) => {
+    const X = [];
+    for (let t = 0; t < T; t++) {
+      const f = V[0].map(() => r.n());
+      X.push(D.map((d, i) => V[i].reduce((a, v, q) => a + v * f[q], 0) + Math.sqrt(d) * r.n()));
+    }
+    const m = D.map((_, i) => X.reduce((a, x) => a + x[i], 0) / T);
+    return D.map((_, i) => D.map((_, q) => X.reduce((a, x) => a + (x[i] - m[i]) * (x[q] - m[q]), 0) / (T - 1)));
+  };
+  const Cs = [];
+  for (const n of [6, 10]) for (const k of [1, 2]) for (const T of [100, 500]) {
+    const V = Array.from({ length: n }, () => Array.from({ length: k }, () => 0.6 * r.n()));
+    Cs.push([k, sampleCov(V, Array.from({ length: n }, () => 0.3 + r.u()), T)]);
+  }
+  for (const gen of Object.values(demo.GENERATORS)) { const o = gen(10, demo.rng(5)); if (o.C) Cs.push([2, o.C]); }
+  const ow = console.warn; const loud = [];
+  console.warn = m => { if (String(m).includes("contrast")) loud.push(String(m)); };
+  let worst = 0, flagged = 0;
+  try {
+    for (const [k, C] of Cs) for (const f of [demo.fitGrammar(C), demo.fitGrammar(C, k, 0, { method: "ipaf" }),
+                                              demo.fitGrammar(C, k, 2, { method: "ipaf" })]) {
+      worst = Math.max(worst, f.contrastResidualMax);
+      if (f.ipaf && f.ipaf.contrastResidualMax > 1) flagged++;
+    }
+  } finally { console.warn = ow; }
+  holds(`the #505 contrast check is quiet on ${Cs.length} ordinary covariances (#505)`,
+        loud.length === 0 && flagged === 0 && worst < 1, `worst ${worst}`);
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");
