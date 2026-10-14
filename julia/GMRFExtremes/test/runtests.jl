@@ -344,6 +344,37 @@ end
     @test abs(excursion_probability(tiny, 1e-14) - GE.ndtr(-1.0)) < 1e-12
 end
 
+@testset "scale equivariance up to the top of the range (#363)" begin
+    # pad * sd used to overflow: max_cdf 0 at sd 1e308, argmax failed at 1e300
+    huge = GaussMarkovChain([0.0], 1e308, Float64[], Float64[])
+    @test abs(max_cdf(huge, 1e308) - GE.ndtr(1.0)) < 1e-12
+    @test abs(excursion_probability(huge, 1e308) - GE.ndtr(-1.0)) < 1e-12
+    @test maximum(abs.(first_passage(huge, 1e308) .-
+                       [GE.ndtr(-1.0), GE.ndtr(1.0)])) < 1e-12
+    @test argmax_marginals(huge) == [1.0]
+    @test abs(expected_max(huge) / 1e308) < 1e-12
+    ref = GaussMarkovChain([0.0, 0.3, -0.2], 1.0, [0.7, 0.5], [0.6, 0.9])
+    mref = max_cdf(ref, 0.8)
+    vref = max_cdf(ref, [0.8])[1]           # unaligned batch lattice
+    aref = argmax_marginals(ref)
+    xref = expected_max(ref)
+    for a in (1e300, 1e305, 1e307, 1e308)
+        c = GaussMarkovChain(a .* ref.mu, a * ref.sd0, ref.phi, a .* ref.s)
+        @test abs(max_cdf(c, a * 0.8) - mref) < 1e-9
+        @test abs(max_cdf(c, [a * 0.8])[1] - vref) < 1e-9
+        @test abs(excursion_probability(c, a * 0.8) - (1 - mref)) < 1e-9
+        @test maximum(abs.(argmax_marginals(c) .- aref)) < 1e-9
+        @test abs(expected_max(c) / a - xref) < 1e-9
+    end
+    # a power-of-two rescaling is exact: the answers are the same bits
+    for k in (-600, -3, 5, 600)
+        a = ldexp(1.0, k)
+        c = GaussMarkovChain(a .* ref.mu, a * ref.sd0, ref.phi, a .* ref.s)
+        @test max_cdf(c, a * 0.8) == mref
+        @test argmax_marginals(c) == aref
+    end
+end
+
 # --- sub-cell scales keep their within-cell information (#244) ---------
 @testset "unresolved scales: initial law, identity chain, drift" begin
     # a strictly positive but sub-cell sd0: was 5.5e-15 instead of 0.25
