@@ -292,3 +292,29 @@ test_that("a common loading column vanishes at any scale", {
                                     F = matrix(c(-1, 1), 2, 1), W = c(.5, .5)),
                  ind, tolerance = 1e-14)
 })
+
+test_that("the exact pair formula survives cov=, huge loadings and Tree validation (#86)", {
+  # cov= fits F, and testing F after the fit sent the pair to the
+  # lattice: 0.15889 for an exact Phi(-1) = 0.15866, 1e22x low at 14 sd
+  S <- matrix(c(1, 0.5, 0.5, 1), 2)
+  for (g in c(1, 14, 30)) {
+    r <- suppressWarnings(race_probabilities(c(0, g), cov = S,
+                                             return_slopes = TRUE))
+    expect_equal(r$p, c(pnorm(g), pnorm(-g)), tolerance = 1e-14)
+    expect_equal(r$slopes, -rep(dnorm(g), 2), tolerance = 1e-14)
+  }
+  # a finite loading contrast whose square overflows: was an error
+  p <- race_probabilities(c(0, 1e155), V = matrix(c(1e155, -1e155), 2, 1),
+                          D = c(1, 1))
+  expect_equal(p, c(pnorm(0.5), pnorm(-0.5)), tolerance = 1e-14)
+  expect_equal(sum(p), 1)
+  # a three-leaf Tree is not a two-runner race
+  expect_error(race_probabilities(c(0, 1), structure = Tree(
+    cluster = c(1, 2, 3), loading = c(1, 1), D = c(1, 1),
+    parent = c(4, 4, 5, 5, 0), strength = c(0, 0, 0, 0.5, 0.7))),
+    "one label per runner")
+  expect_equal(race_probabilities(c(0, 1), structure = Tree(
+    cluster = c(1, 2), loading = c(1, 1), D = c(1, 1),
+    parent = c(3, 3, 0), strength = c(0, 0, 0.5))), c(pnorm(0.5), pnorm(-0.5)),
+    tolerance = 1e-14)
+})

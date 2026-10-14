@@ -297,10 +297,28 @@ function _as_idio(D, n::Integer; name = "D")
     return Dv
 end
 
+"""mu moved next to the origin when a common offset dwarfs the field, as
+python's races._translated_home. The origin is a gauge, but the lattice is
+laid in the caller's units: at an offset of 2^52 its points collapsed to
+the float spacing there, so race shares came back NaN and top-k/rank
+refused a total membership of 0 (#477). Shifting by a middle entry (an
+element, so no sum can overflow) is exact for such offsets; below a
+million field scales nothing moves, so ordinary inputs stay bit-identical.
+A comparison with NaN is false, so non-finite mu passes through untouched."""
+function _translated_home(mu, D)
+    isempty(mu) && return mu
+    scale = (maximum(mu) - minimum(mu)) + sqrt(maximum(D))
+    # |off| <= max|mu|: an ordinary field skips the sort
+    maximum(abs, mu) > 1e6 * scale || return mu
+    off = sort(mu)[length(mu) ÷ 2 + 1]
+    return abs(off) > 1e6 * scale ? mu .- off : mu
+end
+
 function _race_setup(mu, V, D, F, W, base)
     mu = Float64.(collect(mu))
     n = length(mu)
     D = _as_idio(D, n)
+    mu = _translated_home(mu, D)                    # (#477)
     if V === nothing
         Vm = zeros(n, 1)
         Fm = zeros(1, 1)
@@ -432,6 +450,37 @@ function race_probabilities(mu; V = nothing, D = nothing, F = nothing,
         throw(ArgumentError("delta must be a number in (0, 0.5); got $delta"))
     st = _race_setup(mu, V, D, F, W, base)
     n = length(st.mu)
+    if n == 2 && base == "normal" && F === nothing
+        # A two-runner normal race is ONE Gaussian contrast (python's and
+        # R's pair branch): p1 = Phi((mu2 - mu1) / sd_d), sd_d^2 =
+        # |V1 - V2|^2 + D1 + D2 under the default rule, which stands for
+        # the standard normal law. The lattice priced a 20-sd pair tail at
+        # 0.0105x its exact 1.04e-45 (#86). A caller's nodes need not be
+        # Gaussian, so they keep the lattice.
+        dV = st.V[1, :] .- st.V[2, :]
+        sh = sum(abs2, dV)
+        big = max(abs(sh), st.D[1], st.D[2])
+        sd_d = big > 0 ? sqrt(big) * sqrt(max(sh / big + (minimum(st.D) / big +
+                                                        maximum(st.D) / big), 0.0)) : 0.0
+        if !isfinite(sh)
+            # a finite contrast past 1e154 squares to Inf: norm it
+            # through its own scale instead
+            m = maximum(abs, dV)
+            a = m * sqrt(sum(abs2, dV ./ m))
+            c0 = max(a, sqrt(st.D[1]), sqrt(st.D[2]))
+            sd_d = c0 * sqrt((a / c0)^2 + (sqrt(st.D[1]) / c0)^2 +
+                             (sqrt(st.D[2]) / c0)^2)
+        end
+        sd_d > 0 || (sd_d = 1e-150)
+        u = (st.mu[2] - st.mu[1]) / sd_d
+        # each tail directly: 1 - ndtr(u) rounds a 9-sd loser to zero
+        p = [ndtr(u), ndtr(-u)]
+        if return_slopes
+            dens = npdf(u) / sd_d
+            return (p = p, slopes = [-dens, -dens])
+        end
+        return p
+    end
     sd = sqrt.(st.D)
     Q = size(st.F, 1)
     M_all = repeat(st.mu', Q, 1) .+ st.F * st.V'

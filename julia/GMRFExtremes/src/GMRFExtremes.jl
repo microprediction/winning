@@ -439,6 +439,31 @@ end
 _offsets(c::GaussMarkovChain, us) =
     [Float64(u) - c.mu[t] for t in 1:length(c), u in us]
 
+"""The chain in units of 2^e, the binary order of its largest marginal
+sd, and that exponent. The lattice is laid in these units.
+
+A finite marginal sd of 1e308 used to overflow `pad * sd` to Inf, so
+every cell was NaN and `max_cdf` returned 0 for a law that is exactly a
+standard normal; at 1e300 the kernel variance `(s - a)(s + a)` overflowed
+and `argmax_marginals` failed (#363). Scaling by a power of two is exact
+and every lattice quantity is homogeneous in the scale, so an answer is
+bit-for-bit the one the unscaled arithmetic gives wherever that does not
+overflow. Only the passes' inputs are kept (sd0, phi, s); the means enter
+through the offsets, which callers scale by `ldexp(_, -e)`."""
+function _unit_scaled(c::GaussMarkovChain)
+    big = maximum(marginal_sd(c))
+    e = big > 0 ? exponent(big) : 0
+    cs = GaussMarkovChain(zeros(length(c)), ldexp(c.sd0, -e), c.phi,
+                          ldexp.(c.s, -e))
+    return cs, e
+end
+
+"""Offsets `_offsets(c, us)` and the chain, both in units of 2^e."""
+function _scaled_problem(c::GaussMarkovChain, us)
+    cs, e = _unit_scaled(c)
+    return cs, ldexp.(_offsets(c, us), -e), e
+end
+
 """Mass of N(m, sd^2) on [a, b), tail-stable.
 
 The difference is taken in whichever tail the interval sits, as
@@ -550,7 +575,7 @@ it, so the batch agrees with the scalar calls to quadrature accuracy
 (#417)."""
 function max_cdf(c::GaussMarkovChain, u::Real; points = 400)
     _check_threshold(u)
-    R = _offsets(c, (u,))
+    c, R, _ = _scaled_problem(c, (u,))
     lat = _lattice(c, points, R; align = true)
     return _restricted_masses(c, lat, R)[1][end, 1]
 end
@@ -558,7 +583,7 @@ end
 function max_cdf(c::GaussMarkovChain, us::AbstractVector; points = 400)
     _check_threshold(us)
     isempty(us) && return Float64[]
-    R = _offsets(c, us)
+    c, R, _ = _scaled_problem(c, us)
     lat = _lattice(c, points, R)
     masses, _ = _restricted_masses(c, lat, R)
     return masses[end, :]
@@ -636,7 +661,7 @@ end
 probability of Bolin-Lindgren, exact on the chain."""
 function excursion_probability(c::GaussMarkovChain, u::Real; points = 400)
     _check_threshold(u)
-    R = _offsets(c, (u,))
+    c, R, _ = _scaled_problem(c, (u,))
     lat = _lattice(c, points, R; align = true)
     _masses, escaped = _restricted_masses(c, lat, R)
     return sum(escaped)          # small positive terms, not 1 - (1 - eps)
@@ -652,7 +677,7 @@ end
 p[t] = P(first passage at t), plus P(never) as the final entry."""
 function first_passage(c::GaussMarkovChain, u::Real; points = 400)
     _check_threshold(u)
-    R = _offsets(c, (u,))
+    c, R, _ = _scaled_problem(c, (u,))
     lat = _lattice(c, points, R; align = true)
     masses, escaped = _restricted_masses(c, lat, R)
     n = length(c)
@@ -675,20 +700,22 @@ function expected_max(c::GaussMarkovChain; points = 400, nu = 200)
     (nu isa Integer && nu >= 2) || throw(ArgumentError(
         "nu must be an integer >= 2 (the threshold trapezoid needs two " *
         "points); got " * string(nu)))
-    msd = marginal_sd(c)
+    # thresholds and offsets in units of 2^e, mapped back at the end (#363)
+    cs, e = _unit_scaled(c)
+    msd = marginal_sd(cs)
     a = c.mu[1]
-    d = c.mu .- a
+    d = ldexp.(c.mu .- a, -e)
     lo = minimum(d) - 8.0 * maximum(msd)
     hi = maximum(d) + 8.0 * maximum(msd)
     us = collect(range(lo, hi, length = nu))
     du = us[2] - us[1]
     R = [us[k] - d[t] for t in 1:length(c), k in 1:nu]
-    lat = _lattice(c, points, R; extend = false)
-    F = _restricted_masses(c, lat, R)[1][end, :]
+    lat = _lattice(cs, points, R; extend = false)
+    F = _restricted_masses(cs, lat, R)[1][end, :]
     # trapezoid in the threshold: the left-rectangle rule biased
     # E[max] by O(du) (measured +0.053 at nu = 200 against MC)
     surv = 1.0 .- F
-    return a + (lo + (sum(surv) - surv[1] / 2 - surv[end] / 2) * du)
+    return a + ldexp(lo + (sum(surv) - surv[1] / 2 - surv[end] / 2) * du, e)
 end
 
 # ---- argmax marginals (per-threshold forward and backward) ---------
@@ -740,7 +767,9 @@ longer collapses adjacent cells into one (#657)."""
 function argmax_marginals(c::GaussMarkovChain; points = 300,
                           resolution_tol = ARGMAX_RESOLUTION_TOL)
     n = length(c)
-    c = GaussMarkovChain(c.mu .- c.mu[1], c.sd0, c.phi, c.s)
+    _, e = _unit_scaled(c)                # in units of 2^e (#363)
+    c = GaussMarkovChain(ldexp.(c.mu .- c.mu[1], -e), ldexp(c.sd0, -e),
+                         c.phi, ldexp.(c.s, -e))
     x, dx = _grid(c, points)
     err, t = _tie_bias(c, dx)
     err <= resolution_tol || error(string(
