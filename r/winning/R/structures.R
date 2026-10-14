@@ -112,6 +112,9 @@ Tree <- function(cluster, loading, D, parent, strength, leaves = NULL)
     if (length(v) == 1L) v <- rep(v, n)
     lam <- as.numeric(s$strength)
     inv <- .tree_leaf_index(s$cluster, s$leaves)
+    # one leaf per runner, as Blocks/Nested check below: a three-leaf
+    # tree priced a two-runner mu by dropping its third leaf (#86)
+    if (length(inv) != n) stop("cluster must have one label per runner")
     nC <- max(inv)
     parent <- .validate_tree(s$parent, lam, nC)        # 0 = root
     nT <- length(parent)

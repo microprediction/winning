@@ -650,6 +650,10 @@ race_probabilities <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
     stop(sprintf("window must be \"bulk\" or \"span\"; got %s",
                  paste(deparse(window), collapse = " ")), call. = FALSE)
   delta <- .as_delta(delta)                                    # (#445)
+  # the caller's nodes, not a fit's: fit_covariance() returns F, and
+  # testing F after the fit sent every two-runner cov= race to the
+  # lattice instead of the exact pair formula (#86, as python)
+  nodes_given <- !is.null(F) || !is.null(nodes)
   if (!is.null(cov)) {
     if (!is.null(structure) || !is.null(V) || !is.null(D))
       stop("cov= replaces structure=/V=/D=; pass one only")
@@ -671,7 +675,6 @@ race_probabilities <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
                                    window = window, delta = delta))
   }
   if (!is.null(nodes)) { F <- nodes$F; W <- nodes$W }
-  nodes_given <- !is.null(F)
   st <- .race_setup(mu, V, D, F, W, base)
   n <- length(st$mu)
   if (n == 2L && identical(base, "normal") && !nodes_given) {
@@ -687,6 +690,17 @@ race_probabilities <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
     sd_d <- if (big > 0) sqrt(big) * sqrt(max(sh / big + (min(st$D) / big +
                                                           max(st$D) / big), 0))
             else 0
+    if (!is.finite(sh)) {
+      # a finite loading contrast past 1e154 squared to Inf, and
+      # Inf / Inf made sd_d NaN (#86): take the norms through their own
+      # scale instead. Only where the sum overflowed, so every ordinary
+      # pair keeps its bits.
+      m <- max(abs(dV))
+      a <- m * sqrt(sum((dV / m)^2))               # |dV|, finite
+      c0 <- max(a, sqrt(st$D))
+      sd_d <- c0 * sqrt((a / c0)^2 + (sqrt(st$D[1]) / c0)^2 +
+                          (sqrt(st$D[2]) / c0)^2)
+    }
     if (!(sd_d > 0)) sd_d <- 1e-150
     u <- (st$mu[2] - st$mu[1]) / sd_d
     # each tail directly: 1 - pnorm(u) rounds a 9-sd loser to zero
