@@ -71,3 +71,26 @@ def test_full_covariance_update_matches_too(tau2):
         assert np.allclose(m, m2, atol=1e-12)
         assert np.allclose(S, S2, atol=1e-12)
         assert abs(lz - lz2) < 1e-12
+
+
+@pytest.mark.parametrize("scale", [1e-10, 1e-22])
+def test_small_heterogeneous_tau2_takes_the_contrast_branch(scale):
+    """#93 after #715: np.allclose(tau2, tau2[0]) is True for
+    [1e-12, 9e-9, 2e-12, 8e-9] (atol 1e-8), so both updates used the
+    scalar-noise formula: means 0.77 (full) and 0.95 (diagonal) off the
+    exact team/identity lift. Only exactly equal tau2 is uniform now.
+    logZ (~1e9..1e11 here) agrees to its own roundoff, not compared."""
+    from winning.ratings.full import update_market_full
+    m0 = np.array([.3, -.1, .4, -.6])
+    y = np.array([1.2, -.3, .5, -1.4])
+    inv = lambda p: y
+    tau2 = np.array([1e-12, 9e-9, 2e-12, 8e-9])
+    v0 = np.array([1, 2, .5, 3]) * scale
+    mt, St, _ = update_team_market_full(m0, np.diag(v0), np.eye(4), None,
+                                        tau2=tau2, invert=inv)
+    mf, Sf, _ = update_market_full(m0, np.diag(v0), None, tau2=tau2,
+                                   invert=inv)
+    md, vd, _ = update_market(m0, v0, None, tau2=tau2, invert=inv)
+    assert np.abs(mf - mt).max() < 1e-12 and np.abs(md - mt).max() < 1e-12
+    assert np.abs(Sf - St).max() < 1e-9 * scale
+    assert np.abs(vd - np.diag(St)).max() < 1e-9 * scale

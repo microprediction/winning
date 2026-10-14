@@ -691,9 +691,10 @@ def _setup(mu, V, D, F, W, base):
             # sqrt(2) * max_i |(PV)_i| / sqrt(D_i) >= s_delta
             # (triangle inequality on centered rows), which cannot miss
             # a sharp pair; its false positives cost nodes, not error.
-            sharp = float(np.sqrt(2.0)
-                          * np.max(np.sqrt((V ** 2).sum(axis=1))
-                                   / np.sqrt(np.maximum(D, 1e-300))))
+            with np.errstate(over="ignore"):     # inf is sharp (#86)
+                sharp = float(np.sqrt(2.0)
+                              * np.max(np.sqrt((V ** 2).sum(axis=1))
+                                       / np.sqrt(np.maximum(D, 1e-300))))
             r = V.shape[1]
             cap, sharp_max = GH_RULE.get(r, GH_RULE_DEFAULT)
             if r >= 2 and sharp > sharp_max:
@@ -1588,12 +1589,30 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
         # nor meets an absolute floor (max(var, 1e-300) changed the model
         # below contrast sd 1e-150: 0.540 for an exact 0.760, #100).
         if var_d is None:
-            sd_d = _contrast_sd(dV @ dV, D[0], D[1])
+            with np.errstate(over="ignore"):
+                shared = float(dV @ dV)
+            if np.isfinite(shared):
+                sd_d = _contrast_sd(shared, D[0], D[1])
+            else:
+                # finite loadings whose squared contrast overflows
+                # (V = +-1e155): the norm in units of its largest term,
+                # never squared at full scale; [1, 0] for an exact
+                # [0.69, 0.31] before (#86)
+                m = max(float(np.abs(dV).max()), float(np.sqrt(D.max())))
+                big_unit = (m, float(np.sqrt(np.sum((dV / m) ** 2)
+                                             + D[0] / m / m + D[1] / m / m)))
+                with np.errstate(over="ignore"):
+                    sd_d = big_unit[0] * big_unit[1]
         else:
             sd_d = np.sqrt(max(var_d, 0.0))
         if not sd_d > 0.0:
             sd_d = 1e-150     # an exactly deterministic contrast: as before
-        u = float((mu[1] - mu[0] + shift) / sd_d)
+        if var_d is None and not np.isfinite(shared):
+            # the sd itself may exceed the float range: u in its unit
+            u = float((mu[1] / big_unit[0] - mu[0] / big_unit[0]
+                       + shift / big_unit[0]) / big_unit[1])
+        else:
+            u = float((mu[1] - mu[0] + shift) / sd_d)
         # Each tail directly: 1 - ndtr(u) rounds the loser to exactly 0 at
         # a 9 sd contrast where the true value is 1.1e-19, and the pair
         # then depends on which runner is listed first. ndtr(u), ndtr(-u)

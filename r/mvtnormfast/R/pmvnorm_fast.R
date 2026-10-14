@@ -320,6 +320,36 @@ factorize_covariance <- function(sigma, max_rank = 6L, tol = 1e-11,
   list(keep = keep, done = NULL)
 }
 
+# x * 2^k, exact, for |k| up to ~2100 (2^k itself overflows past 1023)
+.ldexp <- function(x, k) {
+  k1 <- trunc(k / 3); k2 <- trunc((k - k1) / 2); k3 <- k - k1 - k2
+  x * 2^k1 * 2^k2 * 2^k3
+}
+
+# Bring a coordinate of extreme scale to unit scale, exactly (python:
+# fastmvn._rescale_extreme_rows). The event lower <= X_i <= upper is
+# unchanged when row i of V, the noise sd, the mean and both bounds are
+# scaled together. Loadings of 1e154 overflowed rowSums(V^2) to Inf and a
+# Phi(1) probability came back 0.5; loadings of 1e-170 underflowed it to
+# 0 and the coordinate was read as a constant (#720). A row whose largest
+# entry is outside 2^-400..2^400 is scaled by that entry's power of two;
+# every other row is untouched.
+.rescale_extreme_rows <- function(V, D, mean, lower, upper) {
+  # every nonzero entry inside 2^-400..2^400: no row is extreme
+  a <- c(abs(V), sqrt(D))
+  if (all(a < 2^400 & (a == 0 | a > 2^-400)))
+    return(list(V = V, D = D, mean = mean, lower = lower, upper = upper))
+  m <- sqrt(D)
+  if (ncol(V) > 0L) m <- pmax(m, apply(abs(V), 1L, max))
+  e <- ifelse(m > 0, floor(log2(m)) + 1, 0)
+  big <- m > 0 & abs(e) > 400
+  if (!any(big))
+    return(list(V = V, D = D, mean = mean, lower = lower, upper = upper))
+  k <- ifelse(big, -e, 0)
+  list(V = .ldexp(V, k), D = .ldexp(D, 2 * k), mean = .ldexp(mean, k),
+       lower = .ldexp(lower, k), upper = .ldexp(upper, k))
+}
+
 # One coordinate: the marginal is N(mean, var) whatever the factor
 # decomposition, so no quadrature (#395).
 .univariate <- function(lower, upper, mean, var) {
@@ -615,6 +645,8 @@ pmvnorm_fast <- function(lower = -Inf, upper = Inf, mean = NULL,
     V <- V[!free, , drop = FALSE]; D <- D[!free]; mean <- mean[!free]
     lower <- lower[!free]; upper <- upper[!free]
   }
+  rs <- .rescale_extreme_rows(V, D, mean, lower, upper)
+  V <- rs$V; D <- rs$D; mean <- rs$mean; lower <- rs$lower; upper <- rs$upper
   st <- .drop_constants(rowSums(V^2) + D, mean, lower, upper)
   if (!is.null(st$done)) return(st$done)
   keep <- st$keep

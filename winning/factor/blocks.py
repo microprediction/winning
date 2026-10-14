@@ -351,6 +351,33 @@ def _checked_mass(raw, kind, mass_tol=None):
     return raw / t
 
 
+def _home(mu, D):
+    """mu as floats, moved next to the origin when a common offset dwarfs
+    the field (races._translated_home). The lattices here are built in
+    the caller's units, so at an offset of 1e13 they collapsed to the
+    float spacing and the block, nested and tree races raised a mass
+    defect (zero mass at 1e15) while their Jacobians came back zero
+    (#477). Ordinary inputs are returned unchanged."""
+    from .races import _translated_home
+    mu = np.asarray(mu, float)
+    with np.errstate(invalid="ignore"):
+        return _translated_home(mu, np.asarray(D, float))
+
+
+def _one_cluster_gauge(cluster, loading, n):
+    """The loading itself, unless every contestant is in ONE cluster: its
+    shock then reaches everyone, and only loading differences are
+    identified. A common 40 in [40] * 5 widened the lattice until the
+    race raised a 2.5% mass defect, moved the Jacobian and broke the
+    inverse (#471). Such a loading is gauge-centred as the factor paths
+    centre theirs (core._gauge_center); any other is returned as given."""
+    lab = np.asarray(cluster)
+    if lab.size != n or n < 2 or not (lab == lab.flat[0]).all():
+        return loading
+    from .core import _gauge_center
+    return _gauge_center(as_loadings(loading, n))
+
+
 def block_race_probabilities(mu, cluster, loading, D, points=257, qa=9):
     """P(i wins | min-wins) under one private factor per cluster.
 
@@ -358,7 +385,8 @@ def block_race_probabilities(mu, cluster, loading, D, points=257, qa=9):
     D[i] its idiosyncratic VARIANCE (as everywhere in winning.factor).
     The unnormalized lattice mass is checked before normalization and a
     material defect raises rather than being normalized away."""
-    mu = np.asarray(mu, float)
+    mu = _home(mu, D)
+    loading = _one_cluster_gauge(cluster, loading, len(mu))
     # one door for D: a scalar is the same variance for everyone (#84)
     raw = _block_max(-mu, np.sqrt(as_idio(D, len(mu), positive=True)),
                      cluster, loading, points, qa)
@@ -386,12 +414,25 @@ def nested_race_probabilities(mu, cluster, loading, D, coupling=None,
     # per-node mass defect inside a plausible-looking average
     # (fourteenth review)
     p = np.zeros(len(mu))
-    muv = np.asarray(mu, float)
+    muv = _home(mu, D)
     sdv = np.sqrt(as_idio(D, len(muv), positive=True))
     for q in range(len(fn)):
-        p += fw[q] * _block_max(-(muv + gamma * (g @ fn[q])), sdv,
-                                cluster, loading, points, qa)
+        p += fw[q] * _block_max(-(muv + _coupled_shift(g, gamma, fn[q])),
+                                sdv, cluster, loading, points, qa)
     return _checked_mass(p, "nested race")
+
+
+def _coupled_shift(g, gamma, node):
+    """gamma (g @ node), the global factor's shift. Only gamma g is
+    identified: coupling c g with gamma / c is the same race, but at
+    c = 1e308 the raw g @ node overflowed before gamma was applied and
+    the lattice mass came back NaN (#722). That spelling is kept
+    wherever it is finite; otherwise gamma is absorbed into g first."""
+    with np.errstate(over="ignore", invalid="ignore"):
+        s = g @ node
+    if np.all(np.isfinite(s)):
+        return gamma * s
+    return (gamma * g) @ node
 
 
 def block_race_jacobian(mu, cluster, loading, D, points=257, qa=9):
@@ -406,9 +447,10 @@ def block_race_jacobian(mu, cluster, loading, D, points=257, qa=9):
     axis"; every inverse and polishing path that calls the Jacobian
     inherited the crash (#145).
     """
-    mu = np.asarray(mu, float)
+    mu = _home(mu, D)
     n = len(mu)
     V = as_loadings(loading, n)          # (n, rank), one ROW per entity
+    V = _one_cluster_gauge(cluster, V, n)
     if V.shape[1] == 0:                  # rank zero: no shared effect (#508)
         V = np.zeros((n, 1))
     if V.shape[1] > 1:
@@ -477,6 +519,7 @@ def abilities_from_block_race(p, cluster, loading, D, points=257, qa=9,
     p_t = np.maximum(p_t, floor); p_t = p_t / p_t.sum()
     lt = np.log(p_t)
     ones = np.ones((n, n)) / n
+    loading = _one_cluster_gauge(cluster, loading, n)
     forward = lambda m: block_race_probabilities(m, cluster, loading, D,
                                                  points=points, qa=qa)
     # The field's own scale. The warm start, the fixed-point step and the
@@ -684,7 +727,7 @@ def tree_race_probabilities(mu, cluster, loading, D, parent, strength,
     leaves= explicitly when the leaves sit at unequal depths (#372)."""
     if leaves is not None:
         cluster = _tree_leaf_index(cluster, leaves)
-    mu = np.asarray(mu, float)
+    mu = _home(mu, D)
     m = -mu
     sd = np.sqrt(as_idio(D, len(mu), positive=True))
     v = _scalar_loading(loading, "tree races"); cluster = np.asarray(cluster)
@@ -791,7 +834,7 @@ def tree_race_jacobian(mu, cluster, loading, D, parent, strength,
     2n forward passes. `leaves` as in tree_race_probabilities (#372)."""
     if leaves is not None:
         cluster = _tree_leaf_index(cluster, leaves)
-    mu = np.asarray(mu, float)
+    mu = _home(mu, D)
     m = -mu
     sd = np.sqrt(as_idio(D, len(mu), positive=True))
     v = _scalar_loading(loading, "tree races"); cluster = np.asarray(cluster)
@@ -910,7 +953,7 @@ def nested_race_jacobian(mu, cluster, loading, D, coupling=None, gamma=1.0,
     if coupling is None or gamma == 0.0:
         return block_race_jacobian(mu, cluster, loading, D, points=points, qa=qa)
     fn, fw = roots_hermitenorm(qf); fw = fw / fw.sum()
-    mu = np.asarray(mu, float)
+    mu = _home(mu, D)
     g = np.atleast_2d(np.asarray(coupling, float))
     if g.shape[0] != len(mu):
         g = g.T
@@ -921,6 +964,8 @@ def nested_race_jacobian(mu, cluster, loading, D, coupling=None, gamma=1.0,
     n = len(mu)
     J = np.zeros((n, n))
     for q in range(len(nodes)):
-        J += w[q] * block_race_jacobian(mu + gamma * (g @ nodes[q]), cluster,
-                                        loading, D, points=points, qa=qa)
+        J += w[q] * block_race_jacobian(mu + _coupled_shift(g, gamma,
+                                                            nodes[q]),
+                                        cluster, loading, D, points=points,
+                                        qa=qa)
     return J

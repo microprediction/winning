@@ -493,6 +493,18 @@ def _crn_general(V, D, Y, s0, m0, prior, counts, groups, common):
         # one common shift: u0 / u_i in these units, u0 the field's
         # pooled unit (any scale serves under its flat prior; this one
         # keeps the arithmetic of the pre-#670 global unit)
+        with np.errstate(over="ignore"):
+            info = np.max(w * (u0 / uc) ** 2) if w.size else 0.0
+        if not np.isfinite(info):
+            # coordinates 1e200 apart in scale: the pooled unit put a
+            # loading of 1e200 on the small one and its square overflowed
+            # the precision (#670). Then the unit of the coordinate that
+            # pins the shift best, so every loading-weighted precision
+            # w_ir (u0 / u_i)^2 is at most about one
+            pos = w > 0
+            r0 = np.min(np.where(pos, uc / np.sqrt(np.where(pos, w, 1.0)),
+                                 np.inf))
+            u0 = float(np.ldexp(1.0, int(np.round(np.log2(r0)))))
         levels.append((np.arange(Lc), u0 / uc, np.zeros(Lc)))
     for lab, U in lev:
         if U.shape[1]:
@@ -727,9 +739,23 @@ def update_contrast(m, cov, a, mean, var, refit=False):
     q = Da[sup] * av[sup]                           # D_i a_i^2 >= 0
     # s_e - D_i a_i^2 as a sum of the OTHER terms, never a difference
     rest = var + np.array([np.delete(q, i).sum() for i in range(len(sup))])
-    zz = Dv[sup] * rest / s_e                       # diag of Cov(zeta)
-    z = np.sqrt(zz)
-    Rz = -np.outer(Da[sup], Da[sup]) / s_e / np.outer(z, z)
+    with np.errstate(over="ignore", under="ignore", invalid="ignore",
+                     divide="ignore"):
+        zz = Dv[sup] * rest / s_e                   # diag of Cov(zeta)
+        z = np.sqrt(zz)
+        Rz = -np.outer(Da[sup], Da[sup]) / s_e / np.outer(z, z)
+    if not (np.isfinite(Rz).all() and (zz > 0).all() and np.isfinite(zz).all()):
+        # D_i rest_i and D_i a_i D_j a_j overflowed at D = 1e155 (NaN in
+        # D'), though both ratios are ordinary (#669). The same quantities
+        # with each product taken in its scale-free form: zz by exponent
+        # and mantissa, Rz_ij = -w_i w_j with w_i = a_i sqrt(D_i / rest_i)
+        mD, eD = np.frexp(Dv[sup])
+        mr, er = np.frexp(rest)
+        ms, es = np.frexp(s_e)
+        zz = np.ldexp(mD * mr / ms, eD + er - es)
+        z = np.sqrt(zz)
+        w = av[sup] * np.sqrt(Dv[sup] / rest)
+        Rz = -np.outer(w, w)
     np.fill_diagonal(Rz, 1.0)
     lam, U = np.linalg.eigh(Rz)
     # the smallest eigenvalue is at least var/s_e (Rz = L (I - w w'/s_e) L
@@ -738,6 +764,10 @@ def update_contrast(m, cov, a, mean, var, refit=False):
     c = max(float(lam[0]), var / s_e)
     D_new = Dv.copy()
     D_new[sup] = c * z ** 2
+    if c < np.finfo(float).tiny:
+        # var / s_e underflowed before its product with z^2: prior 1e150,
+        # var 1e-180 gave D' = 0 for a representable 2.5e-181 (#669)
+        D_new[sup] = np.maximum(float(lam[0]) * zz, var * (zz / s_e))
     if len(sup) > 1:
         E = np.zeros((K, len(sup) - 1))
         E[sup] = (z[:, None] * U[:, 1:]) * np.sqrt(np.maximum(lam[1:] - c,

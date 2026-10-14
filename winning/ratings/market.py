@@ -75,7 +75,7 @@ def update_market(m, v, p_market, tau2=0.25, invert=None, **market_model):
     # closed forms below agree with the naive ones to every digit where
     # v > 0 and are finite at v = 0.
     known = v <= 0.0
-    if np.allclose(tau2, tau2[0]):
+    if np.all(tau2 == tau2[0]):
         t2 = float(tau2[0])
         u = v * t2 / (v + t2)                  # = 1/(1/v + 1/t2)
         ub = (t2 * m + v * y) / (v + t2)       # = u * (m/v + y/t2)

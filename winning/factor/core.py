@@ -1159,6 +1159,11 @@ def win_probabilities_factor(mu: np.ndarray, V: np.ndarray, D: np.ndarray,
     if keep is not None:
         mu, V, D = mu[keep], V[keep], D[keep]
     N = len(mu)
+    # the origin is a gauge, but the lattice below is built in the
+    # caller's units: at a common offset of 1e15 it collapsed to the
+    # float spacing and shares moved 2.6 points (#477, as the front door)
+    from .races import _translated_home
+    mu = _translated_home(mu, D)
     # gauge-fix: a common loading column shifts every conditional mean
     # equally and cannot move an argmin, so center V for a lattice window
     # and numerics invariant under V -> V + 1c' (eighth review). Done
@@ -1263,8 +1268,6 @@ def _pair_solve(gap, p, V, D, F, W, points, tol, n_iter, s):
     i = 0 if p[0] <= p[1] else 1          # the smaller share: finite logs
     sign = 1.0 if i == 0 else -1.0        # p0 increases with the gap
     logp = np.log(p)
-    floor = max(1e-9, 1e-4 / 2)
-    ident = p > floor
     evals = [0]
 
     def mu_of(g):
@@ -1277,8 +1280,11 @@ def _pair_solve(gap, p, V, D, F, W, points, tol, n_iter, s):
         return r
 
     def score(r):
-        return float(np.abs(r[ident]).max() if np.any(ident)
-                     else np.abs(r).max())
+        # Both shares, always: a pair has one contrast and the minority
+        # is the side that exposes a law mismatch. The multi-runner
+        # tail mask (p > 5e-5) dropped a 1e-6 minority and certified a
+        # warm start that repriced it at 5e-37 (#727).
+        return float(np.abs(r).max())
 
     if not np.isfinite(gap):
         return mu_of(gap), 0, np.inf
@@ -1388,6 +1394,14 @@ def abilities_from_probabilities_factor(p: np.ndarray, V: np.ndarray,
     # tail-aware convergence: runners below the floor are matched best-effort
     floor = max(1e-9, 1e-4 / N)
     ident = p > floor
+    if N > 2 and ident.sum() < 2:
+        # One identified share carries no contrast: [1, 1.1e-5, 5.7e-18]
+        # was certified on the favourite alone with abilities 3 units off
+        # (#588). Take every share the solver can represent; if that is
+        # still one, every share, so the certificate is honest.
+        ident = p > _PFLOOR
+        if ident.sum() < 2:
+            ident = np.ones(N, dtype=bool)
     # The factor law actually REPRESENTED by (F, W): V -> aV, F -> F/a is
     # the same forward map, but reading the factor variance off raw
     # sum(V_i^2) inflated the warm start and the step cap by a^2, and the
@@ -1580,6 +1594,8 @@ def jacobian_vector_product(mu, V, D, F, W, h, points=3001, form="ibp",
     h = np.asarray(h, dtype=float)
     N = len(mu)
     D = as_idio(D, N, positive=True)
+    from .races import _translated_home
+    mu = _translated_home(mu, D)     # the origin is a gauge (#477)
     V = as_loadings(V, N)
     V = _gauge_center(V)             # gauge-fix, as in the forward pass (#114)
     points = as_points(points)

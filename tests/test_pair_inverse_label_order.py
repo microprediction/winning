@@ -41,3 +41,26 @@ def test_target_floor_near_machine_precision():
                                   return_info=True)
     assert np.isfinite(a).all() and info["converged"]
     assert info["floored"].tolist() == [False, True]
+
+
+@pytest.mark.parametrize("t", [1e-6, 1e-8])
+@pytest.mark.parametrize("flip", [False, True])
+def test_pair_certifies_the_minority_under_the_supplied_law_727(t, flip):
+    """A centred two-point law has the Gaussian warm start's moments but a
+    different pair map. The multi-runner tail mask dropped a minority
+    below 5e-5, so the favourite's residual (~ the omitted mass, under
+    tol) certified a warm start that repriced 1e-6 at 5e-37."""
+    from winning.factor.core import (abilities_from_probabilities_factor,
+                                     win_probabilities_factor)
+    V = np.array([[0.0], [1.0]])
+    D = np.array([0.05, 0.05])
+    F = np.array([[-1.0], [1.0]])
+    W = np.array([0.5, 0.5])
+    target = np.array([1.0, t] if flip else [t, 1.0])
+    mu, info = abilities_from_probabilities_factor(target, V, D, F, W,
+                                                   return_info=True)
+    p = win_probabilities_factor(mu, V, D, F, W)
+    err = np.abs(np.log(p / (target / target.sum()))).max()
+    assert info["converged"]
+    assert err < 1e-6, (p, target, info)
+    assert abs(info["residual"] - err) < 1e-9

@@ -379,3 +379,50 @@ def test_valid_heterogeneous_scales_still_pass_666(fm):
                               abs=1e-9)
     assert fm.mvn_cdf_fast(upper=0.0, sigma=np.diag([0.0, 1.0])) == \
         pytest.approx(0.5, abs=1e-15)
+
+
+# --- #720: a finite factor row whose sum of squares overflows ---
+
+@pytest.mark.parametrize("a", [9e153, 1e154, 1e300, 1e-170])
+def test_extreme_factor_row_is_the_same_event_720(fm, a):
+    # X = a F1 + a F2, upper = its sd: Phi(1) at every finite a. At 1e154
+    # sum(V^2) overflowed and the univariate shortcut returned Phi(0);
+    # at 1e-170 it underflowed and the row was read as a constant (1.0)
+    import math
+    p, method = fm.mvn_cdf_fast_info(lower=-np.inf, upper=math.hypot(a, a),
+                                     mean=0.0, V=[[a, a]], D=0.0)
+    assert p == pytest.approx(ndtr(1.0), rel=1e-13) and method == "factor"
+    # three loading columns and a representable D beside them
+    d = a * a if a * a < 1e300 else 1e300
+    sd = math.hypot(math.hypot(a, a), math.hypot(a, math.sqrt(d)))
+    p = fm.mvn_cdf_fast(upper=sd, V=[[a, a, a]], D=d)
+    assert p == pytest.approx(ndtr(1.0), rel=1e-12)
+    # beside an ordinary row with no loading (independent of it)
+    # (with own noise, so the rule is Gauss-Hermite rather than Sobol)
+    if 1e-150 < a < 1e200:
+        d = (a / 2) ** 2
+        sd = math.hypot(math.hypot(a, a), a / 2)
+        p = fm.mvn_cdf_fast(upper=[sd, 0.0], V=[[a, a], [0.0, 0.0]],
+                            D=[d, 1.0])
+        assert p == pytest.approx(ndtr(1.0) / 2, rel=1e-9)
+
+
+def test_all_zero_factor_row_is_still_a_constant_720(fm):
+    assert fm.mvn_cdf_fast_info(upper=[1.0, 0.0], V=[[0.0], [1.0]],
+                                D=[0.0, 1.0]) == (pytest.approx(0.5), "factor")
+    assert fm.mvn_cdf_fast_info(upper=[-1.0, 0.0], V=[[0.0], [1.0]],
+                                D=[0.0, 1.0])[0] == 0.0
+
+
+@pytest.mark.parametrize("c", [1e-150, 1e-155])
+def test_small_unit_orthant_is_the_same_law_173(fm, c):
+    # rho = 0.99 in a unit c: below D = 1e-300 the node selector's
+    # sqrt(max(D, 1e-300)) floor read the sharp law as mild (3.65% low
+    # at 1e-155). The #720 row rescale brings the row to unit scale first.
+    import math
+    rho = 0.99
+    exact = 0.25 + math.asin(rho) / (2 * math.pi)
+    p = fm.mvn_cdf_fast(upper=np.zeros(2), mean=np.zeros(2),
+                        V=np.full((2, 1), c * math.sqrt(rho)),
+                        D=np.full(2, c * c * (1 - rho)))
+    assert p == pytest.approx(exact, abs=1e-8)

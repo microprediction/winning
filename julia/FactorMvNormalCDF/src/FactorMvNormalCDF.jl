@@ -432,6 +432,29 @@ constant `mu_i`: outside its interval the rectangle is empty; inside, it
 leaves the integral. Near-deterministic (Dirac) inputs are otherwise out
 of scope. `answer` is `nothing` or the `(p, method)` result.
 """
+# Bring a coordinate of extreme scale to unit scale, exactly (python:
+# fastmvn._rescale_extreme_rows). The event lo_i <= X_i <= up_i is
+# unchanged when row i of V, the noise sd, the mean and both bounds are
+# scaled together. Loadings of 1e154 overflowed sum(V_i^2) to Inf and a
+# Phi(1) probability came back 0.5; loadings of 1e-170 underflowed it to
+# 0 and the coordinate was read as a constant (#720). A row whose largest
+# entry is outside 2^-400..2^400 is scaled by that entry's power of two;
+# every other row is untouched.
+function _rescale_extreme_rows(Vm, Dv, mu, lo, up)
+    n = length(Dv)
+    m = [max(sqrt(Dv[i]), size(Vm, 2) > 0 ? maximum(abs, view(Vm, i, :)) : 0.0)
+         for i in 1:n]
+    e = [m[i] > 0 ? frexp(m[i])[2] : 0 for i in 1:n]
+    big = [m[i] > 0 && abs(e[i]) > 400 for i in 1:n]
+    any(big) || return Vm, Dv, mu, lo, up
+    k = [big[i] ? -e[i] : 0 for i in 1:n]
+    V2 = [ldexp(Vm[i, j], k[i]) for i in 1:n, j in 1:size(Vm, 2)]
+    return (V2, [ldexp(Dv[i], 2k[i]) for i in 1:n],
+            [ldexp(mu[i], k[i]) for i in 1:n],
+            [ldexp(lo[i], k[i]) for i in 1:n],
+            [ldexp(up[i], k[i]) for i in 1:n])
+end
+
 function _drop_constants(var, mu, lo, up)
     for i in eachindex(var)
         lo[i] == up[i] && return falses(length(var)), (0.0, "degenerate-rectangle")
@@ -812,6 +835,7 @@ function _impl(lower, upper, mean, sigma, V, D; gh_order = nothing,
         k = .!free
         Vm = Vm[k, :]; Dv = Dv[k]; mu = mu[k]; lo = lo[k]; up = up[k]
     end
+    Vm, Dv, mu, lo, up = _rescale_extreme_rows(Vm, Dv, mu, lo, up)
     var = vec(sum(Vm .^ 2, dims = 2)) .+ Dv
     keep, done = _drop_constants(var, mu, lo, up)
     done === nothing || return done

@@ -375,3 +375,49 @@ def test_mass_check_rejects_nan():
 
     with pytest.raises(RuntimeError, match="captured total mass"):
         _checked_mass(np.array([0.5, np.nan]), "test race")
+
+
+@pytest.mark.parametrize("c", [1e100, 1e307, 1e308])
+def test_nested_reciprocal_coupling_scaling_is_the_same_race_722(c):
+    """coupling -> c coupling, gamma -> gamma / c leaves gamma g, hence
+    the race, unchanged. At 1e308 g @ node overflowed before gamma (NaN
+    lattice mass); at 1e307 the inverse's variance squared gamma and g
+    separately, 0 * inf."""
+    import warnings
+    from winning.factor.structures import Nested
+    from winning.factor.races import race_probabilities, abilities_from_race
+    from winning.factor.blocks import nested_race_jacobian
+    mu = np.array([-0.4, -0.1, 0.2, 0.5, 0.8])
+    cl, ld = [0, 0, 1, 1, 2], [0.4, 0.2, 0.3, 0.5, 0.1]
+    D = [0.7, 0.8, 0.9, 1.0, 1.1]
+    g = np.array([-0.4, 0.1, 0.4, -0.2, 0.1])
+    p1 = race_probabilities(mu, structure=Nested(cl, ld, D, g, 0.8))
+    a1 = abilities_from_race(p1, structure=Nested(cl, ld, D, g, 0.8))
+    J1 = nested_race_jacobian(mu, cl, ld, D, coupling=g, gamma=0.8)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        s = Nested(cl, ld, D, g * c, 0.8 / c)
+        p = race_probabilities(mu, structure=s)
+        a = abilities_from_race(p1, structure=s)
+        J = nested_race_jacobian(mu, cl, ld, D, coupling=g * c, gamma=0.8 / c)
+    assert np.abs(p - p1).max() < 1e-14
+    assert np.abs(a - a1).max() < 1e-12
+    assert np.isfinite(J).all() and np.abs(J - J1).max() < 1e-14
+
+
+@pytest.mark.parametrize("c", [40.0, 50.0, 1e6])
+def test_single_cluster_common_loading_is_a_gauge_471(c):
+    """One cluster holding every runner: a common loading c adds c A to
+    every performance and cancels. Uncentred it widened the lattice until
+    the forward raised (mass 1.0247 at 40), the Jacobian moved and the
+    inverse refused."""
+    mu = np.array([-0.8, -0.3, 0.0, 0.2, 0.9])
+    cl, D = [0] * 5, [1.0] * 5
+    L = np.array([0.4, 0.2, 0.3, 0.5, 0.1])
+    p0 = block_race_probabilities(mu, cl, L, D)
+    J0 = block_race_jacobian(mu, cl, L, D)
+    a0 = abilities_from_block_race(p0, cl, L, D)[0]
+    tol = 1e-12 if c < 100 else 1e-9   # L + 1e6 itself rounds L by 1e-10
+    assert np.abs(block_race_probabilities(mu, cl, L + c, D) - p0).max() < tol
+    assert np.abs(block_race_jacobian(mu, cl, L + c, D) - J0).max() < tol
+    assert np.abs(abilities_from_block_race(p0, cl, L + c, D)[0] - a0).max() < 1e-8

@@ -49,7 +49,7 @@ from ..shapes import (as_factor_law, as_idio, as_loadings, as_nonnegative,
 
 
 from .races import (_jacobi_sweeps, BASES, _resolution, kink_lattice,
-                    _lower_cdf, _tail_fn)
+                    _lower_cdf, _tail_fn, _translated_home)
 from .blocks import TINY, roots_hermitenorm
 
 from ..rustconfig import load_fastrace
@@ -464,6 +464,9 @@ def _split_nodes(lo, hi, points, mu, sd, kinks):
 
 def _topk_independent(mu, sd, k, base_rows, points, delta=1e-12,
                       is_normal=False, upper=False, kink_split=False):
+    # the lattice is built in the caller's units: at a common offset of
+    # 2^49 its points collapse to the float spacing there (#477)
+    mu = _translated_home(np.asarray(mu, float), sd * sd)
     if upper:
         # P(i among the k LARGEST) = int f_i(x) P(M_{-i}(x) <= k-1) dx,
         # M_{-i}(x) the number of OTHER runners ABOVE x: the same count
@@ -763,6 +766,8 @@ def top_k_probabilities(mu, k, V=None, D=None, base="normal", points=513,
                                      is_normal=is_normal,
                                      kink_split=kink_split)
     else:
+        # before the node shifts are added: at 2^49 they would round (#477)
+        mu = _translated_home(mu, D)
         Vm, nodes, w = _factor_nodes(V, n, qa, "top_k_probabilities", D,
                                      F=F, W=W)
 
@@ -831,6 +836,7 @@ def bottom_k_probabilities(mu, k, V=None, D=None, base="normal",
         raw = _topk_independent(mu, sd, k, base_rows, points, upper=True,
                                 kink_split=kink_split)
         return _checked_topk(raw, k, "bottom-k race")
+    mu = _translated_home(mu, D)                                 # (#477)
     Vm, nodes, w = _factor_nodes(V, n, qa, "bottom_k_probabilities", D)
     raw = np.zeros(n)
     for q in range(len(nodes)):
@@ -895,6 +901,7 @@ def top_k_jacobian_row(mu, i, k, D=None, base="normal", points=513):
     # wrong length broadcast into a plausible wrong answer (#254)
     sd = np.sqrt(D)
     base_rows = BASES[base] if not callable(base) else base
+    mu = _translated_home(mu, D)                                 # (#477)
     lo, hi = _count_window(mu, sd, k, base_rows)
     points = _resolved_points(lo, hi, sd, points, _resolution(base_rows))
     x = np.linspace(lo, hi, points)
@@ -950,6 +957,7 @@ def top_k_jacobian_row_sigma(mu, i, k, D=None, base="normal", points=513):
     # wrong length broadcast into a plausible wrong answer (#254)
     sd = np.sqrt(D)
     base_rows = BASES[base] if not callable(base) else base
+    mu = _translated_home(mu, D)                                 # (#477)
     lo, hi = _count_window(mu, sd, k, base_rows)
     points = _resolved_points(lo, hi, sd, points, _resolution(base_rows))
     x = np.linspace(lo, hi, points)
@@ -996,6 +1004,7 @@ def top_k_jacobians(mu, k, D=None, base="normal", points=513, V=None,
     n = len(mu)
     k = _as_depth(k, n)
     if V is not None:
+        mu = _translated_home(mu, np.ones(n) if D is None else D)  # (#477)
         Vm, nodes, w = _factor_nodes(V, n, qa, "top_k_jacobians", D)
         Jm = np.zeros((n, n))
         Js = np.zeros((n, n))
@@ -1013,6 +1022,7 @@ def top_k_jacobians(mu, k, D=None, base="normal", points=513, V=None,
     # wrong length broadcast into a plausible wrong answer (#254)
     sd = np.sqrt(D)
     base_rows = BASES[base] if not callable(base) else base
+    mu = _translated_home(mu, D)                                 # (#477)
     lo, hi = _count_window(mu, sd, k, base_rows,
                            is_normal=(base == "normal"))
     points = _resolved_points(lo, hi, sd, points, _resolution(base_rows))
@@ -1137,6 +1147,7 @@ def _topk_with_slopes(mu, sd, k, base_rows, points, delta=1e-12,
     field pass. is_normal=True routes through the compiled kernel when
     fastrace ships it (the python window is computed either way, so the
     quadrature grid is identical)."""
+    mu = _translated_home(np.asarray(mu, float), sd * sd)      # (#477)
     lo, hi = _count_window(mu, sd, k, base_rows, delta=delta,
                            is_normal=is_normal)
     points = _resolved_points(lo, hi, sd, points, _resolution(base_rows))
@@ -1630,6 +1641,7 @@ def _rank_marginal_with_jacobian(mu, sd, r, base_rows, points,
     then zero). with_mass=True also returns each runner's density mass
     on this lattice, the row sum rank_probabilities normalises by."""
     n = len(mu)
+    mu = _translated_home(np.asarray(mu, float), sd * sd)      # (#477)
     lo, hi = _count_window(mu, sd, n - 1, base_rows, is_normal=is_normal)
     points = _resolved_points(lo, hi, sd, points, _resolution(base_rows))
     kinks = _kinks(base_rows, kink_split)
@@ -1879,6 +1891,7 @@ def rank_probabilities(mu, D=None, base="normal", points=513, V=None,
     base_rows = BASES[base] if not callable(base) else base
 
     def one_node(m):
+        m = _translated_home(np.asarray(m, float), sd * sd)    # (#477)
         lo, hi = _count_window(m, sd, n - 1, base_rows,
                                is_normal=(base == "normal"))
         # a LOCAL name: assigning `points` here would shadow the enclosing
@@ -1912,6 +1925,7 @@ def rank_probabilities(mu, D=None, base="normal", points=513, V=None,
     if V is None:
         P = one_node(mu)
     else:
+        mu = _translated_home(mu, D)                             # (#477)
         Vm, nodes, w = _factor_nodes(V, n, qa, "rank_probabilities", D)
         P = np.zeros((n, n))
         for q in range(len(nodes)):

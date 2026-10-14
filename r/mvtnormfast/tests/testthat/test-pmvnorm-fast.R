@@ -498,3 +498,28 @@ test_that("PSD is judged in correlation units (#666)", {
   expect_lt(abs(as.numeric(pmvnorm_fast(upper = 0, sigma = S2)) -
                   (0.25 + asin(0.5) / (2 * pi)) / 2), 1e-6)
 })
+
+test_that("a finite factor row whose sum of squares overflows (#720)", {
+  for (a in c(9e153, 1e154, 1e300, 1e-170)) {
+    # X = a F1 + a F2, upper = its sd: Phi(1) at every finite a; at 1e154
+    # rowSums(V^2) overflowed (0.5), at 1e-170 it underflowed (1.0)
+    p <- pmvnorm_fast(lower = -Inf, upper = sqrt(2) * a, mean = 0,
+                      V = matrix(c(a, a), 1), D = 0)
+    expect_lt(abs(as.numeric(p) / pnorm(1) - 1), 1e-13)
+    expect_identical(attr(p, "method"), "factor")
+  }
+  # the all-zero factor row is still a constant
+  expect_equal(as.numeric(pmvnorm_fast(upper = c(1, 0),
+                                       V = matrix(c(0, 1), 2), D = c(0, 1))),
+               0.5)
+})
+
+test_that("a small-unit orthant is the same law (#173)", {
+  rho <- 0.99
+  ex <- 0.25 + asin(rho) / (2 * pi)
+  for (cc in c(1e-150, 1e-155)) {
+    p <- pmvnorm_fast(upper = c(0, 0), V = matrix(cc * sqrt(rho), 2, 1),
+                      D = rep(cc * cc * (1 - rho), 2))
+    expect_lt(abs(as.numeric(p) - ex), 1e-8)
+  }
+})

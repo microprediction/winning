@@ -313,6 +313,44 @@ def test_update_contrast_stays_finite_and_exact_for_a_precise_observation_669(a,
     assert np.isfinite(p).all() and abs(p.sum() - 1) < 1e-9
 
 
+
+@pytest.mark.parametrize("rho", [0, 1])
+def test_update_contrast_survives_a_large_common_unit_669(rho):
+    # D_i rest_i and D_i a_i D_j a_j overflowed at prior variance 1e155:
+    # D' came back NaN. The same model in a unit 2^520 times larger.
+    import warnings
+    u2 = 2.0 ** 520
+    Vm = np.array([[0.5], [-0.25], [0.125]])[:, :rho]
+    D = np.array([1.0, 2.0, 0.75])
+    av = np.array([1.0, 1.0, -0.5])
+    ref = wf.update_contrast(np.zeros(3), (Vm, D), av, mean=1.0, var=0.5)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        got = wf.update_contrast(np.zeros(3), (Vm * 2.0 ** 260, D * u2), av,
+                                 mean=2.0 ** 260, var=0.5 * u2)
+    assert got[5]["exact"]
+    np.testing.assert_allclose(got[0], ref[0] * 2.0 ** 260, rtol=1e-12)
+    np.testing.assert_allclose(got[2], ref[2] * u2, rtol=1e-12)
+    np.testing.assert_allclose(got[1] @ got[1].T, ref[1] @ ref[1].T * u2,
+                               rtol=1e-12, atol=1e-12 * u2)
+
+
+def test_update_contrast_floor_does_not_underflow_669():
+    # prior 1e150, var 1e-180: var / s_e = 5e-331 underflowed before its
+    # product with z^2 and D' came back exactly zero, which the race
+    # engine refuses; the posterior variance is representable
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        m1, V1, D1, *_ = wf.update_contrast(
+            np.zeros(2), (np.zeros((2, 0)), np.full(2, 1e150)), np.ones(2),
+            mean=1.0, var=1e-180)
+    assert np.isfinite(D1).all() and (D1 > 0).all()
+    aSa = float(np.sum((V1.T @ np.ones(2)) ** 2) + D1.sum())
+    assert 0.25e-180 < aSa <= 1e-180
+    p = wf.race_probabilities(-m1, V=-V1, D=D1)
+    assert np.isfinite(p).all() and abs(p.sum() - 1) < 1e-9
+
 # ---------------------------------------------------------------- #670
 
 def test_representable_posterior_at_the_bottom_of_the_float_range_670():
@@ -395,3 +433,25 @@ def test_per_coordinate_units_serve_a_mixed_scale_field_670():
     np.testing.assert_allclose(d2 / s / s, d1, rtol=1e-12)
     Wn = W2 / s[:, None]
     np.testing.assert_allclose(Wn @ Wn.T, W1 @ W1.T, rtol=1e-10, atol=1e-14)
+
+
+@pytest.mark.parametrize("e", [60, 100, 150])
+def test_free_common_shift_across_extreme_coordinate_scales_670(e):
+    # coordinates 10^(2e) apart in scale: the pooled unit put a loading of
+    # ~1e200 on the small one and its square overflowed the precision
+    # (NaN eigenvalue, "not identified"). In each coordinate's own unit
+    # the posterior is the same at every e (exact: m = [0, 1], d = 1/3).
+    import warnings
+    c = 10.0 ** e
+    D = np.array([c ** -2, c ** 2])
+    s0 = np.array([1 / c, c])
+    Y = np.array([[1 / c, 2 / c], [c, 2 * c]])
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        m, d, W = crn_posterior_replicates(np.zeros((2, 0)), D, Y, s0,
+                                           common="free")
+    k = np.array([c, 1 / c])
+    S = (np.diag(d) + W @ W.T) * np.outer(k, k)
+    np.testing.assert_allclose(m * k, [0.0, 1.0], atol=1e-12)
+    np.testing.assert_allclose(d * k * k, [1 / 3, 1 / 3], rtol=1e-12)
+    np.testing.assert_allclose(np.diag(S), [1.0, 1 / 3], rtol=1e-12)

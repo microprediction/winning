@@ -447,3 +447,31 @@ end
     @test abs(mvn_cdf_fast(upper = 0.0, sigma = S2) -
               (0.25 + asin(0.5) / (2pi)) / 2) < 1e-6
 end
+
+@testset "a finite factor row whose sum of squares overflows (#720)" begin
+    Phi1 = 0.8413447460685429
+    for a in (9e153, 1e154, 1e300, 1e-170)
+        # X = a F1 + a F2, upper = its sd: Phi(1) at every finite a; at
+        # 1e154 sum(V.^2) overflowed (0.5), at 1e-170 it underflowed (1.0)
+        p, m = mvn_cdf_fast_info(lower = [-Inf], upper = [sqrt(2) * a],
+                                 mean = [0.0], V = reshape([a, a], 1, 2),
+                                 D = [0.0])
+        @test abs(p / Phi1 - 1) < 1e-13
+        @test m == "factor"
+    end
+    # the all-zero factor row is still a constant
+    @test mvn_cdf_fast(upper = [1.0, 0.0], V = reshape([0.0, 1.0], 2, 1),
+                       D = [0.0, 1.0]) ≈ 0.5
+end
+
+@testset "a small-unit orthant is the same law (#173)" begin
+    # the sharp law goes to the dense fallback, whose own tolerance is
+    # ~1e-4; the 1e-300 floor made it 0.0093 low at both scales
+    rho = 0.99
+    ex = 0.25 + asin(rho) / (2pi)
+    for c in (1e-150, 1e-155)
+        p = mvn_cdf_fast(upper = [0.0, 0.0], V = fill(c * sqrt(rho), 2, 1),
+                         D = fill(c * c * (1 - rho), 2))
+        @test abs(p - ex) < 2e-3
+    end
+end

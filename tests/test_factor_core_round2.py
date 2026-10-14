@@ -659,3 +659,94 @@ console.log(JSON.stringify({{
     assert np.abs(np.subtract(*got["J"])).max() < 1e-15      # was zeros
     for c in got["common"]:
         assert np.abs(np.array(c) - got["ind"]).max() < 1e-12  # was uniform
+
+
+# ------------------------------------------------------- #477 residuals
+
+def test_common_ability_offset_reaches_no_lattice_477():
+    """The front door translated (#631) but the canonical factor helper,
+    its JVP, the top-k/bottom-k/rank kernels and the block, nested and
+    tree lattices built their grids at the caller's origin: shares moved
+    2.6 points at 1e15, top-k raised from 2^49, structured races raised
+    from 1e13 and their Jacobians came back zero at 1e15."""
+    import warnings
+    from winning.factor.core import (win_probabilities_factor,
+                                     jacobian_vector_product)
+    from winning.factor.topk import (top_k_probabilities,
+                                     bottom_k_probabilities,
+                                     rank_probabilities, top_k_jacobians)
+    from winning.factor.blocks import (block_race_probabilities,
+                                       nested_race_probabilities,
+                                       tree_race_probabilities,
+                                       block_race_jacobian,
+                                       nested_race_jacobian,
+                                       tree_race_jacobian)
+    mu = np.array([1.0, 1.25, -0.5])
+    V = np.array([[1.079], [-0.108], [-0.536]])
+    D = np.array([0.1, 0.083, 0.091])
+    F, W = np.array([[-1.0], [0.0], [1.0]]), np.array([0.25, 0.5, 0.25])
+    b4, b3 = np.array([-3.0, -1.0, 1.0, 3.0]), np.array([-1.0, 0.0, 1.0])
+    cl, ld, D3 = [0, 1, 2], [0.3, 0.2, 0.1], [1.0, 1.0, 1.0]
+    parent, strength = [3, 3, 4, 4, -1], [0.0, 0.0, 0.3, 0.0, 0.0]
+    calls = [
+        (mu, lambda m: win_probabilities_factor(m, V, D, F, W, points=501)),
+        (mu, lambda m: win_probabilities_factor(
+            m, V, D, F, W, points=501, return_deletions=True)[1]),
+        (mu, lambda m: jacobian_vector_product(m, V, D, F, W,
+                                               np.array([1.0, -2.0, 1.0]))),
+        (b4, lambda m: top_k_probabilities(m, 2)),
+        (b4, lambda m: top_k_probabilities(m, 2, V=[[.3], [0], [-.2], [.1]])),
+        (b4, lambda m: bottom_k_probabilities(m, 2)),
+        (b4, lambda m: rank_probabilities(m)),
+        (b4, lambda m: top_k_jacobians(m, 2)[0]),
+        (b3, lambda m: block_race_probabilities(m, cl, ld, D3)),
+        (b3, lambda m: block_race_jacobian(m, cl, ld, D3)),
+        (b3, lambda m: nested_race_probabilities(m, cl, ld, D3,
+                                                 coupling=[.3, 0, -.3])),
+        (b3, lambda m: nested_race_jacobian(m, cl, ld, D3,
+                                            coupling=[.3, 0, -.3])),
+        (b3, lambda m: tree_race_probabilities(m, cl, ld, D3, parent,
+                                               strength)),
+        (b3, lambda m: tree_race_jacobian(m, cl, ld, D3, parent, strength)),
+    ]
+    for base, f in calls:
+        want = np.asarray(f(base))
+        for c in (2.0 ** 49, 1e13, 1e15):
+            shifted = base + c
+            assert np.array_equal(shifted - shifted[0], base - base[0])
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")
+                got = np.asarray(f(shifted))
+            assert np.abs(got - want).max() < 1e-12, (c, got, want)
+
+
+def test_one_identified_share_is_no_certificate_588():
+    """Below max(1e-9, 1e-4/N) a share was not scored. With only the
+    favourite above it, the residual held no contrast and a
+    self-generated [1, 1.1e-5, 5.7e-18] was certified with abilities 3
+    units off (the 1.1e-5 share repriced wrong); [1, 1e-17, 3e-65] was
+    certified at residual 0 with every tail unmatched."""
+    from winning.factor.core import (win_probabilities_factor,
+                                     abilities_from_probabilities_factor)
+    V, D = np.zeros((3, 0)), np.ones(3)
+    F, W = np.zeros((1, 0)), np.ones(1)
+    p = win_probabilities_factor(np.array([-6.0, 0.0, 6.0]), V, D, F, W,
+                                 points=1001)
+    mu, info = abilities_from_probabilities_factor(p, V, D, F, W,
+                                                   points=1001,
+                                                   return_info=True)
+    q = win_probabilities_factor(mu, V, D, F, W, points=1001)
+    assert info["converged"]
+    assert abs(np.log(q[1] / p[1])) < 1e-5            # the contrast is met
+    assert abs((mu[1] - mu[0]) - 6.0) < 1e-4
+    p = win_probabilities_factor(np.array([-12.0, 0.0, 12.0]), V, D, F, W,
+                                 points=1001)
+    mu, info = abilities_from_probabilities_factor(p, V, D, F, W,
+                                                   points=1001,
+                                                   return_info=True)
+    q = win_probabilities_factor(mu, V, D, F, W, points=1001)
+    # every tail is below the solver's 1e-15 floor: not certifiable, and
+    # it must not say otherwise
+    assert info["converged"] == bool(np.all(np.abs(np.log(
+        np.maximum(q, 1e-300) / p)) < 1e-6))
+    assert not info["converged"]
