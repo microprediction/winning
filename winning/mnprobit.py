@@ -263,7 +263,7 @@ class MNProbit:
                            options={"maxiter": maxiter, "gtol": 1e-6})
         if polish:
             import winning.likelihood as _L
-            F, W = _L.symmetric_sobol_normal(self.r, 1, 2 ** 13, seed=3)
+            F, W = _L.sobol_normal(self.r, 1, 2 ** 13, seed=3)
             orig = _L.nodes_for_likelihood
             _L.nodes_for_likelihood =                 lambda r, Qf=7, Qz=7, sharp=0.0: (F, W)
             try:
@@ -316,8 +316,8 @@ class MNProbit:
         mu = self.X @ self.params_
         vals = []
         for seed in (101, 102):
-            # symmetrised like the likelihood's own cloud (#605)
-            F, W = _L.symmetric_sobol_normal(self.r, 1, 2 ** 15, seed=seed)
+            # plain Sobol, like the likelihood's own sharp cloud
+            F, W = _L.sobol_normal(self.r, 1, 2 ** 15, seed=seed)
             orig = _L.nodes_for_likelihood
             _L.nodes_for_likelihood =                 lambda r, Qf=7, Qz=7, sharp=0.0: (F, W)
             try:

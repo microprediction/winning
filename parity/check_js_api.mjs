@@ -1962,6 +1962,39 @@ accepts("the inverse takes a scalar D, matching python",
   holds("fitGrammar of an exchangeable C is label free (#383)",
         Math.max(...o.map((x, i) => Math.abs(x - back[i]))) < 1e-12);
 
+  // #505: opt-in iterated principal-axis factoring recovers an exact
+  // v v' + diag(D) with heterogeneous D (the default eigen fit got its
+  // decisive contrast 0.22 as 2.58); the default stays bit for bit.
+  {
+    const v5 = [0, 0, 0, 1, 0, 0.7], D5 = [18, 15, 12, 0.08, 6, 0.05];
+    const C5 = v5.map((x, i) => v5.map((y, j) => x * y + (i === j ? D5[i] : 0)));
+    const cmax = (A, B) => { let e = 0;
+      for (let i = 0; i < A.length; i++) for (let j = 0; j < A.length; j++)
+        e = Math.max(e, Math.abs((A[i][i] + A[j][j] - 2 * A[i][j]) - (B[i][i] + B[j][j] - 2 * B[i][j])));
+      return e; };
+    for (const [k, m] of [[1, 0], [3, 5]]) {
+      const g = demo.fitGrammar(C5, k, m, { method: "ipaf" });
+      holds(`fitGrammar ipaf recovers the #505 rank-one + diagonal at k=${k}, m=${m}`,
+            g.ipaf.converged && cmax(C5, demo.structureCov({ kind: "Factor", V: g.V, D: g.D })) < 1e-10,
+            JSON.stringify(g.ipaf));
+      const d0 = demo.fitGrammar(C5, k, m);
+      holds(`fitGrammar default is unchanged by the ipaf option (k=${k}, m=${m}; #505)`,
+            JSON.stringify(d0) === JSON.stringify(demo.fitGrammar(C5, { k, m })) &&
+            JSON.stringify(d0) === JSON.stringify(demo.fitGrammar(C5, k, m, { method: "eig" })) &&
+            !("ipaf" in d0));
+    }
+    const g4 = demo.fitGrammar(C4, { k: 2, m: 0, method: "ipaf" });
+    holds("fitGrammar ipaf recovers an ordinary rank-two + diagonal (#505)",
+          g4.ipaf.converged && cmax(C4, demo.structureCov({ kind: "Factor", V: g4.V, D: g4.D })) < 1e-10);
+    const ow2 = console.warn; let warned = 0; console.warn = () => { warned++; };
+    const gc = demo.fitGrammar(C5, 1, 0, { method: "ipaf", maxIter: 2 });
+    console.warn = ow2;
+    holds("fitGrammar ipaf honours maxIter and reports non-convergence (#505)",
+          !gc.ipaf.converged && gc.ipaf.iterations <= 4 && warned === 1, JSON.stringify(gc.ipaf));
+    rejects(demo.fitGrammar, [C5, 1, 0, { method: "paf" }], "fitGrammar refuses an unknown method (#505)", "method");
+    rejects(demo.fitGrammar, [C5, 1, 0, { method: "ipaf", maxIter: 0 }], "fitGrammar refuses maxIter < 1 (#505)", "maxIter");
+  }
+
   // frequency MC in the race quotient: a huge common mode costs nothing
   const a = 2e15, Cc = [[a + 1, a], [a, a + 1]];
   const Lc = demo.raceFactor(Cc);

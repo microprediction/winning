@@ -121,13 +121,20 @@
 }
 
 # Equal-weight nodes over (factor^r, own noise) for the sharp regime:
-# scrambled Sobol in r + 1 dimensions (R/sobol.R), symmetrised over the
-# factor signs and permutations (#605). It was a four-prime Halton
-# table, so r = 4 -- the full triangular rank at five alternatives --
-# indexed an NA fifth base and every rank-4 fit died in setup, even on
-# the Gauss-Hermite branch (#388).
-.sobol_nodes3 <- function(r, m = 10L) {
+# plain scrambled Sobol in r + 1 dimensions (R/sobol.R). It was a
+# four-prime Halton table, so r = 4 -- the full triangular rank at five
+# alternatives -- indexed an NA fifth base and every rank-4 fit died in
+# setup, even on the Gauss-Hermite branch (#388).
+#
+# symmetric = TRUE gives the #605 orbit under factor signs and
+# permutations instead. The sharp branch does not use it (owner
+# decision, PR #719 / 2026-10-14): at 2^10 nodes the orbit (8 images of
+# 128 base points at r = 2) cost 3-5x in accuracy and walled the Fishing
+# fit 3.4 nats short of the optimum, as python and julia. The
+# Gauss-Hermite branch keeps #605's invariance for free.
+.sobol_nodes3 <- function(r, m = 10L, symmetric = FALSE) {
   n <- 2L^m
+  if (!symmetric) return(.sobol_normal(r + 1L, n, seed = 0L))
   sym <- .factor_symmetries(r, n)
   ord <- length(sym$perms) * length(sym$signs)
   nb <- as.integer(ceiling(n / ord))

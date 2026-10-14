@@ -1,6 +1,6 @@
 """Multinomial-probit likelihood and estimator regressions, round 3:
 the own-noise tilt (#128, #270, #352), the smooth blend statistic
-(#420), the symmetrised sharp cloud (#605), both normalisations (#376),
+(#420), the sharp cloud and factor symmetry (#605, PR #719), both normalisations (#376),
 one-alternative panels (#581) and separation (#642)."""
 
 import warnings
@@ -136,16 +136,42 @@ def _predict605(A):
 @pytest.mark.parametrize("transform", [
     lambda V: V * [-1.0, 1.0], lambda V: V * [1.0, -1.0],
     lambda V: V[:, ::-1], lambda V: -V[:, ::-1]])
-def test_sharp_cloud_ignores_factor_signs_and_order(transform):
-    """#605: a sign flip moved the sharp-branch probability by 0.0047."""
+def test_sharp_cloud_sign_and_order_noise_is_sobol_noise(transform):
+    """#605: a sign flip moved the sharp-branch probability by 0.0047.
+    The sharp branch is a PLAIN Sobol cloud again (owner decision, PR
+    #719 / 2026-10-14: the symmetrised orbit was 3-5x less accurate and
+    cost the Fishing fit 3.4 nats), so the invariance holds to the
+    cloud's noise, not to 1e-12. Measured max moves: 0.0020, 0.0026,
+    0.0022, 0.0031."""
     base = _predict605(_V605)
-    assert np.abs(_predict605(transform(_V605)) - base).max() < 1e-12
+    assert np.abs(_predict605(transform(_V605)) - base).max() < 6e-3
     ref = np.array([0.3610138, 0.1938048, 0.4039584, 0.0412231])
     assert np.abs(base - ref).max() < 3e-3
 
 
+@pytest.mark.parametrize("transform", [
+    lambda V: V * [-1.0, 1.0], lambda V: V * [1.0, -1.0],
+    lambda V: V[:, ::-1], lambda V: -V[:, ::-1]])
+def test_hermite_branch_ignores_factor_signs_and_order(transform):
+    """#605's exact invariance stays where it is free: the Gauss-Hermite
+    tensor (smooth sharpness below the 2.9 blend start)."""
+    V = _V605 / 4.0
+    assert _smooth_sharpness(V, np.ones(4))[0] < 2.9
+    base = _predict605(V)
+    assert np.abs(_predict605(transform(V)) - base).max() < 1e-12
+
+
+def test_sharp_branch_is_the_plain_sobol_cloud():
+    from winning.likelihood import nodes_for_likelihood, sobol_normal
+    F, W = nodes_for_likelihood(2, sharp=5.0)
+    F0, W0 = sobol_normal(2, 1, 1024, seed=0)
+    assert np.array_equal(F, F0) and np.array_equal(W, W0)
+    assert len(np.unique(F[:, -1])) == 1024
+
+
 @pytest.mark.parametrize("r", [1, 2, 3, 4, 5])
 def test_symmetric_cloud_is_closed_under_its_group(r):
+    # the opt-in helper (the likelihood's sharp branch no longer uses it)
     F, W = symmetric_sobol_normal(r, 1, 1024, seed=0)
     assert abs(W.sum() - 1.0) < 1e-12 and len(F) <= 1200
     # #694: the group (order <= 8) never collapses the own-noise rule
