@@ -189,8 +189,10 @@ attr(.base_laplace, "log_sf") <- function(z) {
 # below a million field scales nothing moves, so ordinary inputs stay
 # bit-identical. isTRUE: a non-finite mu is refused downstream, as before.
 .translated_home <- function(mu, D) {
-  off <- sort(mu, na.last = TRUE)[length(mu) %/% 2L + 1L]
   scale <- (max(mu) - min(mu)) + sqrt(max(D))
+  # |off| <= max|mu|: an ordinary field skips the sort
+  if (!isTRUE(max(abs(mu)) > 1e6 * scale)) return(mu)
+  off <- sort(mu, na.last = TRUE)[length(mu) %/% 2L + 1L]
   if (isTRUE(abs(off) > 1e6 * scale)) mu - off else mu
 }
 

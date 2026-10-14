@@ -307,8 +307,10 @@ million field scales nothing moves, so ordinary inputs stay bit-identical.
 A comparison with NaN is false, so non-finite mu passes through untouched."""
 function _translated_home(mu, D)
     isempty(mu) && return mu
-    off = sort(mu)[length(mu) ÷ 2 + 1]
     scale = (maximum(mu) - minimum(mu)) + sqrt(maximum(D))
+    # |off| <= max|mu|: an ordinary field skips the sort
+    maximum(abs, mu) > 1e6 * scale || return mu
+    off = sort(mu)[length(mu) ÷ 2 + 1]
     return abs(off) > 1e6 * scale ? mu .- off : mu
 end
 
