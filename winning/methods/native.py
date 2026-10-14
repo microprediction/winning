@@ -154,7 +154,15 @@ def _contrast_cholesky(C):
     the old floor.
     """
     m = len(C)
-    tr = float(np.trace(C)) / max(m, 1)
+    dg = np.diagonal(C)
+    with np.errstate(over="ignore"):
+        tr = float(np.sum(dg)) / max(m, 1)
+    if tr == np.inf and np.all(np.isfinite(dg)):
+        # finite variances whose SUM overflows (D = 5e307): scale first,
+        # or the fallback below priced the race on an infinite ridge in
+        # the ports and warned here (#409)
+        mx = float(np.max(dg))
+        tr = mx * float(np.mean(dg / mx))
     if not (tr > 0.0 and np.isfinite(tr)):
         return np.linalg.cholesky(C + 1e-312 * np.eye(m))
     k = -(int(np.frexp(tr)[1]) // 2)

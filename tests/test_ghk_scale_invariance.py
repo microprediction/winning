@@ -106,3 +106,19 @@ def test_a_valid_small_pivot_is_not_inflated_409(method, budget):
     p, _ = method(-np.array([0.0, a, -a]), V, D, budget=budget, seed=9)
     np.testing.assert_allclose(p, [0.49999992, 0.07932763, 0.42067245],
                                atol=2e-3)
+
+
+@pytest.mark.parametrize("method", [ghk, qmc_ghk])
+def test_overflowing_variance_sum_is_the_same_race_409(method):
+    # finite variances whose trace overflows (5e307 each): the scale is
+    # formed without overflow, so no RuntimeWarning, and the race equals
+    # its reciprocal unit change mu /= 1e154, D /= 1e308
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        p, _ = method(np.array([0.0, 1e154, -1e154]), np.empty((3, 0)),
+                      np.full(3, 5e307), budget=4096, seed=9)
+    q, _ = method(np.array([0.0, 1.0, -1.0]), np.empty((3, 0)),
+                  np.full(3, 0.5), budget=4096, seed=9)
+    assert np.isfinite(p).all()
+    np.testing.assert_allclose(p, q, rtol=0, atol=1e-12)
