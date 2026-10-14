@@ -2765,5 +2765,20 @@ accepts("dividendImpliedAbility keeps the favourite first at unit 0.1 (#649)",
   holds("default bulk window keeps a 1e-45 middle runner (#723)", worst < 1e-6, worst.toExponential(2));
 }
 
+{
+  // Gumbel's lower-tail CDF was 1 - S, exactly 0 once S rounds to one: the
+  // Plackett-Luce last place 2.0e-39 of [-35, 0, 0] came back 0 (#710)
+  const c = Math.PI / Math.sqrt(6);
+  let worst = 0;
+  for (const gap of [20, 30, 35]) {
+    const w0 = Math.exp(c * gap), exact = 2 / ((w0 + 2) * (w0 + 1));
+    const mu = [-gap, 0, 0];
+    const b = topk.bottomKProbabilities(mu, 1, { base: "gumbel", points: 513 })[0];
+    const r = topk.rankProbabilities(mu, { base: "gumbel", points: 513 })[0][2];
+    worst = Math.max(worst, Math.abs(b / exact - 1), Math.abs(r / exact - 1));
+  }
+  holds("Gumbel last place matches Plackett-Luce at gaps 20..35 (#710)", worst < 1e-6, worst.toExponential(2));
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");

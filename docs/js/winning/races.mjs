@@ -55,6 +55,13 @@ BASES.logistic.logSf = z => {
   const u = Math.PI / Math.sqrt(3) * z;
   return -Math.max(u, 0) - Math.log1p(Math.exp(-Math.abs(u)));
 };
+/* The asymmetric min-Gumbel's lower-tail CDF, F = -expm1(-e^u): the count
+   programs (top-k, rank) reflect the symmetric bases' survival for F, and
+   for Gumbel fell back to 1 - S, which is 0 once S rounds to one -- a
+   representable last place of 2.0e-39 (mu = [-35, 0, 0]) came back as an
+   exact 0 at any point count (#710). */
+BASES.gumbel.cdf = z =>
+  -Math.expm1(-Math.exp(Math.min(z * (Math.PI / Math.sqrt(6)) - EULER, 30)));
 BASES.laplace.logSf = z => {
   const b = 1 / Math.sqrt(2);
   return z < 0 ? Math.log1p(-0.5 * Math.exp(z / b)) : Math.log(0.5) - z / b;
@@ -112,9 +119,10 @@ export function checkTails(fn) {
 }
 
 /* z -> F(z) from a callable base's cdf or logCdf, or null (the named
-   bases reflect instead). */
+   symmetric bases reflect instead; Gumbel carries its own cdf, #710). */
 export function lowerCdf(fn) {
-  if (fn == null || NAMED_BASES.has(fn)) return null;
+  if (fn == null) return null;
+  if (NAMED_BASES.has(fn)) return typeof fn.cdf === "function" ? fn.cdf : null;
   checkTails(fn);
   if (typeof fn.cdf === "function") return fn.cdf;
   if (typeof fn.logCdf === "function")
