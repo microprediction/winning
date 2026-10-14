@@ -561,6 +561,19 @@ function centredLoadings(V, N) {
   return out;
 }
 
+/* mu moved next to the origin when a common offset dwarfs the field
+   (port of python's races._translated_home): shift by a middle entry
+   (an element, so no sum can overflow) once |offset| > 1e6 field scales;
+   below that nothing moves, so ordinary inputs stay bit-identical. */
+function translatedHome(mu, D) {
+  const s = mu.slice().sort((a, b) => a - b);
+  const off = s[Math.floor(s.length / 2)];
+  let dmax = 0;
+  for (let i = 0; i < D.length; i++) dmax = Math.max(dmax, D[i]);
+  const scale = (s[s.length - 1] - s[0]) + Math.sqrt(dmax);
+  return Math.abs(off) > 1e6 * scale ? mu.map((v) => v - off) : mu;
+}
+
 export function winProbabilitiesFactor(mu, V, D, F, W, opts = {}) {
   checkOpts(opts, WIN_PROBABILITIES_FACTOR_OPTS, "winProbabilitiesFactor");
   const points = asBudget(opts.points, 501, "winProbabilitiesFactor", "points");
@@ -570,6 +583,10 @@ export function winProbabilitiesFactor(mu, V, D, F, W, opts = {}) {
   const N = mu.length;
   V = asLoadings(V, N);
   D = asIdio(D, N);
+  // the origin is a gauge, but the lattice below is built in the
+  // caller's units: at a common offset of 2^52 it collapsed to the float
+  // spacing and shares moved 1.4e-3 (#477, as python's _translated_home)
+  mu = translatedHome(mu, D);
   F = asNodes(F, V[0].length);
   ({ F, W } = asFactorLaw(F, W, "W"));   // zero-weight nodes dropped (#416)
   const Q = F.length;

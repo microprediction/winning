@@ -500,4 +500,15 @@ check("calibrated abilities vs truth", muHat, mu, 5e-6);
   }
 }
 
+/* --- a common ability offset reaches no lattice (#477, as python) --- */
+{
+  const base = [-1, 0, 1], D = [1, 1, 1], V = [[0.5], [0.2], [-0.3]], F = [[-1], [1]], W = [0.5, 0.5];
+  const p0 = winProbabilitiesFactor(base, V, D, F, W, { deletions: true, ownLogSlope: true });
+  for (const c of [1e12, 1e15, 2 ** 52]) {
+    const r = winProbabilitiesFactor(base.map((x) => x + c), V, D, F, W, { deletions: true, ownLogSlope: true });
+    check(`factor forward at common offset ${c} is the unshifted race (#477)`,
+          [...r.p, ...r.ownLogSlope, ...r.deletions.flat()], [...p0.p, ...p0.ownLogSlope, ...p0.deletions.flat()], 1e-15);
+  }
+}
+
 process.exit(failures ? 1 : 0);
