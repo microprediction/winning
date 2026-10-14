@@ -336,25 +336,57 @@ function pow4Scale(amax) {
   return Math.max(-1022, Math.min(1022, e));
 }
 
-export function fitGrammar(C, k = 3, m = 4) {
+/* fitGrammar(C, k = 3, m = 4[, opts]) or fitGrammar(C, opts), opts =
+   { k, m, method, maxIter, tol }. Returns { V, D } columns for
+   raceProbabilities.
+
+   method "eig" (the default): one eigendecomposition of P C P for the
+   factor stage. When the diagonal is heterogeneous its centred part has
+   structured eigenvalues of its own, so the top directions need not span
+   the factor: an exact v v' + diag(D) was fitted with an 11.7x wrong
+   contrast (#505).
+
+   method "ipaf" (opt-in): iterated principal-axis factoring on the
+   projected matrix -- alternate V = top-k eigencolumns of P(C - diag D)P
+   and D = the closing diagonal of P(C - V V')P -- each step the exact
+   minimiser of ||P(C - V V' - diag D)P||_F in its block, so the residual
+   never rises. At most maxIter (default 500) iterations, each one
+   O(n^3) Jacobi; stops when the relative residual changes by <= tol
+   (default 1e-12). Two deterministic starts (SMC uniquenesses, then
+   the eigen fit's diagonal), the smaller residual kept, so at most
+   2 maxIter iterations. The result carries
+   ipaf: { iterations, converged, residual } (iterations summed over the
+   starts run; residual relative to ||P C P||_F; n >= 3 and k >= 1). The residual stage then promotes the top-m eigencolumns
+   of the remaining projected residual, not of P(C - V V')P. */
+export function fitGrammar(C, k = 3, m = 4, opts = undefined) {
+  if (k !== null && typeof k === "object") { opts = k; k = opts.k ?? 3; m = opts.m ?? 4; }
+  opts = opts ?? {};
+  const method = opts.method ?? "eig";
+  if (method !== "eig" && method !== "ipaf")
+    throw new Error(`fitGrammar: method must be "eig" or "ipaf"; got ${method}`);
+  const maxIter = opts.maxIter ?? 500, tol = opts.tol ?? 1e-12;
+  if (method === "ipaf" && !(Number.isInteger(maxIter) && maxIter >= 1 && tol >= 0))
+    throw new Error("fitGrammar: maxIter must be a positive integer and tol >= 0");
+  const ip = method === "ipaf" ? { maxIter, tol } : null;
   C = validateCovariance(C, "fitGrammar: C");
   let amax = 0;
   for (const row of C) for (const v of row) amax = Math.max(amax, Math.abs(v));
   const e = pow4Scale(amax);
-  if (e === 0) return fitGrammarScaled(C, k, m);
+  if (e === 0) return fitGrammarScaled(C, k, m, ip);
   const up = 2 ** e;
-  const fit = fitGrammarScaled(C.map(row => row.map(v => v * up)), k, m);
+  const fit = fitGrammarScaled(C.map(row => row.map(v => v * up)), k, m, ip);
   // undo in two exact steps: 2^-e alone overflows to Infinity past e = 1023
   const down = 2 ** (-e / 2);
   const out = { V: fit.V.map(row => row.map(v => v * down)),
                 D: fit.D.map(d => d * down * down) };
+  if (fit.ipaf) out.ipaf = fit.ipaf;
   if (!out.D.every(Number.isFinite) || !out.V.flat().every(Number.isFinite))
     throw new Error("fitGrammar: the fitted grammar is not representable in " +
                     "double precision at this covariance scale");
   return out;
 }
 
-function fitGrammarScaled(C, k, m) {
+function fitGrammarScaled(C, k, m, ip = null) {
   // rank-k + promoted residual on the PROJECTED residual (the package's
   // fit_covariance pipeline; blocks omitted for browser latency, and the
   // contrast heuristic stands in for the certified quotient ALS):
@@ -416,13 +448,88 @@ function fitGrammarScaled(C, k, m) {
   const { values, vectors } = jacobiEigh(CP, 50);
   const order = values.map((v, i) => i).sort((a, b) => values[b] - values[a]);
   const kk = untiedRank(order.map(i => values[i]), Math.min(k, n), "factor stage");
-  const cols = [];
+  let cols = [];
   for (const idx of order.slice(0, kk)) {
     const lam = Math.max(values[idx], 0);
     if (lam > dead) cols.push(vectors.map(row => row[idx] * Math.sqrt(lam)));
   }
+  // closing diagonal: min_d ||P(R - diag d)P||, R = C - VV', d >= floor,
+  // as the LOWER-BOUNDED least squares (python's water-filling), not a
+  // generic solve with a floor applied afterwards: P o P is singular at
+  // n = 2, where the generic solve silently zeroed a coordinate (#341)
+  const closeD = colsNow => {
+    const RP = projMinus(colsNow);
+    const a = 1 - 2 / n, b = 1 / (n * n);
+    const rhs = RP.map((row, i) => row[i]);
+    const fsum = floor.reduce((x, y) => x + y, 0);
+    if (n <= 2) {
+      const s = Math.max(rhs.reduce((x, y) => x + y, 0), 0) / (a + n * b) / n;
+      return floor.map(f => Math.max(s, f));
+    }
+    const x = nnlsCenteredGram(rhs.map((v, i) => v - (a * floor[i] + b * fsum)), n);
+    return floor.map((f, i) => f + x[i]);
+  };
+  // P (C - VV' - diag d) P
+  const projResid = (colsNow, d) => {
+    const R = projMinus(colsNow);
+    const pd = proj(d.map((di, i) => d.map((_, j) => (i === j ? di : 0))));
+    return R.map((row, i) => row.map((v, j) => v - pd[i][j]));
+  };
+  const fro = M => Math.sqrt(M.reduce((acc, row) => acc + row.reduce((t, v) => t + v * v, 0), 0));
+  let report = null;
+  if (ip && kk > 0) {
+    // iterated principal-axis factoring on the projected matrix (#505)
+    // Two deterministic starts, the smaller final residual kept: the
+    // squared-multiple-correlation uniquenesses 1/(C^-1)_ii (when C is
+    // well conditioned), then the eigen stage's own closing diagonal.
+    // IPAF's linear rate can be near 1 from a start whose factor sits on
+    // the wrong runners: from the eigen start alone the #505 fixture
+    // needed ~1e5 iterations, from the SMC start it converges in tens.
+    const scale = Math.max(fro(CP), 1e-300);
+    const starts = [];
+    const eC = jacobiEigh(C, 50);
+    const lmax = Math.max(...eC.values);
+    if (Math.min(...eC.values) > 1e-10 * lmax)
+      starts.push(C.map((_, i) => {
+        let s = 0;
+        for (let q = 0; q < n; q++) s += eC.vectors[i][q] ** 2 / eC.values[q];
+        return Math.max(1 / s, floor[i]);
+      }));
+    starts.push(closeD(cols));
+    let best = null;
+    for (const d0 of starts) {
+      let d = d0, prev = Infinity, it = 0, converged = false, cs = [];
+      for (it = 1; it <= ip.maxIter; it++) {
+        const eA = jacobiEigh(projResid([], d), 50);
+        const oA = eA.values.map((v, i) => i).sort((x, y) => eA.values[y] - eA.values[x]);
+        cs = [];
+        for (const idx of oA.slice(0, kk)) {
+          const lam = Math.max(eA.values[idx], 0);
+          if (lam > dead) cs.push(eA.vectors.map(row => row[idx] * Math.sqrt(lam)));
+        }
+        d = closeD(cs);
+        const res = fro(projResid(cs, d)) / scale;
+        // relative change, with an absolute 1e-15 floor: at a rounding-level
+        // residual (an exact grammar member) the change is pure noise
+        const stop = Math.abs(prev - res) <= ip.tol * res + 1e-15;
+        prev = res;
+        if (stop) { converged = true; break; }
+      }
+      const iters = Math.min(it, ip.maxIter);
+      if (!best || prev < best.residual)
+        best = { cols: cs, iterations: (best ? best.iterations : 0) + iters, converged, residual: prev };
+      else best.iterations += iters;
+      if (converged && prev <= 1e-12) break;
+    }
+    cols = best.cols;
+    report = { iterations: best.iterations, converged: best.converged, residual: best.residual };
+    if (!report.converged && typeof console !== "undefined")
+      console.warn(`fitGrammar: ipaf stopped at maxIter=${ip.maxIter} ` +
+                   `without converging (relative residual ${report.residual})`);
+  }
   // projected residual, diagonal zeroed, top-m eigencolumns promoted
-  const E = projMinus(cols);
+  // (ipaf: the full remaining residual P(C - VV' - diag D)P instead)
+  const E = report ? projResid(cols, closeD(cols)) : projMinus(cols);
   for (let i = 0; i < n; i++) E[i][i] = 0;
   const eE = jacobiEigh(E, 50);
   const orderE = eE.values.map((v, i) => i).sort((a, b) => eE.values[b] - eE.values[a]);
@@ -431,29 +538,14 @@ function fitGrammarScaled(C, k, m) {
     const lam = Math.max(eE.values[idx], 0);
     if (lam > dead) cols.push(eE.vectors.map(row => row[idx] * Math.sqrt(lam)));
   }
-  // closing diagonal: min_d ||P(R - diag d)P||, R = C - VV', d >= floor,
-  // as the LOWER-BOUNDED least squares (python's water-filling), not a
-  // generic solve with a floor applied afterwards: P o P is singular at
-  // n = 2, where the generic solve silently zeroed a coordinate (#341)
-  const RP = projMinus(cols);
-  const a = 1 - 2 / n, b = 1 / (n * n);
-  const rhs = RP.map((row, i) => row[i]);
-  const fsum = floor.reduce((x, y) => x + y, 0);
-  let Dc;
-  if (n <= 2) {
-    const s = Math.max(rhs.reduce((x, y) => x + y, 0), 0) / (a + n * b) / n;
-    Dc = floor.map(f => Math.max(s, f));
-  } else {
-    const x = nnlsCenteredGram(rhs.map((v, i) => v - (a * floor[i] + b * fsum)), n);
-    Dc = floor.map((f, i) => f + x[i]);
-  }
+  const Dc = closeD(cols);
   if (!cols.length) cols.push(new Array(n).fill(0));
   const V = [], D = [];
   for (let i = 0; i < n; i++) {
     V.push(cols.map(col => col[i]));
     D.push(Dc[i]);
   }
-  return { V, D };
+  return report ? { V, D, ipaf: report } : { V, D };
 }
 
 export function structureCov(s) {
