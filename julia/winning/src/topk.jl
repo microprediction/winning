@@ -265,6 +265,7 @@ function top_k_probabilities(mu, k; V = nothing, D = nothing,
     n = length(mu)
     k = Int(k)
     1 <= k <= n - 1 || error("k must be in [1, n-1]; got k=$k, n=$n")
+    mu = _translated_home(mu, _as_idio(D, n))     # (#477)
     sd = sqrt.(_as_idio(D, n))
     fn = _base_fn(base)
     V === nothing &&
@@ -313,6 +314,7 @@ function bottom_k_probabilities(mu, k; V = nothing, D = nothing,
     n = length(mu)
     k = Int(k)
     1 <= k <= n - 1 || error("k must be in [1, n-1]; got k=$k, n=$n")
+    mu = _translated_home(mu, _as_idio(D, n))     # (#477)
     sd = sqrt.(_as_idio(D, n))
     fn = _base_fn(base)
     V === nothing &&
@@ -335,6 +337,7 @@ function top_k_jacobians(mu, k; D = nothing, base = "normal",
     n = length(mu)
     k = Int(k)
     1 <= k <= n - 1 || error("k must be in [1, n-1]; got k=$k, n=$n")
+    mu = _translated_home(mu, _as_idio(D, n))     # (#477)
     if V !== nothing
         fac = _topk_factor_nodes(V, n, qa, "top_k_jacobians", D)
         Jm = zeros(n, n)
@@ -397,6 +400,7 @@ function rank_probabilities(mu; D = nothing, base = "normal", points = 513,
                             V = nothing, qa = nothing)
     mu = Float64.(collect(mu))
     n = length(mu)
+    mu = _translated_home(mu, _as_idio(D, n))     # (#477)
     sd = sqrt.(_as_idio(D, n))
     fn = _base_fn(base)
     P = if V === nothing

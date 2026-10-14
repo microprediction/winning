@@ -388,3 +388,27 @@ test_that("relative targets survive a finite sum below k / xmax (#461)", {
   expect_lt(max(abs(abilities_from_topk(q * 4e-309, 2) -
                       abilities_from_topk(q, 2))), 1e-9)
 })
+
+test_that("a common translation of the abilities moves nothing (#477)", {
+  # the shifted contrasts are exact, so every price must be too; at
+  # 2^52 the lattice collapsed: race NaN, top-k/rank refused mass 0
+  mu <- c(-3, -1, 1, 3)
+  D <- c(1, 1.5, 0.7, 1)
+  for (e in c(30, 45, 50, 52)) {
+    s <- mu + 2^e
+    expect_lt(max(abs(race_probabilities(s, D = D) -
+                      race_probabilities(mu, D = D))), 1e-12)
+    expect_lt(max(abs(race_jacobian(s, D = D) - race_jacobian(mu, D = D))),
+              1e-12)
+    expect_lt(max(abs(top_k_probabilities(s, 2, D = D) -
+                      top_k_probabilities(mu, 2, D = D))), 1e-12)
+    expect_lt(max(abs(bottom_k_probabilities(s, 2, D = D) -
+                      bottom_k_probabilities(mu, 2, D = D))), 1e-12)
+    expect_lt(max(abs(rank_probabilities(s, D = D) -
+                      rank_probabilities(mu, D = D))), 1e-12)
+    expect_lt(max(abs(unlist(top_k_jacobians(s, 2, D = D)) -
+                      unlist(top_k_jacobians(mu, 2, D = D)))), 1e-12)
+  }
+  # a field near the origin is left exactly where it is
+  expect_identical(.translated_home(mu, D), mu)
+})

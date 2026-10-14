@@ -432,3 +432,26 @@ end
             w ./ maximum(w) .* c, s ./ maximum(s) .* c)[1] .- ls1)) < 1e-9
     end
 end
+
+@testset "a common translation of the abilities moves nothing (#477)" begin
+    # the shifted contrasts are exact, so every price must be too; at
+    # 2^52 the lattice collapsed: race NaN, top-k/rank refused mass 0
+    mu = [-3.0, -1.0, 1.0, 3.0]
+    D = [1.0, 1.5, 0.7, 1.0]
+    for e in (30, 45, 50, 52)
+        s = mu .+ 2.0^e
+        @test maximum(abs.(race_probabilities(s; D = D) .-
+                           race_probabilities(mu; D = D))) < 1e-12
+        @test maximum(abs.(top_k_probabilities(s, 2; D = D) .-
+                           top_k_probabilities(mu, 2; D = D))) < 1e-12
+        @test maximum(abs.(bottom_k_probabilities(s, 2; D = D) .-
+                           bottom_k_probabilities(mu, 2; D = D))) < 1e-12
+        @test maximum(abs.(rank_probabilities(s; D = D) .-
+                           rank_probabilities(mu; D = D))) < 1e-12
+        a, b = top_k_jacobians(s, 2; D = D), top_k_jacobians(mu, 2; D = D)
+        @test maximum(abs.(a.Jmu .- b.Jmu)) < 1e-12
+        @test maximum(abs.(a.Jsigma .- b.Jsigma)) < 1e-12
+    end
+    # a field near the origin is left exactly where it is
+    @test winning._translated_home(mu, D) === mu
+end

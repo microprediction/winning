@@ -180,6 +180,20 @@ attr(.base_laplace, "log_sf") <- function(z) {
   list(F = matrix(F, ncol = r), W = rep(1 / n, n))
 }
 
+# mu moved next to the origin when a common offset dwarfs the field, as
+# python's races._translated_home. The origin is a gauge, but the lattice
+# is laid in the caller's units: at an offset of 2^52 its points
+# collapsed to the float spacing there, so race shares came back NaN and
+# top-k/rank refused a total membership of 0 (#477). Shifting by a middle
+# entry (an element, so no sum can overflow) is exact for such offsets;
+# below a million field scales nothing moves, so ordinary inputs stay
+# bit-identical. isTRUE: a non-finite mu is refused downstream, as before.
+.translated_home <- function(mu, D) {
+  off <- sort(mu, na.last = TRUE)[length(mu) %/% 2L + 1L]
+  scale <- (max(mu) - min(mu)) + sqrt(max(D))
+  if (isTRUE(abs(off) > 1e6 * scale)) mu - off else mu
+}
+
 .race_setup <- function(mu, V, D, F, W, base) {
   mu <- as.numeric(mu)
   n <- length(mu)
@@ -193,6 +207,7 @@ attr(.base_laplace, "log_sf") <- function(z) {
   # point mass the lattice divides by, which crashed in .bulk_window with
   # "missing value where TRUE/FALSE needed" instead of naming D.
   D <- .as_idio(D, n, positive = TRUE)
+  mu <- .translated_home(mu, D)                              # (#477)
   if (is.null(V)) {
     V <- matrix(0, n, 1)
     F <- matrix(0, 1, 1)

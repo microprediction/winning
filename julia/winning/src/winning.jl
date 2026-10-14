@@ -297,10 +297,26 @@ function _as_idio(D, n::Integer; name = "D")
     return Dv
 end
 
+"""mu moved next to the origin when a common offset dwarfs the field, as
+python's races._translated_home. The origin is a gauge, but the lattice is
+laid in the caller's units: at an offset of 2^52 its points collapsed to
+the float spacing there, so race shares came back NaN and top-k/rank
+refused a total membership of 0 (#477). Shifting by a middle entry (an
+element, so no sum can overflow) is exact for such offsets; below a
+million field scales nothing moves, so ordinary inputs stay bit-identical.
+A comparison with NaN is false, so non-finite mu passes through untouched."""
+function _translated_home(mu, D)
+    isempty(mu) && return mu
+    off = sort(mu)[length(mu) ÷ 2 + 1]
+    scale = (maximum(mu) - minimum(mu)) + sqrt(maximum(D))
+    return abs(off) > 1e6 * scale ? mu .- off : mu
+end
+
 function _race_setup(mu, V, D, F, W, base)
     mu = Float64.(collect(mu))
     n = length(mu)
     D = _as_idio(D, n)
+    mu = _translated_home(mu, D)                    # (#477)
     if V === nothing
         Vm = zeros(n, 1)
         Fm = zeros(1, 1)
