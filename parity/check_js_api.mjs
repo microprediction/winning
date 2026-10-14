@@ -3056,7 +3056,10 @@ accepts("dividendImpliedAbility keeps the favourite first at unit 0.1 (#649)",
         !g.ipaf.converged && Math.abs(g.contrastResidualMax - 76.877) < 1e-2
         && warned.length === 1 && warned[0].includes("contrast"), JSON.stringify(g.ipaf) + " " + g.contrastResidualMax);
   holds("the default fit reports its contrast misfit (#505)",
-        Math.abs(d.contrastResidualMax - 10.713) < 1e-2 && !("ipaf" in d), String(d.contrastResidualMax));
+        Math.abs(d.contrastResidualMax - 10.713) < 1e-2 && !("ipaf" in d)
+        && JSON.stringify(Object.keys(d)) === '["V","D"]', String(d.contrastResidualMax));
+  holds("the ipaf report carries the contrast misfit (#505)",
+        g.ipaf.contrastResidualMax === g.contrastResidualMax, JSON.stringify(g.ipaf));
   holds("an exact ipaf recovery reports converged and a rounding-level contrast misfit (#505)",
         h.ipaf.converged && h.contrastResidualMax < 1e-10, String(h.contrastResidualMax));
   const big = demo.fitGrammar(mk([0, 0, 0, 1, 0, 0.7], [18, 15, 12, 0.08, 6, 0.05]).map(r => r.map(x => x * 2 ** 600)), 1, 0);
