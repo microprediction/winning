@@ -318,3 +318,14 @@ test_that("the exact pair formula survives cov=, huge loadings and Tree validati
     parent = c(3, 3, 0), strength = c(0, 0, 0.5))), c(pnorm(0.5), pnorm(-0.5)),
     tolerance = 1e-14)
 })
+
+# A rank-two contrast of 7e307 per column has a norm past the float
+# range: the overflow fallback formed a = Inf, then NaN, and errored. The
+# norm and u are now formed in units of the largest term (#86, python).
+test_that("a pair whose contrast norm overflows keeps its exact price (#86)", {
+  p <- race_probabilities(c(0, 1.4e308),
+                          V = matrix(c(7e307, -7e307, 7e307, -7e307), 2, 2),
+                          D = c(1, 1))
+  expect_equal(p, c(pnorm(1 / sqrt(2)), pnorm(-1 / sqrt(2))),
+               tolerance = 1e-14)
+})

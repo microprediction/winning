@@ -496,3 +496,11 @@ end
     @test abs(rank_probabilities([-12.0, -4, 4, 12]; base = "gumbel")[1, 4] /
               1.101321e-26 - 1) < 1e-5
 end
+
+@testset "a pair whose contrast norm overflows keeps its price (#86)" begin
+    # rank two at 7e307: |dV| = 2e308 overflowed, a = Inf, NaN, and the
+    # 1e-150 fallback priced [1, 0] for Phi(1/sqrt 2)
+    p = race_probabilities([0, 1.4e308]; V = [7e307 7e307; -7e307 -7e307],
+                           D = [1.0, 1.0])
+    @test p ≈ [0.7602499389065233, 0.2397500610934767] rtol = 1e-14
+end
