@@ -1,0 +1,8 @@
+# julia exact Fishing fit (fit_julia.jl, input ../2026-10-14-plain-sobol/py_branch.json),
+# sharp-branch cloud varied; JULIA_NUM_THREADS=4, nice -n 10, 2026-10-14
+h10 julia exact -1215.67 in 13.5s     # main: plain Halton 2^10 (offset 20)
+h12 julia exact -1215.66 in 46.2s     # plain Halton 2^12
+h13 julia exact -1209.75 in 227.9s    # plain Halton 2^13
+rs0 julia exact -1203.77 in 19.9s     # R scrambled Sobol 2^10 seed 0 (CSV read per evaluation)
+rs1 julia exact -1215.97 in 14.1s     # R scrambled Sobol 2^10 seed 1 (CSV read per evaluation)
+rs2 julia exact -1210.96 in 13.7s     # R scrambled Sobol 2^10 seed 2 (CSV read per evaluation)
