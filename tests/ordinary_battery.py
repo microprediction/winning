@@ -43,10 +43,22 @@ def _sample_covariances():
     for n in (6, 12, 24):
         for r in (1, 2, 3):
             V = rng.normal(size=(n, r)) * rng.uniform(0.4, 1.2)
-            C = V @ V.T + np.diag(rng.uniform(0.3, 1.5, size=n))
-            X = rng.multivariate_normal(np.zeros(n), C, size=4 * n)
+            d = rng.uniform(0.3, 1.5, size=n)
+            # drawn straight from the factor model: multivariate_normal
+            # factors the covariance through the platform's LAPACK, so
+            # the same seed gave different samples on Linux, Windows and
+            # macOS
+            m = 4 * n
+            X = (rng.standard_normal((m, r)) @ V.T
+                 + rng.standard_normal((m, n)) * np.sqrt(d))
             out.append((f"n{n}r{r}", np.cov(X.T)))
     return out
+
+
+def _fitted_covariance(S):
+    """V V' + diag(D) of the default fit (warnings still surface)."""
+    V, D, _F, _W = fit_covariance(S)
+    return V @ V.T + np.diag(D)
 
 
 def calls():
@@ -80,8 +92,10 @@ def calls():
         yield (f"inv_top2/normal/{label}",
                lambda q=q, V=V, D=D: abilities_from_topk(q, 2, V=V, D=D))
     for label, S in _sample_covariances():
+        # the fit's loadings are identified only up to sign and rotation,
+        # which rounding can flip; the fitted covariance is what is pinned
         yield (f"fit_covariance/sample/{label}",
-               lambda S=S: fit_covariance(S))
+               lambda S=S: _fitted_covariance(S))
         mu = np.linspace(-1.0, 1.0, len(S))
         yield (f"race_cov/sample/{label}",
                lambda mu=mu, S=S: race_probabilities(mu, cov=S))
