@@ -415,7 +415,16 @@ def structure_variances(structure):
             g = np.atleast_2d(np.asarray(structure.coupling, float))
             if g.shape[0] != len(D):
                 g = g.T
-            tot = tot + (float(structure.gamma) ** 2) * (g ** 2).sum(axis=1)
+            ga = float(structure.gamma)
+            with np.errstate(over="ignore", under="ignore",
+                             invalid="ignore"):
+                cv = (ga ** 2) * (g ** 2).sum(axis=1)
+            if not (np.all(np.isfinite(cv))
+                    and np.finfo(float).tiny <= ga ** 2 < np.inf):
+                # only gamma g is identified: coupling 1e307 g with gamma
+                # 1e-307 squared each factor alone, 0 * inf (#722)
+                cv = ((ga * g) ** 2).sum(axis=1)
+            tot = tot + cv
         return tot
     if isinstance(structure, Tree):
         from .blocks import _scalar_loading

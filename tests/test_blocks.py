@@ -375,3 +375,31 @@ def test_mass_check_rejects_nan():
 
     with pytest.raises(RuntimeError, match="captured total mass"):
         _checked_mass(np.array([0.5, np.nan]), "test race")
+
+
+@pytest.mark.parametrize("c", [1e100, 1e307, 1e308])
+def test_nested_reciprocal_coupling_scaling_is_the_same_race_722(c):
+    """coupling -> c coupling, gamma -> gamma / c leaves gamma g, hence
+    the race, unchanged. At 1e308 g @ node overflowed before gamma (NaN
+    lattice mass); at 1e307 the inverse's variance squared gamma and g
+    separately, 0 * inf."""
+    import warnings
+    from winning.factor.structures import Nested
+    from winning.factor.races import race_probabilities, abilities_from_race
+    from winning.factor.blocks import nested_race_jacobian
+    mu = np.array([-0.4, -0.1, 0.2, 0.5, 0.8])
+    cl, ld = [0, 0, 1, 1, 2], [0.4, 0.2, 0.3, 0.5, 0.1]
+    D = [0.7, 0.8, 0.9, 1.0, 1.1]
+    g = np.array([-0.4, 0.1, 0.4, -0.2, 0.1])
+    p1 = race_probabilities(mu, structure=Nested(cl, ld, D, g, 0.8))
+    a1 = abilities_from_race(p1, structure=Nested(cl, ld, D, g, 0.8))
+    J1 = nested_race_jacobian(mu, cl, ld, D, coupling=g, gamma=0.8)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        s = Nested(cl, ld, D, g * c, 0.8 / c)
+        p = race_probabilities(mu, structure=s)
+        a = abilities_from_race(p1, structure=s)
+        J = nested_race_jacobian(mu, cl, ld, D, coupling=g * c, gamma=0.8 / c)
+    assert np.abs(p - p1).max() < 1e-14
+    assert np.abs(a - a1).max() < 1e-12
+    assert np.isfinite(J).all() and np.abs(J - J1).max() < 1e-14

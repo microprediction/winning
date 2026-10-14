@@ -389,9 +389,22 @@ def nested_race_probabilities(mu, cluster, loading, D, coupling=None,
     muv = np.asarray(mu, float)
     sdv = np.sqrt(as_idio(D, len(muv), positive=True))
     for q in range(len(fn)):
-        p += fw[q] * _block_max(-(muv + gamma * (g @ fn[q])), sdv,
-                                cluster, loading, points, qa)
+        p += fw[q] * _block_max(-(muv + _coupled_shift(g, gamma, fn[q])),
+                                sdv, cluster, loading, points, qa)
     return _checked_mass(p, "nested race")
+
+
+def _coupled_shift(g, gamma, node):
+    """gamma (g @ node), the global factor's shift. Only gamma g is
+    identified: coupling c g with gamma / c is the same race, but at
+    c = 1e308 the raw g @ node overflowed before gamma was applied and
+    the lattice mass came back NaN (#722). That spelling is kept
+    wherever it is finite; otherwise gamma is absorbed into g first."""
+    with np.errstate(over="ignore", invalid="ignore"):
+        s = g @ node
+    if np.all(np.isfinite(s)):
+        return gamma * s
+    return (gamma * g) @ node
 
 
 def block_race_jacobian(mu, cluster, loading, D, points=257, qa=9):
@@ -921,6 +934,8 @@ def nested_race_jacobian(mu, cluster, loading, D, coupling=None, gamma=1.0,
     n = len(mu)
     J = np.zeros((n, n))
     for q in range(len(nodes)):
-        J += w[q] * block_race_jacobian(mu + gamma * (g @ nodes[q]), cluster,
-                                        loading, D, points=points, qa=qa)
+        J += w[q] * block_race_jacobian(mu + _coupled_shift(g, gamma,
+                                                            nodes[q]),
+                                        cluster, loading, D, points=points,
+                                        qa=qa)
     return J
