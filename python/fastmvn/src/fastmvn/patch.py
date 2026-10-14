@@ -8,6 +8,7 @@ once."""
 from __future__ import annotations
 
 import hashlib
+import threading
 
 import numpy as np
 
@@ -16,6 +17,19 @@ from .core import _mvn_cdf_impl, factorize_covariance
 _ORIGINAL = {}
 _FACTOR_CACHE = {}
 _CACHE_LIMIT = 128
+_ROUTE = threading.local()
+
+
+def last_route():
+    """(route, reason) for this thread's most recent patched cdf call:
+    route is "fastmvn" or "scipy", reason says why. None before any
+    call. A fallback is silent by design (the patch is transparent);
+    this is where the caller can see that, and why, it happened (#173)."""
+    return getattr(_ROUTE, "last", None)
+
+
+def _record(route, reason):
+    _ROUTE.last = (route, reason)
 
 
 def _cov_key(cov):
@@ -83,6 +97,13 @@ def patch_scipy():
         # goes to scipy, which accepts it or raises as scipy would.
         fast_ok = set(kwargs) <= {"rng"} and _default_accuracy(abseps,
                                                                 releps)
+        if not set(kwargs) <= {"rng"}:
+            why = "keyword(s) %s go to scipy" % sorted(set(kwargs) - {"rng"})
+        elif not fast_ok:
+            why = ("abseps=%r, releps=%r is tighter than the fast rule's "
+                   "%g" % (abseps, releps, _SCIPY_ABSEPS))
+        else:
+            why = "not a factor-plus-diagonal call of scipy's shape"
         try:
             c = np.atleast_2d(np.asarray(cov, dtype=float))
             if fast_ok and c.ndim == 2 and c.shape[0] == c.shape[1] \
@@ -110,9 +131,12 @@ def patch_scipy():
                         np.asarray(mean, dtype=float)
                     lo = None if lower_limit is None else lower_limit
                     p, _ = _mvn_cdf_impl(lo, x, mu, None, V, D)
+                    _record("fastmvn", "factor covariance at default "
+                                       "accuracy")
                     return p
         except Exception:
             pass  # any surprise routes to original scipy below
+        _record("scipy", why)
         return _ORIGINAL["cdf"](self, x, mean=mean, cov=cov,
                                 allow_singular=allow_singular,
                                 maxpts=maxpts, abseps=abseps,

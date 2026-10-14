@@ -35,3 +35,10 @@ Dense, genuinely unstructured covariances are not this package's
 business: the exact-decomposition check is strict (reconstruction to
 1e-11 relative), and anything that fails it goes to `mvtnorm::pmvnorm()`
 unchanged, so a loose fit can never masquerade as the structured case.
+
+The fast rule has no error estimate. A call that asks `mvtnorm` for more
+than 1e-5 (an `abseps` below 1e-5, a non-zero `releps` below 1e-5, or
+the same inside `algorithm = GenzBretz(...)` / `TVPACK(...)`) goes to
+`mvtnorm::pmvnorm()` and carries `attr(, "reason")`. `maxpts` alone is
+an effort cap and does not. Rank 3 and above always uses the Sobol rule
+by design (about 2e-4 relative at sharpness 3).

@@ -37,7 +37,13 @@ case. The patch caches factorization attempts by covariance content, so
 repeated calls with the same matrix pay the eigendecomposition once.
 The fast rule has no error estimate, so a patched call that asks for
 more than scipy's default accuracy (abseps or releps below 1e-5) goes
-to scipy, which honours it and its maxpts budget.
+to scipy, which honours it and its maxpts budget. maxpts alone is an
+effort cap, not an accuracy target, so it does not by itself send a
+call to scipy. `fastmvn.last_route()` returns `(route, reason)` for the
+calling thread's last patched call, so a fallback can be seen.
+Factor rank 3 and above always uses the 2^13-point scrambled Sobol rule
+(about 2e-4 relative at sharpness 3); Gauss-Hermite there is a
+measured-but-declined option, not an oversight.
 
 Part of the winning project
 (github.com/microprediction/winning); the R sibling is mvtnormfast.

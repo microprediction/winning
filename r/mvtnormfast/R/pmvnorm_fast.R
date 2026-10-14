@@ -58,6 +58,8 @@
 .nodes_for <- function(V, D) {
   r <- ncol(V)
   sharp <- max(sqrt(rowSums(V^2)) / sqrt(pmax(D, 1e-300)))
+  # rank >= 3 always takes Sobol (owner decision, #173): see
+  # winning/fastmvn.py::_nodes_for
   if (sharp > 3.0 || r > 2) {
     .sobol_normal(r, 2^13, seed = 0L)
   } else {
@@ -578,9 +580,50 @@ factorize_covariance <- function(sigma, max_rank = 6L, tol = 1e-11,
                      collapse = " x ")), call. = FALSE)
 }
 
+# The accuracy a pmvnorm call asks for, resolved as mvtnorm resolves it:
+# any extra argument builds GenzBretz(...), else `algorithm` (an object,
+# a constructor or its name). Returns the reason to fall back, or NULL.
+# The fast rule has no error estimate; it stands in for a request no
+# tighter than SciPy's default (abseps 1e-5), the same line the Python
+# SciPy patch draws (#692). mvtnorm's own default (abseps 1e-3, releps
+# 0, where 0 means no relative target) is looser and stays fast. A
+# tighter abseps / releps / TVPACK eps was silently ignored on the
+# structured path: abseps = 1e-10 on a trivariate orthant came back
+# 4.9e-6 off (#173). maxpts alone is an effort cap, not a target.
+.FAST_EPS <- 1e-5
+.tolerance_fallback <- function(...) {
+  d <- list(...)
+  nm <- names(d)
+  if (is.null(nm)) nm <- rep("", length(d))
+  extra <- d[!nm %in% c("corr", "algorithm", "keepAttr", "seed")]
+  alg <- tryCatch({
+    a <- if (length(extra)) do.call(mvtnorm::GenzBretz, extra) else
+      d$algorithm
+    if (is.function(a) || is.character(a)) do.call(a, list()) else a
+  }, error = function(e) NULL)
+  eps <- if (inherits(alg, "GenzBretz")) c(alg$abseps, alg$releps) else
+    if (inherits(alg, "TVPACK")) c(alg$eps, 0) else return(NULL)
+  ab <- suppressWarnings(as.numeric(eps[[1]]))
+  re <- suppressWarnings(as.numeric(eps[[2]]))
+  if (length(ab) != 1L || length(re) != 1L || is.na(ab) || is.na(re))
+    return(NULL)
+  if (ab < .FAST_EPS || (re > 0 && re < .FAST_EPS))
+    return(sprintf("abseps %g, releps %g is tighter than the fast rule's %g",
+                   ab, re, .FAST_EPS))
+  NULL
+}
+
 pmvnorm_fast <- function(lower = -Inf, upper = Inf, mean = NULL,
                          sigma = NULL, V = NULL, D = NULL, ...) {
   .check_covariance_inputs(sigma, V, D)
+  why <- if (...length()) .tolerance_fallback(...) else NULL
+  if (!is.null(why) && is.null(sigma)) {
+    # a tolerance the rule cannot certify: price V V' + diag(D) densely
+    n <- .infer_dimension(V, D, mean, lower, upper)
+    V <- .as_loadings(V, n)
+    D <- .as_len(D, n, "D", nonneg = TRUE)
+    sigma <- tcrossprod(V) + diag(D, n)
+  }
   if (!is.null(sigma)) {
     sigma <- .as_covariance(sigma)
     # Normalise every per-coordinate argument ONCE, before dispatch: the
@@ -601,7 +644,7 @@ pmvnorm_fast <- function(lower = -Inf, upper = Inf, mean = NULL,
       sigma <- as.matrix(sigma)[!free, !free, drop = FALSE]
       mean <- mean[!free]; lower <- lower[!free]; upper <- upper[!free]
     }
-    fd <- factorize_covariance(sigma)
+    fd <- if (is.null(why)) factorize_covariance(sigma) else NULL
     if (is.null(fd)) {
       sigma <- as.matrix(sigma)
       nn <- nrow(sigma)
@@ -624,6 +667,7 @@ pmvnorm_fast <- function(lower = -Inf, upper = Inf, mean = NULL,
                               sigma = sigma[keep, keep, drop = FALSE], ...)
       }
       attr(p, "method") <- "mvtnorm-fallback"
+      if (!is.null(why)) attr(p, "reason") <- why
       return(p)
     }
     V <- fd$V; D <- fd$D

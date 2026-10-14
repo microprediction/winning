@@ -87,6 +87,12 @@ def _nodes_for(V, D):
     sharp = float(np.max(np.sqrt((V ** 2).sum(axis=1))
                          / np.sqrt(np.maximum(D, 1e-300))))
     if sharp > 3.0 or r > 2:
+        # Rank >= 3 always takes Sobol, whatever the sharpness: an owner
+        # decision (#173), not an oversight. A tensor Gauss-Hermite rule
+        # at rank 3 needs Q^3 nodes and no rank-3 order has been
+        # measured; Sobol is about 2e-4 relative at sharpness 3. A caller
+        # who needs better goes through scipy / mvtnorm, which the SciPy
+        # patch and pmvnorm_fast do when a tighter tolerance is asked.
         # scrambled Sobol, not Halton: plain Halton's low-dimensional
         # projections degrade badly past three dimensions (measured: a
         # rank-6 auto-detected decomposition gave 1e-4 error on Halton

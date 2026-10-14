@@ -377,3 +377,67 @@ def test_in_grammar_small_n_spread_variances_fits_exactly():
     St = Vt @ Vt.T + np.diag(Dt)
     V, D, F, W, rep = fit_covariance(St, return_report=True)
     assert rep["contrast_residual_max"] < 1e-5
+
+
+def test_contrast_residual_warns_on_a_direct_fit_505(monkeypatch):
+    """#505: an exact rank-one-plus-diagonal input whose positive
+    diagonal spans eleven decades, fitted at k=1, m=0, blocks=1, has its
+    0-3 contrast variance off by 77x (contrast_residual_max 76.9) beside
+    a projected residual of 8e-8. The report said so; nothing warned.
+    The fit is unchanged. A direct fit now warns above 1.0 (ordinary
+    fits sit below 0.21); the cov= front door keeps its own 0.05 warning
+    and still warns once, in its own words."""
+    import warnings
+    v = np.array([0, 1, 2, 0.01])
+    Dt = np.array([1e-6, 1e4, 1e5, 2e-6])
+    C = np.outer(v, v) + np.diag(Dt)
+    with pytest.warns(RuntimeWarning, match="nearly singular contrast"):
+        rep = fit_covariance(C, k=1, m=0, blocks=1, return_report=True)[-1]
+    assert rep["contrast_residual_max"] > 50
+    # the same input at the defaults holds every contrast: silent
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        rep = fit_covariance(C, return_report=True)[-1]
+    assert rep["contrast_residual_max"] < 0.05
+    # the cov= front door words the contrast warning itself, once
+    from winning.factor import races
+    import winning.factor.core as core
+    real = core.fit_covariance
+
+    def bad(cov, **kw):
+        return real(cov, **{"k": 1, "m": 0, "blocks": 1, **kw})
+    monkeypatch.setattr(core, "fit_covariance", bad)
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        races._fit_cov(C, None, None, None)
+    msgs = [str(x.message) for x in w]
+    assert sum("nearly singular contrast" in m for m in msgs) == 1
+    assert not any(m.startswith("fit_covariance did not") for m in msgs)
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        races._fit_cov(C, None, None, None, will_route=True)
+    assert not w
+
+
+def test_ordinary_fits_do_not_warn_505():
+    """The direct-fit contrast warning must not fire on sampling noise:
+    exact V V' + D and sample covariances of 4n draws, n 5-40, rank 1-4,
+    reach contrast_residual_max ~0.2 at most (0.05 would flag a third)."""
+    import warnings
+    rng = np.random.default_rng(2026)
+    worst = 0.0
+    for n in (5, 10, 20, 40):
+        for r in (1, 2, 3, 4):
+            for sample in (False, True):
+                V = rng.normal(size=(n, r))
+                C = V @ V.T + np.diag(0.2 + rng.random(n))
+                if sample:
+                    X = rng.multivariate_normal(np.zeros(n), C, size=4 * n)
+                    C = np.cov(X, rowvar=False)
+                with warnings.catch_warnings(record=True) as w:
+                    warnings.simplefilter("always")
+                    rep = fit_covariance(C, return_report=True)[-1]
+                assert not [x for x in w
+                            if "nearly singular contrast" in str(x.message)]
+                worst = max(worst, rep["contrast_residual_max"])
+    assert worst > 0.05     # the battery does reach the cov= threshold

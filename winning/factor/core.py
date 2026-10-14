@@ -728,8 +728,27 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
         Vall, D, res_pipe = Veig, Deig, res_eig
         arm = "eigen"
     F, W = qmc_nodes(Vall.shape[1], m=nodes_log2, seed=seed)
+    Rfin = _center2(C - Vall @ Vall.T - np.diag(D))
+    worst = _worst_contrast_ratio(C, Rfin)
+    if worst > _CONTRAST_WARN:
+        # a direct call reported contrast_residual_max 76.9 on an exact
+        # rank-one input (k=1, m=0, blocks=1) beside a projected residual
+        # of 8e-8, and said nothing (#505). The threshold is NOT the cov=
+        # front door's 0.05: on 200 ordinary fits (n 5-80, rank 1-4, half
+        # exact V V' + D, half sample covariances of 4n draws) 76 exceeded
+        # 0.05 and the largest was 0.20, so 0.05 here would mostly flag
+        # sampling noise. 1.0 -- a contrast variance off by its own size
+        # -- separates the pathological case. _fit_cov keeps its own 0.05
+        # warning and filters this one.
+        import warnings
+        warnings.warn(
+            f"fit_covariance did not hold a nearly singular contrast: the "
+            f"worst pairwise difference variance is off by {worst:.2f} of "
+            "its own size (contrast_residual_max). Global residual norms "
+            "cannot see this, so head-to-head probabilities between the "
+            "affected pair may be badly wrong even though the covariance "
+            "residual looks small.", RuntimeWarning, stacklevel=2)
     if return_report:
-        Rfin = _center2(C - Vall @ Vall.T - np.diag(D))
         denom = float(np.linalg.norm(_center2(C)))
         rel = float(np.linalg.norm(Rfin)) / denom if denom > 0 else 0.0
         # the warning diagnostic: worst single choice-relevant entry the
@@ -744,7 +763,7 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
                   "projected_residual_max": absmax,
                   "rank": Vall.shape[1],
                   "sharpness": sharp,
-                  "contrast_residual_max": _worst_contrast_ratio(C, Rfin),
+                  "contrast_residual_max": worst,
                   "blocks": block_source,
                   "block_labels": np.asarray(cluster, dtype=int).copy(),
                   "arm": arm}
@@ -1005,6 +1024,11 @@ def fit_tree(C, parent, k: int = 0, max_n: int = 2000):
         "floored": int(np.sum(D <= floor * (1.0 + 1e-12))),
     }
     return np.zeros((n, 0)), D, tree, report
+
+
+# contrast_residual_max above which a direct fit_covariance call warns
+# (#505); races._fit_cov warns from 0.05 on its own
+_CONTRAST_WARN = 1.0
 
 
 def _worst_contrast_ratio(C, R, cap_n=4000):
