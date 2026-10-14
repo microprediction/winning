@@ -719,9 +719,34 @@ function diffScale(S, d) {
   return Math.max(t, 1e-300);
 }
 
-function diffProblem(mu, C, i) {
+function diffProblem(mu, C, i, where) {
   // mean and covariance of (x_j - x_i)_{j != i}
   const n = mu.length, m = new Float64Array(n - 1);
+  // C at the door, in O(n^2): square, finite, symmetric (the tolerance of
+  // validateCovariance) and no negative variance. Both arms read one
+  // triangle through S, so C and C' priced differently, and an
+  // indefinite C came back as a confident book (#726). Definiteness of
+  // what the arms actually use -- the difference covariance S -- is
+  // checked by its own Cholesky (diffCholesky), at no extra order.
+  if (!Array.isArray(C) || C.length !== n)
+    throw new Error(`${where}: C must be a ${n} x ${n} covariance matrix`);
+  let amax = 0, asym = 0;
+  for (let a = 0; a < n; a++) {
+    if (!isVector(C[a]) || C[a].length !== n)
+      throw new Error(`${where}: C must be square; row ${a} is not ${n} entries`);
+    for (let b = 0; b < n; b++) {
+      const v = C[a][b];
+      if (typeof v !== "number" || !Number.isFinite(v))
+        throw new Error(`${where}: C contains a non-finite entry (${v}) in row ${a}`);
+      amax = Math.max(amax, Math.abs(v));
+      if (b < a) asym = Math.max(asym, Math.abs(v - C[b][a]));
+    }
+    if (C[a][a] < 0)
+      throw new Error(`${where}: C is not positive semidefinite (variance [${a}] = ${C[a][a]} < 0)`);
+  }
+  if (asym > 1e-8 * Math.max(amax, 1e-300))
+    throw new Error(`${where}: C is not symmetric (max asymmetry ${asym.toExponential(2)}); ` +
+                    "pass (C + C')/2 if the asymmetry is numerical noise");
   const S = new Float64Array((n - 1) * (n - 1));
   const idx = [];
   for (let j = 0; j < n; j++) if (j !== i) idx.push(j);
@@ -736,8 +761,12 @@ function diffProblem(mu, C, i) {
 export function ghkPrepareOne(mu, C, i) {
   // per-alternative Cholesky of the difference covariance (the GHK setup
   // cost the wall-time axis charges honestly)
-  const { m, S } = diffProblem(mu, C, i);
+  const { m, S } = diffProblem(mu, C, i, "ghkPrepareOne");
   const d = mu.length - 1;
+  return { m, L: diffCholesky(S, d, "ghkPrepareOne"), d };
+}
+
+function diffCholesky(S, d, where) {
   const L = new Float64Array(d * d);
   // the pivot floor is relative to the difference problem's own scale:
   // an absolute 1e-12 replaced valid small contrast variances, so the
@@ -750,11 +779,20 @@ export function ghkPrepareOne(mu, C, i) {
     for (let b = 0; b <= a; b++) {
       let s = S[a * d + b];
       for (let k = 0; k < b; k++) s -= L[a * d + k] * L[b * d + k];
-      if (a === b) L[a * d + a] = Math.sqrt(s > 0 ? s : eps);
-      else L[a * d + b] = s / L[b * d + b];
+      if (a === b) {
+        // a pivot materially below zero (relative to its own variance, as
+        // validateCovariance's -1e-8 in correlation units) is an
+        // indefinite contrast covariance, not roundoff: eps priced it as
+        // some other law (#726)
+        if (s < -1e-8 * Math.abs(S[a * d + a]))
+          throw new Error(`${where}: C is not positive semidefinite: the ` +
+            `contrast covariance has a negative pivot (${s.toExponential(2)}); ` +
+            "clipping it silently invents a different model");
+        L[a * d + a] = Math.sqrt(s > 0 ? s : eps);
+      } else L[a * d + b] = s / L[b * d + b];
     }
   }
-  return { m, L, d };
+  return L;
 }
 
 export function ghkSampleOne(prob, reps, r) {
@@ -810,8 +848,9 @@ export function mendellElstonOne(mu, C, i) {
   // u_k > 0 one coordinate at a time, propagating truncated-normal moments
   // and pretending normality is preserved (it is not; the bias is the
   // flat line this arm draws).
-  const { m, S } = diffProblem(mu, C, i);
+  const { m, S } = diffProblem(mu, C, i, "mendellElstonOne");
   const d = mu.length - 1;
+  diffCholesky(S, d, "mendellElstonOne");     // definiteness only (#726)
   let logp = 0;
   // Hardest constraint FIRST, as python's _order_variables does.
   // Sequential moment matching is order dependent -- each step pretends

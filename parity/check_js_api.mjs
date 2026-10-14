@@ -2795,5 +2795,23 @@ accepts("dividendImpliedAbility keeps the favourite first at unit 0.1 (#649)",
   holds("GHK keeps a 2.9e-316 correlated path (#555)", ok, got.join(", "));
 }
 
+{
+  // GHK and Mendell-Elston clipped negative pivots/variances to eps and
+  // priced an indefinite C as [1, 0] (#726); both refuse at the door now
+  const mu = [0, 0.5];
+  const indef = [[1, 1.4], [1.4, 1]];          // contrast variance -0.8
+  const asym = [[1, 0.3], [0.5, 1]];
+  const negv = [[-1, 0], [0, 1]];
+  for (const [name, C] of [["indefinite", indef], ["asymmetric", asym], ["negative-variance", negv]]) {
+    rejects(demo.ghkPrepareOne, [mu, C, 0], `ghkPrepareOne refuses a ${name} C (#726)`);
+    rejects(demo.mendellElstonOne, [mu, C, 0], `mendellElstonOne refuses a ${name} C (#726)`);
+  }
+  const C3 = [[1, 0.3, 0.1], [0.3, 1, 0.2], [0.1, 0.2, 1]];
+  accepts("a valid C still prices through both arms (#726)",
+          () => [demo.mendellElstonOne([0, 0.3, 0.6], C3, 1),
+                 demo.ghkSampleOne(demo.ghkPrepareOne([0, 0.3, 0.6], C3, 1), 100, demo.rng(1)) / 100],
+          v => v.every(x => x > 0 && x < 1));
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");
