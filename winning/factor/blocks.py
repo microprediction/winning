@@ -364,6 +364,20 @@ def _home(mu, D):
         return _translated_home(mu, np.asarray(D, float))
 
 
+def _one_cluster_gauge(cluster, loading, n):
+    """The loading itself, unless every contestant is in ONE cluster: its
+    shock then reaches everyone, and only loading differences are
+    identified. A common 40 in [40] * 5 widened the lattice until the
+    race raised a 2.5% mass defect, moved the Jacobian and broke the
+    inverse (#471). Such a loading is gauge-centred as the factor paths
+    centre theirs (core._gauge_center); any other is returned as given."""
+    lab = np.asarray(cluster)
+    if lab.size != n or n < 2 or not (lab == lab.flat[0]).all():
+        return loading
+    from .core import _gauge_center
+    return _gauge_center(as_loadings(loading, n))
+
+
 def block_race_probabilities(mu, cluster, loading, D, points=257, qa=9):
     """P(i wins | min-wins) under one private factor per cluster.
 
@@ -372,6 +386,7 @@ def block_race_probabilities(mu, cluster, loading, D, points=257, qa=9):
     The unnormalized lattice mass is checked before normalization and a
     material defect raises rather than being normalized away."""
     mu = _home(mu, D)
+    loading = _one_cluster_gauge(cluster, loading, len(mu))
     # one door for D: a scalar is the same variance for everyone (#84)
     raw = _block_max(-mu, np.sqrt(as_idio(D, len(mu), positive=True)),
                      cluster, loading, points, qa)
@@ -435,6 +450,7 @@ def block_race_jacobian(mu, cluster, loading, D, points=257, qa=9):
     mu = _home(mu, D)
     n = len(mu)
     V = as_loadings(loading, n)          # (n, rank), one ROW per entity
+    V = _one_cluster_gauge(cluster, V, n)
     if V.shape[1] == 0:                  # rank zero: no shared effect (#508)
         V = np.zeros((n, 1))
     if V.shape[1] > 1:
@@ -503,6 +519,7 @@ def abilities_from_block_race(p, cluster, loading, D, points=257, qa=9,
     p_t = np.maximum(p_t, floor); p_t = p_t / p_t.sum()
     lt = np.log(p_t)
     ones = np.ones((n, n)) / n
+    loading = _one_cluster_gauge(cluster, loading, n)
     forward = lambda m: block_race_probabilities(m, cluster, loading, D,
                                                  points=points, qa=qa)
     # The field's own scale. The warm start, the fixed-point step and the
