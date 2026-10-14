@@ -814,6 +814,13 @@ end
 function _contrast_cholesky(C::AbstractMatrix{Float64})
     m = size(C, 1)
     tr = sum(C[d, d] for d in 1:m) / m
+    if tr == Inf && all(d -> isfinite(C[d, d]), 1:m)
+        # finite variances whose SUM overflows (D = 5e307): the mean in
+        # units of the largest, or the fallback below added an infinite
+        # ridge and priced [1/3, 1/3, 1/3] (#409)
+        mx = maximum(C[d, d] for d in 1:m)
+        tr = mx * (sum(C[d, d] / mx for d in 1:m) / m)
+    end
     if !(tr > 0.0 && isfinite(tr))
         Cr = copy(C)
         for d in 1:m

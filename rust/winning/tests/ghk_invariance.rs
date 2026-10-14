@@ -65,3 +65,26 @@ fn a_valid_small_pivot_is_not_inflated() {
         assert!((p[i] / s - want[i]).abs() < 3e-3, "share {i}: {}", p[i] / s);
     }
 }
+
+#[test]
+fn an_overflowing_variance_sum_is_the_same_race() {
+    // #409: D = 5e307 gives contrast variances 1e308 whose SUM overflowed;
+    // the fallback put an infinite ridge on the diagonal, every pivot was
+    // inf and the asymmetric race came back [1/3, 1/3, 1/3]. The same
+    // race in units of 1e154 is the reference, at the same seeds.
+    let big: Vec<f64> = (0..3)
+        .map(|i| ghk_prob_one_factor(&[0.0, 1e154, -1e154], &[], 0, &[5e307; 3],
+                                     3, i, 4096, 9 + i as u64))
+        .collect();
+    let unit: Vec<f64> = (0..3)
+        .map(|i| ghk_prob_one_factor(&[0.0, 1.0, -1.0], &[], 0, &[0.5; 3],
+                                     3, i, 4096, 9 + i as u64))
+        .collect();
+    for i in 0..3 {
+        assert!(big[i].is_finite() && (big[i] - unit[i]).abs() < 1e-12,
+                "share {i}: {} vs {}", big[i], unit[i]);
+    }
+    let sigma = [5e307, 0.0, 0.0, 0.0, 5e307, 0.0, 0.0, 0.0, 5e307];
+    let dense = ghk_prob_one(&[0.0, 1e154, -1e154], &sigma, 3, 1, 4096, 10);
+    assert!((dense - unit[1]).abs() < 1e-12, "dense: {dense} vs {}", unit[1]);
+}

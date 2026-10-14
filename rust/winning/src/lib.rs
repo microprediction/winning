@@ -740,7 +740,9 @@ pub fn cholesky(a: &mut [f64], n: usize) -> bool {
         for k in 0..j {
             d -= a[j * n + k] * a[j * n + k];
         }
-        if d <= 0.0 {
+        // a non-finite pivot is no factor: sqrt(inf) was accepted and
+        // every standardised bound came out zero (#409)
+        if !(d > 0.0 && d.is_finite()) {
             return false;
         }
         let dj = d.sqrt();
@@ -849,6 +851,13 @@ fn ghk_contrast(a: &[f64], mut c: Vec<f64>, m: usize, r_draws: usize,
         tr += c[d * m + d];
     }
     tr /= m.max(1) as f64;
+    if tr == f64::INFINITY && (0..m).all(|d| c[d * m + d].is_finite()) {
+        // finite variances whose SUM overflows (D = 5e307): the mean in
+        // units of the largest, or the fallback below put an infinite
+        // ridge on every pivot and priced [1/3, 1/3, 1/3] (#409)
+        let mx = (0..m).map(|d| c[d * m + d]).fold(0.0f64, f64::max);
+        tr = mx * ((0..m).map(|d| c[d * m + d] / mx).sum::<f64>() / m as f64);
+    }
     if tr > 0.0 && tr.is_finite() {
         // tr = f 2^e with f in [0.5, 1); scale by 2^(2k), k = -floor(e/2),
         // applied as two exact multiplications by 2^k so that a subnormal

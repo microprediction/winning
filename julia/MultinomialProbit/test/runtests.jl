@@ -915,3 +915,16 @@ end
     @test abs(sum(raw) - 1) < 0.02
     @test maximum(abs.(raw ./ sum(raw) .- ref)) < 0.01
 end
+
+@testset "GHK: an overflowing variance sum is the same race (#409)" begin
+    # contrast variances 1e308 whose SUM overflowed: the fallback added an
+    # infinite ridge and every share came out 1/4 raw (1/3 normalised)
+    big = [ghk_choice_prob([0.0, 1e154, -1e154], zeros(3, 0), k;
+                           D = fill(5e307, 3), r_draws = 2048, seed = 9) for k in 1:3]
+    unit = [ghk_choice_prob([0.0, 1.0, -1.0], zeros(3, 0), k;
+                            D = fill(0.5, 3), r_draws = 2048, seed = 9) for k in 1:3]
+    @test big ≈ unit rtol = 1e-12
+    @test all(isfinite, [ghk_choice_logprob([0.0, 1e154, -1e154], zeros(3, 0), k;
+                                            D = fill(5e307, 3), r_draws = 64)
+                         for k in 1:3])
+end
