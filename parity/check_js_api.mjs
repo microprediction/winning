@@ -2972,5 +2972,16 @@ accepts("dividendImpliedAbility keeps the favourite first at unit 0.1 (#649)",
   }
 }
 
+{
+  // the overflow branch reduced the max with a runner-sized spread,
+  // Math.max(...u), which threw RangeError past the engine's argument
+  // limit (150k on node 24) (#461 residual)
+  accepts("rescaledTarget of 150,000 entries at 1e308 (#461)",
+          () => core.rescaledTarget(new Array(150000).fill(1e308)),
+          x => x.length === 150000 && x.every(v => Math.abs(v * 150000 - 1) < 1e-12)
+               && Math.abs(x.reduce((a, b) => a + b, 0) - 1) < 1e-9,
+          x => String(x[0]));
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");

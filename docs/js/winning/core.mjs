@@ -409,7 +409,10 @@ export function rescaledTarget(v, mass = 1) {
   let u = Array.from(v);
   let s = u.reduce((a, b) => a + b, 0);
   if (!Number.isFinite(s) || !Number.isFinite(mass / s)) {
-    const mx = Math.max(...u.map(Math.abs));
+    // a loop, not Math.max(...u): a runner-sized spread passes the
+    // engine's argument limit and threw RangeError at 150k (#461)
+    let mx = -Infinity;
+    for (let i = 0; i < u.length; i++) mx = Math.max(mx, Math.abs(u[i]));
     u = u.map(x => x / mx);
     s = u.reduce((a, b) => a + b, 0);
   }
