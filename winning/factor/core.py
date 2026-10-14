@@ -1394,6 +1394,14 @@ def abilities_from_probabilities_factor(p: np.ndarray, V: np.ndarray,
     # tail-aware convergence: runners below the floor are matched best-effort
     floor = max(1e-9, 1e-4 / N)
     ident = p > floor
+    if N > 2 and ident.sum() < 2:
+        # One identified share carries no contrast: [1, 1.1e-5, 5.7e-18]
+        # was certified on the favourite alone with abilities 3 units off
+        # (#588). Take every share the solver can represent; if that is
+        # still one, every share, so the certificate is honest.
+        ident = p > _PFLOOR
+        if ident.sum() < 2:
+            ident = np.ones(N, dtype=bool)
     # The factor law actually REPRESENTED by (F, W): V -> aV, F -> F/a is
     # the same forward map, but reading the factor variance off raw
     # sum(V_i^2) inflated the warm start and the step cap by a^2, and the

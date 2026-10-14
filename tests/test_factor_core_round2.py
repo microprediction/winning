@@ -718,3 +718,35 @@ def test_common_ability_offset_reaches_no_lattice_477():
                 warnings.simplefilter("error")
                 got = np.asarray(f(shifted))
             assert np.abs(got - want).max() < 1e-12, (c, got, want)
+
+
+def test_one_identified_share_is_no_certificate_588():
+    """Below max(1e-9, 1e-4/N) a share was not scored. With only the
+    favourite above it, the residual held no contrast and a
+    self-generated [1, 1.1e-5, 5.7e-18] was certified with abilities 3
+    units off (the 1.1e-5 share repriced wrong); [1, 1e-17, 3e-65] was
+    certified at residual 0 with every tail unmatched."""
+    from winning.factor.core import (win_probabilities_factor,
+                                     abilities_from_probabilities_factor)
+    V, D = np.zeros((3, 0)), np.ones(3)
+    F, W = np.zeros((1, 0)), np.ones(1)
+    p = win_probabilities_factor(np.array([-6.0, 0.0, 6.0]), V, D, F, W,
+                                 points=1001)
+    mu, info = abilities_from_probabilities_factor(p, V, D, F, W,
+                                                   points=1001,
+                                                   return_info=True)
+    q = win_probabilities_factor(mu, V, D, F, W, points=1001)
+    assert info["converged"]
+    assert abs(np.log(q[1] / p[1])) < 1e-5            # the contrast is met
+    assert abs((mu[1] - mu[0]) - 6.0) < 1e-4
+    p = win_probabilities_factor(np.array([-12.0, 0.0, 12.0]), V, D, F, W,
+                                 points=1001)
+    mu, info = abilities_from_probabilities_factor(p, V, D, F, W,
+                                                   points=1001,
+                                                   return_info=True)
+    q = win_probabilities_factor(mu, V, D, F, W, points=1001)
+    # every tail is below the solver's 1e-15 floor: not certifiable, and
+    # it must not say otherwise
+    assert info["converged"] == bool(np.all(np.abs(np.log(
+        np.maximum(q, 1e-300) / p)) < 1e-6))
+    assert not info["converged"]
