@@ -87,23 +87,49 @@ function _topk_grid(mu, sd, k, fn, points; delta = 1e-12)
     z = (x .- mu') ./ sd'                       # (L, n)
     b = fn(z)
     return (x = x, dx = x[2] - x[1], z = z, S = b.S, f = b.f,
-            fp = b.fp, F = clip01(1 .- b.S))
+            fp = b.fp, F = _lower_cdf(fn, z, b.S), Sc = _count_survival(fn, b.S))
 end
 
-function _count_distribution(F)
+"""The min-Gumbel's lower-tail CDF, 1 - exp(-exp(c z - gamma)), taken as
+-expm1 so it keeps its relative precision where S rounds to one."""
+_gumbel_cdf(z) = -expm1.(-exp.(min.(z .* (pi / sqrt(6)) .- EULER, 30)))
+
+"""CDF rows for the count programs. The asymmetric min-Gumbel takes its
+own lower tail where S > 1/2: 1 - S rounded a representable last place
+to exactly zero (mu = [-35, 0, 0]: 0 for 2.05e-39, #710, as R and
+python). Every other base keeps 1 - S, bit for bit."""
+function _lower_cdf(fn, z, S)
+    F = clip01(1 .- S)
+    if fn === base_gumbel
+        lower = S .> 0.5
+        any(lower) && (F[lower] .= clip01(_gumbel_cdf(z[lower])))
+    end
+    return F
+end
+
+"""The survival rows the count programs pair with `_lower_cdf`: S itself
+where F was taken from the base's own CDF (so neither is a cancelled
+1 - x), otherwise `nothing`, which keeps the old 1 - F."""
+_count_survival(fn, S) = fn === base_gumbel ? clip01(S) : nothing
+
+function _count_distribution(F, S = nothing)
+    # S, when given, is used in place of 1 - F (accurate where that cancels)
     L, n = size(F)
     C = zeros(L, n + 1)
     C[:, 1] .= 1.0
     for j in 1:n
         f = F[:, j]
+        s = S === nothing ? 1 .- f : S[:, j]
         for m in (j + 1):-1:2
-            C[:, m] .= C[:, m] .* (1 .- f) .+ C[:, m - 1] .* f
+            C[:, m] .= C[:, m] .* s .+ C[:, m - 1] .* f
         end
-        C[:, 1] .*= 1 .- f
+        C[:, 1] .*= s
     end
     return C
 end
 
+# The one-direction cavity deconvolution: bases with no lower-tail CDF
+# of their own keep it, bit for bit.
 function _loo_cdf(C, F, k)
     L, n = size(F)
     out = zeros(n, L)
@@ -183,10 +209,154 @@ function _pair_pmf_at(Qi, F, i, k)
     return out
 end
 
+# Cavity deconvolution with error bounds (#511, #710); mirrors R's
+# .count_err/.loo_both/.loo_cdf and python's topk._deconv. Each count
+# coefficient carries relative roundoff <= 2 (n+1) eps plus an underflow
+# floor; each recursion step adds a subtraction and a division, and the
+# running first-order bound tracks the absolute error of every recovered
+# coefficient, capped at 1. The old rule ran ONE direction per lattice
+# point and integrated the subtraction residue as a rare exact place: a
+# Gumbel last place at mu = [-20, 0, 0] came back 1.9e5 times its exact
+# 1.05e-22, and at [-12, -4, 4, 12] 5.6e-18 for 1.1e-26.
+_count_err(C) = (2 * size(C, 2) + 2) * eps(Float64) .* C .+
+                size(C, 2) * floatmin(Float64)
+
+"""Both passes in full, each coefficient from the pass with the smaller
+bound: (Q = pmf (L x n), B = the chosen bounds)."""
+function _loo_both(C, E, Fi, Si)
+    L, n1 = size(C)
+    n = n1 - 1
+    Q = zeros(L, n)
+    B = zeros(L, n)
+    inv = 1 ./ max.(Si, 1e-300)
+    q = min.(C[:, 1] .* inv, 1.0)
+    e = ifelse.(Si .< 1e-300, 1.0, min.(E[:, 1] .* inv, 1.0))
+    Q[:, 1] .= q
+    B[:, 1] .= e
+    for m in 2:n
+        q = clip01((C[:, m] .- Fi .* q) .* inv)
+        e = min.((E[:, m] .+ Fi .* e) .* inv, 1.0)
+        Q[:, m] .= q
+        B[:, m] .= e
+    end
+    inv = 1 ./ max.(Fi, 1e-300)
+    q = min.(C[:, n + 1] .* inv, 1.0)
+    e = ifelse.(Fi .< 1e-300, 1.0, min.(E[:, n + 1] .* inv, 1.0))
+    better = e .< B[:, n]
+    Q[better, n] .= q[better]
+    B[better, n] .= e[better]
+    for m in (n - 1):-1:1
+        q = clip01((C[:, m + 1] .- Si .* q) .* inv)
+        e = min.((E[:, m + 1] .+ Si .* e) .* inv, 1.0)
+        better = e .< B[:, m]
+        Q[better, m] .= q[better]
+        B[better, m] .= e[better]
+    end
+    return (Q = Q, B = B)
+end
+
+"""P(N_{-i} <= k-1) for every runner, (n, L): the forward head sum or one
+minus the backward tail sum, whichever is better bounded; points where
+even that bound exceeds 1e-6 of the value are redone per coefficient by
+`_loo_both`."""
+function _loo_cdf_bounded(C, F, k, S = nothing)
+    L, n = size(F)
+    k >= n && return ones(n, L)
+    S === nothing && (S = 1 .- F)
+    E = _count_err(C)
+    inv = 1 ./ max.(S, 1e-300)
+    q = min.(C[:, 1] .* inv, 1.0)
+    e = min.(E[:, 1] .* inv, 1.0)
+    e[S .< 1e-300] .= 1.0
+    head = copy(q)
+    head_e = copy(e)
+    for m in 2:k
+        q = clip01((C[:, m] .- F .* q) .* inv)
+        e = min.((E[:, m] .+ F .* e) .* inv, 1.0)
+        head .+= q
+        head_e .+= e
+    end
+    inv = 1 ./ max.(F, 1e-300)
+    q = min.(C[:, n + 1] .* inv, 1.0)
+    e = min.(E[:, n + 1] .* inv, 1.0)
+    e[F .< 1e-300] .= 1.0
+    tail = copy(q)
+    tail_e = eps(Float64) .+ e
+    for m in (n - 1):-1:(k + 1)
+        q = clip01((C[:, m + 1] .- S .* q) .* inv)
+        e = min.((E[:, m + 1] .+ S .* e) .* inv, 1.0)
+        tail .+= q
+        tail_e .+= e
+    end
+    use_head = head_e .<= tail_e
+    cdf = ifelse.(use_head, head, 1 .- tail)
+    bound = ifelse.(use_head, head_e, tail_e)
+    loose = findall(bound .> max.(1e-6 .* cdf, 1e-280))
+    if !isempty(loose)
+        li = [I[1] for I in loose]
+        r = _loo_both(C[li, :], E[li, :], F[loose], S[loose])
+        hd = vec(sum(r.Q[:, 1:k], dims = 2))
+        he = vec(sum(r.B[:, 1:k], dims = 2))
+        tl = vec(sum(r.Q[:, (k + 1):n], dims = 2))
+        te = eps(Float64) .+ vec(sum(r.B[:, (k + 1):n], dims = 2))
+        cdf[loose] .= ifelse.(he .<= te, hd, 1 .- tl)
+    end
+    return permutedims(clip01(cdf))
+end
+
+"""The leave-one-out count pmf of runner i, (L x n), and its bounds."""
+function _loo_pmf_bounded(C, F, i, S = nothing)
+    Fi = F[:, i]
+    Si = S === nothing ? 1 .- Fi : S[:, i]
+    return _loo_both(C, _count_err(C), Fi, Si)
+end
+
+"""P(N_{-ij} = k-1) for every j != i: the forward pass up to coefficient
+k-1 and the backward pass down to it, each with its running bound
+(seeded with the bound on Qi itself), the better-bounded one winning at
+each point -- the rule `_loo_both` uses one level up (#511 residual)."""
+function _pair_pmf_at_bounded(Qi, F, i, k, S = nothing, Bi = nothing)
+    L, n = size(F)
+    out = zeros(n, L)
+    nn = n - 1                                    # others of i
+    k - 1 > nn - 1 && return out                  # only n-2 besides j
+    E = _count_err(Qi)
+    Bi === nothing || (E = E .+ Bi)
+    for j in 1:n
+        j == i && continue
+        Fj = F[:, j]
+        Sj = S === nothing ? 1 .- Fj : S[:, j]
+        inv = 1 ./ max.(Sj, 1e-300)
+        q = min.(Qi[:, 1] .* inv, 1.0)
+        e = ifelse.(Sj .< 1e-300, 1.0, min.(E[:, 1] .* inv, 1.0))
+        for m in 2:k
+            q = clip01((Qi[:, m] .- Fj .* q) .* inv)
+            e = min.((E[:, m] .+ Fj .* e) .* inv, 1.0)
+        end
+        inv = 1 ./ max.(Fj, 1e-300)
+        qb = min.(Qi[:, n] .* inv, 1.0)
+        eb = ifelse.(Fj .< 1e-300, 1.0, min.(E[:, n] .* inv, 1.0))
+        for cc in (nn - 1):-1:k
+            qb = clip01((Qi[:, cc + 1] .- Sj .* qb) .* inv)
+            eb = min.((E[:, cc + 1] .+ Sj .* eb) .* inv, 1.0)
+        end
+        out[j, :] .= ifelse.(e .<= eb, q, qb)
+    end
+    return out
+end
+
+"""The bounded rule where the base supplied accurate survivals `S`, the
+one-direction rule (unchanged) where it did not."""
+_loo_pmf_either(C, F, i, S) = S === nothing ? (_loo_pmf(C, F, i), nothing) :
+                                              _loo_pmf_bounded(C, F, i, S)
+_pair_pmf_either(Qi, F, i, k, S, Bi) = S === nothing ?
+    _pair_pmf_at(Qi, F, i, k) : _pair_pmf_at_bounded(Qi, F, i, k, S, Bi)
+
 function _topk_with_slopes(mu, sd, k, fn, points)
     g = _topk_grid(mu, sd, k, fn, points)
-    C = _count_distribution(g.F)
-    cdf = _loo_cdf(C, g.F, k)
+    C = _count_distribution(g.F, g.Sc)
+    cdf = g.Sc === nothing ? _loo_cdf(C, g.F, k) :
+          _loo_cdf_bounded(C, g.F, k, g.Sc)
     dens = g.f' ./ sd                            # (n, L)
     dmu = -g.fp' ./ (sd .* sd)
     return (q = vec(sum(dens .* cdf, dims = 2)) .* g.dx,
@@ -293,10 +463,15 @@ function _bottomk_independent(mu, sd, k, fn, points)
     lo, hi = -hi_r, -lo_r
     points = _resolved_points(lo, hi, sd, points)
     x = collect(range(lo, hi, length = points))
-    b = fn((x .- mu') ./ sd')
+    z = (x .- mu') ./ sd'
+    b = fn(z)
     G = clip01(b.S)
-    C = _count_distribution(G)
-    cdf = _loo_cdf(C, G, k)
+    # survivals in the role of the CDFs and the CDFs, taken from the
+    # base's own lower tail where it has one, in the role of the
+    # survivals: 1 - S rounded a Gumbel last place to zero (#710)
+    Fc = fn === base_gumbel ? _lower_cdf(fn, z, b.S) : nothing
+    C = _count_distribution(G, Fc)
+    cdf = Fc === nothing ? _loo_cdf(C, G, k) : _loo_cdf_bounded(C, G, k, Fc)
     dens = b.f' ./ sd
     return vec(sum(dens .* cdf, dims = 2)) .* (x[2] - x[1])
 end
@@ -356,12 +531,12 @@ function top_k_jacobians(mu, k; D = nothing, base = "normal",
     g = _topk_grid(mu, sd, k, fn, points)
     dens = g.f' ./ sd                            # (n, L)
     zdens = (g.z .* g.f)' ./ sd
-    C = _count_distribution(g.F)
+    C = _count_distribution(g.F, g.Sc)
     Jm = zeros(n, n)
     Js = zeros(n, n)
     for i in 1:n
-        Qi = _loo_pmf(C, g.F, i)
-        pair = _pair_pmf_at(Qi, g.F, i, k)
+        Qi, Bi = _loo_pmf_either(C, g.F, i, g.Sc)
+        pair = _pair_pmf_either(Qi, g.F, i, k, g.Sc, Bi)
         kern = pair .* dens[i, :]'
         row_mu = vec(sum(kern .* dens, dims = 2)) .* g.dx
         row_sd = vec(sum(kern .* zdens, dims = 2)) .* g.dx
@@ -379,10 +554,10 @@ end
 function _rank_matrix_node(mu, sd, fn, points)
     n = length(mu)
     g = _topk_grid(mu, sd, n - 1, fn, points)
-    C = _count_distribution(g.F)
+    C = _count_distribution(g.F, g.Sc)
     P = zeros(n, n)
     for i in 1:n
-        Qi = _loo_pmf(C, g.F, i)
+        Qi, _ = _loo_pmf_either(C, g.F, i, g.Sc)
         P[i, :] .= vec(sum(Qi .* (g.f[:, i] ./ sd[i]), dims = 1)) .* g.dx
     end
     return P
@@ -700,17 +875,17 @@ function _rank_marginal_with_jacobian(mu, sd, r, fn, points)
     n = length(mu)
     g = _topk_grid(mu, sd, n - 1, fn, points)
     dens = g.f' ./ sd                            # (n, L)
-    C = _count_distribution(g.F)
+    C = _count_distribution(g.F, g.Sc)
     p = zeros(n)
     J = zeros(n, n)
     for i in 1:n
-        Qi = _loo_pmf(C, g.F, i)
+        Qi, Bi = _loo_pmf_either(C, g.F, i, g.Sc)
         p[i] = sum(Qi[:, r] .* dens[i, :]) * g.dx
         # P(N_{-ij} = n-1) is identically zero (only n-2 others exist)
-        pair = r <= n - 1 ? _pair_pmf_at(Qi, g.F, i, r) :
+        pair = r <= n - 1 ? _pair_pmf_either(Qi, g.F, i, r, g.Sc, Bi) :
                zeros(n, length(g.x))
         if r >= 2
-            pair = pair .- _pair_pmf_at(Qi, g.F, i, r - 1)
+            pair = pair .- _pair_pmf_either(Qi, g.F, i, r - 1, g.Sc, Bi)
         end
         kern = pair .* dens[i, :]'
         row = vec(sum(kern .* dens, dims = 2)) .* g.dx

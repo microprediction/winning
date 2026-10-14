@@ -473,3 +473,26 @@ end
     r = race_probabilities([0.2, 0.0]; D = [1.0, 1.0], return_slopes = true)
     @test r.slopes ≈ fill(-winning.npdf(-0.2 / sqrt(2)) / sqrt(2), 2) rtol = 1e-14
 end
+
+@testset "Gumbel last places keep their exact Plackett-Luce values (#710)" begin
+    # 1 - S rounded the lower-tail CDF to zero (gap 35: 3e-248 times the
+    # truth) and the one-direction deconvolution fabricated mass (gap 20:
+    # 1.9e5 times it). Independent standardized min-Gumbels are
+    # Plackett-Luce with weights exp(-c mu).
+    c = pi / sqrt(6)
+    for gap in (20.0, 30.0, 35.0), points in (513, 8193)
+        mu = [-gap, 0.0, 0.0]
+        w0 = exp(c * gap)
+        exact = 2 / ((w0 + 2) * (w0 + 1))
+        b = bottom_k_probabilities(mu, 1; base = "gumbel", points = points)
+        R = rank_probabilities(mu; base = "gumbel", points = points)
+        @test abs(b[1] / exact - 1) < 1e-10
+        @test abs(R[1, 3] / exact - 1) < 1e-10
+        # cumulative rank = top-k
+        t2 = top_k_probabilities(mu, 2; base = "gumbel", points = points)
+        @test maximum(abs.(vec(sum(R[:, 1:2], dims = 2)) .- t2)) < 1e-10
+    end
+    # the deconvolution residue on a four-runner field (R's value)
+    @test abs(rank_probabilities([-12.0, -4, 4, 12]; base = "gumbel")[1, 4] /
+              1.101321e-26 - 1) < 1e-5
+end
