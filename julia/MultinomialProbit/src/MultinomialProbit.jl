@@ -707,16 +707,34 @@ function _choice_pair(mu::AbstractMatrix, V::AbstractMatrix,
         c = mu[t, k] - mu[t, j]
         s2 = Dv[k] + Dv[j] + sum((V[k, cc] - V[j, cc])^2 for cc in 1:r;
                                  init = zero(ET))
-        if s2 > 0
-            s = sqrt(s2)
+        s = sqrt(s2)
+        if !isfinite(s2) || (s2 == 0 && (Dv[k] + Dv[j] != 0 ||
+                                         any(cc -> V[k, cc] != V[j, cc], 1:r)))
+            # finite loadings whose squares overflow (or underflow) the
+            # sum: the norm in units of the largest term. Loadings
+            # [1e154, 1e154] priced Phi(1) as 0.5 (#720, python's
+            # _choice_pair); ordinary rows keep the plain sum.
+            mx = max(sqrt(Dv[k]), sqrt(Dv[j]),
+                     maximum(cc -> abs(V[k, cc] - V[j, cc]), 1:r;
+                             init = zero(ET)))
+            s = mx * sqrt((sqrt(Dv[k]) / mx)^2 + (sqrt(Dv[j]) / mx)^2 +
+                          sum(((V[k, cc] - V[j, cc]) / mx)^2 for cc in 1:r;
+                              init = zero(ET)))
+        end
+        if s > 0
             zz = c / s
             l = logndtr(zz)
             lam = exp(-zz^2 / 2 - 0.5 * log(2 * pi) - l)
             lp[t] = l
             dmu[t, k] = lam / s
             dmu[t, j] = -lam / s
+            s3 = s^3
+            plain = isfinite(s3) && s3 > floatmin(Float64)
             for cc in 1:r
-                g = -lam * c / s^3 * (V[k, cc] - V[j, cc])
+                # s^3 overflowed at loadings 9e153 and the score came
+                # back zero (#720): there it is -(lam z / s) (d / s)
+                g = plain ? -lam * c / s3 * (V[k, cc] - V[j, cc]) :
+                    -(lam * zz / s) * ((V[k, cc] - V[j, cc]) / s)
                 GV[t, k, cc] = g
                 GV[t, j, cc] = -g
             end

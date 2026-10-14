@@ -916,6 +916,20 @@ end
     @test maximum(abs.(raw ./ sum(raw) .- ref)) < 0.01
 end
 
+@testset "binary closed form at an extreme loading scale (#720)" begin
+    # sum(d^2) overflowed at 1e154 (Phi(1) priced 0.5), s^3 at 9e153 (a
+    # zero loading score), and at 1e-170 with D = 0 the sum underflowed
+    # (p = 1); the chosen loading's exact score is -lambda(1) / (2a)
+    lam = exp(-0.5 - 0.5 * log(2pi) - log(MultinomialProbit.ndtr(1.0)))
+    for (a, d) in ((9e153, 1.0), (1e154, 1.0), (1e300, 1.0), (1e-170, 0.0))
+        ll, dmu, dV = choice_loglik_and_score(reshape([0.0, hypot(a, a)], 1, 2),
+                                              [0.0 0.0; a a], [2]; D = [d, d])
+        @test exp(ll) ≈ MultinomialProbit.ndtr(1.0) rtol = 1e-14
+        @test dV[2, :] ≈ fill(-lam / (2a), 2) rtol = 1e-12
+        @test dV[1, :] ≈ fill(lam / (2a), 2) rtol = 1e-12
+    end
+end
+
 @testset "GHK: an overflowing variance sum is the same race (#409)" begin
     # contrast variances 1e308 whose SUM overflowed: the fallback added an
     # infinite ridge and every share came out 1/4 raw (1/3 normalised)
