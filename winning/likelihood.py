@@ -43,9 +43,11 @@ def _gh1(Q):
 # orthogonal Q, and in particular for a column sign flip or permutation.
 # The Gauss-Hermite tensor is invariant under both, but a scrambled Sobol
 # cloud is not, so the sharp-branch probability moved by 0.0047 when one
-# loading column changed sign (#605). The cloud is therefore the orbit
-# of base points under a group of signed permutations of the factor
-# coordinates, at about the same node count.
+# loading column changed sign (#605). symmetric_sobol_normal is the
+# orbit of base points under a group of signed permutations of the
+# factor coordinates, at about the same node count. _factor_nodes uses
+# it; the MNP choice likelihood's sharp branch went back to the plain
+# cloud (sobol_normal), where the orbit cost 3-5x in accuracy (PR #719).
 #
 # The group order is capped at 8, so at least n/8 base points (and as
 # many distinct own-noise values) remain. The full group of 2^r r!
@@ -102,11 +104,32 @@ def symmetric_sobol_normal(r, extra, n, seed):
     return F, np.full(len(F), 1.0 / len(F))
 
 
+def sobol_normal(r, extra, n, seed):
+    """Plain standard-normal scrambled-Sobol cloud: n points in
+    r + extra dimensions, equal weights. The MNP choice likelihood's
+    sharp-branch cloud (see nodes_for_likelihood)."""
+    from scipy.stats import qmc
+    u = qmc.Sobol(r + extra, scramble=True, seed=seed).random(n)
+    F = ndtri(np.clip(u, 1e-12, 1 - 1e-12))
+    return F, np.full(n, 1.0 / n)
+
+
 def nodes_for_likelihood(r, Qf=7, Qz=7, sharp=0.0):
-    """(F, W): nodes over (factor^r, own-noise); Sobol past sharpness 3,
-    symmetrised over factor signs and permutations (#605)."""
+    """(F, W): nodes over (factor^r, own-noise); a plain scrambled Sobol
+    cloud past sharpness 3, the Gauss-Hermite tensor below.
+
+    The Gauss-Hermite tensor is invariant under factor sign flips and
+    permutations, so #605's guarantee holds there for free. The Sobol
+    cloud is NOT symmetrised (owner decision, PR #719 / 2026-10-14): the
+    #605 orbit at 2^10 nodes (8 images of 128 base points at r = 2) had
+    3-5x the error of the plain cloud at the Fishing fit (rms 5-10 nats
+    against 1-3) and walled the fit at sharpness 2.9, 3.4 nats short of
+    the optimum. A sign flip or permutation of V therefore moves a
+    sharp-branch value by Sobol noise, not by 1e-12.
+    symmetric_sobol_normal remains available for callers who want the
+    invariance."""
     if sharp > 3.0:
-        return symmetric_sobol_normal(r, 1, 2 ** 10, seed=0)
+        return sobol_normal(r, 1, 2 ** 10, seed=0)
     xf, wf = _gh1(Qf)
     xz, wz = _gh1(Qz)
     grids = np.meshgrid(*([xf] * r + [xz]), indexing="ij")

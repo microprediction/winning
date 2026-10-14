@@ -297,9 +297,10 @@ end
 # orthogonal Q, and in particular for a column sign flip or permutation.
 # The Gauss-Hermite tensor is invariant under both; a Halton cloud is
 # not, so the sharp-branch probability moved by 0.0029 when one loading
-# column changed sign (#605). The cloud is the orbit of base points under
-# a group of signed permutations of the factor coordinates, at about the
-# same node count. General rotations are not covered.
+# column changed sign (#605). `_symmetric_halton` is the orbit of base
+# points under a group of signed permutations of the factor coordinates,
+# at about the same node count. General rotations are not covered. The
+# likelihood's sharp branch no longer uses it (see nodes_for_likelihood).
 #
 # The group order is capped at 8, so at least n/8 base points (and as
 # many distinct own-noise values) remain: the full 2^r r! = 384 at r = 4
@@ -346,10 +347,19 @@ function _symmetric_halton(r::Int, extra::Int, n::Int)
     return F, fill(1.0 / size(F, 1), size(F, 1))
 end
 
-"""(F, W): nodes over (factor^r, own-noise); a symmetrised Halton cloud
-past sharpness 3 (the dependency-free escalation of the R port, #605)."""
+"""(F, W): nodes over (factor^r, own-noise); a plain Halton cloud past
+sharpness 3 (the dependency-free escalation of the R port), the
+Gauss-Hermite tensor below.
+
+The Gauss-Hermite tensor is invariant under factor sign flips and
+permutations, so #605's guarantee holds there for free. The sharp cloud
+is not symmetrised (owner decision, PR #719 / 2026-10-14): the #605
+orbit (8 images of 128 base points at r = 2) cost 3-5x in accuracy and
+walled the Fishing fit at sharpness 2.9, 3.4 nats short of the optimum,
+as python's winning.likelihood.nodes_for_likelihood. `_symmetric_halton`
+remains for callers who want the invariance."""
 function nodes_for_likelihood(r::Int; Qf = 7, Qz = 7, sharp = 0.0)
-    sharp > 3.0 && return _symmetric_halton(r, 1, 2^10)
+    sharp > 3.0 && return _halton_normal(r + 1, 2^10)
     xf, wf = _gh1(Qf)
     xz, wz = _gh1(Qz)
     npts = Qf^r * Qz

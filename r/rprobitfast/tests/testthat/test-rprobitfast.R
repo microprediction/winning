@@ -481,9 +481,14 @@ test_that("the family switch is continuous and cusp-free (#420)", {
   }
 })
 
-test_that("the sharp cloud is closed under factor signs and order (#605)", {
+test_that("the opt-in symmetric cloud is closed under factor signs and order (#605)", {
+  # The sharp branch uses the plain cloud (owner decision, PR #719 /
+  # 2026-10-14: the orbit was 3-5x less accurate and cost the Fishing fit
+  # 3.4 nats); symmetric = TRUE keeps #605's orbit available.
+  plain <- .sobol_nodes3(2L, 10L)
+  expect_identical(plain$F, .sobol_normal(3L, 1024L, seed = 0L)$F)
   for (r in 1:5) {
-    nd <- .sobol_nodes3(r, 10L)
+    nd <- .sobol_nodes3(r, 10L, symmetric = TRUE)
     # #694: a group of order <= 8 never collapses the own-noise rule
     expect_gte(length(unique(nd$F[, r + 1L])), 1024L / 8L)
     key <- function(F) sort(apply(round(F, 10), 1, paste, collapse = ","))

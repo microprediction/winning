@@ -722,7 +722,11 @@ end
         @test abs(right - left) < 1e-5
         @test abs(dV[i, 1] - (left + right) / 2) < 1e-5
     end
-    # #605: the sharp cloud ignores factor signs and order
+    # #605: factor signs and order. The sharp branch is a plain Halton
+    # cloud again (owner decision, PR #719 / 2026-10-14: the symmetrised
+    # orbit was 3-5x less accurate and cost the Fishing fit 3.4 nats), so
+    # there the invariance holds to the cloud's noise (measured max moves
+    # 0.0019 / 0.0039 / 0.0022); the Gauss-Hermite branch keeps it exactly.
     mu5 = reshape([0.14067943910283115, -0.1688419276279345,
                    0.8188357505677056, -0.7906732620426022], 1, 4)
     V5 = [-4.44796743024364 2.0653322851949887;
@@ -732,8 +736,15 @@ end
     pr(A) = [exp(choice_loglik_and_score(mu5, A, [k])[1]) for k in 1:4]
     p0 = pr(V5)
     for A in (V5 .* [-1.0 1.0], V5 .* [1.0 -1.0], V5[:, [2, 1]])
-        @test maximum(abs.(pr(A) .- p0)) < 1e-12
+        @test maximum(abs.(pr(A) .- p0)) < 8e-3
     end
+    Vg = V5 ./ 4
+    q0 = pr(Vg)
+    for A in (Vg .* [-1.0 1.0], Vg .* [1.0 -1.0], Vg[:, [2, 1]])
+        @test maximum(abs.(pr(A) .- q0)) < 1e-12
+    end
+    Fs, _ = MultinomialProbit.nodes_for_likelihood(2; sharp = 5.0)
+    @test Fs == MultinomialProbit._halton_normal(3, 2^10)[1]
     @test maximum(abs.(p0 ./ sum(p0) .-
                        [0.3610138, 0.1938048, 0.4039584, 0.0412231])) < 3e-3
     # #581: one alternative is no choice
@@ -885,6 +896,7 @@ end
 end
 
 @testset "sharp cloud keeps its own-noise resolution (#694)" begin
+    # the opt-in symmetrised helper (the likelihood's sharp branch is plain)
     for r in 1:5
         F, W = MultinomialProbit._symmetric_halton(r, 1, 2^10)
         @test length(unique(F[:, r + 1])) >= 2^10 ÷ 8
