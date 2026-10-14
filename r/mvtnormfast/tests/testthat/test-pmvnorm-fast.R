@@ -513,3 +513,13 @@ test_that("a finite factor row whose sum of squares overflows (#720)", {
                                        V = matrix(c(0, 1), 2), D = c(0, 1))),
                0.5)
 })
+
+test_that("a small-unit orthant is the same law (#173)", {
+  rho <- 0.99
+  ex <- 0.25 + asin(rho) / (2 * pi)
+  for (cc in c(1e-150, 1e-155)) {
+    p <- pmvnorm_fast(upper = c(0, 0), V = matrix(cc * sqrt(rho), 2, 1),
+                      D = rep(cc * cc * (1 - rho), 2))
+    expect_lt(abs(as.numeric(p) - ex), 1e-8)
+  }
+})

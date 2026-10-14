@@ -463,3 +463,15 @@ end
     @test mvn_cdf_fast(upper = [1.0, 0.0], V = reshape([0.0, 1.0], 2, 1),
                        D = [0.0, 1.0]) ≈ 0.5
 end
+
+@testset "a small-unit orthant is the same law (#173)" begin
+    # the sharp law goes to the dense fallback, whose own tolerance is
+    # ~1e-4; the 1e-300 floor made it 0.0093 low at both scales
+    rho = 0.99
+    ex = 0.25 + asin(rho) / (2pi)
+    for c in (1e-150, 1e-155)
+        p = mvn_cdf_fast(upper = [0.0, 0.0], V = fill(c * sqrt(rho), 2, 1),
+                         D = fill(c * c * (1 - rho), 2))
+        @test abs(p - ex) < 2e-3
+    end
+end

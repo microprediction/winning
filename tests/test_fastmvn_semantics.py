@@ -412,3 +412,17 @@ def test_all_zero_factor_row_is_still_a_constant_720(fm):
                                 D=[0.0, 1.0]) == (pytest.approx(0.5), "factor")
     assert fm.mvn_cdf_fast_info(upper=[-1.0, 0.0], V=[[0.0], [1.0]],
                                 D=[0.0, 1.0])[0] == 0.0
+
+
+@pytest.mark.parametrize("c", [1e-150, 1e-155])
+def test_small_unit_orthant_is_the_same_law_173(fm, c):
+    # rho = 0.99 in a unit c: below D = 1e-300 the node selector's
+    # sqrt(max(D, 1e-300)) floor read the sharp law as mild (3.65% low
+    # at 1e-155). The #720 row rescale brings the row to unit scale first.
+    import math
+    rho = 0.99
+    exact = 0.25 + math.asin(rho) / (2 * math.pi)
+    p = fm.mvn_cdf_fast(upper=np.zeros(2), mean=np.zeros(2),
+                        V=np.full((2, 1), c * math.sqrt(rho)),
+                        D=np.full(2, c * c * (1 - rho)))
+    assert p == pytest.approx(exact, abs=1e-8)
