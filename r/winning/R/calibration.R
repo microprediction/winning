@@ -327,9 +327,22 @@ ability_implied_state_prices <- function(ability, density, unit = 1.0,
   # is 0.015 off because of it, against 2e-6 for the direct pricing.
   # Measuring the actual support keeps every in-window field on the exact
   # primitive and agrees with python wherever its bound is meaningful.
-  supp <- which(density > 1e-12) - 1L - L
-  left <- which(floor(co) + min(supp) < -L | co <= -L + 2)
-  right <- which(ceiling(co) + max(supp) > L | co >= L - 2)
+  #
+  # Once W reaches L the support fills the lattice (the standard L=500,
+  # unit=0.01 normal has W = 1000) and every nonzero offset "leaves" it,
+  # so this test sent python's own 8:4:2:1 round trip to the dilating
+  # cluster path as well, 0.017 off (#725). The exact primitive piles
+  # mass leaving the left edge at -L and drops it past +L, which keeps
+  # who wins up to edge dead heats; for such a density only an offset
+  # past the representable range hangs -- python's rule there too.
+  if (W >= L) {
+    left <- which(co < -(L - 2))
+    right <- which(co > L - 2)
+  } else {
+    supp <- which(density > 1e-12) - 1L - L
+    left <- which(floor(co) + min(supp) < -L | co <= -L + 2)
+    right <- which(ceiling(co) + max(supp) > L | co >= L - 2)
+  }
   if (!length(left) && !length(right))
     return(state_prices_from_offsets(density, co))
   if (max_depth == 0L) {

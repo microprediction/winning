@@ -761,8 +761,17 @@ def state_prices_from_extended_offsets(density, offsets, max_depth=3, unit_ratio
     # At this point in the algorithm we have a race that isn't completely degenerate
     # Let's center and then see if any horses are hanging off the lattice.
     centered_offsets = int_centered(offsets)
-    offset_lower_bound = -L + W
-    offset_upper_bound = L - W
+    # L - W keeps a support of width W inside the lattice. Once W reaches
+    # L that interval is empty or reversed -- the standard L=500,
+    # unit=0.01 normal has W = 1000 -- and every in-window field was
+    # sent to the dilating cluster path, 0.017 off where the exact
+    # primitive is 1.6e-6 (#725). That primitive piles mass that leaves
+    # the left edge at -L and drops it past +L, which preserves who wins
+    # up to edge dead heats, so for such a density only an offset past
+    # the representable range (_low_high's L - 2) hangs.
+    bound = L - W if W < L else L - 2
+    offset_lower_bound = -bound
+    offset_upper_bound = bound
     hanging_left  = [ i for i,o in enumerate(centered_offsets) if o<offset_lower_bound  ]
     hanging_right = [ i for i,o in enumerate(centered_offsets) if o>offset_upper_bound  ]
     hanging = bool(hanging_right or hanging_left)

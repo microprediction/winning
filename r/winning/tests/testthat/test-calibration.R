@@ -198,10 +198,15 @@ test_that("a distant runner does not collapse the viable field (#393)", {
   expect_equal(ability_implied_state_prices(c(0, 1, 30, 31, 33), d),
                c(ref[1:2], 0, 0, 0), tolerance = 1e-9)
   d2 <- skew_normal_density(L = 50, unit = 0.1, a = 1)
+  # python on the same inputs. W = 100 > L here, so since #725 this is the
+  # exact primitive, not the dilating cluster path (was 0.5632313848738231,
+  # 0.2595696474144002, 0.17255456544459888, 0.004644402180415685,
+  # 8.676225604073229e-11; the continuous skew-normal race is 0.56786,
+  # 0.27008, 0.16054, 0.0015209, 3.57e-13)
   expect_equal(ability_implied_state_prices(c(-0.5, 0, 0.3, 2.1, 6), d2,
                                             unit = 0.1),
-               c(0.5632313848738231, 0.2595696474144002, 0.17255456544459888,
-                 0.004644402180415685, 8.676225604073229e-11),
+               c(0.5672982284762254, 0.27027574567228596, 0.16087563506704702,
+                 0.001550390784063666, 3.7779460993255496e-13),
                tolerance = 1e-8)
   expect_true(is.infinite(ability_implied_dividends(c(0, 1, 500), d)[3]))
 })
