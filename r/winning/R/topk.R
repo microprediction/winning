@@ -420,6 +420,7 @@ top_k_probabilities <- function(mu, k, V = NULL, D = NULL,
   n <- length(mu)
   k <- .as_depth(k, n)
   sd <- sqrt(.as_idio(D, n))
+  mu <- .translated_home(mu, .as_idio(D, n))     # (#477)
   fn <- if (is.function(base)) base else .BASES[[base]]
   if (is.null(V))
     return(.checked_topk(.topk_with_slopes(mu, sd, k, fn, points)$q,
@@ -481,6 +482,7 @@ bottom_k_probabilities <- function(mu, k, V = NULL, D = NULL,
   # through .as_idio like every other top-k path: a bare sqrt(D) let
   # D = c(1, 9) at n = 4 recycle silently into c(1, 9, 1, 9) (#319)
   sd <- sqrt(.as_idio(D, n))
+  mu <- .translated_home(mu, .as_idio(D, n))     # (#477)
   fn <- if (is.function(base)) base else .BASES[[base]]
   if (is.null(V))
     return(.checked_topk(.bottomk_independent(mu, sd, k, fn, points), k,
@@ -498,6 +500,7 @@ top_k_jacobians <- function(mu, k, D = NULL, base = "normal",
                             points = 513, V = NULL, qa = NULL) {
   n <- length(mu)
   k <- .as_depth(k, n)
+  mu <- .translated_home(mu, .as_idio(D, n))     # (#477)
   if (!is.null(V)) {
     # exact node mixture: the factor shift commutes with d/dmu, d/dsigma
     fac <- .topk_factor_nodes(V, n, qa, D)
@@ -565,6 +568,7 @@ rank_probabilities <- function(mu, D = NULL, base = "normal",
                                points = 513, V = NULL, qa = NULL) {
   n <- length(mu)
   sd <- sqrt(.as_idio(D, n))
+  mu <- .translated_home(mu, .as_idio(D, n))     # (#477)
   fn <- if (is.function(base)) base else .BASES[[base]]
   if (is.null(V)) {
     P <- .rank_matrix_node(mu, sd, fn, points)

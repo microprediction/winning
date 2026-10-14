@@ -180,6 +180,22 @@ attr(.base_laplace, "log_sf") <- function(z) {
   list(F = matrix(F, ncol = r), W = rep(1 / n, n))
 }
 
+# mu moved next to the origin when a common offset dwarfs the field, as
+# python's races._translated_home. The origin is a gauge, but the lattice
+# is laid in the caller's units: at an offset of 2^52 its points
+# collapsed to the float spacing there, so race shares came back NaN and
+# top-k/rank refused a total membership of 0 (#477). Shifting by a middle
+# entry (an element, so no sum can overflow) is exact for such offsets;
+# below a million field scales nothing moves, so ordinary inputs stay
+# bit-identical. isTRUE: a non-finite mu is refused downstream, as before.
+.translated_home <- function(mu, D) {
+  scale <- (max(mu) - min(mu)) + sqrt(max(D))
+  # |off| <= max|mu|: an ordinary field skips the sort
+  if (!isTRUE(max(abs(mu)) > 1e6 * scale)) return(mu)
+  off <- sort(mu, na.last = TRUE)[length(mu) %/% 2L + 1L]
+  if (isTRUE(abs(off) > 1e6 * scale)) mu - off else mu
+}
+
 .race_setup <- function(mu, V, D, F, W, base) {
   mu <- as.numeric(mu)
   n <- length(mu)
@@ -193,6 +209,7 @@ attr(.base_laplace, "log_sf") <- function(z) {
   # point mass the lattice divides by, which crashed in .bulk_window with
   # "missing value where TRUE/FALSE needed" instead of naming D.
   D <- .as_idio(D, n, positive = TRUE)
+  mu <- .translated_home(mu, D)                              # (#477)
   if (is.null(V)) {
     V <- matrix(0, n, 1)
     F <- matrix(0, 1, 1)
@@ -635,6 +652,7 @@ race_probabilities <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
     stop(sprintf("window must be \"bulk\" or \"span\"; got %s",
                  paste(deparse(window), collapse = " ")), call. = FALSE)
   delta <- .as_delta(delta)                                    # (#445)
+  nodes_given <- !is.null(F) || !is.null(nodes)   # before cov= sets F (#86)
   if (!is.null(cov)) {
     if (!is.null(structure) || !is.null(V) || !is.null(D))
       stop("cov= replaces structure=/V=/D=; pass one only")
@@ -656,7 +674,6 @@ race_probabilities <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
                                    window = window, delta = delta))
   }
   if (!is.null(nodes)) { F <- nodes$F; W <- nodes$W }
-  nodes_given <- !is.null(F)
   st <- .race_setup(mu, V, D, F, W, base)
   n <- length(st$mu)
   if (n == 2L && identical(base, "normal") && !nodes_given) {
@@ -672,6 +689,17 @@ race_probabilities <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
     sd_d <- if (big > 0) sqrt(big) * sqrt(max(sh / big + (min(st$D) / big +
                                                           max(st$D) / big), 0))
             else 0
+    if (!is.finite(sh)) {
+      # a finite loading contrast past 1e154 squared to Inf, and
+      # Inf / Inf made sd_d NaN (#86): take the norms through their own
+      # scale instead. Only where the sum overflowed, so every ordinary
+      # pair keeps its bits.
+      m <- max(abs(dV))
+      a <- m * sqrt(sum((dV / m)^2))               # |dV|, finite
+      c0 <- max(a, sqrt(st$D))
+      sd_d <- c0 * sqrt((a / c0)^2 + (sqrt(st$D[1]) / c0)^2 +
+                          (sqrt(st$D[2]) / c0)^2)
+    }
     if (!(sd_d > 0)) sd_d <- 1e-150
     u <- (st$mu[2] - st$mu[1]) / sd_d
     # each tail directly: 1 - pnorm(u) rounds a 9-sd loser to zero
