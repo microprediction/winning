@@ -561,6 +561,19 @@ function centredLoadings(V, N) {
   return out;
 }
 
+/* mu moved next to the origin when a common offset dwarfs the field
+   (port of python's races._translated_home): shift by a middle entry
+   (an element, so no sum can overflow) once |offset| > 1e6 field scales;
+   below that nothing moves, so ordinary inputs stay bit-identical. */
+function translatedHome(mu, D) {
+  const s = mu.slice().sort((a, b) => a - b);
+  const off = s[Math.floor(s.length / 2)];
+  let dmax = 0;
+  for (let i = 0; i < D.length; i++) dmax = Math.max(dmax, D[i]);
+  const scale = (s[s.length - 1] - s[0]) + Math.sqrt(dmax);
+  return Math.abs(off) > 1e6 * scale ? mu.map((v) => v - off) : mu;
+}
+
 export function winProbabilitiesFactor(mu, V, D, F, W, opts = {}) {
   checkOpts(opts, WIN_PROBABILITIES_FACTOR_OPTS, "winProbabilitiesFactor");
   const points = asBudget(opts.points, 501, "winProbabilitiesFactor", "points");
@@ -570,6 +583,10 @@ export function winProbabilitiesFactor(mu, V, D, F, W, opts = {}) {
   const N = mu.length;
   V = asLoadings(V, N);
   D = asIdio(D, N);
+  // the origin is a gauge, but the lattice below is built in the
+  // caller's units: at a common offset of 2^52 it collapsed to the float
+  // spacing and shares moved 1.4e-3 (#477, as python's _translated_home)
+  mu = translatedHome(mu, D);
   F = asNodes(F, V[0].length);
   ({ F, W } = asFactorLaw(F, W, "W"));   // zero-weight nodes dropped (#416)
   const Q = F.length;
@@ -802,7 +819,18 @@ export function abilitiesFromProbabilitiesFactor(pTarget, V, D, F, W, opts = {})
   // counts, so the result either reprices them or says it did not converge.
   const floor = Math.max(1e-9, 1e-4 / N);
   let ident = p.map((v) => v > floor);
-  if (N > 2 && ident.filter(Boolean).length < 2) ident = p.map(() => true);
+  if (N === 2) {
+    // a pair is ONE contrast and the minority is the side that exposes a
+    // law mismatch: the tail mask (p > 5e-5) dropped a 1e-6 minority and
+    // certified a warm start that repriced it at 5e-37 (#727, as python)
+    ident = [true, true];
+  } else if (ident.filter(Boolean).length < 2) {
+    // every share the solver can represent; if that is still one, every
+    // share. Scoring a share below PFLOOR made a self-generated
+    // [1, 1.1e-5, 5.7e-18] an irreducible non-convergence (#588, as python)
+    ident = p.map((v) => v > PFLOOR);
+    if (ident.filter(Boolean).length < 2) ident = p.map(() => true);
+  }
   const residualOf = (phat) => {
     let res = 0;
     for (let i = 0; i < N; i++) if (ident[i]) res = Math.max(res, Math.abs(Math.log(phat[i]) - logp[i]));
@@ -829,7 +857,9 @@ export function abilitiesFromProbabilitiesFactor(pTarget, V, D, F, W, opts = {})
     const sgn = m === 0 ? 1 : -1;
     const g0 = sgn * s0 * ndtri(p[m]) - (shift[1] - shift[0]);
     const p0At = (g) => winProbabilitiesFactor([-0.5 * g, 0.5 * g], V, D, F, W, fwdOpts).p;
-    let g = g0, ph = p0At(g), res = residualOf(ph.map((v) => Math.max(v, PFLOOR)));
+    // both shares scored, floored at 1e-300 as python's _pair_solve: at
+    // PFLOOR a minority below 1e-15 could never certify (#727)
+    let g = g0, ph = p0At(g), res = residualOf(ph.map((v) => Math.max(v, 1e-300)));
     let it = 0;
     if (res >= tol) {
       // bracket the root of h(g) = +-(log p_m(g) - log p_m*), increasing in g;
@@ -851,7 +881,7 @@ export function abilitiesFromProbabilitiesFactor(pTarget, V, D, F, W, opts = {})
         const hm = h(mid);
         g = mid;
         ph = p0At(g);
-        res = residualOf(ph.map((v) => Math.max(v, PFLOOR)));
+        res = residualOf(ph.map((v) => Math.max(v, 1e-300)));
         if (res < tol) { it++; break; }
         if (hm < 0) {
           lo = mid; hlo = hm;
