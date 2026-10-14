@@ -2885,5 +2885,30 @@ accepts("dividendImpliedAbility keeps the favourite first at unit 0.1 (#649)",
   } finally { console.warn = keep; }
 }
 
+{
+  // one cluster: its loading shock is common to every contestant, so V
+  // and V + c price alike; the raw c widened the lattice and threw a
+  // mass defect at c = 40 while the Jacobian silently moved (#471)
+  const gap = (a, b) => Math.max(...a.flat(Infinity).map((v, i) => Math.abs(v - b.flat(Infinity)[i])));
+  const mu = [-.8, -.3, 0, .2, .9], cl = [0, 0, 0, 0, 0], D = [1, 1, 1, 1, 1];
+  const v0 = [.3, -.1, .2, 0, -.4];
+  const p0 = blocks.blockRaceProbabilities(mu, cl, v0, D), J0 = blocks.blockRaceJacobian(mu, cl, v0, D);
+  for (const c of [40, 1e6]) {
+    const v = v0.map(x => x + c);
+    accepts(`one-cluster Blocks forward ignores a common loading ${c} (#471)`,
+            () => gap(p0, blocks.blockRaceProbabilities(mu, cl, v, D)), g => g < 1e-10, g => g.toExponential(2));
+    accepts(`one-cluster Blocks Jacobian ignores a common loading ${c} (#471)`,
+            () => gap(J0, blocks.blockRaceJacobian(mu, cl, v, D)), g => g < 1e-10, g => g.toExponential(2));
+    accepts(`one-cluster Blocks inverse ignores a common loading ${c} (#471)`,
+            () => blocks.abilitiesFromBlockRace(p0, cl, v, D, { maxIter: 25, tol: 1e-8 }),
+            r => gap(blocks.blockRaceProbabilities(r.mu, cl, v0, D), p0) < 1e-7);
+  }
+  // two clusters: a cluster's common part is a real effect and must stay
+  const cl2 = [0, 0, 1, 1, 1];
+  const q0 = blocks.blockRaceProbabilities(mu, cl2, v0, D);
+  const q1 = blocks.blockRaceProbabilities(mu, cl2, v0.map((x, i) => x + (i < 2 ? 1 : 0)), D);
+  holds("a two-cluster common part still prices (#471)", gap(q0, q1) > 1e-3);
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");
