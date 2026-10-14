@@ -379,3 +379,36 @@ def test_valid_heterogeneous_scales_still_pass_666(fm):
                               abs=1e-9)
     assert fm.mvn_cdf_fast(upper=0.0, sigma=np.diag([0.0, 1.0])) == \
         pytest.approx(0.5, abs=1e-15)
+
+
+# --- #720: a finite factor row whose sum of squares overflows ---
+
+@pytest.mark.parametrize("a", [9e153, 1e154, 1e300, 1e-170])
+def test_extreme_factor_row_is_the_same_event_720(fm, a):
+    # X = a F1 + a F2, upper = its sd: Phi(1) at every finite a. At 1e154
+    # sum(V^2) overflowed and the univariate shortcut returned Phi(0);
+    # at 1e-170 it underflowed and the row was read as a constant (1.0)
+    import math
+    p, method = fm.mvn_cdf_fast_info(lower=-np.inf, upper=math.hypot(a, a),
+                                     mean=0.0, V=[[a, a]], D=0.0)
+    assert p == pytest.approx(ndtr(1.0), rel=1e-13) and method == "factor"
+    # three loading columns and a representable D beside them
+    d = a * a if a * a < 1e300 else 1e300
+    sd = math.hypot(math.hypot(a, a), math.hypot(a, math.sqrt(d)))
+    p = fm.mvn_cdf_fast(upper=sd, V=[[a, a, a]], D=d)
+    assert p == pytest.approx(ndtr(1.0), rel=1e-12)
+    # beside an ordinary row with no loading (independent of it)
+    # (with own noise, so the rule is Gauss-Hermite rather than Sobol)
+    if 1e-150 < a < 1e200:
+        d = (a / 2) ** 2
+        sd = math.hypot(math.hypot(a, a), a / 2)
+        p = fm.mvn_cdf_fast(upper=[sd, 0.0], V=[[a, a], [0.0, 0.0]],
+                            D=[d, 1.0])
+        assert p == pytest.approx(ndtr(1.0) / 2, rel=1e-9)
+
+
+def test_all_zero_factor_row_is_still_a_constant_720(fm):
+    assert fm.mvn_cdf_fast_info(upper=[1.0, 0.0], V=[[0.0], [1.0]],
+                                D=[0.0, 1.0]) == (pytest.approx(0.5), "factor")
+    assert fm.mvn_cdf_fast_info(upper=[-1.0, 0.0], V=[[0.0], [1.0]],
+                                D=[0.0, 1.0])[0] == 0.0

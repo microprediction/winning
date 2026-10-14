@@ -468,7 +468,31 @@ def _univariate(lo, up, mu, var):
     return float(np.exp(lm[0])), "factor"
 
 
+def _rescale_extreme_rows(V, D, mu, lo, up):
+    """Bring a coordinate of extreme scale to unit scale, exactly.
+
+    The event lo_i <= X_i <= up_i is unchanged when row i of V, the
+    noise sd, the mean and both bounds are scaled together. Two finite
+    loadings of 1e154 overflowed sum(V_i^2) to inf and a Phi(1)
+    probability came back 0.5; loadings of 1e-170 underflowed it to 0
+    and the coordinate was read as a constant (#720). A row whose
+    largest entry is outside 2^-400..2^400 is scaled by the power of two
+    of that entry (no rounding); every other row is untouched."""
+    with np.errstate(over="ignore", under="ignore"):
+        m = np.sqrt(D)
+        if V.shape[1]:
+            m = np.maximum(m, np.abs(V).max(axis=1))
+    e = np.frexp(m)[1]
+    big = (m > 0) & (np.abs(e) > 400)
+    if not big.any():
+        return V, D, mu, lo, up
+    k = np.where(big, -e, 0)
+    return (np.ldexp(V, k[:, None]), np.ldexp(D, 2 * k), np.ldexp(mu, k),
+            np.ldexp(lo, k), np.ldexp(up, k))
+
+
 def _structured(lo, up, mu, V, D):
+    V, D, mu, lo, up = _rescale_extreme_rows(V, D, mu, lo, up)
     var = (V ** 2).sum(axis=1) + D
     keep, done = _drop_constants(var, mu, lo, up)
     if done is not None:

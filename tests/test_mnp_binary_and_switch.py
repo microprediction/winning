@@ -125,3 +125,23 @@ def test_a_zero_column_is_invisible_at_J4(scale):
         assert np.abs(a[1] - b[1]).max() < 1e-12
         live = [c for c in range(3) if np.ptp(pad[:, c]) > 0]
         assert np.abs(a[2] - b[2][:, live]).max() < 1e-12
+
+
+@pytest.mark.parametrize("a", [1.0, 9e153, 1e154, 1e-170])
+def test_binary_closed_form_at_extreme_loading_scale_720(a):
+    """Loading difference [a, a], gap its norm: Phi(1) at every scale.
+    sum(d^2) overflowed at 1e154 (p = 0.5); s^3 overflowed at 9e153 and
+    the loading score came back zero. Exact score -lambda(1) / (2a)."""
+    import math
+    from scipy.special import ndtr
+    from winning.likelihood import choice_loglik_and_score
+    sd = math.hypot(a, a)
+    mu = np.array([[0.0, sd]])
+    V = np.array([[0.0, 0.0], [a, a]])
+    D = np.full(2, 1e-30 * a * a)            # negligible own noise
+    ll, dmu, dV = choice_loglik_and_score(mu, V, np.array([1]), D=D)
+    assert math.exp(ll) == pytest.approx(ndtr(1.0), rel=1e-12)
+    lam1 = math.exp(-0.5 - 0.5 * math.log(2 * math.pi)) / ndtr(1.0)
+    want = -lam1 / (2 * a)
+    np.testing.assert_allclose(dV[1], [want, want], rtol=1e-12)
+    np.testing.assert_allclose(dV[0], [-want, -want], rtol=1e-12)
