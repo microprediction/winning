@@ -2815,6 +2815,51 @@ accepts("dividendImpliedAbility keeps the favourite first at unit 0.1 (#649)",
 }
 
 {
+  // #726 residuals reopened after the first fix (issue #726 comments): the
+  // dense helpers must now (a) reject an indefinite contrast reached through a
+  // zero Cholesky pivot, (b) reject a coercible non-number entry exactly as
+  // validateCovariance does, and (c) not let a tolerance-declared asymmetry
+  // make C and C' price differently.
+  const mu = [0, 0.3, 0.6];
+  const zeroPivot = [[0, 0, 0], [0, 0, 1], [0, 1, 1]];   // indefinite contrast, zero pivot
+  rejects(demo.ghkPrepareOne, [mu, zeroPivot, 0],
+          "ghkPrepareOne refuses an indefinite contrast with a zero pivot (#726)");
+  rejects(demo.mendellElstonOne, [mu, zeroPivot, 0],
+          "mendellElstonOne refuses an indefinite contrast with a zero pivot (#726)");
+
+  const Cstr = [["1", 0], [0, 1]];                       // quoted diagonal variance
+  rejects(demo.ghkPrepareOne, [[0, 1], Cstr, 0],
+          "ghkPrepareOne refuses a coercible non-number entry (#726)");
+  rejects(demo.mendellElstonOne, [[0, 1], Cstr, 0],
+          "mendellElstonOne refuses a coercible non-number entry (#726)");
+
+  // A tolerance-declared asymmetry (small against a 1e12 common mode) must not
+  // pick a triangle: C and C' give the same normalized shares through both arms.
+  const H = 1e12;
+  const C = Array.from({length: 3}, (_, i) =>
+    Array.from({length: 3}, (_, j) => H + (i === j ? 1 : 0)));
+  C[0][1] += 0.5;                                        // asym = 0.5; global tolerance 1e4
+  const Ct = C.map((_, i) => C.map(row => row[i]));
+  const Cs = C.map((row, i) => row.map((x, j) => (x + Ct[i][j]) / 2));
+  const norm = x => { const s = x.reduce((a, b) => a + b, 0); return x.map(v => v / s); };
+  const me = M => norm(mu.map((_, i) => demo.mendellElstonOne(mu, M, i)));
+  const ghk = M => norm(mu.map((_, i) =>
+    demo.ghkSampleOne(demo.ghkPrepareOne(mu, M, i), 100000, demo.rng(10 + i))));
+  const meC = me(C), meCt = me(Ct), meS = me(Cs);
+  const ghkC = ghk(C), ghkCt = ghk(Ct), ghkS = ghk(Cs);
+  const maxDiff = (a, b) => Math.max(...a.map((x, i) => Math.abs(x - b[i])));
+  // Mendell-Elston is deterministic, so C / C' / symmetrized agree to ~1e-12
+  holds("Mendell-Elston: C and C' match the symmetrized covariance (#726)",
+        Math.max(maxDiff(meC, meS), maxDiff(meCt, meS)) < 1e-9,
+        `C-S ${maxDiff(meC, meS).toExponential(2)}, Ct-S ${maxDiff(meCt, meS).toExponential(2)}`);
+  // GHK is a Monte-Carlo estimate; C and C' must agree to well within sampling
+  // error (the divergence before the fix was ~6 percentage points)
+  holds("GHK: C and C' match the symmetrized covariance (#726)",
+        Math.max(maxDiff(ghkC, ghkS), maxDiff(ghkCt, ghkS)) < 5e-3,
+        `C-S ${maxDiff(ghkC, ghkS).toExponential(2)}, Ct-S ${maxDiff(ghkCt, ghkS).toExponential(2)}`);
+}
+
+{
   // one global 1e-8 * max|dist| tolerance let an unrelated 1e12 distance
   // hide a -1 distance, a 1 vs 100 asymmetry and a diagonal of 1 (#721)
   const H = 1e12;
