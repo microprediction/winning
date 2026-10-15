@@ -53,9 +53,12 @@ def test_golden_covers_the_battery(golden):
         f"stale {sorted(set(golden) - names)[:5]}")
 
 
-# Known platform dependence, tracked rather than hidden: the cov= front
-# door takes the factor route on macOS and dense GHK on Linux/Windows
-# for this input (results differ by ~6e-5), see #745.
+# Known platform dependence, tracked rather than hidden. Every platform
+# takes the SAME route here (the factor fit, rank 3, not degraded); what
+# differs is the sign LAPACK gives one fitted loading column, and the
+# scrambled-Sobol nodes are not sign-symmetric, so the finite-QMC answer
+# moves by its own quadrature error (~6e-5; flipping column 3 on macOS
+# reproduces the Linux vector to 5e-9), see #745.
 KNOWN_PLATFORM_ROUTE = {"race_cov/sample/n6r3": "#745"}
 
 
@@ -63,7 +66,7 @@ def _params():
     for name, thunk in CALLS:
         if name in KNOWN_PLATFORM_ROUTE:
             yield pytest.param(name, thunk, id=name, marks=pytest.mark.xfail(
-                reason="cov= route flips with platform rounding "
+                reason="cov= factor nodes depend on the platform's loading signs "
                        + KNOWN_PLATFORM_ROUTE[name], strict=False))
         else:
             yield pytest.param(name, thunk, id=name)

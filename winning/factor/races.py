@@ -1566,29 +1566,24 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
         # head-to-head filter (every contest is a pair) that window
         # search, not the forward pass, was the single largest cost.
         #
-        # Under the nodes the caller supplied, if any: F, W then stand
-        # for the factor law, (V, F) -> (V / c, c F) is the same race, and
-        # the contrast variance is (V0 - V1)' Cov_W(F) (V0 - V1) with a
-        # node mean shifting the contrast (#149's invariant, forward
-        # side: V alone gave 0.51 for an exact 0.70 at c = 0.03). The
-        # default rule's nodes, and a covariance fit's, stand for the
-        # standard normal itself, so its covariance is the identity, not
-        # the pruned tensor's (3e-5 short of it: a fitted equicorrelated
-        # pair priced 3.6e-5 off its analytic value through the nodes).
+        # Under the nodes the caller supplied, F, W ARE the factor law,
+        # which need not be normal: the pair is then the exact mixture
+        # over the nodes, as the general lattice computes it (#742: a
+        # centred two-point law priced 0.5 for an exact 0.75 when only
+        # its mean and covariance were matched). The default rule's
+        # nodes, and a covariance fit's, stand for the standard normal
+        # itself, so the closed form below uses the identity covariance,
+        # not the pruned tensor's (3e-5 short of it: a fitted
+        # equicorrelated pair priced 3.6e-5 off its analytic value
+        # through the nodes).
         dV = V[0] - V[1]
         if nodes_given:
-            # relative weights, as the lattice reads them (#170: W and cW
-            # are the same factor law; unnormalised, a x10 weight moved
-            # the pair 0.72 -> 0.61 and its inverse "converged" 5.6e-2 off)
-            Wn = as_weights(W)       # via max(W): sum(W) can overflow (#415)
-            Fm = Wn @ F
-            Fc = F - Fm
-            CovF = Fc.T @ (Fc * Wn[:, None])
-            var_d = float(dV @ CovF @ dV + D[0] + D[1])
-            shift = float(dV @ Fm)
-        else:
-            var_d = None
-            shift = 0.0
+            p, dens = _pair_mixture(mu[1] - mu[0], dV, D[0], D[1], F, W)
+            if return_slopes:
+                return p, np.array([-dens, -dens])
+            return p
+        var_d = None
+        shift = 0.0
         # The contrast sd in units of the largest term, so it neither
         # overflows (D = [9e307, 9e307] summed to inf and priced [.5, .5])
         # nor meets an absolute floor (max(var, 1e-300) changed the model
@@ -1943,6 +1938,25 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
             gap = sd_d * float(ndtri(target[0])) - shift
         else:
             gap = -sd_d * float(ndtri(target[1])) - shift
+        if V is not None and nodes_given:
+            # the forward prices the exact mixture over the caller's nodes
+            # (#742), which the closed form matches only to two moments:
+            # invert THAT map by a monotone 1-D solve from this start
+            g = _pair_mixture_gap(target, _Vc[0] - _Vc[1], _Dn[0], _Dn[1],
+                                  _Fq, _Wq, gap, sd_d)
+            if g is not None and np.isfinite(g):
+                # certified by the very map the forward evaluates (the
+                # forward's pruning of null nodes moves it by <= 1e-15)
+                mu = np.array([-0.5 * g, 0.5 * g])
+                ph = _pair_mixture(g, _Vc[0] - _Vc[1], _Dn[0], _Dn[1],
+                                   _Fq, _Wq)[0]
+                # no 1e-300 floor: a subnormal target is a real share
+                # the solve reprices exactly (#91); an exact 0 is inf
+                with np.errstate(divide="ignore"):
+                    r0 = float(np.abs(np.log(ph) - logt).max())
+                if r0 < tol:
+                    return _inverse_return(mu, True, r0, 0, floored, tol,
+                                           return_info)
         mu = np.array([-0.5 * gap, 0.5 * gap])
         ok = bool(np.isfinite(mu).all())
         if not nodes_given or not ok:
@@ -2030,6 +2044,99 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
         mu, _lattice, scale, alpha, n_iter, tol)
     return _inverse_return(mu, converged, resid_max, iters, floored,
                            tol, return_info)
+
+
+def _pair_mixture(gap, dV, d0, d1, F, W):
+    """A two-runner normal race under a caller's node law, exactly (#742).
+
+    Runner i performs mu_i + V_i . f + e_i (lowest wins), so given the node
+    f runner 0 wins with probability Phi((gap - (V0 - V1) . f) / sd),
+    gap = mu1 - mu0, sd = sqrt(D0 + D1); the race is the W-mixture of
+    those. Returns ([p0, p1], dp0/dgap), the second being the own-slope
+    magnitude both runners share. Each tail is summed directly, so the
+    loser keeps full relative precision and swapping the runners swaps
+    the answer exactly. O(Q).
+    """
+    Wn = as_weights(W)           # relative weights, as the lattice reads them
+    sd = _contrast_sd(0.0, d0, d1)
+    if not sd > 0.0:
+        sd = 1e-150              # an exactly deterministic contrast: as before
+    u = (float(gap) - np.asarray(F, dtype=float) @ dV) / sd
+    p = np.array([float(Wn @ ndtr(u)), float(Wn @ ndtr(-u))])
+    p = p / p.sum()
+    dens = float(Wn @ np.exp(-0.5 * u * u)) / np.sqrt(2.0 * np.pi) / sd
+    return p, dens
+
+
+def _pair_mixture_gap(target, dV, d0, d1, F, W, g0, h):
+    """The gap mu1 - mu0 at which _pair_mixture prices `target` (#742).
+
+    p0 is increasing in the gap, so this is a monotone 1-D root of
+    log p_small(gap) - log target_small, taken on the SMALLER share so a
+    1e-16 target keeps its digits (#412); log p is a log-sum-exp of
+    log_ndtr terms, finite where p itself underflows. Newton from g0 (the
+    closed form's gap, already right for a normal node law), safeguarded
+    by the bracket the iterates establish: a step leaving it bisects, and
+    while one side is open the step is capped at h, doubling. Returns
+    None if it does not converge.
+    """
+    from scipy.special import log_ndtr
+    Wn = as_weights(W)
+    with np.errstate(divide="ignore"):
+        logw = np.log(Wn)
+    sd = _contrast_sd(0.0, d0, d1)
+    if not sd > 0.0:
+        sd = 1e-150
+    s = np.asarray(F, dtype=float) @ dV
+    small = 0 if target[0] <= target[1] else 1
+    sign = 1.0 if small == 0 else -1.0       # p_small increases in sign*gap
+    logt = float(np.log(target[small]))
+
+    def lse(a):
+        m = float(a.max())
+        if not np.isfinite(m):
+            return m
+        return m + float(np.log(np.exp(a - m).sum()))
+
+    if not (np.isfinite(g0) and np.isfinite(h) and h > 0.0):
+        return None
+    g, lo, hi = float(g0), -np.inf, np.inf
+    for _ in range(200):
+        u = sign * (g - s) / sd
+        p = float(Wn @ ndtr(u))
+        if p > 1e-250:
+            # the direct sums, half the cost of the log domain
+            logp = float(np.log(p))
+            ratio = float(Wn @ np.exp(-0.5 * u * u)) / np.sqrt(2.0 * np.pi) / p
+        else:
+            logp = lse(logw + log_ndtr(u))
+            ratio = float(np.exp(lse(logw - 0.5 * u * u)
+                                 - 0.5 * np.log(2.0 * np.pi) - logp))
+        f = sign * (logp - logt)              # increasing in g
+        if f == 0.0:
+            return g
+        if not np.isfinite(f):
+            return None
+        if f > 0.0:
+            hi = g
+        else:
+            lo = g
+        # d f / d g = sum_w phi(u) / (sd p_small) = ratio / sd > 0
+        gn = g - f * sd / ratio if ratio > 0.0 else np.nan
+        if abs(f) < 1e-8 and lo < gn < hi:
+            # quadratic convergence: from a relative error of 1e-8 the
+            # step lands at rounding, and the caller certifies it
+            return float(gn)
+        if not (lo < gn < hi):
+            if np.isfinite(lo) and np.isfinite(hi):
+                gn = 0.5 * (lo + hi)
+            else:
+                gn = g - h if f > 0.0 else g + h
+                h *= 2.0
+        if abs(gn - g) <= 2.0 * np.finfo(float).eps * max(abs(g), sd):
+            return float(gn)
+        g = float(gn)
+    return None
 
 
 def _contrast_sd(shared, d0, d1):
