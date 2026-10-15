@@ -468,6 +468,13 @@ def _d_crn_reps(V):
 # Not driven, each for a stated reason. Keep this list SHORT and specific:
 # an entry here is a hole in the sweep, so it must say why.
 EXEMPT = {
+    "winning.torch.factor.race_log_prob_factor":
+        "torch tensors with leading batch dims: V is (..., n, rank) "
+        "exactly and anything else raises; with batch dims a (rank, n) "
+        "spelling is ambiguous, so there is no spelling to normalise "
+        "(tests/test_torch_heads.py covers it)",
+    "winning.torch.losses.thurstone_nll":
+        "passes V straight to race_log_prob_factor (exempt above)",
     "winning.shapes.as_loadings":
         "is the normaliser; its own contract is tested directly below",
     "winning.factor.races.forward_grid":
@@ -525,7 +532,8 @@ def _discover():
 # winning_imports keeps this list true by reading the imports themselves.
 HARD_DEPS = ("numpy", "scipy")
 OPTIONAL_BACKENDS = frozenset({"fastrace", "flint", "jax", "matplotlib",
-                               "mpl_toolkits", "pandas", "trueskill"})
+                               "mpl_toolkits", "pandas", "torch",
+                               "trueskill"})
 # match the MESSAGE, not the class name: ModuleNotFoundError subclasses
 # ImportError and either can carry a missing optional backend
 _MISSING = re.compile(r"No module named '?([A-Za-z_][\w.]*)'?")
@@ -616,8 +624,12 @@ def test_every_public_V_is_covered():
     # backend is absent is not stale: the module still exists, the sweep
     # is narrowed, and the warning above already says so
     # (winning.certified imports python-flint at module level)
+    # (a missing backend can stop a whole subpackage importing --
+    # winning.torch without torch -- so its modules are never listed:
+    # a name under an unimportable package is not stale either)
     stale = sorted(nm for nm in covered - found
-                   if nm.rsplit(".", 1)[0] not in optional)
+                   if not any(nm.rsplit(".", 1)[0] == o
+                              or nm.startswith(o + ".") for o in optional))
     assert not stale, ("drivers/exemptions naming functions that no "
                        "longer exist:\n  " + "\n  ".join(stale))
 

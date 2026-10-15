@@ -178,6 +178,41 @@ import winning.factor.polish as wfo        # noqa: E402
 import winning.factor.races as wfr         # noqa: E402
 import winning.factor.topk as wft          # noqa: E402
 
+# winning.torch: PyTorch heads, python only by nature (a training-loop
+# API, not a pricing verb; R and the browser have no autograd to serve).
+# Not swept by _public_verbs (it is not winning.factor and importing it
+# needs torch), so its public names are declared here and checked
+# against the subpackage's __all__ statically, with or without torch.
+TORCH_ONLY = {
+    "race_log_prob":           "python only: PyTorch head (win log-probs, analytic backward)",
+    "race_lattice":            "python only: PyTorch head (the lattice race_log_prob uses)",
+    "race_log_prob_factor":    "python only: PyTorch head (factor race over fixed nodes)",
+    "thurstone_nll":           "python only: PyTorch loss",
+    "ordered_prefix_log_prob": "python only: PyTorch loss",
+    "topk_log_prob":           "python only: PyTorch loss",
+}
+
+
+def test_torch_heads_are_declared_python_only():
+    import ast
+    tree = ast.parse((ROOT / "winning" / "torch" / "__init__.py").read_text())
+    exported = None
+    for node in tree.body:
+        if (isinstance(node, ast.Assign)
+                and any(getattr(t, "id", None) == "__all__"
+                        for t in node.targets)):
+            exported = set(ast.literal_eval(node.value))
+    assert exported == set(TORCH_ONLY), (
+        "winning.torch.__all__ and TORCH_ONLY disagree: "
+        f"undeclared {sorted(exported - set(TORCH_ONLY))}, "
+        f"stale {sorted(set(TORCH_ONLY) - exported)}")
+    r_exports = set(re.findall(r"^export\((\w+)\)", R_NS, re.M))
+    js_exports = set(re.findall(r"export function (\w+)", JS_SRC))
+    for name in TORCH_ONLY:
+        assert name not in r_exports and _camel(name) not in js_exports, (
+            f"{name} is declared python only but a port exports it")
+
+
 _HELPERS = {"as_loadings", "as_idio", "as_variance", "load_fastrace",
             "forward_grid", "kink_lattice", "roots_hermitenorm", "ndtr",
             "ndtri",

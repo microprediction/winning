@@ -24,7 +24,7 @@ setup(
         "Programming Language :: Python :: 3.13",
     ],
     python_requires=">=3.10",
-    packages=["winning", "winning.classic", "winning.factor", "winning.methods", "winning.bench", "winning.research", "winning.probit", "winning.ratings", "winning.ratings.verify", "winning.alternatives"],
+    packages=["winning", "winning.classic", "winning.factor", "winning.methods", "winning.bench", "winning.research", "winning.probit", "winning.ratings", "winning.ratings.verify", "winning.alternatives", "winning.torch"],
     test_suite='pytest',
     tests_require=['pytest','pandas','scipy>=1.7.3','randomcov'],
     include_package_data=True,
@@ -34,7 +34,9 @@ setup(
                     # compiled kernels (rust/fastrace); pure python without
                     "fast": ["fastrace>=0.2.0"],
                     # winning.certified: Arb ball arithmetic
-                    "certified": ["python-flint>=0.6"]},
+                    "certified": ["python-flint>=0.6"],
+                    # winning.torch: Thurstone heads for PyTorch
+                    "torch": ["torch>=2.0"]},
     entry_points={
         "console_scripts": [
             "winning=winning.__main__:main",
