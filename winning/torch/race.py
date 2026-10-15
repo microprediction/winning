@@ -139,10 +139,14 @@ class _Gumbel:
 
     @classmethod
     def log_cdf(cls, z):
-        # log(1 - exp(-e^u)), stable both ways
+        # log(1 - exp(-e^u)), stable both ways. Each branch sees a clamped
+        # argument (same values where it is selected): far left, e < 1e-16
+        # makes log1p(-exp(-e)) = log(0), and its infinite derivative times
+        # torch.where's zero gave NaN gradients on separated fields (#753)
         e = torch.exp(cls._u(z))
-        return torch.where(e < 0.6931, torch.log(-torch.expm1(-e)),
-                           torch.log1p(-torch.exp(-e)))
+        return torch.where(e < 0.6931,
+                           torch.log(-torch.expm1(-e.clamp(max=0.6931))),
+                           torch.log1p(-torch.exp(-e.clamp(min=0.6931))))
 
     @classmethod
     def dlog_pdf(cls, z):
@@ -231,7 +235,20 @@ def _lattice_rows(mu, sd, mask, fam, points, delta):
         cpu = lambda t: None if t is None else t.cpu()
         return _lattice_rows(cpu(mu), cpu(sd), cpu(mask), fam, points,
                              delta).to(mu.device)
-    dt = mu.dtype
+    lo, hi = _window_rows(mu, sd, mask, fam, delta)
+    u = torch.linspace(0.0, 1.0, points, dtype=torch.float64,
+                       device=mu.device)
+    x = lo[:, None] + (hi - lo)[:, None] * u[None, :]
+    return x.to(mu.dtype)
+
+
+@torch.no_grad()
+def _window_rows(mu, sd, mask, fam, delta):
+    """(lo, hi) per row, float64, of the WINNER lattice (race_lattice).
+
+    Right for the win event only: the right edge is cut where every
+    winner integrand is negligible. Later-place events need more (see
+    losses._event_lattice_rows)."""
     wd = torch.float64
     big = torch.finfo(wd).max
     if mask is None:
@@ -290,9 +307,7 @@ def _lattice_rows(mu, sd, mask, fam, points, delta):
     # a one-runner (or degenerate) row still needs a non-empty lattice
     smax = torch.where(mask, s64, torch.zeros_like(s64)).max(-1).values
     hi = torch.maximum(hi, lo + smax.clamp(min=1e-12))
-    u = torch.linspace(0.0, 1.0, points, dtype=wd, device=mu.device)
-    x = lo[:, None] + (hi - lo)[:, None] * u[None, :]
-    return x.to(dt)
+    return lo, hi
 
 
 # ------------------------------------------------------------- the kernel

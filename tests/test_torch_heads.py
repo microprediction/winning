@@ -360,3 +360,342 @@ def test_mps_float32_matches_cpu_float64():
     assert np.allclose(lp.detach().cpu().numpy(), ref, rtol=1e-4, atol=1e-4)
     lp[:, 0].sum().backward()
     assert torch.all(torch.isfinite(m.grad))
+
+
+# ------------------------------------- #753: later places on separated fields
+# ordered_prefix_log_prob / topk_log_prob used the WINNER lattice, whose
+# right edge stops where every winner integrand is negligible. A later
+# place has its mass near its own runner, often far to the right of
+# that: P(0 then 1) at mu = [0, 10] came out 0.503 (exact 1 - 7.7e-13).
+# References below are exact: closed forms, or a one-dimensional
+# log-domain quadrature on 200001 points (spectral for these smooth
+# integrands, ~1e-14), independent of winning's lattices.
+from scipy.special import log_ndtr as _log_ndtr  # noqa: E402
+from scipy.special import logsumexp as _lse  # noqa: E402
+
+GAPS = [5.0, 10.0, 20.0, 40.0]
+SDS2 = [(1.0, 1.0), (0.3, 1.0), (1.0, 0.3), (2.0, 0.5)]
+SDS3 = [(1.0, 1.0, 1.0), (0.3, 1.0, 2.0), (2.0, 1.0, 0.3)]
+
+
+def _ref_terms(mu, sd):
+    x = np.linspace((mu - 40 * sd).min(), (mu + 40 * sd).max(), 200001)
+    z = (x[None] - mu[:, None]) / sd[:, None]
+    lf = -0.5 * z * z - 0.5 * math.log(2 * math.pi) - np.log(sd)[:, None]
+    return lf, _log_ndtr(z), _log_ndtr(-z), math.log(x[1] - x[0])
+
+
+def _ref_order3(mu, sd, o):
+    """log P(X_a < X_b < X_c) = log int f_b F_a S_c."""
+    a, b, c = o
+    lf, lF, lS, ldx = _ref_terms(mu, sd)
+    return _lse(lf[b] + lF[a] + lS[c]) + ldx
+
+
+def _ref_top2_of3(mu, sd, i):
+    """log P(i among the best two of three) = log int f_i (1 - F_j F_l)."""
+    j, m = [r for r in range(3) if r != i]
+    lf, lF, _, ldx = _ref_terms(mu, sd)
+    with np.errstate(divide="ignore"):
+        w = np.log(-np.expm1(lF[j] + lF[m]))
+    return _lse(lf[i] + w) + ldx
+
+
+def _rel(got, ref):
+    return abs(math.expm1(float(got) - float(ref)))
+
+
+@pytest.mark.parametrize("gap", GAPS)
+@pytest.mark.parametrize("sds", SDS2)
+def test_753_two_runner_order_is_the_pair_probability(gap, sds):
+    """Full order of a pair = P(X_a < X_b), relative, both orders (the
+    rare order is 1e-5 .. 1e-176 here)."""
+    mu = np.array([0.0, gap])
+    sd = np.array(sds)
+    for o in [(0, 1), (1, 0)]:
+        got = wt.ordered_prefix_log_prob(_t(mu), torch.tensor(o), _t(sd))
+        ref = _log_ndtr((mu[o[1]] - mu[o[0]]) / math.hypot(*sd))
+        assert _rel(got, ref) < 1e-10, (o, float(got), ref)
+
+
+@pytest.mark.parametrize("gap", GAPS)
+@pytest.mark.parametrize("sds", SDS3)
+def test_753_three_runner_prefixes_on_separated_fields(gap, sds):
+    """k = 2 prefixes of three runners (each is a full order, spectral on
+    the lattice) to 1e-10 relative, down to 1e-300; k = 3 to 1e-4 for
+    events above 1e-12 (the cumulative quadrature; see the next test)."""
+    mu = np.array([0.0, gap, 2 * gap])
+    sd = np.array(sds)
+    for o in itertools.permutations(range(3)):
+        ref = _ref_order3(mu, sd, o)
+        if ref < -690:
+            continue
+        k2 = wt.ordered_prefix_log_prob(_t(mu), torch.tensor(o[:2]), _t(sd))
+        assert _rel(k2, ref) < 1e-10, (o, float(k2), ref)
+        if ref > math.log(1e-12):
+            k3 = wt.ordered_prefix_log_prob(_t(mu), torch.tensor(o), _t(sd))
+            assert _rel(k3, ref) < 1e-4, (o, float(k3), ref)
+
+
+def test_753_k3_prefix_converges_under_refinement():
+    """k = 3 is a cumulative trapezoid with an Euler-Maclaurin end
+    correction across the whole (now wider) lattice: fourth order, so 4x
+    the points cuts the error ~256x, here on rare events (1e-12 .. 1e-47)
+    of a separated field, where the error is largest."""
+    mu = np.array([0.0, 10.0, 20.0])
+    sd = np.ones(3)
+    for o in [(0, 2, 1), (1, 2, 0), (2, 1, 0)]:
+        ref = _ref_order3(mu, sd, o)
+        e = [_rel(wt.ordered_prefix_log_prob(_t(mu), torch.tensor(o), _t(sd),
+                                             points=p), ref)
+             for p in (257, 1025)]
+        assert e[1] < 1e-5 and e[1] < e[0] / 50, (o, e)
+
+
+def test_753_far_ahead_outsider_keeps_the_prefix_relative():
+    """A non-prefix runner 40 sd ahead must finish behind the prefix: the
+    event (1e-235) lives far LEFT, which the win lattice's relative left
+    edge already covers."""
+    mu = np.array([0.0, 0.0, -40.0])
+    sd = np.ones(3)
+    for o in itertools.permutations(range(3)):
+        ref = _ref_order3(mu, sd, o)
+        got = wt.ordered_prefix_log_prob(_t(mu), torch.tensor(o[:2]), _t(sd))
+        assert _rel(got, ref) < 1e-10, (o, float(got), ref)
+
+
+@pytest.mark.parametrize("gap", GAPS)
+@pytest.mark.parametrize("sds", SDS3)
+def test_753_top2_of_three_on_separated_fields(gap, sds):
+    """The issue's fixture ([0, 10, 20]: weak runner 4.3e-13 for 7.7e-13)
+    and its relatives, relative to exact, and sum = 2."""
+    mu = np.array([0.0, gap, 2 * gap])
+    sd = np.array(sds)
+    lp = wt.topk_log_prob(_t(mu), 2, _t(sd)).numpy()
+    for i in range(3):
+        ref = _ref_top2_of3(mu, sd, i)
+        if ref > -690:
+            assert _rel(lp[i], ref) < 1e-10, (i, lp[i], ref)
+    assert abs(np.exp(lp).sum() - 2.0) < 1e-11
+
+
+@pytest.mark.parametrize("n", [3, 4])
+@pytest.mark.parametrize("gap", [1.0] + GAPS)
+def test_753_full_orderings_sum_to_one(n, gap):
+    mu = gap * np.arange(n, dtype=float)
+    sd = np.linspace(0.5, 1.5, n)
+    perms = list(itertools.permutations(range(n)))
+    lp = wt.ordered_prefix_log_prob(_t(mu).expand(len(perms), n),
+                                    torch.tensor(perms), _t(sd))
+    assert abs(torch.exp(lp).sum().item() - 1.0) < 1e-7
+    # and every k = 2 prefix family sums to one (spectral)
+    perms2 = list(itertools.permutations(range(n), 2))
+    lp2 = wt.ordered_prefix_log_prob(_t(mu).expand(len(perms2), n),
+                                     torch.tensor(perms2), _t(sd))
+    assert abs(torch.exp(lp2).sum().item() - 1.0) < 1e-11
+
+
+@pytest.mark.parametrize("base", ["normal", "gumbel"])
+@pytest.mark.parametrize("gap", GAPS)
+def test_753_topk_memberships_sum_to_k(base, gap):
+    mu = gap * np.array([0.0, 1.0, 2.0, 3.0, 0.5])
+    sd = np.array([1.0, 0.4, 2.0, 1.0, 0.7])
+    # the min-Gumbel density falls double-exponentially on its right, so
+    # at the default spacing it resolves to ~1e-10, not ~1e-13
+    tol = 1e-10 if base == "normal" else 1e-9
+    for k in range(1, 5):
+        lp = wt.topk_log_prob(_t(mu), k, _t(sd), base=base)
+        assert abs(torch.exp(lp).sum().item() - k) < tol, k
+
+
+def _random_fields(m, seed):
+    rng = np.random.default_rng(seed)
+    out = []
+    for t in range(m):
+        n = int(rng.integers(3, 7))
+        out.append(([1, 3, 10, 25][t % 4] * rng.normal(size=n),
+                    rng.uniform(0.3, 2.0, size=n)))
+    return out
+
+
+@pytest.mark.parametrize("field", range(16))
+def test_753_random_fields_agree_with_winning_factor(field):
+    """Ordinary to well-separated random fields (spread 1..25 sd, sd 0.3
+    .. 2): k = 2 prefixes and top-k for k = 1..3 agree with
+    winning.factor.ordered_probabilities / top_k_probabilities (which
+    price these fields correctly; they size their lattice to every
+    runner's bulk). On main the k = 2 prefixes were off by up to 100%
+    (2e-4 at spread 1)."""
+    mu, sd = _random_fields(16, 753)[field]
+    n = len(mu)
+    perms = list(itertools.permutations(range(n), 2))
+    lp = wt.ordered_prefix_log_prob(_t(mu).expand(len(perms), n),
+                                    torch.tensor(perms), _t(sd)).numpy()
+    ref = ordered_probabilities(mu, k=2, D=sd ** 2, points=4001)
+    r = np.array([ref[p] for p in perms])
+    ok = r > 1e-280
+    assert np.abs(np.expm1(lp[ok] - np.log(r[ok]))).max() < 1e-10
+    for k in range(1, min(3, n - 1) + 1):
+        lt = wt.topk_log_prob(_t(mu), k, _t(sd)).numpy()
+        rt = top_k_probabilities(mu, k, D=sd ** 2)
+        ok = rt > 1e-280
+        assert np.abs(np.expm1(lt[ok] - np.log(rt[ok]))).max() < 1e-10, k
+
+
+def test_753_ordinary_hetero_k3_prefix_is_right():
+    """Not only separated fields: with sd from 0.3 to 2 the winner lattice
+    clipped the slow runner's bulk, and k = 3 full orders of ORDINARY
+    three-runner fields were off by up to 88% on main."""
+    rng = np.random.default_rng(3)
+    worst = 0.0
+    for _ in range(12):
+        mu = rng.normal(size=3)
+        sd = rng.uniform(0.3, 2.0, 3)
+        for o in itertools.permutations(range(3)):
+            ref = _ref_order3(mu, sd, o)
+            got = wt.ordered_prefix_log_prob(_t(mu), torch.tensor(o), _t(sd))
+            worst = max(worst, _rel(got, ref))
+    assert worst < 1e-4          # k = 3 quadrature; main: 0.88
+
+
+@pytest.mark.parametrize("gap", GAPS)
+def test_753_gumbel_prefixes_are_plackett_luce_when_separated(gap):
+    """Under the min-Gumbel base the prefix law is Plackett-Luce exactly.
+    The wider lattice reaches x where a prefix runner's log S = -e^u is
+    ~-1e17; rest = sum(all) - sum(prefix) then lost every digit, so the
+    non-prefix runners are now summed directly. (1e-8: the rarest of
+    these events, 1e-67 at gap 40, resolves to 1.3e-9 at 257 points and
+    1e-13 at 1025; the Gumbel's right flank is sharper than its sd.)"""
+    c = math.pi / math.sqrt(6.0)
+    mu = np.array([0.0, gap, -gap, 0.5])
+
+    def pl(o):
+        u = -c * mu
+        rem, s = list(range(len(mu))), 0.0
+        for i in o:
+            s += u[i] - _lse(u[rem])
+            rem.remove(i)
+        return s
+
+    for o in itertools.permutations(range(4), 2):
+        got = wt.ordered_prefix_log_prob(_t(mu), torch.tensor(o),
+                                         base="gumbel")
+        assert _rel(got, pl(o)) < 1e-8, (o, float(got), pl(o))
+
+
+def test_753_batch_of_mixed_fields_matches_rows():
+    """One lattice length serves a batch (the largest any row needs), so a
+    separated row in a batch of ordinary rows is priced right, and every
+    row equals its own call to quadrature accuracy."""
+    fields = [(np.array([0.0, 0.5, 1.0]), np.ones(3)),
+              (np.array([0.0, 10.0, 20.0]), np.array([0.3, 1.0, 2.0])),
+              (np.array([0.0, 40.0, 1.0]), np.ones(3))]
+    mu = _t(np.stack([f[0] for f in fields]))
+    sd = _t(np.stack([f[1] for f in fields]))
+    order = torch.tensor([[1, 0], [0, 2], [2, 1]])
+    lp = wt.ordered_prefix_log_prob(mu, order, sd)
+    lt = wt.topk_log_prob(mu, 2, sd)
+    for r in range(3):
+        one = wt.ordered_prefix_log_prob(mu[r], order[r], sd[r])
+        assert _rel(lp[r], one) < 1e-11
+        assert np.abs(np.expm1((lt[r] - wt.topk_log_prob(
+            mu[r], 2, sd[r])).numpy())).max() < 1e-11
+        o3 = tuple(order[r].tolist()) + tuple(
+            {0, 1, 2} - set(order[r].tolist()))
+        assert _rel(lp[r], _ref_order3(fields[r][0], fields[r][1], o3)) \
+            < 1e-10
+
+
+def test_753_padding_does_not_move_the_event_lattice():
+    """Masked runners are out of the window and the spacing rule: a
+    padded entry with an extreme mu / tiny sd changes nothing."""
+    mu = _t([0.0, 10.0, 500.0, 20.0])
+    sd = _t([1.0, 1.0, 1e-3, 0.5])
+    mask = torch.tensor([True, True, False, True])
+    sub_mu, sub_sd = mu[[0, 1, 3]], sd[[0, 1, 3]]
+    lp = wt.ordered_prefix_log_prob(mu, torch.tensor([3, 1]), sd, mask=mask)
+    ref = wt.ordered_prefix_log_prob(sub_mu, torch.tensor([2, 1]), sub_sd)
+    assert torch.equal(lp, ref)
+    lt = wt.topk_log_prob(mu, 2, sd, mask=mask)
+    assert torch.equal(lt[[0, 1, 3]], wt.topk_log_prob(sub_mu, 2, sub_sd))
+    assert torch.isneginf(lt[2])
+
+
+def test_753_lattice_size_rule_and_cap():
+    from winning.torch.losses import (_EVENT_CAP, _EVENT_SPACING,
+                                      _event_lattice_rows)
+    from winning.torch.race import _as_base, _lattice_rows
+    fam = _as_base("normal")
+
+    def size(mu, sd, points=257):
+        return _event_lattice_rows(_t(mu)[None], _t(sd)[None], None, fam,
+                                   points, 1e-12).shape[-1]
+
+    # ordinary: points= unchanged
+    assert size([0.0, 0.5, 1.0], [1.0, 1.0, 1.0]) == 257
+    # separated, narrow runner: spacing <= _EVENT_SPACING * min sd
+    x = _event_lattice_rows(_t([0.0, 40.0, 80.0])[None],
+                            _t([0.3, 1.0, 2.0])[None], None, fam, 257, 1e-12)
+    assert x.shape[-1] > 257
+    assert float(x[0, 1] - x[0, 0]) <= _EVENT_SPACING * 0.3 + 1e-12
+    # covers every runner's bulk (the win lattice stops near 40 + 7)
+    assert float(x[0, -1]) >= 80.0 + 7.0 * 2.0
+    win = _lattice_rows(_t([0.0, 40.0, 80.0])[None],
+                        _t([0.3, 1.0, 2.0])[None], None, fam, 257, 1e-12)
+    assert float(win[0, -1]) < 60.0
+    # capped, unless points= asks for more
+    assert size([0.0, 5000.0], [1.0, 1.0]) == _EVENT_CAP
+    assert size([0.0, 5000.0], [1.0, 1.0], points=5001) == 5001
+
+
+@pytest.mark.parametrize("base", ["normal", "gumbel"])
+def test_753_gradcheck_on_a_separated_field(base):
+    mu = _t([0.0, 10.0, 20.0], grad=True)
+    sd = _t([1.0, 0.5, 2.0], grad=True)
+    assert torch.autograd.gradcheck(
+        lambda m, s: wt.ordered_prefix_log_prob(m, torch.tensor([1, 0]), s,
+                                                base=base),
+        (mu, sd), eps=1e-6, atol=1e-6)
+    assert torch.autograd.gradcheck(
+        lambda m, s: wt.topk_log_prob(m, 2, s, base=base),
+        (mu, sd), eps=1e-6, atol=1e-6)
+
+
+@pytest.mark.parametrize("base", ["normal", "gumbel"])
+def test_753_float32_separated_fields(base):
+    """float32: the likely events are right (main: 0.503 for ~1), sums
+    hold, gradients are finite."""
+    mu = torch.tensor([0.0, 10.0, 20.0], dtype=torch.float32,
+                      requires_grad=True)
+    p = torch.exp(wt.ordered_prefix_log_prob(mu[:2], torch.tensor([0, 1]),
+                                             base=base))
+    c = math.pi / math.sqrt(6.0)
+    exact = (math.exp(_log_ndtr(10.0 / math.sqrt(2.0))) if base == "normal"
+             else 1.0 / (1.0 + math.exp(-10.0 * c)))
+    assert abs(p.item() - exact) < 1e-6
+    lt = wt.topk_log_prob(mu, 2, base=base)
+    assert abs(torch.exp(lt).sum().item() - 2.0) < 1e-5
+    lp64 = wt.topk_log_prob(mu.detach().double(), 2, base=base)
+    assert torch.allclose(torch.exp(lt).double(), torch.exp(lp64), atol=1e-6)
+    (lt.sum() + wt.ordered_prefix_log_prob(
+        mu, torch.tensor([2, 1, 0]), base=base)).backward()
+    assert torch.all(torch.isfinite(mu.grad))
+
+
+@pytest.mark.skipif(not torch.backends.mps.is_available(), reason="no MPS")
+def test_753_mps_event_lattice_matches_cpu():
+    """The event lattice is sized on the CPU (one sync) for MPS too."""
+    mu = np.array([[0.0, 10.0, 20.0], [0.0, 0.5, 1.0]])
+    m = torch.tensor(mu, dtype=torch.float32, device="mps",
+                     requires_grad=True)
+    order = torch.tensor([[1, 0], [2, 1]], device="mps")
+    a = wt.ordered_prefix_log_prob(m, order)
+    b = wt.topk_log_prob(m, 2)
+    ra = wt.ordered_prefix_log_prob(_t(mu), order.cpu())
+    rb = wt.topk_log_prob(_t(mu), 2)
+    assert np.allclose(a.detach().cpu().numpy(), ra.numpy(), rtol=1e-4,
+                       atol=1e-4)
+    assert np.allclose(torch.exp(b).detach().cpu().numpy(),
+                       torch.exp(rb).numpy(), atol=1e-5)
+    (a.sum() + b.sum()).backward()
+    assert torch.all(torch.isfinite(m.grad))

@@ -1,8 +1,11 @@
 """Thurstonian losses for network heads: winner, ordered prefix, top-k.
 
-All min-wins (lower mu is better), all on race_log_prob's lattice and
-normalised by the same lattice total, so k = 1 of each reproduces
-race_log_prob and the families are mutually consistent.
+All min-wins (lower mu is better). The prefix and top-k losses share
+one EVENT lattice (_event_lattice_rows): race_log_prob's window widened
+to cover every runner's bulk, since a later place lives where a winner
+does not (#753). Each is normalised by the win-integrand total on that
+same lattice, so k = 1 of each reproduces race_log_prob to lattice
+accuracy (~1e-12) and the families are mutually consistent.
 
     thurstone_nll            analytic backward (race_log_prob)
     ordered_prefix_log_prob  AUTOGRAD backward through the lattice
@@ -19,8 +22,8 @@ import math
 
 import torch
 
-from .race import (_as_base, _lattice_rows, _prepare, _terms,
-                   _win_integrand, race_log_prob)
+from .race import (_as_base, _prepare, _terms, _win_integrand,
+                   _window_rows, race_log_prob)
 
 __all__ = ["thurstone_nll", "ordered_prefix_log_prob", "topk_log_prob"]
 
@@ -55,11 +58,88 @@ def thurstone_nll(mu, winner, sd=None, *, V=None, nodes=15, base="normal",
     return _reduce(-lw, reduction)
 
 
-def _setup(mu, sd, mask, base, points, delta):
+# The prefix / top-k lattice: spacing at most this fraction of the
+# smallest valid sd, and at most this many points (or points=, if more).
+_EVENT_SPACING = 0.3
+_EVENT_CAP = 4097
+
+
+@torch.no_grad()
+def _event_lattice_rows(mu, sd, mask, fam, points, delta, nested=False):
+    """The lattice for ordered-prefix and top-k events (#753).
+
+    The win lattice (race._window_rows) ends where every WINNER integrand
+    is negligible. A later place, or a top-k membership, can have its
+    mass far to the right of that (P(0 then 1) at mu = [0, 10] came out
+    0.503 on it). Here the right edge also covers every valid runner's
+    bulk, measured in the WIDEST valid sd:
+
+        hi = max(hi_win, max_i mu_i + q_hi max_i sd_i),   S(q_hi) = delta.
+
+    Why the widest sd: the last runner o_k of a prefix must finish behind
+    the others, so the integrand f_{o_k} H rest has its mass at or left
+    of about max_i mu_i, often deep in o_k's own right tail (P(1 then 0)
+    at mu = [0, 5], sd = [1, 0.3] is 8e-7, all of it near x = 4.6). For
+    a log-concave base, S(z + q) / S(z) <= S(q) / S(0) for z >= 0, so
+    with x0 = max_i mu_i >= mu_{o_k} and a step of q_hi max sd >= q_hi
+    sd_{o_k}, what is dropped right of hi is ~delta RELATIVE to the mass
+    near x0, not merely delta absolute (mu_i + q_hi sd_i per runner left
+    7e-7 relative error on that event). The left edge is the win
+    lattice's, which already covers min_i mu_i + sd_i q_lo relative to
+    each runner's win share.
+
+    The point count is the larger of points= and what keeps the spacing
+    at most _EVENT_SPACING * min sd (enough for the spectral k <= 2 and
+    top-k integrals), up to _EVENT_CAP (or points=, if that is larger).
+    nested=True (prefixes with k >= 3, whose cumulative integrals are
+    fourth order, so their error follows the spacing) also keeps the
+    spacing no coarser than the win lattice's at points=, as far as twice
+    points= (without it, rare k = 3 orders of ordinary fields lost up to
+    10x accuracy to the wider window). Past the cap the window still covers every event;
+    only the spacing coarsens (accuracy: docs/design/torch.md). Reading
+    the count is one host sync per call; it is the batch maximum, so all
+    rows of a batch share it."""
+    if mu.device.type == "mps":
+        cpu = lambda t: None if t is None else t.cpu()
+        return _event_lattice_rows(cpu(mu), cpu(sd), cpu(mask), fam,
+                                   points, delta, nested).to(mu.device)
+    wd = torch.float64
+    lo, hi_win = _window_rows(mu, sd, mask, fam, delta)
+    if mask is None:
+        mask = torch.ones(mu.shape, dtype=torch.bool, device=mu.device)
+    m64 = mu.to(wd)
+    s64 = sd.to(wd)
+    q_hi = fam.upper_quantile(torch.tensor(delta, dtype=wd,
+                                           device=mu.device))
+    mmax = torch.where(mask, m64, torch.full_like(m64, -math.inf))
+    smax = torch.where(mask, s64, torch.zeros_like(s64))
+    hi = torch.maximum(hi_win,
+                       mmax.max(-1).values + q_hi * smax.max(-1).values)
+    smin = torch.where(mask, s64, torch.full_like(s64, math.inf))
+    cap = max(points, _EVENT_CAP)
+
+    def need(cells):
+        # host sync: the lattice length is the batch maximum
+        w = float(torch.nan_to_num(cells, nan=0.0, posinf=cap).max()) \
+            if cells.numel() else 0.0
+        return math.ceil(w) + 1
+
+    L = max(points, need((hi - lo) / (_EVENT_SPACING * smin.min(-1).values)))
+    if nested:
+        # no coarser than the win lattice at points=, up to 2x points
+        L = max(L, min(need((hi - lo) / (hi_win - lo) * (points - 1)),
+                       2 * points - 1))
+    L = int(min(L, cap))
+    u = torch.linspace(0.0, 1.0, L, dtype=wd, device=mu.device)
+    x = lo[:, None] + (hi - lo)[:, None] * u[None, :]
+    return x.to(mu.dtype)
+
+
+def _setup(mu, sd, mask, base, points, delta, nested=False):
     fam = _as_base(base)
     mu_r, sd_r, mask_r, lead, n = _prepare(mu, sd, mask)
-    x = _lattice_rows(mu_r.detach(), sd_r.detach(), mask_r, fam, points,
-                      delta)
+    x = _event_lattice_rows(mu_r.detach(), sd_r.detach(), mask_r, fam,
+                            points, delta, nested)
     z, logf, logS = _terms(mu_r, sd_r, mask_r, x, fam)
     g = _win_integrand(logf, logS)
     g = torch.where(mask_r[:, :, None], g, torch.full_like(g, -math.inf))
@@ -101,10 +181,10 @@ def ordered_prefix_log_prob(mu, order, sd=None, *, base="normal",
     gives measured errors; raise points= for k >= 3). Backward: autograd
     through the lattice.
     """
-    fam, mu_r, sd_r, mask_r, lead, n, x, z, logf, logS, logZ = _setup(
-        mu, sd, mask, base, points, delta)
     order = torch.as_tensor(order, dtype=torch.long, device=mu.device)
     k = order.shape[-1]
+    fam, mu_r, sd_r, mask_r, lead, n, x, z, logf, logS, logZ = _setup(
+        mu, sd, mask, base, points, delta, nested=k >= 3)
     if k < 1 or k > n:
         raise ValueError(f"order must hold 1..n indices; got k = {k}")
     o = order.expand(*lead, k).reshape(-1, k)
@@ -115,8 +195,15 @@ def ordered_prefix_log_prob(mu, order, sd=None, *, base="normal",
     L = x.shape[-1]
     idx = o[:, :, None].expand(-1, k, L)
     lf = torch.gather(logf, 1, idx)                               # (R, k, L)
-    lS = torch.gather(logS, 1, idx)
-    rest = logS.sum(1) - lS.sum(1)                                # (R, L)
+    # log S of the runners NOT in the prefix, summed directly. The
+    # difference sum(all) - sum(prefix) cancels where a prefix runner's
+    # log S is huge, which the wider event lattice reaches: gumbel log S
+    # is -e^u, ~-1e17 forty sd out, so the difference lost every digit
+    # (#753). Here nothing is subtracted.
+    inpre = torch.zeros(logS.shape[:2], dtype=torch.bool,
+                        device=logS.device).scatter(1, o, True)
+    rest = torch.where(inpre[:, :, None], torch.zeros_like(logS),
+                       logS).sum(1)                               # (R, L)
     if k == 1:
         integrand = lf[:, 0] + rest
     else:
