@@ -360,3 +360,128 @@ def test_mps_float32_matches_cpu_float64():
     assert np.allclose(lp.detach().cpu().numpy(), ref, rtol=1e-4, atol=1e-4)
     lp[:, 0].sum().backward()
     assert torch.all(torch.isfinite(m.grad))
+
+
+# --- #753: later-place events live beyond the winner window -------------
+
+def _norm_logcdf(z):
+    from scipy.special import log_ndtr
+    return float(log_ndtr(z))
+
+
+@pytest.mark.parametrize("gap", [5.0, 10.0, 20.0])
+def test_full_pair_order_is_the_win_probability(gap):
+    # P(0 first, 1 second) = P(X0 < X1) = Phi(gap / sqrt 2); the winner
+    # lattice cut the second finisher's mass and gave 0.503 at gap 10 and
+    # 3.1e-7 at gap 20 (#753)
+    mu = _t([0.0, gap])
+    got = float(wt.ordered_prefix_log_prob(mu, torch.tensor([0, 1])))
+    want = _norm_logcdf(gap / math.sqrt(2.0))
+    assert abs(got - want) < 1e-11
+    got = float(wt.ordered_prefix_log_prob(mu, torch.tensor([1, 0])))
+    want = _norm_logcdf(-gap / math.sqrt(2.0))
+    assert abs(got - want) < 1e-9 * abs(want)
+
+
+def test_separated_top2_of_three_is_the_pair_tail():
+    # runner 2 is in the top two essentially iff it beats runner 1; the
+    # correction from beating runner 0 is below 1e-45. Was 4.3e-13 for
+    # 7.69e-13, with the memberships summing to 1.9999997 (#753)
+    mu = _t([0.0, 10.0, 20.0])
+    p = torch.exp(wt.topk_log_prob(mu, 2))
+    weak = math.exp(_norm_logcdf(-10.0 / math.sqrt(2.0)))
+    assert abs(float(p[2]) / weak - 1.0) < 1e-9
+    assert abs(float(p.sum()) - 2.0) < 1e-11
+
+
+@pytest.mark.parametrize("spread", [1.0, 4.0, 10.0])
+@pytest.mark.parametrize("k", [2, 3])
+def test_topk_memberships_sum_to_k_on_separated_fields(spread, k):
+    rng = np.random.default_rng(int(spread * 10) + k)
+    for n in (4, 8, 12):
+        mu = _t(rng.normal(size=n) * spread)
+        sd = _t(rng.uniform(0.5, 1.5, size=n))
+        s = float(torch.exp(wt.topk_log_prob(mu, k, sd)).sum())
+        assert abs(s - k) < 1e-10, (n, s)
+
+
+def _fine_topk(mu, sd, i, k):
+    """Independent referee: P(i among the k smallest) on a 200k-point
+    log-domain grid around runner i (Poisson-binomial count of others)."""
+    from scipy.special import log_ndtr
+    from scipy.stats import norm
+    x = np.linspace(mu[i] - 40 * sd[i], mu[i] + 40 * sd[i], 200001)
+    lp = np.full((k, len(x)), -np.inf)
+    lp[0] = 0.0
+    for j in range(len(mu)):
+        if j == i:
+            continue
+        lF = log_ndtr((x - mu[j]) / sd[j])
+        lS = log_ndtr(-(x - mu[j]) / sd[j])
+        new = np.full_like(lp, -np.inf)
+        new[0] = lp[0] + lS
+        for a in range(1, k):
+            new[a] = np.logaddexp(lp[a] + lS, lp[a - 1] + lF)
+        lp = new
+    g = norm.logpdf(x, mu[i], sd[i]) + np.logaddexp.reduce(lp, axis=0)
+    m = g.max()
+    return float(m + np.log(np.trapezoid(np.exp(g - m), x)))
+
+
+def test_topk_far_tail_matches_an_independent_referee():
+    # wide fields put members' tiny shares far right of the winner
+    # window; these are 1e-27 .. 1e-119 and must keep their digits
+    rng = np.random.default_rng(753)
+    for spread, n, k in ((4.0, 12, 2), (10.0, 5, 2), (10.0, 8, 3)):
+        mu = rng.normal(size=n) * spread
+        sd = rng.uniform(0.5, 1.5, size=n)
+        lp = wt.topk_log_prob(_t(mu), k, _t(sd)).numpy()
+        for i in np.argsort(mu)[-3:]:          # the weakest three
+            ref = _fine_topk(mu, sd, i, k)
+            if ref < -690.0:
+                # below float64's normal range the linear count program
+                # underflows (a separate limitation); skip those
+                continue
+            assert abs(lp[i] - ref) < 1e-6 * max(1.0, abs(ref)), (
+                spread, n, k, i)
+
+
+@pytest.mark.parametrize("k", [2, 3])
+def test_later_place_events_converge_under_refinement(k):
+    # the window now covers every runner, so refining it converges to
+    # the same answer (the winner window converged to a wrong one)
+    rng = np.random.default_rng(31 + k)
+    mu = _t(rng.normal(size=6) * 6.0)
+    sd = _t(rng.uniform(0.5, 1.5, size=6))
+    order = torch.tensor(list(np.argsort(rng.normal(size=6))[:k]))
+    a = wt.ordered_prefix_log_prob(mu, order, sd, points=1025)
+    b = wt.ordered_prefix_log_prob(mu, order, sd, points=8193)
+    assert abs(float(a - b)) < 1e-6 * max(1.0, abs(float(b)))
+    t1 = wt.topk_log_prob(mu, k, sd, points=1025)
+    t2 = wt.topk_log_prob(mu, k, sd, points=8193)
+    torch.testing.assert_close(torch.exp(t1), torch.exp(t2), rtol=1e-8,
+                               atol=1e-14)
+
+
+def test_k1_events_keep_the_winner_lattice():
+    # k = 1 is race_log_prob, on its own window, unchanged
+    rng = np.random.default_rng(1)
+    mu, sd = _t(rng.normal(size=7) * 3.0), _t(rng.uniform(0.5, 1.5, 7))
+    lp = wt.race_log_prob(mu, sd)
+    for i in range(7):
+        assert torch.equal(
+            wt.ordered_prefix_log_prob(mu, torch.tensor([i]), sd), lp[i])
+    # top-1 is the count program, a different route to the same number
+    torch.testing.assert_close(wt.topk_log_prob(mu, 1, sd), lp, rtol=1e-12,
+                               atol=1e-12)
+
+
+def test_separated_pair_order_gradient_matches_finite_differences():
+    mu = _t([0.0, 6.0], grad=True)
+    lp = wt.ordered_prefix_log_prob(mu, torch.tensor([1, 0]))
+    (g,) = torch.autograd.grad(lp, mu)
+    # d/dmu1 log Phi((mu0 - mu1)/sqrt 2) = -phi(z)/(sqrt2 Phi(z))
+    from scipy.stats import norm
+    z = -6.0 / math.sqrt(2.0)
+    d = math.exp(norm.logpdf(z) - norm.logcdf(z)) / math.sqrt(2.0)
+    torch.testing.assert_close(g, _t([d, -d]), rtol=1e-6, atol=0)

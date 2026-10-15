@@ -1,8 +1,9 @@
 """Thurstonian losses for network heads: winner, ordered prefix, top-k.
 
-All min-wins (lower mu is better), all on race_log_prob's lattice and
-normalised by the same lattice total, so k = 1 of each reproduces
-race_log_prob and the families are mutually consistent.
+All min-wins (lower mu is better), each normalised by the winner total
+on its own lattice. k = 1 uses race_log_prob's lattice, so it reproduces
+race_log_prob. Events with k >= 2 use a lattice that also covers the
+later places, because their mass lies past the winner window (#753).
 
     thurstone_nll            analytic backward (race_log_prob)
     ordered_prefix_log_prob  AUTOGRAD backward through the lattice
@@ -55,11 +56,15 @@ def thurstone_nll(mu, winner, sd=None, *, V=None, nodes=15, base="normal",
     return _reduce(-lw, reduction)
 
 
-def _setup(mu, sd, mask, base, points, delta):
+def _setup(mu, sd, mask, base, points, delta, later=False):
+    # later=True: the event involves later places, whose mass lies beyond
+    # the winner window's right edge (#753: P(0 then 1) at a gap of 10
+    # came back 0.503 for 1 - 8e-13); k = 1 keeps the winner window, so
+    # it reproduces race_log_prob exactly
     fam = _as_base(base)
     mu_r, sd_r, mask_r, lead, n = _prepare(mu, sd, mask)
     x = _lattice_rows(mu_r.detach(), sd_r.detach(), mask_r, fam, points,
-                      delta)
+                      delta, cover_all=later)
     z, logf, logS = _terms(mu_r, sd_r, mask_r, x, fam)
     g = _win_integrand(logf, logS)
     g = torch.where(mask_r[:, :, None], g, torch.full_like(g, -math.inf))
@@ -101,10 +106,10 @@ def ordered_prefix_log_prob(mu, order, sd=None, *, base="normal",
     gives measured errors; raise points= for k >= 3). Backward: autograd
     through the lattice.
     """
-    fam, mu_r, sd_r, mask_r, lead, n, x, z, logf, logS, logZ = _setup(
-        mu, sd, mask, base, points, delta)
     order = torch.as_tensor(order, dtype=torch.long, device=mu.device)
     k = order.shape[-1]
+    fam, mu_r, sd_r, mask_r, lead, n, x, z, logf, logS, logZ = _setup(
+        mu, sd, mask, base, points, delta, later=k > 1)
     if k < 1 or k > n:
         raise ValueError(f"order must hold 1..n indices; got k = {k}")
     o = order.expand(*lead, k).reshape(-1, k)
@@ -151,7 +156,7 @@ def topk_log_prob(mu, k, sd=None, *, base="normal", points=257,
     if not (isinstance(k, int) and k >= 1):
         raise ValueError(f"k must be a positive int; got {k!r}")
     fam, mu_r, sd_r, mask_r, lead, n, x, z, logf, logS, logZ = _setup(
-        mu, sd, mask, base, points, delta)
+        mu, sd, mask, base, points, delta, later=k > 1)
     R, _, L = z.shape
     m3 = mask_r[:, :, None]
     S = torch.where(m3, torch.exp(logS), torch.ones_like(logS))
