@@ -3135,5 +3135,32 @@ accepts("dividendImpliedAbility keeps the favourite first at unit 0.1 (#649)",
         loud.length === 0 && flagged === 0 && worst < 1, `worst ${worst}`);
 }
 
+// --- a pair under a caller's NON-normal node law is the exact mixture
+// over the nodes, as the lattice prices it (#742); referees are scipy's
+// sum_q w_q Phi((mu1 - mu0 - (V0 - V1) . F_q) / sqrt(D0 + D1)). The
+// two-moment closed form gave 0.126806 and 0.5 for these.
+for (const [mu, V, D, F, W, want] of [
+  [[0, 0.3], [[1], [-0.5]], [1, 1], [[0.8], [1.4], [2.0]], [0.3, 0.4, 0.3],
+   0.12773177012898643],
+  [[0, 0], [[1], [0]], [0.01, 0.01], [[-1], [3]], [0.75, 0.25],
+   0.7499999999994235]]) {
+  const p = races.raceProbabilities(mu, { V, D, F, W });
+  holds(`caller-node pair is the exact mixture ${want} (#742)`,
+        Math.abs(p[0] - want) < 1e-14 && Math.abs(p[1] - (1 - want)) < 1e-14, `${p}`);
+  const q = races.raceProbabilities([mu[1], mu[0]], { V: [V[1], V[0]], D: [D[1], D[0]], F, W });
+  holds("caller-node pair relists exactly (#742)", q[0] === p[1] && q[1] === p[0], `${q}`);
+  const lat = races.raceProbabilities([...mu, 60], { V: [...V, [0]], D: [...D, 1], F, W });
+  holds("caller-node pair agrees with the far-third lattice (#742)",
+        Math.abs(lat[0] - p[0]) < 1e-8 && Math.abs(lat[1] - p[1]) < 1e-8, `${lat}`);
+}
+{
+  const [mu, V, D, F, W] = [[0, 0.3], [[1], [-0.5]], [1, 1], [[0.8], [1.4], [2.0]], [0.3, 0.4, 0.3]];
+  const p = races.raceProbabilities(mu, { V, D, F, W });
+  const o = races.abilitiesFromRace(p, { V, D, F, W, returnInfo: true });
+  holds("caller-node pair inverse solves the mixture in one 1-D root (#742)",
+        o.converged && o.iterations === 0
+        && Math.abs((o.mu[1] - o.mu[0]) - 0.3) < 1e-10, `${o.mu} it ${o.iterations}`);
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");

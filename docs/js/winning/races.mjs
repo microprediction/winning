@@ -715,6 +715,84 @@ export function collapseStructure(structure, V, D, F, W, where) {
    node mean shifting the contrast; the default rule stands for the
    standard normal, so dV' dV. Each tail directly (ndtr(u), ndtr(-u)):
    full relative precision, and exactly permutation-equivariant. */
+/* The pair under a caller's node law, exactly (#742), as python's
+   _pair_mixture: given node q runner 0 wins with probability
+   Phi((gap - proj_q) / sd), proj_q = (V0 - V1) . F_q, sd = sqrt(D0 + D1);
+   the race is the weighted mixture. Each tail summed directly. */
+function pairSd(d0, d1) {
+  const lo = Math.min(d0, d1), hi = Math.max(d0, d1);
+  if (!(hi > 0)) return 1e-150;  // an exactly deterministic contrast
+  return Math.sqrt(hi) * Math.sqrt(lo / hi + 1);
+}
+function pairMixture(gap, proj, w, d0, d1, returnSlopes) {
+  const sd = pairSd(d0, d1);
+  let p0 = 0, p1 = 0, dens = 0;
+  for (let q = 0; q < proj.length; q++) {
+    const u = (gap - proj[q]) / sd;
+    p0 += w[q] * ndtr(u);
+    p1 += w[q] * ndtr(-u);
+    if (returnSlopes) dens += w[q] * npdf(u);
+  }
+  const t = p0 + p1;
+  const p = [p0 / t, p1 / t];
+  if (!returnSlopes) return p;
+  dens /= sd;
+  return { p, slopes: [-dens, -dens] };
+}
+/* The gap at which pairMixture prices `target`, as python's
+   _pair_mixture_gap: p0 increases in the gap, so Newton on
+   log p_small - log target_small from the closed form's gap g0,
+   safeguarded by the bracket the iterates establish (a step leaving it
+   bisects; while one side is open the step is h, doubling). Direct sums
+   unless p_small underflows, then the log domain. null if no root. */
+function pairMixtureGap(target, proj, w, d0, d1, g0, h) {
+  const sd = pairSd(d0, d1);
+  const small = target[0] <= target[1] ? 0 : 1;
+  const sign = small === 0 ? 1 : -1;
+  const logt = Math.log(target[small]);
+  const lse = terms => {
+    let m = -Infinity;
+    for (const v of terms) if (v > m) m = v;
+    if (!Number.isFinite(m)) return m;
+    let acc = 0;
+    for (const v of terms) acc += Math.exp(v - m);
+    return m + Math.log(acc);
+  };
+  if (!(Number.isFinite(g0) && Number.isFinite(h) && h > 0)) return null;
+  let g = g0, lo = -Infinity, hi = Infinity;
+  for (let it = 0; it < 200; it++) {
+    const u = proj.map(s => sign * (g - s) / sd);
+    let p = 0;
+    for (let q = 0; q < u.length; q++) p += w[q] * ndtr(u[q]);
+    let logp, ratio;
+    if (p > 1e-250) {
+      logp = Math.log(p);
+      let d = 0;
+      for (let q = 0; q < u.length; q++) d += w[q] * Math.exp(-0.5 * u[q] * u[q]);
+      ratio = d / Math.sqrt(2 * Math.PI) / p;
+    } else {
+      const lw = w.map(v => (v > 0 ? Math.log(v) : -Infinity));
+      logp = lse(u.map((x, q) => lw[q] + logndtr(x)));
+      ratio = Math.exp(lse(u.map((x, q) => lw[q] - 0.5 * x * x))
+                       - 0.5 * Math.log(2 * Math.PI) - logp);
+    }
+    const f = sign * (logp - logt);           // increasing in g
+    if (f === 0) return g;
+    if (!Number.isFinite(f)) return null;
+    if (f > 0) hi = g; else lo = g;
+    let gn = ratio > 0 ? g - f * sd / ratio : NaN;
+    // quadratic convergence: from 1e-8 the step lands at rounding
+    if (Math.abs(f) < 1e-8 && lo < gn && gn < hi) return gn;
+    if (!(lo < gn && gn < hi)) {
+      if (Number.isFinite(lo) && Number.isFinite(hi)) gn = 0.5 * (lo + hi);
+      else { gn = f > 0 ? g - h : g + h; h *= 2; }
+    }
+    if (Math.abs(gn - g) <= 2 * Number.EPSILON * Math.max(Math.abs(g), sd)) return gn;
+    g = gn;
+  }
+  return null;
+}
+
 function pairClosedForm(st, nodesGiven, returnSlopes) {
   const { mu, V, D, F, W } = st;
   const dV = V[0].map((v, j) => v - V[1][j]);
@@ -731,10 +809,12 @@ function pairClosedForm(st, nodesGiven, returnSlopes) {
       ? F.map(f => f.reduce((acc, x, j) => acc + x * dV[j], 0))
       : F.map(f => f.reduce((acc, x, j) => acc + x * V[0][j], 0) -
                    f.reduce((acc, x, j) => acc + x * V[1][j], 0));
-    for (let q = 0; q < F.length; q++) shift += (wr[q] / ws) * proj[q];
-    let v = D[0] + D[1];
-    for (let q = 0; q < F.length; q++) v += (wr[q] / ws) * (proj[q] - shift) ** 2;
-    sdD = Math.sqrt(Math.max(v, 0));
+    // the caller's F, W ARE the factor law, which need not be normal:
+    // the pair is the exact mixture over the nodes, as the lattice
+    // prices it (#742: a centred two-point law priced 0.5 for an exact
+    // 0.75 when only its mean and covariance were matched)
+    return pairMixture(mu[1] - mu[0], proj, wr.map(w => w / ws), D[0], D[1],
+                       returnSlopes);
   } else {
     // in units of the largest term: no overflow, no absolute floor (#100)
     let big = Math.max(Math.sqrt(D[0]), Math.sqrt(D[1]));
@@ -1003,6 +1083,21 @@ function solveRace(target, floored, { V, D, F, W, base, points, nIter, tol,
     const gap = (target[0] <= target[1]
       ? sdD * invNormalRational(target[0])
       : -sdD * invNormalRational(target[1])) - shift;
+    // the forward prices the exact mixture over the caller's nodes
+    // (#742): invert THAT map by a monotone 1-D solve from this start
+    if (V != null && F != null) {
+      const Fv = asFactorNodes(F, r, "F");
+      const Wq = asWeights(W, Fv.length, "W");
+      const proj = Fv.map(fq => fq.reduce((acc, x, c) => acc + x * (Vc[0][c] - Vc[1][c]), 0));
+      const gs = pairMixtureGap(target, proj, Wq, Dn[0], Dn[1], gap, sdD);
+      if (gs !== null && Number.isFinite(gs)) {
+        // certified by the very map the forward evaluates
+        const sol = [-0.5 * gs, 0.5 * gs];
+        const ph = pairMixture(gs, proj, Wq, Dn[0], Dn[1], false);
+        const r1 = Math.max(...ph.map((v, i) => Math.abs(Math.log(Math.max(v, 1e-300)) - logt[i])));
+        if (r1 < tol) return inverseReturn(sol, true, r1, 0, floored, tol, returnInfo);
+      }
+    }
     const pair = [-0.5 * gap, 0.5 * gap];
     const ok = pair.every(Number.isFinite);
     if (F == null || !ok)
