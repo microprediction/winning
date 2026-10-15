@@ -140,6 +140,10 @@ def test_ordinary_cov_prices_ignore_eigensolver_choices(monkeypatch,
         np.testing.assert_allclose(_price(mu, S), want, rtol=0, atol=1e-14,
                                    err_msg=label)
         monkeypatch.setattr(core, "_top_eigen", orig)
+    # another driver rounds differently, and the fit's alternation carries
+    # that to ~1e-11 (Linux CI: 1.0e-11 on sample_n20r3; the drift guard's
+    # FIT_ATOL exists for the same reason). A sign or basis change, as on
+    # main, moves the price by ~1e-4.
     monkeypatch.setattr(core.np.linalg, "eigh",
                         lambda M: scipy.linalg.eigh(M, driver="evr"))
-    np.testing.assert_allclose(_price(mu, S), want, rtol=0, atol=1e-12)
+    np.testing.assert_allclose(_price(mu, S), want, rtol=0, atol=1e-9)
