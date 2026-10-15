@@ -3163,6 +3163,12 @@ for (const [mu, V, D, F, W, want] of [
   holds("caller-node pair inverse solves the mixture in one 1-D root (#742)",
         o.converged && o.iterations === 0
         && Math.abs((o.mu[1] - o.mu[0]) - 0.3) < 1e-10, `${o.mu} it ${o.iterations}`);
+  // a subnormal target is a real share: the certificate takes log p
+  // unfloored (#91), so the exact root is not rejected
+  const sub = races.abilitiesFromRace([1e-310, 1], { V: [[1], [0]], D: [0.01, 0.01], F: [[-1], [3]], W: [0.75, 0.25], returnInfo: true });
+  const psub = races.raceProbabilities(sub.mu, { V: [[1], [0]], D: [0.01, 0.01], F: [[-1], [3]], W: [0.75, 0.25] });
+  holds("caller-node pair inverts a 1e-310 share exactly (#742, #91)",
+        sub.converged && sub.iterations === 0 && Math.abs(psub[0] / 1e-310 - 1) < 1e-6, `${sub.mu} p0 ${psub[0]}`);
 }
 
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }

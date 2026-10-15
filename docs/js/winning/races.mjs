@@ -1094,7 +1094,9 @@ function solveRace(target, floored, { V, D, F, W, base, points, nIter, tol,
         // certified by the very map the forward evaluates
         const sol = [-0.5 * gs, 0.5 * gs];
         const ph = pairMixture(gs, proj, Wq, Dn[0], Dn[1], false);
-        const r1 = Math.max(...ph.map((v, i) => Math.abs(Math.log(Math.max(v, 1e-300)) - logt[i])));
+        // no 1e-300 floor: a subnormal target is a real share the solve
+        // reprices exactly (#91); an exact 0 gives Infinity
+        const r1 = Math.max(...ph.map((v, i) => Math.abs(Math.log(v) - logt[i])));
         if (r1 < tol) return inverseReturn(sol, true, r1, 0, floored, tol, returnInfo);
       }
     }

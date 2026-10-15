@@ -184,3 +184,16 @@ def test_default_rule_pairs_keep_the_closed_form():
         got = abilities_from_race(p, V=V, D=D)
         np.testing.assert_allclose(got[1] - got[0], mu[1] - mu[0],
                                    atol=1e-12)
+
+
+@pytest.mark.parametrize("t", [1e-200, 1e-310])
+def test_discrete_inverse_of_a_subnormal_share(t):
+    # the certificate takes log p unfloored: a 1e-310 target is repriced
+    # exactly by the solve and must not be rejected by a 1e-300 floor
+    V, D = np.array([[1.0], [0.0]]), np.array([0.01, 0.01])
+    F, W = np.array([[-1.0], [3.0]]), np.array([0.75, 0.25])
+    got, info = abilities_from_race([t, 1.0], V=V, D=D, F=F, W=W,
+                                    return_info=True)
+    assert info["converged"] and info["iterations"] == 0
+    p = race_probabilities(got, V=V, D=D, F=F, W=W)
+    np.testing.assert_allclose(p[0], t, rtol=1e-9)

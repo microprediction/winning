@@ -1950,8 +1950,10 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
                 mu = np.array([-0.5 * g, 0.5 * g])
                 ph = _pair_mixture(g, _Vc[0] - _Vc[1], _Dn[0], _Dn[1],
                                    _Fq, _Wq)[0]
-                r0 = float(np.abs(np.log(np.maximum(ph, 1e-300))
-                                  - logt).max())
+                # no 1e-300 floor: a subnormal target is a real share
+                # the solve reprices exactly (#91); an exact 0 is inf
+                with np.errstate(divide="ignore"):
+                    r0 = float(np.abs(np.log(ph) - logt).max())
                 if r0 < tol:
                     return _inverse_return(mu, True, r0, 0, floored, tol,
                                            return_info)
