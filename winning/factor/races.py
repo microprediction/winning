@@ -1615,9 +1615,14 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
         if var_d is None and not np.isfinite(shared):
             # the sd itself may exceed the float range: u in its unit
             u = float((mu[1] / big_unit[0] - mu[0] / big_unit[0]
-                       + shift / big_unit[0]) / big_unit[1])
+                       - shift / big_unit[0]) / big_unit[1])
         else:
-            u = float((mu[1] - mu[0] + shift) / sd_d)
+            # runner i performs mu_i + V_i . F + e_i, so the node mean
+            # raises the contrast X1 - X0 by -(V0 - V1) . E[F] = -shift.
+            # It was added: a caller's node law with mean 1.43 priced an
+            # exact [0.128, 0.872] as [0.936, 0.064], and the closed-form
+            # inverse (which had the sign right) did not round-trip.
+            u = float((mu[1] - mu[0] - shift) / sd_d)
         # Each tail directly: 1 - ndtr(u) rounds the loser to exactly 0 at
         # a 9 sd contrast where the true value is 1.1e-19, and the pair
         # then depends on which runner is listed first. ndtr(u), ndtr(-u)
