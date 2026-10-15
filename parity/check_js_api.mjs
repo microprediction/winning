@@ -3088,9 +3088,12 @@ accepts("dividendImpliedAbility keeps the favourite first at unit 0.1 (#649)",
   accepts("a W < L classic field is unchanged (#725)",
           () => classic.abilityImpliedStatePrices([0, 0.7, 1.3, 2.1], classic.skewNormalDensity(200, 0.1, { a: 0 }), { unit: 0.1 }),
           p => close(p, [0.6049811058833535, 0.2601479044907512, 0.1086783458341974, 0.026192643791697244]), p => String(p));
-  accepts("a pair under a centred node law is unchanged (#86)",
+  // a +-1 two-point law is not normal: since #742 the pair is its exact
+  // mixture (scipy referee below), no longer the two-moment
+  // 0.21100713763708207 this pinned
+  accepts("a pair under a centred node law is its exact mixture (#86, #742)",
           () => races.raceProbabilities([0.3, -1.2], { V: [[0.4], [-0.3]], D: [1, 2], F: [[-1], [1]], W: [0.5, 0.5] }),
-          p => close(p, [0.21100713763708207, 0.7889928623629179]), p => String(p));
+          p => close(p, [0.2120477732895367, 0.7879522267104633]), p => String(p));
   accepts("a rank-two V/D pair is unchanged (#86)",
           () => races.raceProbabilities([0.3, -1.2], { V: [[0.4, 0.1], [-0.3, 0.2]], D: [0.5, 1.5] }),
           p => close(p, [0.17139085557395572, 0.8286091444260443]), p => String(p));
