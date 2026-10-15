@@ -792,39 +792,50 @@ function badCovariance(C, where) {
 function diffProblem(mu, C, i, where) {
   // mean and covariance of (x_j - x_i)_{j != i}
   const n = mu.length, m = new Float64Array(n - 1);
-  // C at the door, in O(n^2): square, finite, symmetric (the tolerance of
-  // validateCovariance) and no negative variance. Both arms read one
-  // triangle through S, so C and C' priced differently, and an
-  // indefinite C came back as a confident book (#726). Definiteness of
-  // what the arms actually use -- the difference covariance S -- is
-  // checked by its own Cholesky pivots, at no extra order.
+  // C at the door, in O(n^2): square, finite (the explicit type guard
+  // validateCovariance also uses), symmetric within validateCovariance's
+  // tolerance and no negative variance. The difference covariance is built
+  // from the symmetrized C so C and C' price the same way (a tolerance-
+  // declared asymmetry must not pick a triangle, #726 residual), and an
+  // indefinite C is rejected by the contrast Cholesky pivots below.
   if (!Array.isArray(C) || C.length !== n)
     throw new Error(`${where}: C must be a ${n} x ${n} covariance matrix`);
   for (let a = 0; a < n; a++)
     if (!isVector(C[a]) || C[a].length !== n)
       throw new Error(`${where}: C must be square; row ${a} is not ${n} entries`);
-  let amax = 0, asym = 0, bad = 0;
+  // Reject non-number / non-finite entries and negative variances with the
+  // explicit typeof guard (the prior `0 * v` sentinel coerced numeric
+  // strings and other coercible values, so they slipped through and re-typed
+  // the covariance mid-arithmetic -- #726 residual). This is the same check
+  // validateCovariance applies, so the dense helpers reject exactly what it
+  // does.
+  badCovariance(C, where);
+  let amax = 0, asym = 0;
   for (let a = 0; a < n; a++) {
     const Ca = C[a];
     for (let b = 0; b <= a; b++) {
       const v = Ca[b], w = C[b][a];
-      bad += 0 * v + 0 * w;             // NaN iff an entry is not finite
       amax = Math.max(amax, Math.abs(v));
       asym = Math.max(asym, Math.abs(v - w));
     }
-    if (Ca[a] < 0) bad = -1;
   }
-  if (bad !== 0) badCovariance(C, where);
   if (asym > 1e-8 * Math.max(amax, 1e-300))
     throw new Error(`${where}: C is not symmetric (max asymmetry ${asym.toExponential(2)}); ` +
                     "pass (C + C')/2 if the asymmetry is numerical noise");
+  // Build the difference covariance from the symmetrized C: validateCovariance
+  // averages every accepted pair (C + C')/2 before its PSD check, so a
+  // tolerance-declared asymmetry must not select a triangle. Averaging each
+  // pair here makes C and C' yield the same contrast -- and therefore the
+  // same price -- instead of differing by several percentage points (#726
+  // residual).
+  const csym = (p, q) => 0.5 * (C[p][q] + C[q][p]);
   const S = new Float64Array((n - 1) * (n - 1));
   const idx = [];
   for (let j = 0; j < n; j++) if (j !== i) idx.push(j);
   for (let a = 0; a < n - 1; a++) {
     m[a] = mu[idx[a]] - mu[i];
     for (let b = 0; b < n - 1; b++)
-      S[a * (n - 1) + b] = C[idx[a]][idx[b]] - C[idx[a]][i] - C[i][idx[b]] + C[i][i];
+      S[a * (n - 1) + b] = csym(idx[a], idx[b]) - csym(idx[a], i) - csym(i, idx[b]) + C[i][i];
   }
   return { m, S };
 }
@@ -861,22 +872,27 @@ export function ghkPrepareOne(mu, C, i) {
 
 function negativePivot(where, s) {
   throw new Error(`${where}: C is not positive semidefinite: the ` +
-    `contrast covariance has a negative pivot (${s.toExponential(2)}); ` +
+    `contrast covariance is not positive definite (pivot ${s.toExponential(2)}); ` +
     "clipping it silently invents a different model");
 }
 
 /* Definiteness of a difference covariance, by the same pivots
-   ghkPrepareOne factors with (#726). */
+   ghkPrepareOne factors with (#726). A non-positive pivot means the contrast
+   is not positive definite: the old code floored a zero pivot to 0 and
+   discarded the cross term, so an indefinite contrast priced as a confident
+   book. Mirror ghkPrepareOne exactly (eps floor, no zero-pivot short-circuit)
+   so both arms reject the same inputs. */
 function checkDiffDefinite(S, d, where) {
   const L = new Float64Array(d * d);
+  const eps = 1e-12 * diffScale(S, d);
   for (let a = 0; a < d; a++) {
     for (let b = 0; b <= a; b++) {
       let s = S[a * d + b];
       for (let k = 0; k < b; k++) s -= L[a * d + k] * L[b * d + k];
       if (a === b) {
         if (s < -1e-8 * Math.abs(S[a * d + a])) negativePivot(where, s);
-        L[a * d + a] = Math.sqrt(s > 0 ? s : 0);
-      } else L[a * d + b] = L[b * d + b] > 0 ? s / L[b * d + b] : 0;
+        L[a * d + a] = Math.sqrt(s > 0 ? s : eps);
+      } else L[a * d + b] = s / L[b * d + b];
     }
   }
 }
