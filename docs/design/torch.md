@@ -173,7 +173,18 @@ accuracy, same as CPU float32) and the window is computed on the CPU.
   and its error grows with k — use short prefixes.
 * `topk_log_prob`: prefix/suffix Poisson-binomial count programs joined
   per runner (no deconvolution), ≤ 1e-9 relative vs winning; O(n·L·k²),
-  a Python loop over runners, autograd tape O(n·L·k).
+  a Python loop over runners, autograd tape O(n·L·k). The count program
+  is in linear space, so a membership below ~1e-308 clamps to
+  log(tiny) = -708.4.
+* Window for k ≥ 2 (#753). Both functions' k ≥ 2 events sit on a lattice
+  whose right edge covers every runner to its own upper quantile
+  (`_lattice_rows(..., cover_all=True)`). The winner window cuts where
+  every winner integrand is negligible, but later places carry their mass
+  past that cut. On the winner window, P(0 then 1) at a gap of 10 came
+  back 0.503 for 1 − 8e-13, and top-2 memberships summed to 1.9999997.
+  k = 1 stays on the winner window, so it is `race_log_prob` exactly. The
+  point count is unchanged, so the cost is unchanged; the spacing is
+  wider on spread fields.
 
 ## Tests (tests/test_torch_heads.py; `importorskip("torch")`)
 

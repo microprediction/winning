@@ -224,13 +224,19 @@ def race_lattice(mu, sd=None, *, base="normal", points=257, delta=1e-12,
 
 
 @torch.no_grad()
-def _lattice_rows(mu, sd, mask, fam, points, delta):
+def _lattice_rows(mu, sd, mask, fam, points, delta, cover_all=False):
+    """The per-row lattice. cover_all=False is the WINNER window: its
+    right edge is cut where every winner integrand f_i prod S is
+    negligible. Later-place events (an ordered prefix's second finisher,
+    top-k membership) have their mass around the later runners' own
+    bodies, beyond that cut, so they pass cover_all=True: the right edge
+    then covers every valid runner to its own upper quantile (#753)."""
     if mu.device.type == "mps":
         # MPS has neither float64 nor ndtri; the window is O(17 n) per
         # row, so it is computed on the CPU and only the lattice moves
         cpu = lambda t: None if t is None else t.cpu()
         return _lattice_rows(cpu(mu), cpu(sd), cpu(mask), fam, points,
-                             delta).to(mu.device)
+                             delta, cover_all).to(mu.device)
     dt = mu.dtype
     wd = torch.float64
     big = torch.finfo(wd).max
@@ -251,7 +257,9 @@ def _lattice_rows(mu, sd, mask, fam, points, delta):
     # the Gaussian product of the two gives the edge (and f_i alone
     # gives mu_i + q_hi sd_i, whichever is nearer).
     key = torch.where(mask, m64, torch.full_like(m64, math.inf))
-    if mu.shape[-1] >= 2:
+    if cover_all:
+        hi_i = m64 + s64 * q_hi
+    elif mu.shape[-1] >= 2:
         two = torch.topk(key, 2, dim=-1, largest=False)
         k1, k2 = two.indices[..., :1], two.indices[..., 1:2]
         idx = torch.arange(mu.shape[-1], device=mu.device)[None, :]
