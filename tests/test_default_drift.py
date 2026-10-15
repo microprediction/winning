@@ -53,13 +53,11 @@ def test_golden_covers_the_battery(golden):
         f"stale {sorted(set(golden) - names)[:5]}")
 
 
-# Known platform dependence, tracked rather than hidden. Every platform
-# takes the SAME route here (the factor fit, rank 3, not degraded); what
-# differs is the sign LAPACK gives one fitted loading column, and the
-# scrambled-Sobol nodes are not sign-symmetric, so the finite-QMC answer
-# moves by its own quadrature error (~6e-5; flipping column 3 on macOS
-# reproduces the Linux vector to 5e-9), see #745.
-KNOWN_PLATFORM_ROUTE = {"race_cov/sample/n6r3": "#745"}
+# Known platform dependence, tracked rather than hidden. Empty: the one
+# entry it held, race_cov/sample/n6r3, moved with LAPACK's sign for a
+# fitted loading column until fit_covariance canonicalised its basis
+# (#745, docs/notes/cov-determinism.md).
+KNOWN_PLATFORM_ROUTE = {}
 
 
 def _params():

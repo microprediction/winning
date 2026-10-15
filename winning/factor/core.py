@@ -727,6 +727,9 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
     if res_eig < res_pipe:
         Vall, D, res_pipe = Veig, Deig, res_eig
         arm = "eigen"
+    # the nodes are not rotation or sign invariant, so the basis they
+    # meet must be a function of V V' alone, not of LAPACK's choices (#745)
+    Vall = _canonical_factor_basis(Vall)
     F, W = qmc_nodes(Vall.shape[1], m=nodes_log2, seed=seed)
     Rfin = _center2(C - Vall @ Vall.T - np.diag(D))
     worst = _worst_contrast_ratio(C, Rfin)
@@ -769,6 +772,33 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
                   "arm": arm}
         return Vall, D, F, W, report
     return Vall, D, F, W
+
+
+def _canonical_factor_basis(V):
+    """V rotated into the eigenbasis of V'V, each column's sign fixed.
+
+    A fitted V is identified only up to V -> V O (O orthogonal), and the
+    eigensolvers that produce it return each eigenvector with a sign
+    LAPACK chooses: macOS and Linux fitted the same rank-3 covariance
+    with one column negated, and the scrambled-Sobol nodes are not
+    symmetric under that flip, so race_probabilities(mu, cov=S) differed
+    by 6e-5 between platforms (#745). Here the columns become V U, U the
+    eigenvectors of V'V in decreasing eigenvalue order (V V' unchanged up
+    to rounding), and each column is negated if its largest-|entry| is
+    negative (ties: first index), as fastmvn does (#688). One r x r
+    eigendecomposition. What it cannot fix: a rotation within an exactly
+    (or nearly) repeated eigenvalue of V'V, and a column whose two
+    largest |entries| tie with opposite signs. See
+    docs/notes/cov-determinism.md."""
+    r = V.shape[1]
+    if r == 0:
+        return V
+    if r > 1:
+        lam, U = np.linalg.eigh(V.T @ V)
+        V = V @ U[:, np.argsort(lam, kind="stable")[::-1]]
+    big = np.abs(V).argmax(axis=0)
+    sign = np.where(V[big, np.arange(r)] < 0.0, -1.0, 1.0)
+    return V * sign
 
 
 def _nnls_gram(G, r, max_iter=50):
