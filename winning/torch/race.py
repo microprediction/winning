@@ -139,10 +139,14 @@ class _Gumbel:
 
     @classmethod
     def log_cdf(cls, z):
-        # log(1 - exp(-e^u)), stable both ways
+        # log(1 - exp(-e^u)), stable both ways. Each branch sees a clamped
+        # argument (same values where it is selected): far left, e < 1e-16
+        # makes log1p(-exp(-e)) = log(0), and its infinite derivative times
+        # torch.where's zero gave NaN gradients on separated fields (#753)
         e = torch.exp(cls._u(z))
-        return torch.where(e < 0.6931, torch.log(-torch.expm1(-e)),
-                           torch.log1p(-torch.exp(-e)))
+        return torch.where(e < 0.6931,
+                           torch.log(-torch.expm1(-e.clamp(max=0.6931))),
+                           torch.log1p(-torch.exp(-e.clamp(min=0.6931))))
 
     @classmethod
     def dlog_pdf(cls, z):
@@ -197,6 +201,25 @@ def _prepare(mu, sd, mask):
         mask_r = torch.ones(mu_r.shape, dtype=torch.bool, device=mu.device)
     else:
         mask_r = mask.expand(shape).reshape(-1, n)
+        # padding "does not run": replace it by a benign runner BEFORE any
+        # arithmetic. Neutralising only the computed terms left (x - mu)/sd
+        # and log sd on the raw padding, so sd = 0 or a NaN there gave
+        # NaN gradients through 0 * inf (#760). torch.where routes exactly
+        # zero gradient to the replaced entries.
+        mu_r = torch.where(mask_r, mu_r, torch.zeros_like(mu_r))
+        sd_r = torch.where(mask_r, sd_r, torch.ones_like(sd_r))
+    if not torch.jit.is_tracing():
+        # one host sync; invalid active inputs used to come back as NaN
+        # where winning's numpy APIs refuse them (#760)
+        if not bool(mask_r.any(-1).all()):
+            raise ValueError("every row needs at least one valid runner "
+                             "(mask is all False on some row)")
+        d_mu, d_sd = mu_r.detach(), sd_r.detach()
+        if not bool(torch.isfinite(d_mu).all()):
+            raise ValueError("mu has a non-finite entry on a valid runner")
+        if not bool((torch.isfinite(d_sd) & (d_sd > 0)).all()):
+            raise ValueError("sd must be finite and positive on every "
+                             "valid runner")
     return mu_r, sd_r, mask_r, lead, n
 
 
@@ -224,20 +247,27 @@ def race_lattice(mu, sd=None, *, base="normal", points=257, delta=1e-12,
 
 
 @torch.no_grad()
-def _lattice_rows(mu, sd, mask, fam, points, delta, cover_all=False):
-    """The per-row lattice. cover_all=False is the WINNER window: its
-    right edge is cut where every winner integrand f_i prod S is
-    negligible. Later-place events (an ordered prefix's second finisher,
-    top-k membership) have their mass around the later runners' own
-    bodies, beyond that cut, so they pass cover_all=True: the right edge
-    then covers every valid runner to its own upper quantile (#753)."""
+def _lattice_rows(mu, sd, mask, fam, points, delta):
     if mu.device.type == "mps":
         # MPS has neither float64 nor ndtri; the window is O(17 n) per
         # row, so it is computed on the CPU and only the lattice moves
         cpu = lambda t: None if t is None else t.cpu()
         return _lattice_rows(cpu(mu), cpu(sd), cpu(mask), fam, points,
-                             delta, cover_all).to(mu.device)
-    dt = mu.dtype
+                             delta).to(mu.device)
+    lo, hi = _window_rows(mu, sd, mask, fam, delta)
+    u = torch.linspace(0.0, 1.0, points, dtype=torch.float64,
+                       device=mu.device)
+    x = lo[:, None] + (hi - lo)[:, None] * u[None, :]
+    return x.to(mu.dtype)
+
+
+@torch.no_grad()
+def _window_rows(mu, sd, mask, fam, delta):
+    """(lo, hi) per row, float64, of the WINNER lattice (race_lattice).
+
+    Right for the win event only: the right edge is cut where every
+    winner integrand is negligible. Later-place events need more (see
+    losses._event_lattice_rows)."""
     wd = torch.float64
     big = torch.finfo(wd).max
     if mask is None:
@@ -257,9 +287,7 @@ def _lattice_rows(mu, sd, mask, fam, points, delta, cover_all=False):
     # the Gaussian product of the two gives the edge (and f_i alone
     # gives mu_i + q_hi sd_i, whichever is nearer).
     key = torch.where(mask, m64, torch.full_like(m64, math.inf))
-    if cover_all:
-        hi_i = m64 + s64 * q_hi
-    elif mu.shape[-1] >= 2:
+    if mu.shape[-1] >= 2:
         two = torch.topk(key, 2, dim=-1, largest=False)
         k1, k2 = two.indices[..., :1], two.indices[..., 1:2]
         idx = torch.arange(mu.shape[-1], device=mu.device)[None, :]
@@ -298,9 +326,7 @@ def _lattice_rows(mu, sd, mask, fam, points, delta, cover_all=False):
     # a one-runner (or degenerate) row still needs a non-empty lattice
     smax = torch.where(mask, s64, torch.zeros_like(s64)).max(-1).values
     hi = torch.maximum(hi, lo + smax.clamp(min=1e-12))
-    u = torch.linspace(0.0, 1.0, points, dtype=wd, device=mu.device)
-    x = lo[:, None] + (hi - lo)[:, None] * u[None, :]
-    return x.to(dt)
+    return lo, hi
 
 
 # ------------------------------------------------------------- the kernel
