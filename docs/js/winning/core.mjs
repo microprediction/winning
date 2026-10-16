@@ -178,6 +178,27 @@ export function asIterations(n, where, name = "nIter") {
   return n;
 }
 
+/* Math.max / Math.min of an array without spreading it: a spread passes
+   every entry as an argument and overflows the call stack around 1.3e5
+   runners (#747, #461). Same result as the spread, including NaN
+   propagation and max(-0, 0) = 0. */
+export function maxOf(a) {
+  let m = -Infinity;
+  for (const v of a) {
+    if (v !== v) return NaN;
+    if (v > m || (v === 0 && m === 0 && Object.is(m, -0))) m = v;
+  }
+  return m;
+}
+export function minOf(a) {
+  let m = Infinity;
+  for (const v of a) {
+    if (v !== v) return NaN;
+    if (v < m || (v === 0 && m === 0 && Object.is(v, -0))) m = v;
+  }
+  return m;
+}
+
 /* A convergence tolerance is a finite positive number. */
 export function asTolerance(tol, where, name = "tol") {
   if (typeof tol !== "number" || !Number.isFinite(tol) || !(tol > 0))
@@ -712,15 +733,15 @@ export function firstPrimes(d) {
 export function aitkenTrial(mu, step, ratio, scale, forward, residMax,
                             fwdKeys = ["resid", "dres"]) {
   let jump = step.map(v => v / (1 - ratio));
-  const big = Math.max(...jump.map(Math.abs));
-  const cap = Math.max(2 * scale, Math.max(...step.map(Math.abs)));
+  const big = maxOf(jump.map(Math.abs));
+  const cap = Math.max(2 * scale, maxOf(step.map(Math.abs)));
   if (big > cap) jump = jump.map(v => v * (cap / big));
   const cand = mu.map((m, i) => m - jump[i]);
   let fwd;
   try { fwd = forward(cand); } catch (e) { return null; }
   const rc = fwd[fwdKeys[0]], dc = fwd[fwdKeys[1]];
   if (!rc.every(Number.isFinite) || !dc.every(Number.isFinite)) return null;
-  if (Math.max(...rc.map(Math.abs)) > 10 * residMax) return null;
+  if (maxOf(rc.map(Math.abs)) > 10 * residMax) return null;
   return { mu: cand, fwd };
 }
 
@@ -808,7 +829,7 @@ export function floorableTarget(target, mass) {
   if (target.some(v => v < 0))
     throw new Error("target entries must be non-negative: targetFloor " +
                     "floors small and zero shares, not negative ones");
-  const mx = Math.max(...target);
+  const mx = maxOf(target);
   const t = target.map(v => v / mx);
   const s = t.reduce((a, b) => a + b, 0);
   return t.map(v => v * (mass / s));
@@ -872,7 +893,7 @@ export function jacobiSweeps(mu, forward, scale, alpha, nIter, tol) {
     }
     let { resid, dres } = fw;
     cached = null;
-    residMax = Math.max(...resid.map(Math.abs));
+    residMax = maxOf(resid.map(Math.abs));
     residRms = Math.sqrt(resid.reduce((a, b) => a + b * b, 0) / n);
     if (residMax < tol) break;
     if (prev && residMax >= prev.residMax && residRms >= prev.residRms) {
@@ -922,7 +943,7 @@ export function jacobiSweeps(mu, forward, scale, alpha, nIter, tol) {
     // (one forward, only here) and keep the better of the two, so the
     // diagnostics describe the mu returned (#497, port of python)
     const fwd = cached || forward(mu);
-    const rEnd = Math.max(...fwd.resid.map(Math.abs));
+    const rEnd = maxOf(fwd.resid.map(Math.abs));
     if (prev && !(rEnd < prev.residMax)) mu = prev.mu;
     else residMax = rEnd;
   }
