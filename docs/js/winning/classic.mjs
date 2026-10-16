@@ -1,7 +1,7 @@
 // The classic state-price lattice calibration -- port of
 // winning/lattice.py + lattice_calibration.py, dead heats included.
 import { ndtr, npdf, interpClamped, mean, checkOpts, OPT_HINTS, asFiniteVector, rescaledTarget,
-         asIterations, isVector } from "./core.mjs";
+         asIterations, isVector, maxOf, minOf } from "./core.mjs";
 
 /* Each exported call declares its own option keys; see checkOpts in
    core.mjs for why an options object needs this at all. */
@@ -270,7 +270,7 @@ function asOffsets(x, where) {
    integer nearest its midpoint; an in-range book is untouched. */
 function edgeCentred(offsets, L) {
   if (!offsets.length) return offsets;
-  const lo = Math.min(...offsets), hi = Math.max(...offsets);
+  const lo = minOf(offsets), hi = maxOf(offsets);   // no spread: #747
   if (lo >= -(L - 2) && hi <= L - 2) return offsets;
   const c = Math.floor((lo + hi) / 2 + 0.5);
   return offsets.map(o => o - c);
@@ -344,7 +344,7 @@ function divideOffsets(c) {
   const gaps = [0];
   for (let i = 1; i < n; i++) gaps.push(Math.abs(srt[i] - srt[i - 1]));
   const g = gaps.slice(0, maxBest + 1);
-  const i0 = Math.max(1, g.indexOf(Math.max(...g)));
+  const i0 = Math.max(1, g.indexOf(maxOf(g)));
   return (srt[i0 - 1] + srt[i0]) / 2;
 }
 function clusteredStatePrices(density, offsets, fast, unitRatio, maxDepth) {
@@ -385,7 +385,7 @@ function extendedStatePrices(density, offsets, maxDepth, unitRatio) {
   const L = impliedL(density);
   const supp = supportIndices(density);
   const W = supp[supp.length - 1] - supp[0];
-  const best = Math.min(...offsets);
+  const best = minOf(offsets);
   if (offsets.some(o => o > best + W))       // no chance of winning
     return extendedStatePrices(density, intCentred(offsets.map(o => (o > best + W ? Infinity : o))),
                                maxDepth, unitRatio);
