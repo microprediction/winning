@@ -201,6 +201,25 @@ def _prepare(mu, sd, mask):
         mask_r = torch.ones(mu_r.shape, dtype=torch.bool, device=mu.device)
     else:
         mask_r = mask.expand(shape).reshape(-1, n)
+        # padding "does not run": replace it by a benign runner BEFORE any
+        # arithmetic. Neutralising only the computed terms left (x - mu)/sd
+        # and log sd on the raw padding, so sd = 0 or a NaN there gave
+        # NaN gradients through 0 * inf (#760). torch.where routes exactly
+        # zero gradient to the replaced entries.
+        mu_r = torch.where(mask_r, mu_r, torch.zeros_like(mu_r))
+        sd_r = torch.where(mask_r, sd_r, torch.ones_like(sd_r))
+    if not torch.jit.is_tracing():
+        # one host sync; invalid active inputs used to come back as NaN
+        # where winning's numpy APIs refuse them (#760)
+        if not bool(mask_r.any(-1).all()):
+            raise ValueError("every row needs at least one valid runner "
+                             "(mask is all False on some row)")
+        d_mu, d_sd = mu_r.detach(), sd_r.detach()
+        if not bool(torch.isfinite(d_mu).all()):
+            raise ValueError("mu has a non-finite entry on a valid runner")
+        if not bool((torch.isfinite(d_sd) & (d_sd > 0)).all()):
+            raise ValueError("sd must be finite and positive on every "
+                             "valid runner")
     return mu_r, sd_r, mask_r, lead, n
 
 

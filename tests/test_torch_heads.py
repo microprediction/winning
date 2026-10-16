@@ -868,3 +868,79 @@ def test_event_lattice_is_quiet_on_ordinary_heads():
             sd = _t(rng.uniform(0.3, 3.0, size=n))
             wt.topk_log_prob(mu, min(2, n - 1) or 1, sd)
             wt.ordered_prefix_log_prob(mu, torch.tensor([0, n - 1]), sd)
+
+
+# --- #760: masked padding is algebraically absent -------------------------
+
+_BAD_PADDING = [(1.0, 0.0), (1.0, -2.0), (float("nan"), 1.0),
+                (1.0, float("nan")), (float("inf"), 1.0), (1.0, float("inf"))]
+
+
+@pytest.mark.parametrize("pad_mu,pad_sd", _BAD_PADDING)
+@pytest.mark.parametrize("path", ["analytic", "autograd", "prefix2",
+                                  "top2", "factor"])
+def test_invalid_padding_gives_the_unpadded_race_and_zero_gradient(
+        path, pad_mu, pad_sd):
+    # sd = 0 or NaN in a masked slot gave NaN gradients (#760)
+    mu = _t([0.0, 0.7, pad_mu, 0.3], grad=True)
+    sd = _t([1.0, 0.8, pad_sd, 1.3], grad=True)
+    mask = torch.tensor([True, True, False, True])
+    mu0 = _t([0.0, 0.7, 0.3])
+    sd0 = _t([1.0, 0.8, 1.3])
+    V = _t([[0.4], [-0.2], [float("nan")], [0.1]], grad=True)
+
+    def run(m, s, msk, v=None):
+        if path in ("analytic", "autograd"):
+            return wt.race_log_prob(m, s, mask=msk, backward=path)
+        if path == "prefix2":
+            o = torch.tensor([0, 3]) if msk is not None else torch.tensor(
+                [0, 2])
+            return wt.ordered_prefix_log_prob(m, o, s, mask=msk)
+        if path == "top2":
+            return wt.topk_log_prob(m, 2, s, mask=msk)
+        return wt.race_log_prob_factor(m, v, s, mask=msk)
+
+    out = run(mu, sd, mask, V)
+    ref = run(mu0, sd0, None, _t([[0.4], [-0.2], [0.1]]))
+    got = out if out.dim() == 0 else out[mask]
+    torch.testing.assert_close(got, ref, rtol=1e-12, atol=1e-12)
+    loss = got.sum()
+    loss.backward()
+    assert torch.isfinite(mu.grad).all() and torch.isfinite(sd.grad).all()
+    assert float(mu.grad[2]) == 0.0 and float(sd.grad[2]) == 0.0
+    if path == "factor":
+        assert torch.isfinite(V.grad).all() and float(V.grad[2, 0]) == 0.0
+
+
+def test_order_selecting_padding_or_out_of_range_refuses():
+    # a masked runner gathered as a finisher priced a "probability" of 7.1
+    # and sent gradient to padding (#760, second residual)
+    mu, sd = _t([0.0, 1.0, 2.0]), _t([1.0, 1.0, 1.0])
+    mask = torch.tensor([True, False, True])
+    for order in ([1], [0, 1], [1, 0]):
+        with pytest.raises(ValueError, match="masked"):
+            wt.ordered_prefix_log_prob(mu, torch.tensor(order), sd,
+                                       mask=mask)
+    with pytest.raises(ValueError, match="outside"):
+        wt.ordered_prefix_log_prob(mu, torch.tensor([0, 3]), sd)
+    # batched: a mask that pads a different runner per row
+    mu2 = _t([[0.0, 1.0, 2.0], [0.5, 0.0, 1.0]])
+    m2 = torch.tensor([[True, True, False], [True, True, True]])
+    with pytest.raises(ValueError, match="masked"):
+        wt.ordered_prefix_log_prob(mu2, torch.tensor([0, 2]), mask=m2)
+    out = wt.ordered_prefix_log_prob(mu2, torch.tensor([0, 1]), mask=m2)
+    assert torch.isfinite(out).all() and bool((out < 0).all())
+
+
+@pytest.mark.parametrize("bad,match", [
+    (dict(sd=[1.0, 0.0]), "sd must be finite and positive"),
+    (dict(sd=[1.0, -1.0]), "sd must be finite and positive"),
+    (dict(mu=[0.0, float("nan")]), "non-finite"),
+    (dict(mask=[False, False]), "at least one valid runner"),
+])
+def test_invalid_active_inputs_refuse(bad, match):
+    mu = _t(bad.get("mu", [0.0, 1.0]))
+    sd = _t(bad.get("sd", [1.0, 1.0]))
+    mask = torch.tensor(bad["mask"]) if "mask" in bad else None
+    with pytest.raises(ValueError, match=match):
+        wt.race_log_prob(mu, sd, mask=mask)

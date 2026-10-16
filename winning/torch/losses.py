@@ -207,10 +207,17 @@ def ordered_prefix_log_prob(mu, order, sd=None, *, base="normal",
     if k < 1 or k > n:
         raise ValueError(f"order must hold 1..n indices; got k = {k}")
     o = order.expand(*lead, k).reshape(-1, k)
-    if k > 1 and not torch.jit.is_tracing():
-        srt = torch.sort(o, dim=-1).values
-        if bool((srt[:, 1:] == srt[:, :-1]).any()):
-            raise ValueError("order has a repeated runner")
+    if not torch.jit.is_tracing():
+        if bool(((o < 0) | (o >= n)).any()):
+            raise ValueError(f"order has an index outside 0..{n - 1}")
+        if k > 1:
+            srt = torch.sort(o, dim=-1).values
+            if bool((srt[:, 1:] == srt[:, :-1]).any()):
+                raise ValueError("order has a repeated runner")
+        # a masked runner is padding, not a finisher: gathering it priced
+        # a "probability" of 7.1 and sent gradient to padding (#760)
+        if not bool(torch.gather(mask_r, 1, o).all()):
+            raise ValueError("order selects a masked (padding) runner")
     L = x.shape[-1]
     idx = o[:, :, None].expand(-1, k, L)
     lf = torch.gather(logf, 1, idx)                               # (R, k, L)
