@@ -317,7 +317,12 @@ export function polishRace(opts = {}) {
     });
     A0 = A0.concat(A); b0 = b0.concat(b);
   }
-  if (!b0.length) return { p: fwdM(mu0), mu: mu0, info: { active: [] } };
+  // no constraint left: the warm start is the answer, with the same
+  // diagnostics a constrained solve reports (python's "unconstrained"
+  // branch); omitting them made info.converged undefined (#763)
+  if (!b0.length) return { p: fwdM(mu0), mu: mu0,
+                           info: { active: [], maxViolation: 0, converged: true,
+                                   muDistance: 0 } };
   // Solve in the FIELD'S units. The objective, the penalty schedule and
   // every stopping tolerance below are absolute numbers, so the same race
   // written with abilities x c and variances x c^2 polished differently:
