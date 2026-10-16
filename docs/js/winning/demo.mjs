@@ -2,7 +2,7 @@
 // miniature), dense linear algebra for the in-browser grammar fit, and
 // a Monte Carlo sampler to race against.
 import { hermite1, interpClamped, solve, firstPrimes, asLoadings,
-         isVector, asCount, asIdio } from "./core.mjs";
+         isVector, asCount, asIdio, asTolerance } from "./core.mjs";
 import { treeCluster } from "./blocks.mjs";
 
 /* Halton sequence through the normal quantile: equal-weight nodes for
@@ -372,8 +372,12 @@ export function fitGrammar(C, k = 3, m = 4, opts = undefined) {
   if (method !== "eig" && method !== "ipaf")
     throw new Error(`fitGrammar: method must be "eig" or "ipaf"; got ${method}`);
   const maxIter = opts.maxIter ?? 500, tol = opts.tol ?? 1e-12;
-  if (method === "ipaf" && !(Number.isInteger(maxIter) && maxIter >= 1 && tol >= 0))
-    throw new Error("fitGrammar: maxIter must be a positive integer and tol >= 0");
+  if (method === "ipaf" && !(Number.isInteger(maxIter) && maxIter >= 1))
+    throw new Error("fitGrammar: maxIter must be a positive integer");
+  // finite and positive: tol >= 0 admitted Infinity, which stopped IPAF
+  // after two sweeps and certified a fit 0.74 off as converged (#764,
+  // the browser residual of #658); python/R/julia already refuse it
+  if (method === "ipaf") asTolerance(tol, "fitGrammar");
   const ip = method === "ipaf" ? { maxIter, tol } : null;
   C = validateCovariance(C, "fitGrammar: C");
   let amax = 0;
@@ -996,9 +1000,18 @@ export function mendellElstonOne(mu, C, i) {
     const k = alive.shift();
     const skk = Math.max(S[k * d + k], eps), sk = Math.sqrt(skk);
     const z = m[k] / sk;
-    const Pz = Math.max(ndtr(z), 1e-300);
-    logp += Math.log(Pz);
-    const lam = npdf(z) / Pz;
+    const Pz = ndtr(z);
+    let lam;
+    if (Pz >= 1e-300) {                  // ordinary: arithmetic unchanged
+      logp += Math.log(Pz);
+      lam = npdf(z) / Pz;
+    } else {
+      // in logs: max(ndtr(z), 1e-300) floored a representable 1.1e-307
+      // tail at 1e-300 (gap 53, #734); the Mills ratio from the same logs
+      const lPz = logndtr(z);
+      logp += lPz;
+      lam = Math.exp(-0.5 * z * z - 0.5 * Math.log(2 * Math.PI) - lPz);
+    }
     const del = lam * (lam + z);
     for (const j of alive) m[j] += (S[k * d + j] / sk) * lam;
     for (let aj = 0; aj < alive.length; aj++)
