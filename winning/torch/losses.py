@@ -62,6 +62,7 @@ def thurstone_nll(mu, winner, sd=None, *, V=None, nodes=15, base="normal",
 # smallest valid sd, and at most this many points (or points=, if more).
 _EVENT_SPACING = 0.3
 _EVENT_CAP = 4097
+_EVENT_WARN_SPACING = 1.0      # x min sd; see _event_lattice_rows
 
 
 @torch.no_grad()
@@ -129,6 +130,24 @@ def _event_lattice_rows(mu, sd, mask, fam, points, delta, nested=False):
         # no coarser than the win lattice at points=, up to 2x points
         L = max(L, min(need((hi - lo) / (hi_win - lo) * (points - 1)),
                        2 * points - 1))
+    # what the cap leaves: accuracy holds to a spacing of ~1.25 min sd
+    # (equal-mean pair, sd = [1, r]: error 1e-12 at 0.83, 5e-9 at 1.25,
+    # 1e-3 at 2.1, 0.16 at 4.2 -- top-2 1.16 at r = 1000, #756). Past
+    # 1.0 min sd, say so rather than refine without bound; points= above
+    # the cap is honoured.
+    worst = (hi - lo) / ((cap - 1) * smin.min(-1).values)
+    worst = float(torch.nan_to_num(worst, nan=0.0, posinf=0.0).max()) \
+        if worst.numel() else 0.0
+    if worst > _EVENT_WARN_SPACING:
+        import warnings
+        warnings.warn(
+            "winning.torch event lattice cannot resolve the narrowest "
+            f"runner: at its cap of {cap} points the spacing is "
+            f"{worst:.2g} x the smallest sd (accurate to ~1.25). The "
+            "runners' scales differ too much for one uniform lattice, so "
+            "ordered-prefix and top-k probabilities may be inaccurate. "
+            f"Pass points={math.ceil(worst * (cap - 1)) + 1} or more.",
+            RuntimeWarning, stacklevel=4)
     L = int(min(L, cap))
     u = torch.linspace(0.0, 1.0, L, dtype=wd, device=mu.device)
     x = lo[:, None] + (hi - lo)[:, None] * u[None, :]
