@@ -81,8 +81,8 @@ def update_margins_full(m, S, margins=None, V=None, beta2=1.0,
     return _lift_contrast_update(m, S, np.eye(n), y, Cn, log_jac)
 
 
-def rate_history(races, ids=None, prior_mean=0.0, prior_var=1.0,
-                 timescale=200.0, tau2=0.25, beta2=1.0, lengths_scale=0.2,
+def rate_history(races, ids=None, prior_mean=None, prior_var=None,
+                 timescale=None, tau2=0.25, beta2=1.0, lengths_scale=0.2,
                  meas_var=0.0, transform=None, state=None,
                  return_state=False, base="normal"):
     """Forward filter over a racing history (full-covariance belief),
@@ -103,10 +103,23 @@ def rate_history(races, ids=None, prior_mean=0.0, prior_var=1.0,
       'winner'   -- index into runners
       optional 'V' -- (k, r) loadings for the race's k runners
 
+    prior_mean, prior_var, timescale: the OU drift (defaults 0, 1, 200).
+    Omitted on a resumed filter (state=...), they are read from the
+    state, so a split history equals the single pass (#776).
+
     Returns (ratings, history_logZ): ratings maps runner id ->
     (mean, sd) at the final time; history_logZ is the total evidence,
     the objective for tuning the hyperparameters.
     """
+    # The drift hyperparameters are saved in the state; a resume that
+    # omitted them silently reverted to 0 / 1 / 200 (#776).
+    _saved = state if state is not None else {}
+    if prior_mean is None:
+        prior_mean = _saved.get("prior_mean", 0.0)
+    if prior_var is None:
+        prior_var = _saved.get("prior_var", 1.0)
+    if timescale is None:
+        timescale = _saved.get("timescale", 200.0)
     if state is not None:
         index = dict(state["index"])
         m = np.asarray(state["m"], dtype=float).copy()
