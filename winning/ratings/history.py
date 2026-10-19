@@ -318,18 +318,34 @@ def tune_history(races, tune=("tau2", "beta2", "timescale",
     defaults.update(fixed)
     x0 = np.log([defaults[k] for k in tune])
 
+    # A trial point may fail numerically and is penalized, but if NO
+    # evaluation came back finite the data or the fixed settings are
+    # invalid: the defaults were returned as if calibrated, with best
+    # logZ -1e12 (#774). Remember the first failure and raise it.
+    seen = {"finite": False, "error": None}
+
     def neg_evidence(x):
         params = dict(defaults)
         params.update({k: float(np.exp(v)) for k, v in zip(tune, x)})
         try:
             _, lz = rate_history(races, **params)
-        except Exception:
+        except Exception as e:
+            if seen["error"] is None:
+                seen["error"] = e
             return 1e12
+        if np.isfinite(lz):
+            seen["finite"] = True
         return -lz
 
     res = minimize(neg_evidence, x0, method="Nelder-Mead",
                    options={"maxiter": maxiter, "xatol": 1e-3,
                             "fatol": 1e-3})
+    if not seen["finite"]:
+        if seen["error"] is not None:
+            raise seen["error"]
+        raise ValueError(
+            "tune_history: no evaluation of the filter evidence was finite; "
+            "nothing was calibrated")
     best = dict(defaults)
     best.update({k: float(np.exp(v)) for k, v in zip(tune, res.x)})
     return best, -float(res.fun)

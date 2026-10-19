@@ -51,6 +51,43 @@ def test_predict_race_in_order_times_unchanged():
                                   predict_race(st2, ["a", "b"])[0])
 
 
+# ---- #774: tune_history with no valid evaluation -----------------------
+
+def test_tune_history_raises_on_invalid_data():
+    races = [{"t": 0.0, "runners": ["a", "b"],
+              "scores": [float("nan"), 0.0]}]
+    with pytest.raises(ValueError, match="not finite"):
+        tune_history(races, tune=("tau2",), maxiter=30)
+
+
+def test_tune_history_raises_on_unsupported_fixed_base():
+    races = [{"t": 0.0, "runners": ["a", "b"], "winner": 0}]
+    with pytest.raises(NotImplementedError):
+        tune_history(races, tune=("tau2",), maxiter=30, base="laplace")
+
+
+def test_tune_history_raises_on_invalid_fixed_scale():
+    races = [{"t": 0.0, "runners": ["a", "b"], "scores": [1.0, 0.0]}]
+    with pytest.raises(ValueError, match="lengths_scale"):
+        tune_history(races, tune=("tau2",), maxiter=30, lengths_scale=-1)
+
+
+def test_tune_history_still_penalizes_failing_trial_points(monkeypatch):
+    # a valid baseline with some rejected trial points still calibrates,
+    # identically to the unpatched run when the rejections are off-path
+    want = tune_history(RACES, tune=("beta2",), maxiter=20)
+    real = H.rate_history
+
+    def flaky(races, **kw):
+        if kw["beta2"] > 1e6:
+            raise FloatingPointError("trial point")
+        return real(races, **kw)
+
+    monkeypatch.setattr(H, "rate_history", flaky)
+    got = tune_history(RACES, tune=("beta2",), maxiter=20)
+    assert got == want and np.isfinite(got[1])
+
+
 # ---- #776: resumed drift hyperparameters -------------------------------
 
 TWO = [{"t": 0.0, "runners": ["a", "b"], "scores": [1.0, 0.0]},
