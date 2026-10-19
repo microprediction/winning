@@ -3296,6 +3296,38 @@ accepts("dividendImpliedAbility keeps the favourite first at unit 0.1 (#649)",
   holds("dense baselines share validateCovariance's -1e-8 boundary (#782)", same);
 }
 
+// --- topKProbabilities refines a lattice that fails its mass check, as
+// python's _refined_topk (#623): the browser threw "membership 1.9800" at
+// the default 513 points on a field python prices (#769)
+{
+  const mu = [3.02, -0.08, -3.70, 4.74, 6.13], D = [2.53, 15.04, 0.30, 22.94, 2.24];
+  const py = [0.13583549218409463, 0.7171972785949864, 0.9977115702258443,
+              0.14264443876219762, 0.006611220232877024];   // python, points=513
+  accepts("topKProbabilities refines the default lattice to python's answer (#769)",
+          () => [topk.topKProbabilities(mu, 2, { D, base: "laplace" }),
+                 topk.topKProbabilities(mu, 2, { D, base: "laplace", points: 1025 })],
+          ([a, b]) => a.every((v, i) => v === b[i] && Math.abs(v - py[i]) < 1e-14) &&
+            Math.abs(a.reduce((x, y) => x + y, 0) - 2) < 1e-12);
+  // the factor path refines the same way (a zero loading is the same race)
+  accepts("topKProbabilities refines a factor field too (#769)",
+          () => topk.topKProbabilities(mu, 2, { D, base: "laplace", V: [[0], [0], [0], [0], [0]] }),
+          a => a.every((v, i) => Math.abs(v - py[i]) < 1e-12));
+  // bounded: four times the request, and the message names the last lattice
+  rejects(topk.topKProbabilities, [mu, 2, { D, base: "laplace", points: 129 }],
+          "an unresolved field still throws after refining to 4x points (#769)",
+          "refined from points=129 to 513");
+  // a call that passes first time is untouched
+  const ord = [[[0, 0.3, 0.7, 1.1], 1, {}], [[0, 0.3, 0.7, 1.1], 2, { base: "laplace" }],
+               [[0.2, -0.4, 0.9, 0.1, 0.5], 3, { D: [1, 2, 0.5, 1.5, 1], points: 257 }]];
+  const before = [[0.43640781082941793, 0.29974779469506657, 0.17191567638244531, 0.09192871809307027],
+                  [0.7604141243769369, 0.6276385841353082, 0.39268836630393084, 0.21925892518382423],
+                  [0.6687365897834013, 0.778344734061206, 0.33639256407588486, 0.6736163251345413,
+                   0.5429097869449666]];                    // main, before #769
+  accepts("ordinary top-k calls are bitwise unchanged by the refinement (#769)",
+          () => ord.map(([m, k, o]) => topk.topKProbabilities(m, k, o)),
+          rs => rs.every((r, a) => r.every((v, i) => v === before[a][i])));
+}
+
 // --- a pair under a caller's NON-normal node law is the exact mixture
 // over the nodes, as the lattice prices it (#742); referees are scipy's
 // sum_q w_q Phi((mu1 - mu0 - (V0 - V1) . F_q) / sqrt(D0 + D1)). The

@@ -473,6 +473,32 @@ function checkedTopk(raw, k, kind, massTol = 5e-3) {
   return out;
 }
 
+/* checkedTopk on rawAt(points), refining a lattice that fails it --
+   python's _refined_topk (#623). The checks see a defect they cannot fix,
+   and the remedy they name, raise points=, is mechanical: a failed check
+   doubles the lattice (2p - 1 keeps the old points as a subset) and tries
+   again, up to four times the request and never past MAX_TOPK_POINTS.
+   Only a call that would otherwise have thrown pays for it; a call that
+   passes first time is untouched. The browser threw at the default 513
+   points on a five-runner Laplace field python priced (#769). */
+function refinedTopk(rawAt, k, points, kind) {
+  const raw = rawAt(points);         // validates points, as before
+  let err;
+  try { return checkedTopk(raw, k, kind); } catch (e) { err = e; }
+  const cap = Math.min(4 * (points - 1) + 1, MAX_TOPK_POINTS);
+  if (points >= cap) throw err;
+  let pts = points;
+  while (pts < cap) {
+    pts = Math.min(2 * pts - 1, cap);
+    const r = rawAt(pts);
+    try { return checkedTopk(r, k, kind); } catch (e) { err = e; }
+  }
+  throw new Error(
+    `${err.message} (lattice refined from points=${points} to ${pts} ` +
+    `without resolving it; pass a larger points= explicitly, at most ` +
+    `${MAX_TOPK_POINTS}, or report this field)`);
+}
+
 function factorNodes(V, n, qa, D = null) {
   let Vm = asLoadings(V, n).map(row => row.slice());
   const r = Vm[0].length;
@@ -550,20 +576,23 @@ export function topKProbabilities(mu, k, opts = {}) {
   const fn = baseFn(base);
   // omission is null/undefined, never falsiness: NaN, false and "" are
   // malformed loadings for asLoadings to refuse, not "no factor" (#549)
-  if (V == null) return checkedTopk(topkWithSlopes(mu, sd, k, fn, points).q,
-                             k, "top-k race");
+  if (V == null) return refinedTopk(pts => topkWithSlopes(mu, sd, k, fn, pts).q,
+                                    k, points, "top-k race");
   const { Vm, nodes, w } = factorNodes(V, n, qa, D);
-  const raw = new Array(n).fill(0);
-  for (let q = 0; q < nodes.length; q++) {
-    const shifted = mu.map((m, i) => {
-      let s = m;
-      for (let c = 0; c < nodes[q].length; c++) s += Vm[i][c] * nodes[q][c];
-      return s;
-    });
-    const node = topkWithSlopes(shifted, sd, k, fn, points).q;
-    for (let i = 0; i < n; i++) raw[i] += w[q] * node[i];
-  }
-  return checkedTopk(raw, k, "top-k race");
+  const rawAt = pts => {
+    const raw = new Array(n).fill(0);
+    for (let q = 0; q < nodes.length; q++) {
+      const shifted = mu.map((m, i) => {
+        let s = m;
+        for (let c = 0; c < nodes[q].length; c++) s += Vm[i][c] * nodes[q][c];
+        return s;
+      });
+      const node = topkWithSlopes(shifted, sd, k, fn, pts).q;
+      for (let i = 0; i < n; i++) raw[i] += w[q] * node[i];
+    }
+    return raw;
+  };
+  return refinedTopk(rawAt, k, points, "top-k race");
 }
 
 export function bottomKProbabilities(mu, k, opts = {}) {
