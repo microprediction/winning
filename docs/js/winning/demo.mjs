@@ -633,8 +633,22 @@ export function structureCov(s) {
   // matrix for Independent(1) and loading errors "for undefined" (#563)
   let n;
   if (isVector(s.D)) n = s.D.length;
-  else if (s.kind === "Factor" && isVector(s.V)) n = s.V.length;
-  else if (isVector(s.cluster)) n = s.cluster.length;
+  else if (s.kind === "Factor" && isVector(s.V)) {
+    // a WIDE matrix V (rows < columns) with scalar D is two races: an
+    // (n, rank) loading with rank > n, or a (rank, n) one. The pricing
+    // calls read n from mu, so both price; here there is no mu, and the
+    // row count silently turned a transposed 2 x 4 loading into a 2 x 2
+    // covariance for a different field (#767). Square and tall V keep
+    // the runner-major reading, as asLoadings does.
+    const w = isVector(s.V[0]) ? s.V[0].length : -1;
+    if (w > s.V.length && s.V.every(r => isVector(r) && r.length === w))
+      throw new Error(
+        `structureCov: a Factor with scalar D and a ${s.V.length} x ${w} V ` +
+        `is ambiguous: ${s.V.length} contestants with ${w} factors, or ` +
+        `${w} contestants with ${s.V.length}. Pass D as one variance per ` +
+        "contestant, or V as (n, rank) with one row per contestant");
+    n = s.V.length;
+  } else if (isVector(s.cluster)) n = s.cluster.length;
   else
     throw new Error(
       `structureCov: a ${s.kind} structure with scalar D carries no field ` +

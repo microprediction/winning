@@ -3209,6 +3209,39 @@ accepts("dividendImpliedAbility keeps the favourite first at unit 0.1 (#649)",
   } finally { console.warn = ow; }
 }
 
+// --- structureCov never reads a wide V's row count as the field size
+// under scalar D (#767): Factor(2 x 4 V, 1) is both a 4-runner rank-2
+// and a 2-runner rank-4 race (the pricer takes n from mu), and returned
+// the 2 x 2 covariance, which then crashed mcBatch on a 4-runner field
+{
+  const Vt = [[0.2, 0.3, -0.1, 0.5], [0.4, -0.2, 0.1, 0.6]];
+  const Vr = Vt[0].map((_, i) => Vt.map(row => row[i]));          // 4 x 2
+  rejects(demo.structureCov, [structures.Factor(Vt, 1)],
+          "structureCov(Factor(2 x 4 V, scalar D)) refuses as ambiguous (#767)", "ambiguous");
+  rejects(demo.structureCov, [structures.Factor([[0.1, 0.2, 0.3]], 1)],
+          "structureCov(Factor(1 x 3 V, scalar D)) refuses as ambiguous (#767)", "ambiguous");
+  const want = [[1.2, -0.02, 0.02, 0.34], [-0.02, 1.13, -0.05, 0.03],
+                [0.02, -0.05, 1.02, 0.01], [0.34, 0.03, 0.01, 1.61]];
+  const near = A => A.length === 4 && A.every((r, i) => r.length === 4 &&
+    r.every((v, j) => Math.abs(v - want[i][j]) < 1e-12));
+  accepts("structureCov: vector D disambiguates a transposed V; runner-major V with scalar D is unchanged (#767)",
+          () => [demo.structureCov(structures.Factor(Vt, [1, 1, 1, 1])),
+                 demo.structureCov(structures.Factor(Vr, 1)),
+                 demo.structureCov(structures.Factor(Vr, [1, 1, 1, 1])),
+                 demo.structureCov(structures.Factor([[0.3, 0.1], [0.2, -0.4]], 1)),
+                 demo.structureCov(structures.Factor([0.3, 0.1, -0.2], 1))],
+          ([a, b, c, sq, flat]) => near(a) && near(b) && near(c) &&
+            sq.length === 2 && Math.abs(sq[0][1] - (0.06 - 0.04)) < 1e-15 &&
+            flat.length === 3 && Math.abs(flat[0][1] - 0.03) < 1e-15);
+  // the disambiguated covariance drives the Monte Carlo arm on 4 runners
+  accepts("structureCov(Factor(V transposed, vector D)) feeds mcBatch (#767)",
+          () => { const c = [0, 0, 0, 0];
+                  demo.mcBatch([-0.5, 0, 0.5, 0.8],
+                    demo.raceFactor(demo.structureCov(structures.Factor(Vt, [1, 1, 1, 1]))),
+                    demo.rng(1), 10, c); return c; },
+          c => c.reduce((x, y) => x + y, 0) === 10);
+}
+
 // --- a pair under a caller's NON-normal node law is the exact mixture
 // over the nodes, as the lattice prices it (#742); referees are scipy's
 // sum_q w_q Phi((mu1 - mu0 - (V0 - V1) . F_q) / sqrt(D0 + D1)). The
