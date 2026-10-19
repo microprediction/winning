@@ -310,3 +310,20 @@ test_that("an offset of exactly +-(L - 2) is priced exactly, not clustered (#773
   expect_lt(max(abs(ability_implied_state_prices(c(0, 1 + 1e-9), d) -
                     c(0.633744856100823, 0.36625514389917707))), 1e-15)
 })
+
+test_that("max_depth is a whole number >= 0 (#775)", {
+  dens <- rep(1/31, 31)
+  ab <- c(0, 10, 20, 30)
+  for (bad in list(-1, 1.5, TRUE, FALSE, NaN, Inf, -Inf, NA, NA_integer_, c(1, 2), "2", NULL))
+    expect_error(ability_implied_state_prices(ab, dens, max_depth = bad),
+                 "max_depth must be a whole number >= 0")
+  # valid budgets are unchanged (python's values on the same field)
+  expect_equal(ability_implied_state_prices(ab, dens, max_depth = 0L), c(1, 0, 0, 0))
+  expect_lt(max(abs(ability_implied_state_prices(ab, dens, max_depth = 1L) -
+                    c(0.73784245296, 0.223982995514, 0.03767320938, 0.000501342146))), 1e-11)
+  for (md in list(2L, 2))
+    expect_lt(max(abs(ability_implied_state_prices(ab, dens, max_depth = md) -
+                      c(0.73784245296, 0.193474399289, 0.059003267863, 0.009679879888))), 1e-11)
+  expect_identical(ability_implied_state_prices(ab, dens),
+                   ability_implied_state_prices(ab, dens, max_depth = 3L))
+})

@@ -57,6 +57,20 @@ def _check_unit(unit, where):
         raise ValueError(where + ': unit must be a finite positive number; got ' + repr(unit))
 
 
+def _check_max_depth(max_depth, where):
+    """ max_depth is a recursion budget: a whole number >= 0, as the
+    browser port requires. The recursion stops only on max_depth == 0, so
+    -1 and True ran as depth 1 and 1.5, nan and inf as depth 2 (#775). """
+    try:
+        ok = isinstance(max_depth, (int, float, np.integer, np.floating)) \
+            and not isinstance(max_depth, (bool, np.bool_)) \
+            and math.isfinite(max_depth) and max_depth == int(max_depth) and max_depth >= 0
+    except (TypeError, ValueError, OverflowError):
+        ok = False
+    if not ok:
+        raise ValueError(where + ': max_depth must be a whole number >= 0; got ' + repr(max_depth))
+
+
 def state_price_implied_ability(prices, density, unit=1.0):
     """ Calibrate offsets (translations of the performance density) to match state prices
 
@@ -101,6 +115,7 @@ def ability_implied_state_prices(ability, density, unit=1.0, max_depth=3):
     :return: [ 7.6, 12.3, ... ]
     """
     _check_unit(unit, 'ability_implied_state_prices')
+    _check_max_depth(max_depth, 'ability_implied_state_prices')
     scale_free_offsets = [ a/unit for a in ability ]
     return state_prices_from_extended_offsets(density=density, offsets=scale_free_offsets, max_depth=max_depth)
 

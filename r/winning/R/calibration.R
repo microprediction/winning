@@ -156,6 +156,17 @@ CALIBRATION_WARN_TOL <- 1e-3
   invisible(unit)
 }
 
+.check_max_depth <- function(max_depth, where) {
+  # a recursion budget, a whole number >= 0 as the browser requires: the
+  # recursion stops only on max_depth == 0, so -1 and TRUE ran as depth 1
+  # and 1.5 and Inf as depth 2 (#775)
+  if (length(max_depth) != 1L || !is.numeric(max_depth) || !is.finite(max_depth) ||
+      max_depth != round(max_depth) || max_depth < 0)
+    stop(where, ": max_depth must be a whole number >= 0; got ",
+         deparse(max_depth), call. = FALSE)
+  invisible(max_depth)
+}
+
 #' Ability implied by state prices
 #' @param prices numeric win probabilities (nonnegative; a zero price
 #'   returns ability Inf)
@@ -204,6 +215,7 @@ dividend_implied_ability <- function(dividends, density,
 ability_implied_state_prices <- function(ability, density, unit = 1.0,
                                          max_depth = 3L) {
   .check_unit(unit, "ability_implied_state_prices")
+  .check_max_depth(max_depth, "ability_implied_state_prices")
   # the reference's full extended handling, not just centring: a runner
   # hundreds of support widths behind pushed the viable ones off the
   # lattice edge, where the shift clamp made them identical -- a 75/25
