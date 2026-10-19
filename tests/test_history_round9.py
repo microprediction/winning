@@ -22,6 +22,46 @@ RACES = [
 ]
 
 
+# ---- #770: walk_forward with warmup=0 ----------------------------------
+
+def test_walk_forward_warmup_zero_scores_the_prior():
+    races = [{"t": 0.0, "runners": ["a", "b"], "winner": 0,
+              "p_market": [0.7, 0.3]}]
+    out = walk_forward(races, warmup=0)
+    assert out["n_scored"] == 1 and len(out["records"]) == 1
+    np.testing.assert_allclose(out["records"][0]["p_model"], [0.5, 0.5],
+                               atol=1e-12)
+    assert out["log_loss_model"] == pytest.approx(math.log(0.5))
+    assert out["log_loss_market"] == pytest.approx(math.log(0.7))
+
+
+@pytest.mark.parametrize("key,val", [("winner", 1), ("order", [1, 0]),
+                                     ("margins", [1.0, 0.0]),
+                                     ("scores", [0.0, 1.0])])
+def test_walk_forward_warmup_zero_every_outcome_form(key, val):
+    out = walk_forward([{"t": 0.0, "runners": ["a", "b"], key: val}],
+                       warmup=0)
+    assert out["n_scored"] == 1
+    assert out["records"][0]["winner"] == 1
+    np.testing.assert_allclose(out["records"][0]["p_model"], [0.5, 0.5],
+                               atol=1e-12)
+
+
+def test_walk_forward_rejects_negative_warmup():
+    with pytest.raises(ValueError, match="warmup"):
+        walk_forward(RACES, warmup=-1)
+
+
+def test_walk_forward_warmup_zero_extends_warmup_one():
+    # the races after the first are scored exactly as before
+    w0 = walk_forward(RACES, warmup=0)
+    w1 = walk_forward(RACES, warmup=1)
+    assert w0["n_scored"] == w1["n_scored"] + 1
+    for a, b in zip(w0["records"][1:], w1["records"]):
+        assert a["i"] == b["i"] and a["winner"] == b["winner"]
+        np.testing.assert_array_equal(a["p_model"], b["p_model"])
+
+
 # ---- #772: predict_race clock ------------------------------------------
 
 def _state():

@@ -359,8 +359,18 @@ def walk_forward(races, warmup=20, market_arm=True, V_key="V",
     consumes prices historically unless market_arm=False strips them),
     and the market's own log-loss as the benchmark when prices are
     present. Returns a dict of totals and per-race records."""
+    if warmup < 0:
+        raise ValueError(f"warmup must be >= 0; got {warmup!r}")
     races = list(races)
     state = None
+    # Before the first race the belief is the population prior: an
+    # empty state prices every runner as a debut. predict_race got
+    # state=None and crashed when warmup=0 (#770).
+    prior_state = {"index": {}, "m": np.zeros(0), "S": np.zeros((0, 0)),
+                   "t": None}
+    for _k in ("prior_mean", "prior_var", "timescale"):
+        if params.get(_k) is not None:
+            prior_state[_k] = params[_k]
     recs = []
     ll_model = ll_market = 0.0
     n_scored = 0
@@ -369,7 +379,8 @@ def walk_forward(races, warmup=20, market_arm=True, V_key="V",
                             or race.get("order") is not None
                             or race.get("margins") is not None
                             or race.get("scores") is not None):
-            p, _ = predict_race(state, race["runners"],
+            p, _ = predict_race(state if state is not None else prior_state,
+                                race["runners"],
                                 t=race.get("t"),
                                 V=race.get(V_key),
                                 beta2=params.get("beta2", 1.0),
