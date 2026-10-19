@@ -18,7 +18,7 @@
 # inexact factorization never masquerades as the structured case.
 module FactorMvNormalCDF
 
-using LinearAlgebra: SymTridiagonal, eigen, Symmetric, diag, norm
+using LinearAlgebra: SymTridiagonal, eigen, eigvals, Symmetric, diag, norm
 import MvNormalCDF
 
 export mvn_cdf_fast, mvn_cdf_fast_info, mvnormcdf_factor, factorize_covariance
@@ -501,14 +501,30 @@ columns, and one factor split across dependent columns -- so the rank
 that picks the rule is the covariance's, not the column count: two
 appended zero columns sent a rank-one model to the dense fallback (#457).
 The columns are `V W`, `W` the eigenvectors of `V'V` in decreasing order.
+The RANK is decided from `V` with each row divided by its marginal sd
+`scale` (coordinate-free units): on raw `V'V` a unit change of one
+coordinate truncated a rank-two law to rank one (#786). Where the two
+tests agree the raw basis is kept (bitwise unchanged); where they differ
+the row-normalised eigenvectors give the columns.
 """
-function _canonical_loadings(V::AbstractMatrix)
+function _canonical_loadings(V::AbstractMatrix, scale = nothing)
     V = V[:, [any(!=(0.0), view(V, :, c)) for c in 1:size(V, 2)]]
     size(V, 2) > 1 || return V
     E = eigen(Symmetric(V' * V))
     idx = sortperm(E.values, rev = true)
     lam = E.values[idx]
     keep = idx[lam .> 1e-13 * lam[1]]
+    if scale !== nothing
+        Vn = V ./ scale
+        G = Symmetric(Vn' * Vn)
+        ln = eigvals(G)
+        k = count(>(1e-13 * maximum(ln)), ln)
+        if k != length(keep)
+            En = eigen(G)
+            idn = sortperm(En.values, rev = true)
+            return V * En.vectors[:, idn[1:k]]
+        end
+    end
     return V * E.vectors[:, keep]
 end
 
@@ -846,7 +862,7 @@ function _impl(lower, upper, mean, sigma, V, D; gh_order = nothing,
     n = length(Dv)
     n == 1 && return _univariate(lo[1], up[1], mu[1], var[1])
     # the rank is the covariance's, not the column count (#457)
-    Vm = _canonical_loadings(Vm)
+    Vm = _canonical_loadings(Vm, sqrt.(var))
     s = sqrt.(Dv)
     r = size(Vm, 2)
     if r == 0

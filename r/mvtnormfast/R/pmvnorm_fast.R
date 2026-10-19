@@ -73,12 +73,25 @@
 # moved a rank-3 answer, #518) and the raw column count chose the rule
 # (two zero columns moved a rank-one answer 2.37%, #457). Columns become
 # V W, W the eigenvectors of V'V in decreasing order; directions carrying
-# nothing are dropped.
-.canonical_loadings <- function(V) {
+# nothing are dropped. The RANK is decided from V with each row divided
+# by its marginal sd `scale` (coordinate-free units): on raw V'V a unit
+# change of one coordinate truncated a rank-two law to rank one (#786).
+# Where the two tests agree the raw basis is kept (bitwise unchanged);
+# where they differ the row-normalised eigenvectors give the columns.
+.canonical_loadings <- function(V, scale = NULL) {
   V <- V[, colSums(V != 0) > 0, drop = FALSE]
   if (ncol(V) > 1L) {
     e <- eigen(crossprod(V), symmetric = TRUE)   # decreasing
     keep <- e$values > 1e-13 * e$values[1]
+    if (!is.null(scale)) {
+      G <- crossprod(V / scale)
+      ln <- eigen(G, symmetric = TRUE, only.values = TRUE)$values
+      k <- sum(ln > 1e-13 * ln[1])
+      if (k != sum(keep)) {
+        en <- eigen(G, symmetric = TRUE)
+        return(V %*% en$vectors[, seq_len(k), drop = FALSE])
+      }
+    }
     V <- V %*% e$vectors[, keep, drop = FALSE]
   }
   V
@@ -700,7 +713,7 @@ pmvnorm_fast <- function(lower = -Inf, upper = Inf, mean = NULL,
   }
   if (length(D) == 1L)
     return(.univariate(lower, upper, mean, sum(V^2) + D))
-  V <- .canonical_loadings(V)
+  V <- .canonical_loadings(V, sqrt(rowSums(V^2) + D))
   s <- sqrt(D)
   if (ncol(V) == 0L) {
     lm <- .log_cell_mass(matrix(upper - mean, 1), matrix(lower - mean, 1), s)

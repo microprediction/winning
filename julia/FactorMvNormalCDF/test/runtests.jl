@@ -464,6 +464,41 @@ end
                        D = [0.0, 1.0]) ≈ 0.5
 end
 
+@testset "coordinate units do not delete a factor (#786)" begin
+    V = [0.30812945940123476 -1.8936005031221805;
+         0.05423700319905680 -1.8882188805898732;
+         -0.04568751096449155 1.2303149108078115;
+         -1.2824267666411462 -0.7947487032502422]
+    D = [0.48381594889619123, 0.607241434401239,
+         0.2137039397661559, 0.5038986029743953]
+    mu = [1.3435081180060733, 0.48784958537212353,
+          0.20068268880906692, 1.449261738300165]
+    up = [0.3670668335351432, -0.9140137229005407,
+          -0.16906974496655425, 0.6067127817398206]
+    p0, m0 = mvn_cdf_fast_info(upper = up, mean = mu, V = V, D = D)
+    c = 2.0 .^ [-11, -11, -10, 12]   # was 3.726e-4: a real factor dropped
+    p, m = mvn_cdf_fast_info(upper = up .* c, mean = mu .* c, V = V .* c,
+                             D = D .* c .^ 2)
+    @test abs(p / p0 - 1) < 1e-9
+    @test m == m0
+    # one coordinate in large units: 1/6 at 1e7 before (#720 comment)
+    ex = 0.125 + 2 * asin(1 / sqrt(6)) / (4pi)
+    V3 = [1.0 0.0; 0.0 1.0; 1.0 1.0]
+    for c1 in (1.0, 1e6, 1e7, 1e8, 2.0^399)
+        s = [c1, 1.0, 1.0]
+        @test abs(mvn_cdf_fast(upper = zeros(3), V = V3 .* s,
+                               D = s .^ 2) - ex) < 1e-7
+    end
+    # ordinary inputs: the raw basis, bit for bit
+    for r in 2:4, n in (3, 10, 50)
+        W = [sin(7.1 * i + 3.3 * j + r) for i in 1:n, j in 1:r]
+        for X in (W, hcat(W, 0.5 .* W[:, 1]))
+            sc = sqrt.(vec(sum(X .^ 2, dims = 2)) .+ 0.5)
+            @test MF._canonical_loadings(X, sc) == MF._canonical_loadings(X)
+        end
+    end
+end
+
 @testset "a small-unit orthant is the same law (#173)" begin
     # the sharp law goes to the dense fallback, whose own tolerance is
     # ~1e-4; the 1e-300 floor made it 0.0093 low at both scales
