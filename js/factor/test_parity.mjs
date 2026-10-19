@@ -539,4 +539,66 @@ check("calibrated abilities vs truth", muHat, mu, 5e-6);
         [0.7101770877961151, 0.21882443644429006, 0.07099847575959484], 1e-14);
 }
 
+/* --- deletion rows at their own resolution, as python's removal_shares
+   (#785): the sd_min/8 target applies whether or not the forward lattice
+   was capped --- */
+{
+  const rt2 = Math.SQRT2;
+  const laplaceBase = (spans) => ({ spans,
+    eval(z, sd) {
+      const fz = Math.exp(-rt2 * Math.abs(z)) / Math.SQRT2;
+      const ls = z >= 0 ? Math.log(0.5) - rt2 * z : Math.log1p(-0.5 * Math.exp(rt2 * z));
+      return { ls, fx: fz / sd, ds: z === 0 ? 0 : Math.sign(z) * rt2 * fz / (sd * sd) };
+    } });
+  // the issue's fixture: 933 uncapped forward points against a removal
+  // target of 3729 returned P(0 wins | 2 removed) = 0.42149, 70 bp high
+  const lap = laplaceBase([22, 22]);
+  const mu = [1.86, 1.82, -1.39], D = [0.2, 0.125, 1.25].map((s) => s * s);
+  const oracle = 0.4145220394678141;   // split-at-the-cusps integral
+  let row = null;
+  try { row = winProbabilitiesFactor(mu, [[], [], []], D, [[]], [1], { base: lap, deletions: true }).deletions[2]; }
+  catch (e) { console.log("   " + e.message); }
+  check("uncapped Laplace deletion row within 1e-3 of the exact integral (#785)",
+        [row ? row[0] : NaN], [oracle], 1e-3);
+  // python removal_shares(mu, D=D, base="laplace") with these spans' lattice
+  check("uncapped Laplace deletion row is python's removal_shares (#785)",
+        [row ? row[0] : NaN], [0.4150322120976259], 1e-12);
+  const fine = winProbabilitiesFactor(mu, [[], [], []], D, [[]], [1],
+                                      { base: lap, deletions: true, points: 32001 }).deletions[2];
+  check("the same row at 32001 points converges to the exact integral (#785)",
+        [fine[0]], [oracle], 2e-6);
+
+  // a battery of ordinary fields against python's removal_shares
+  // (gen_test_vectors_removal.py): normal, gumbel and laplace; 3 to 12
+  // runners; sd ratios 1 to 20; with and without a factor
+  const R = JSON.parse(readFileSync(new URL("./test_vectors_removal.json", import.meta.url)));
+  const lap18 = laplaceBase([18, 18]);   // python's laplace spans
+  let worst = 0, refused = 0, compared = 0;
+  for (const c of R.cases) {
+    if (!c.deletions) continue;          // python's own 1e-3 mass guard refused
+    const V = c.V[0].length ? c.V : c.V.map(() => []);
+    try {
+      const got = winProbabilitiesFactor(c.mu, V, c.D, c.F, c.W,
+        { base: c.base === "laplace" ? lap18 : c.base, deletions: true }).deletions;
+      for (let i = 0; i < got.length; i++) for (let j = 0; j < got.length; j++)
+        worst = Math.max(worst, Math.abs(got[i][j] - c.deletions[i][j]));
+      compared++;
+    } catch (e) { refused++; }
+  }
+  check(`deletion rows match python removal_shares on ${compared} ordinary fields (#785)`,
+        [worst], [0], 1e-12);
+  check("no ordinary battery field is refused (#785)", [refused], [0], 0.5);
+
+  // ordinary fields whose forward lattice already meets the removal
+  // target are bitwise unchanged (pinned from origin/main 7af3ed1c)
+  check("ordinary factor deletion row unchanged (#785)",
+        winProbabilitiesFactor([0, 0.5, 1, 1.5], [[0.3], [-0.1], [0.2], [0]], [1, 1.2, 0.8, 1],
+                               [[-1], [1]], [0.5, 0.5], { deletions: true }).deletions[1],
+        [0.7016501657854247, 0, 0.19281299926124565, 0.10553683495332968], 1e-300);
+  check("ordinary gumbel deletion row unchanged (#785)",
+        winProbabilitiesFactor([0, 0.4, 0.9], [[], [], []], [1, 1, 1], [[]], [1],
+                               { base: "gumbel", deletions: true }).deletions[0],
+        [0, 0.6550416000142272, 0.3449583999857729], 1e-300);
+}
+
 process.exit(failures ? 1 : 0);
