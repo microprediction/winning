@@ -1920,6 +1920,18 @@ pub fn check_ordered_k(k: usize) -> Result<(), String> {
     Ok(())
 }
 
+/// check_ordered_k plus the field bound k <= n: an ordered k-prefix needs
+/// k distinct runners, and k > n returned an all-zero tensor of total
+/// mass 0 that callers reported as a lattice failure (#768).
+pub fn check_ordered_prefix(k: usize, n: usize) -> Result<(), String> {
+    check_ordered_k(k)?;
+    if k > n {
+        return Err(format!(
+            "k = {k} is out of range for a field of {n}: k must be in [1, min(3, n)]"));
+    }
+    Ok(())
+}
+
 /// Every entry of a named input is finite (#602). A NaN factor node
 /// used to contribute zero raw mass (every `e > -745` test is false)
 /// and be normalized away, pricing the law conditional on the other
@@ -3282,7 +3294,7 @@ pub fn ordered_kernel(
     k: usize,
 ) -> (Vec<f64>, f64) {
     let n = mu.len();
-    if let Err(e) = check_ordered_k(k) {
+    if let Err(e) = check_ordered_prefix(k, n) {
         panic!("{e}");
     }
     let q = f_nodes.nrows();
@@ -3528,6 +3540,31 @@ mod tests {
         ordered_kernel(mu.view(), v.view(), d.view(), f.view(), w.view(),
                        201, -8.0, 8.7, 4);
     }
+    #[test]
+    #[should_panic(expected = "k must be in [1, min(3, n)]")]
+    fn ordered_kernel_refuses_k_above_n() {
+        let mu = ndarray::arr1(&[0.0, 0.2]);
+        let v = ndarray::Array2::<f64>::zeros((2, 1));
+        let d = ndarray::arr1(&[1.0, 1.0]);
+        let f = ndarray::Array2::<f64>::zeros((1, 1));
+        let w = ndarray::arr1(&[1.0]);
+        ordered_kernel(mu.view(), v.view(), d.view(), f.view(), w.view(),
+                       201, -8.0, 8.7, 3);
+    }
+
+    #[test]
+    fn ordered_kernel_accepts_full_prefix() {
+        let mu = ndarray::arr1(&[0.0, 0.2, 0.7]);
+        let v = ndarray::Array2::<f64>::zeros((3, 1));
+        let d = ndarray::arr1(&[1.0, 1.0, 1.0]);
+        let f = ndarray::Array2::<f64>::zeros((1, 1));
+        let w = ndarray::arr1(&[1.0]);
+        let (_, total) = ordered_kernel(mu.view(), v.view(), d.view(),
+                                        f.view(), w.view(), 401, -8.0,
+                                        8.7, 3);
+        assert!((total - 1.0).abs() < 1e-3, "{total}");
+    }
+
     fn separated_price(c: f64, sd_spread: bool) -> Vec<f64> {
         let mu = ndarray::arr1(&[0.0, 0.4 * c, 1.0 * c]);
         let v = ndarray::Array2::<f64>::zeros((3, 1));

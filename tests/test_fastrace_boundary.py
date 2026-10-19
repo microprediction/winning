@@ -651,3 +651,15 @@ def test_classic_calibrate_is_scale_free_377():
     with pytest.raises(ValueError, match="no positive mass"):
         fastrace.classic_exact_calibrate(d, [0.0, 0.0, 0.0], grid,
                                          [0.0] * 3, 3)
+
+
+# --- #768: ordered_prefixes also needs k <= n ------------------------------
+
+def test_ordered_prefixes_rejects_k_above_n():
+    """n=2, k=3 returned eight zeros with total 0 instead of refusing."""
+    args = (np.array([0.0, 0.2]), np.zeros((2, 1)), np.ones(2),
+            np.zeros((1, 1)), np.ones(1), 1001, -8.0, 8.7)
+    with pytest.raises(ValueError, match=r"min\(3, n\)"):
+        fastrace.ordered_prefixes(*args, 3)
+    flat, total = fastrace.ordered_prefixes(*args, 2)
+    assert np.asarray(flat).size == 4 and abs(total - 1) < 1e-4

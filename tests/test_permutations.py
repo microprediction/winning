@@ -94,3 +94,21 @@ def test_rust_matches_numpy_path():
     finally:
         E._HAVE_RUST = saved
     assert np.max(np.abs(q_rs - q_np)) < 1e-9
+
+
+# --- #768: an ordered k-prefix needs k distinct runners ---
+
+@pytest.mark.parametrize("n,k", [(2, 3), (1, 2), (1, 3)])
+def test_k_above_field_size_is_a_clear_value_error(n, k):
+    """k > n reached the kernel as zero mass and was reported as a
+    lattice failure (FloatingPointError)."""
+    mu = np.linspace(0.0, 0.2, n)
+    with pytest.raises(ValueError, match=r"k must be in \[1, min\(3, n\)\]"):
+        ordered_probabilities(mu, k=k, points=501)
+
+
+@pytest.mark.parametrize("n,k", [(1, 1), (2, 1), (2, 2), (3, 3), (3, 2)])
+def test_k_up_to_field_size_still_prices(n, k):
+    mu = np.linspace(0.0, 0.4, n)
+    q = ordered_probabilities(mu, k=k, points=501)
+    assert q.shape == (n,) * k and abs(q.sum() - 1) < 1e-6
