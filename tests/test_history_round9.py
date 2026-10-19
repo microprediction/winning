@@ -22,6 +22,35 @@ RACES = [
 ]
 
 
+# ---- #772: predict_race clock ------------------------------------------
+
+def _state():
+    return rate_history(
+        [{"t": 10.0, "runners": ["a", "b"], "scores": [1.0, 0.0]}],
+        ids=["a", "b"], timescale=10.0, prior_var=1.0, beta2=1.0,
+        lengths_scale=1.0, return_state=True)[2]
+
+
+@pytest.mark.parametrize("t", [5.0, 9.999, np.nan, np.inf, -np.inf])
+def test_predict_race_rejects_stale_or_non_finite_time(t):
+    with pytest.raises(ValueError, match="prediction time"):
+        predict_race(_state(), ["a", "b"], t=t)
+
+
+def test_predict_race_in_order_times_unchanged():
+    st = _state()
+    p_none, _ = predict_race(st, ["a", "b"])
+    p_eq, _ = predict_race(st, ["a", "b"], t=10.0)
+    p_int, _ = predict_race(st, ["a", "b"], t=10)
+    np.testing.assert_array_equal(p_none, p_eq)
+    np.testing.assert_array_equal(p_none, p_int)
+    # a later time diffuses exactly as diffuse_full says
+    m, S = diffuse_full(st["m"], st["S"], dt=1.0, timescale=10.0)
+    st2 = dict(st, m=m, S=S, t=11.0)
+    np.testing.assert_array_equal(predict_race(st, ["a", "b"], t=11.0)[0],
+                                  predict_race(st2, ["a", "b"])[0])
+
+
 # ---- #776: resumed drift hyperparameters -------------------------------
 
 TWO = [{"t": 0.0, "runners": ["a", "b"], "scores": [1.0, 0.0]},

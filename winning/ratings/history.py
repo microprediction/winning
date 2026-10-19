@@ -264,6 +264,17 @@ def predict_race(state, runners, t=None, V=None, beta2=1.0, points=257,
 
     m = np.asarray(state["m"], dtype=float)
     S = np.asarray(state["S"], dtype=float)
+    # Same clock contract as rate_history (#654): an older or NaN t fell
+    # through as "now", pricing an earlier race with a posterior that
+    # holds later evidence; +inf decayed everything to the prior (#772).
+    if t is not None:
+        if not np.isfinite(float(t)):
+            raise ValueError(f"prediction time t = {t!r} is not finite")
+        if state["t"] is not None and t < state["t"]:
+            raise ValueError(
+                f"prediction time t = {t!r} is older than the filter state "
+                f"(t = {state['t']!r}); the state already holds later "
+                "evidence. Predict from a state saved before t.")
     if t is not None and state["t"] is not None and t > state["t"]:
         m, S = diffuse_full(m, S, dt=t - state["t"],
                             timescale=state.get("timescale", 200.0),
