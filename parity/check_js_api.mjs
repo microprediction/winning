@@ -3183,6 +3183,32 @@ accepts("dividendImpliedAbility keeps the favourite first at unit 0.1 (#649)",
         loud.length === 0 && flagged === 0 && worst < 1, `worst ${worst}`);
 }
 
+// --- fitGrammar refuses a misspelled option in both call forms (#766):
+// {maxIters: 2} and {toll: 1e-2} were dropped and ipaf ran its default
+// 500-sweep, 1e-12 budget, reporting converged
+{
+  const v = [0, 0, 0, 1, 0, 0.7], Dg = [18, 15, 12, 0.08, 6, 0.05];
+  const Cg = v.map((x, i) => v.map((y, j) => x * y + (i === j ? Dg[i] : 0)));
+  for (const bad of [{ maxIters: 2 }, { toll: 1e-2 }, { method: "ipaf", nonsense: 1 }]) {
+    rejects(demo.fitGrammar, [Cg, 1, 0, { method: "ipaf", ...bad }],
+            `fitGrammar(C, k, m, ${JSON.stringify(bad)}) refuses (#766)`, "unknown option");
+    rejects(demo.fitGrammar, [Cg, { k: 1, m: 0, method: "ipaf", ...bad }],
+            `fitGrammar(C, {${Object.keys(bad)}}) refuses (#766)`, "unknown option");
+  }
+  // the documented keys still run, and the two forms agree exactly
+  const ow = console.warn; console.warn = () => {};
+  try {
+    accepts("fitGrammar's documented keys are unchanged in both forms (#766)",
+            () => [demo.fitGrammar(Cg, 1, 0, { method: "ipaf", maxIter: 2, tol: 1e-12 }),
+                   demo.fitGrammar(Cg, { k: 1, m: 0, method: "ipaf", maxIter: 2, tol: 1e-12 }),
+                   demo.fitGrammar(Cg, 1, 0), demo.fitGrammar(Cg, 1, 0, {}),
+                   demo.fitGrammar(Cg, 1, 0, null)],
+            ([a, b, c, d, e]) => a.ipaf.iterations === 4 && !a.ipaf.converged &&
+              JSON.stringify(a) === JSON.stringify(b) &&
+              JSON.stringify(c) === JSON.stringify(d) && JSON.stringify(c) === JSON.stringify(e));
+  } finally { console.warn = ow; }
+}
+
 // --- a pair under a caller's NON-normal node law is the exact mixture
 // over the nodes, as the lattice prices it (#742); referees are scipy's
 // sum_q w_q Phi((mu1 - mu0 - (V0 - V1) . F_q) / sqrt(D0 + D1)). The

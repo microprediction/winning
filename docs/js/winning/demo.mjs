@@ -336,6 +336,15 @@ function pow4Scale(amax) {
   return Math.max(-1022, Math.min(1022, e));
 }
 
+// its own import line, apart from the module header's (PR #765 edits that)
+import { checkOpts, OPT_HINTS } from "./core.mjs";
+// fitGrammar's own option keys (see checkOpts in core.mjs): a misspelled
+// {maxIters: 2} or {toll: 1e-2} was silently dropped and ipaf ran the
+// default 500-sweep budget to 1e-12 (#766). python's fit_covariance is a
+// keyword signature, so it raises TypeError on an unknown keyword.
+const FIT_GRAMMAR_OPTS = new Set(["method", "maxIter", "tol"]);
+const FIT_GRAMMAR_OBJECT_OPTS = new Set(["k", "m", "method", "maxIter", "tol"]);
+
 /* fitGrammar(C, k = 3, m = 4[, opts]) or fitGrammar(C, opts), opts =
    { k, m, method, maxIter, tol }. Returns { V, D } columns for
    raceProbabilities.
@@ -366,7 +375,10 @@ function pow4Scale(amax) {
    contrast_residual_max); V and D do not depend on it. The residual stage then promotes the top-m eigencolumns
    of the remaining projected residual, not of P(C - V V')P. */
 export function fitGrammar(C, k = 3, m = 4, opts = undefined) {
-  if (k !== null && typeof k === "object") { opts = k; k = opts.k ?? 3; m = opts.m ?? 4; }
+  if (k !== null && typeof k === "object") {
+    checkOpts(k, FIT_GRAMMAR_OBJECT_OPTS, "fitGrammar", OPT_HINTS);
+    opts = k; k = opts.k ?? 3; m = opts.m ?? 4;
+  } else if (opts != null) checkOpts(opts, FIT_GRAMMAR_OPTS, "fitGrammar", OPT_HINTS);
   opts = opts ?? {};
   const method = opts.method ?? "eig";
   if (method !== "eig" && method !== "ipaf")
