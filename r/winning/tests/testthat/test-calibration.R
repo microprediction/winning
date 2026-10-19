@@ -290,3 +290,23 @@ test_that("a common translation across the lattice edge keeps the contrast (#585
     expect_lt(max(abs(state_prices_from_offsets(d, c(-3, 3, 1) + s) - base)), 1e-12)
   expect_gt(base[1], 0.9)
 })
+
+test_that("an offset of exactly +-(L - 2) is priced exactly, not clustered (#773)", {
+  d <- c(0, 0, 1/3, 1/3, 1/3, 0, 0)      # L = 3, support {-1, 0, 1}
+  for (off in list(c(0, 1), c(0, -1), c(1, 0), c(-1, 0))) {
+    direct <- state_prices_from_offsets(d, off)
+    for (md in 0:3)                        # was 0.634 (and [1, 0] at depth 0)
+      expect_lt(max(abs(ability_implied_state_prices(off, d, max_depth = md) - direct)), 1e-15)
+  }
+  expect_lt(max(abs(state_prices_from_offsets(d, c(0, 1)) - c(7/9, 2/9))), 1e-15)
+  # L = 5, support {-2..2}: a runner at exactly -3 stays on the lattice
+  d5 <- c(0, 0, 0, rep(0.2, 5), 0, 0, 0)
+  off <- c(-1, 0, 1, 1, -1, 0, -3, 0)
+  expect_lt(max(abs(ability_implied_state_prices(off, d5) - state_prices_from_offsets(d5, off))), 1e-15)
+  # neighbours, pinned from origin/main 7af3ed1c: just inside was already
+  # exact and just past the endpoint still hangs and clusters
+  expect_lt(max(abs(ability_implied_state_prices(c(0, 1 - 1e-9), d) -
+                    c(0.7777777775000001, 0.22222222250000007))), 1e-15)
+  expect_lt(max(abs(ability_implied_state_prices(c(0, 1 + 1e-9), d) -
+                    c(0.633744856100823, 0.36625514389917707))), 1e-15)
+})

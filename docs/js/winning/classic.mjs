@@ -407,8 +407,11 @@ function extendedStatePrices(density, offsets, maxDepth, unitRatio) {
       if (o > L - 2) right.push(i);
       return;
     }
-    if (Math.floor(o) + sLo < -L || o <= -L + 2) left.push(i);
-    if (Math.ceil(o) + sHi > L || o >= L - 2) right.push(i);
+    // lowHigh represents an offset of exactly +-(L - 2): only one past it
+    // is clamped. The inclusive test sent [0, 1] at L = 3 to the cluster
+    // path, [0.634, 0.366] against the exact [7/9, 2/9] (#773)
+    if (Math.floor(o) + sLo < -L || o < -L + 2) left.push(i);
+    if (Math.ceil(o) + sHi > L || o > L - 2) right.push(i);
   });
   if (!left.length && !right.length) return statePricesFromOffsets(density, co);
   if (maxDepth === 0) {

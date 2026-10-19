@@ -340,8 +340,10 @@ ability_implied_state_prices <- function(ability, density, unit = 1.0,
     right <- which(co > L - 2)
   } else {
     supp <- which(density > 1e-12) - 1L - L
-    left <- which(floor(co) + min(supp) < -L | co <= -L + 2)
-    right <- which(ceiling(co) + max(supp) > L | co >= L - 2)
+    # low_high represents an offset of exactly +-(L - 2); only one past it
+    # is clamped, so the range test is strict (#773)
+    left <- which(floor(co) + min(supp) < -L | co < -L + 2)
+    right <- which(ceiling(co) + max(supp) > L | co > L - 2)
   }
   if (!length(left) && !length(right))
     return(state_prices_from_offsets(density, co))
