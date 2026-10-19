@@ -815,6 +815,57 @@ function badCovariance(C, where) {
       throw new Error(`${where}: C is not positive semidefinite (variance [${a}] = ${C[a][a]} < 0)`);
 }
 
+/* validateCovariance's verdict on C (#782), cheaply. Its Jacobi
+   eigensolve is about 100 Choleskys, and these helpers run once PER
+   RUNNER on the same C: validating every call cost 190x a single GHK
+   setup at n = 200. So an ordinary C is accepted by one Cholesky of the
+   correlation matrix R + 0.5e-8 I, which succeeds only if min eig(R) >
+   -0.5e-8, well inside validateCovariance's -1e-8 (Cholesky's backward
+   error in these diagonal-free units is ~n eps). Anything else --
+   a negative or zero variance, or a failed pivot -- goes to
+   validateCovariance itself, so the refusals and their messages are its
+   own. An accepted C is remembered per matrix object with a copy of its
+   entries, compared in O(n^2), so the n per-runner calls on one field pay
+   for one Cholesky and a C edited in place is checked again. */
+const acceptedC = new WeakMap();
+function sameEntries(seen, C) {
+  const n = C.length;
+  if (seen.length !== n * n) return false;
+  for (let a = 0; a < n; a++) {
+    const c = C[a];
+    if (c.length !== n) return false;
+    for (let b = 0; b < n; b++) if (seen[a * n + b] !== c[b]) return false;
+  }
+  return true;
+}
+function clearlyPsd(C) {
+  const n = C.length, sd = new Float64Array(n);
+  for (let a = 0; a < n; a++) {
+    if (!(C[a][a] > 0)) return false;
+    sd[a] = Math.sqrt(C[a][a]);
+  }
+  const L = new Float64Array(n * n);
+  for (let a = 0; a < n; a++) {
+    for (let b = 0; b <= a; b++) {
+      let s = a === b ? 1 + 0.5e-8 : 0.5 * (C[a][b] + C[b][a]) / sd[a] / sd[b];
+      for (let k = 0; k < b; k++) s -= L[a * n + k] * L[b * n + k];
+      if (a === b) {
+        if (!(s > 0)) return false;
+        L[a * n + a] = Math.sqrt(s);
+      } else L[a * n + b] = s / L[b * n + b];
+    }
+  }
+  return true;
+}
+function validatedOnce(C, where) {
+  const seen = acceptedC.get(C);
+  if (seen && sameEntries(seen, C)) return;
+  if (!clearlyPsd(C)) validateCovariance(C, `${where}: C`);
+  const n = C.length, copy = new Float64Array(n * n);
+  for (let a = 0; a < n; a++) copy.set(C[a], a * n);
+  acceptedC.set(C, copy);
+}
+
 function diffProblem(mu, C, i, where) {
   // mean and covariance of (x_j - x_i)_{j != i}
   const n = mu.length, m = new Float64Array(n - 1);
@@ -822,8 +873,11 @@ function diffProblem(mu, C, i, where) {
   // validateCovariance also uses), symmetric within validateCovariance's
   // tolerance and no negative variance. The difference covariance is built
   // from the symmetrized C so C and C' price the same way (a tolerance-
-  // declared asymmetry must not pick a triangle, #726 residual), and an
-  // indefinite C is rejected by the contrast Cholesky pivots below.
+  // declared asymmetry must not pick a triangle, #726 residual). The
+  // contrast pivots alone do NOT reject an indefinite C: differencing
+  // removes the common-mode direction, so [[1, -2], [-2, 1]] (eigenvalue
+  // -1 along 1) has a positive contrast and priced 0.658 (#782). The full
+  // PSD check is validateCovariance's, once per matrix (validatedOnce).
   if (!Array.isArray(C) || C.length !== n)
     throw new Error(`${where}: C must be a ${n} x ${n} covariance matrix`);
   for (let a = 0; a < n; a++)
@@ -848,6 +902,7 @@ function diffProblem(mu, C, i, where) {
   if (asym > 1e-8 * Math.max(amax, 1e-300))
     throw new Error(`${where}: C is not symmetric (max asymmetry ${asym.toExponential(2)}); ` +
                     "pass (C + C')/2 if the asymmetry is numerical noise");
+  validatedOnce(C, where);                                     // #782
   // Build the difference covariance from the symmetrized C: validateCovariance
   // averages every accepted pair (C + C')/2 before its PSD check, so a
   // tolerance-declared asymmetry must not select a triangle. Averaging each

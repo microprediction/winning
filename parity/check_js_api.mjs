@@ -3242,6 +3242,60 @@ accepts("dividendImpliedAbility keeps the favourite first at unit 0.1 (#649)",
           c => c.reduce((x, y) => x + y, 0) === 10);
 }
 
+// --- GHK and Mendell-Elston refuse a C whose negative eigenvalue lies in
+// the common-mode direction (#782): differencing hides it, so the contrast
+// pivots passed [[1, -2], [-2, 1]] and both arms priced Phi(1/sqrt 6)
+{
+  const C = [[1, -2], [-2, 1]];
+  rejects(demo.ghkPrepareOne, [[0, 1], C, 0],
+          "ghkPrepareOne refuses an indefinite C with a PSD contrast (#782)", "positive semidefinite");
+  rejects(demo.mendellElstonOne, [[0, 1], C, 0],
+          "mendellElstonOne refuses an indefinite C with a PSD contrast (#782)", "positive semidefinite");
+  // every matrix validateCovariance refuses for indefiniteness, both arms
+  // refuse; every one it accepts, both arms accept: PSD A plus a common
+  // shift a 11', which no contrast can see
+  const r = demo.rng(782);
+  let agree = 0, total = 0, bad = [];
+  for (let t = 0; t < 40; t++) {
+    const n = 2 + (t % 5);
+    const A = Array.from({ length: n }, () => Array.from({ length: n }, () => r.n()));
+    const P = A.map((ri, i) => A.map((rj, j) => ri.reduce((s, v, k) => s + v * rj[k], 0) + (i === j ? 0.1 : 0)));
+    const minDiag = Math.min(...P.map((row, i) => row[i]));
+    const a = -minDiag * (0.2 + 0.75 * r.u());          // keeps every variance positive
+    const Cs = P.map(row => row.map(v => v + a));
+    const mu = Array.from({ length: n }, (_, i) => 0.1 * i);
+    let refV = false, refG = false, refM = false;
+    try { demo.validateCovariance(Cs); } catch (e) { refV = true; }
+    try { demo.ghkPrepareOne(mu, Cs, 0); } catch (e) { refG = true; }
+    try { demo.mendellElstonOne(mu, Cs, 0); } catch (e) { refM = true; }
+    total++;
+    if (refV === refG && refV === refM) agree++; else bad.push(t);
+  }
+  holds("dense baselines refuse exactly what validateCovariance refuses (#782)",
+        agree === total, `${agree}/${total} ${bad}`);
+  // a C edited in place after a valid call is validated again
+  const E = [[1, 0.2], [0.2, 1]];
+  demo.mendellElstonOne([0, 1], E, 0);
+  E[0][1] = E[1][0] = -2;
+  rejects(demo.mendellElstonOne, [[0, 1], E, 0],
+          "a C edited in place to indefinite is validated again (#782)", "positive semidefinite");
+  rejects(demo.ghkPrepareOne, [[0, 1], E, 1],
+          "ghkPrepareOne re-validates an edited C too (#782)", "positive semidefinite");
+  // the boundary is validateCovariance's -1e-8 in correlation units, not
+  // the Cholesky fast path's: I + a 11' with common-mode eigenvalue -eps
+  let same = true;
+  for (const eps of [0.3e-8, 0.7e-8, 0.95e-8, 1.05e-8, 2e-8]) {
+    const a = -(1 + eps) / (3 + eps);
+    const Cb = [0, 1, 2].map(i => [0, 1, 2].map(j => (i === j ? 1 : 0) + a));
+    const ok = g => { try { g(); return true; } catch (e) { return false; } };
+    const v = ok(() => demo.validateCovariance(Cb));
+    same = same && v === (eps < 1e-8) &&
+      v === ok(() => demo.ghkPrepareOne([0, 0.1, 0.2], Cb.map(r => r.slice()), 0)) &&
+      v === ok(() => demo.mendellElstonOne([0, 0.1, 0.2], Cb.map(r => r.slice()), 1));
+  }
+  holds("dense baselines share validateCovariance's -1e-8 boundary (#782)", same);
+}
+
 // --- a pair under a caller's NON-normal node law is the exact mixture
 // over the nodes, as the lattice prices it (#742); referees are scipy's
 // sum_q w_q Phi((mu1 - mu0 - (V0 - V1) . F_q) / sqrt(D0 + D1)). The
