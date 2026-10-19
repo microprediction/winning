@@ -421,3 +421,59 @@ def test_single_cluster_common_loading_is_a_gauge_471(c):
     assert np.abs(block_race_probabilities(mu, cl, L + c, D) - p0).max() < tol
     assert np.abs(block_race_jacobian(mu, cl, L + c, D) - J0).max() < tol
     assert np.abs(abilities_from_block_race(p0, cl, L + c, D)[0] - a0).max() < 1e-8
+
+
+# --- #780: a scalar tree leaf loading is one loading for every runner ---
+
+def _tree_780():
+    mu = np.array([-.5, -.1, .2, .4])
+    cluster = np.array([0, 0, 1, 1])
+    D = np.array([.8, .9, 1., 1.1])
+    parent = np.array([2, 2, -1])
+    return mu, cluster, D, parent
+
+
+@pytest.mark.parametrize("strength", [[0., 0., .4], [0., 0., 0.]])
+@pytest.mark.parametrize("which", ["probabilities", "jacobian"])
+def test_tree_scalar_loading_matches_expanded(which, strength):
+    """Python indexed the 0-d loading by runner order and raised
+    IndexError; the scalar must now price exactly as its expansion."""
+    from winning.factor import blocks as B
+    f = getattr(B, f"tree_race_{which}")
+    mu, cluster, D, parent = _tree_780()
+    lam = np.array(strength)
+    expanded = f(mu, cluster, np.full(4, .3), D, parent, lam, points=129)
+    scalar = f(mu, cluster, .3, D, parent, lam, points=129)
+    assert np.array_equal(scalar, expanded)
+    assert np.array_equal(f(mu, cluster, np.float64(.3), D, parent, lam,
+                            points=129), expanded)
+
+
+def test_tree_expanded_loading_reference_unchanged():
+    """The vector spelling the fix leaves alone, at the issue's values."""
+    from winning.factor.blocks import tree_race_probabilities
+    mu, cluster, D, parent = _tree_780()
+    p = tree_race_probabilities(mu, cluster, [.3] * 4, D, parent,
+                                np.array([0., 0., .4]), points=129)
+    assert np.allclose(p, [0.42684000, 0.25205727, 0.17948344, 0.14161929],
+                       atol=1e-7)
+
+
+def test_structured_tree_scalar_loading_matches_expanded():
+    from winning.factor.races import race_probabilities
+    from winning.factor.structures import Tree
+    mu, cluster, D, parent = _tree_780()
+    lam = np.array([0., 0., .4])
+    a = race_probabilities(mu, structure=Tree(cluster, .3, D, parent, lam),
+                           points=129)
+    b = race_probabilities(mu, structure=Tree(cluster, np.full(4, .3), D,
+                                              parent, lam), points=129)
+    assert np.array_equal(a, b)
+
+
+def test_tree_rank_r_loading_still_refused():
+    from winning.factor.blocks import tree_race_probabilities
+    mu, cluster, D, parent = _tree_780()
+    with pytest.raises(NotImplementedError, match="rank-one"):
+        tree_race_probabilities(mu, cluster, np.full((4, 2), .3), D, parent,
+                                np.array([0., 0., .4]), points=129)

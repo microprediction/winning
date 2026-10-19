@@ -205,3 +205,21 @@ test_that("ordinary nested races are unchanged (#477, #722)", {
   expect_equal(nested_race_probabilities(mu + 3.7, cl, ld, D, coupling = g,
                                          gamma = .8), ref, tolerance = 1e-12)
 })
+
+test_that("tree scalar loading equals its expansion (#780)", {
+  # .scalar_loading(.3) kept length one and v[ord] filled NA for the rest
+  mu <- c(-.5, -.1, .2, .4); cl <- c(1L, 1L, 2L, 2L)
+  D <- c(.8, .9, 1, 1.1); pa <- c(3L, 3L, 0L)
+  for (st in list(c(0, 0, .4), c(0, 0, 0))) {
+    expect_identical(
+      tree_race_probabilities(mu, cl, .3, D, pa, st, points = 129),
+      tree_race_probabilities(mu, cl, rep(.3, 4), D, pa, st, points = 129))
+    expect_identical(
+      tree_race_jacobian(mu, cl, .3, D, pa, st, points = 129),
+      tree_race_jacobian(mu, cl, rep(.3, 4), D, pa, st, points = 129))
+  }
+  p <- tree_race_probabilities(mu, cl, rep(.3, 4), D, pa, c(0, 0, .4),
+                               points = 129)
+  expect_lt(max(abs(p - c(0.42684000, 0.25205727, 0.17948344, 0.14161929))),
+            1e-6)
+})

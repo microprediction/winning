@@ -402,6 +402,7 @@ tree_race_probabilities <- function(mu, cluster, loading, D, parent,
   m <- -mu
   sd <- sqrt(.as_idio(D, length(mu), positive = TRUE))
   v <- .scalar_loading(loading)
+  if (length(v) == 1L) v <- rep(v, length(mu))   # scalar = common (#780)
   lam <- as.numeric(strength)
   n <- length(m)
   inv <- .tree_leaf_index(cluster, leaves)            # (#372)
@@ -690,6 +691,7 @@ tree_race_jacobian <- function(mu, cluster, loading, D, parent, strength,
   m <- -mu
   sd <- sqrt(.as_idio(D, length(mu), positive = TRUE))
   v <- .scalar_loading(loading)
+  if (length(v) == 1L) v <- rep(v, length(mu))   # scalar = common (#780)
   lam <- as.numeric(strength)
   n <- length(m)
   inv <- .tree_leaf_index(cluster, leaves)            # (#372)
