@@ -25,7 +25,7 @@ emits utilities passes `mu = -u`). All take leading batch dims.
 | `thurstone_nll(mu, winner, sd=None, *, V=None, reduction="mean")` | −log P(winner) | analytic |
 | `ordered_prefix_log_prob(mu, order (..., k), sd=None)` | log P(order[0] 1st, …, order[k-1] k-th) | autograd |
 | `topk_log_prob(mu, k, sd=None)` | `(..., n)` log P(i among the k best) | autograd |
-| `race_lattice(mu, sd, ...)` | `(..., points)` the lattice used | — |
+| `race_lattice(mu, sd, ...)` | `(..., points)` the win lattice (prefix / top-k use the wider event lattice below) | — |
 
 * **Shapes.** `mu (..., n)`; `sd` `None`, scalar or broadcastable to
   `mu`; gradients flow to `mu` and `sd` (parameterise `sd = exp(s)`
@@ -122,6 +122,47 @@ winning's default bulk window, whose rare-winner post-check is
 normal-only (8e-6 relative off the converged span lattice; this module
 3e-10, the span reference's own floor).
 
+### Prefix and top-k: the event lattice (#753)
+
+The win window is right for the win event only: it stops where every
+**winner** integrand is negligible. A later place, or a top-k
+membership, lives near its own runner, which can be far to the right
+(on the win lattice P(0 then 1) at `mu = [0, 10]` came out 0.503, and
+k = 3 orders of *ordinary* three-runner fields with sd 0.3–2 were off by
+up to 88%). `ordered_prefix_log_prob` and `topk_log_prob` therefore use
+an **event lattice** (`losses._event_lattice_rows`):
+
+* **left:** the win lattice's (it already covers `min_i mu_i + sd_i q_lo`,
+  relative to each runner's share).
+* **right:** `hi = max(hi_win, max_i mu_i + q_hi · max_i sd_i)`,
+  `S(q_hi) = delta`. The widest sd, not each runner's own: the last runner
+  of a prefix must finish behind the others, so its mass sits at or left
+  of about `max_i mu_i`, often deep in its own right tail (P(1 then 0) at
+  `mu = [0, 5]`, sd `[1, 0.3]` is 8e-7, all near x = 4.6). For a
+  log-concave base `S(z+q)/S(z) ≤ S(q)/S(0)` for `z ≥ 0`, so what is cut
+  right of `hi` is ~delta *relative to the event*. (`mu_i + q_hi sd_i`
+  per runner left 7e-7 relative error on that event.)
+* **points:** `max(points, ⌈span / dx⌉ + 1)` with `dx = 0.3 · min sd`,
+  capped at 4097 (or `points=`, if larger). For k ≥ 3 prefixes, whose
+  nested cumulative integrals are fourth order rather than spectral, `dx`
+  is also no coarser than the win lattice's at `points=`, up to `2·points`,
+  so on ordinary fields they do not lose resolution to the wider window
+  (~1.3–1.6× the points there).
+  The count is the batch maximum (all rows share it) and reading it is
+  one host sync per call. For k ≤ 2 and top-k, ordinary fields keep
+  `points=`; separated or very heterogeneous fields get more.
+* **past the cap** (span > ~1230 min sd) the window still covers every
+  event and only the spacing grows: pairs and top-k sums stay at ~1e-11
+  up to dx = 0.5 min sd (span ~2000 sd), ~3e-9 at dx = 1 sd, and 2e-2 at
+  dx = 2 sd (span 8000 sd). Pass `points=` to go further.
+* the prefix integrand's "rest" (`Σ log S` over runners not in the
+  prefix) is summed directly: as `Σ_all − Σ_prefix` it cancelled where a
+  prefix runner's `log S` is huge, which the wider window reaches (Gumbel
+  `log S = −e^u` is ~−1e17 forty sd out).
+
+`race_log_prob`, `thurstone_nll` and the factor race keep the win
+lattice, bitwise unchanged.
+
 **float32:** finite log-probs and gradients for 10- and 40-sd longshots
 (both bases); absolute error of `p` ~1e-7 against float64. Use float64
 for evaluation and anything that reads small probabilities.
@@ -165,26 +206,30 @@ accuracy, same as CPU float32) and the window is computed on the CPU.
   also picks 15 nodes; sharp fields (loadings ≫ sd) need more nodes, and
   rank ≥ 3 is a `nodes**rank` blow-up (use winning's Sobol rule
   offline).
-* `ordered_prefix_log_prob`: k ≤ 2 spectral (`H_1 = F` exactly); k = 3
-  adds one cumulative trapezoid with an Euler–Maclaurin end correction
-  (fourth order): 3e-5 relative at 257 points, 1e-7 at 1025. Each extra
+* `ordered_prefix_log_prob` (event lattice): k ≤ 2 spectral (`H_1 = F`
+  exactly): ≤ 1e-11 relative against exact references on fields
+  separated by 5–40 sd with sd 0.3–2, down to 1e-300 events (Gumbel:
+  ~1e-9 on the rarest, its right flank is sharper than its sd). k = 3
+  adds one cumulative trapezoid with an Euler–Maclaurin end correction,
+  now across the whole wider span; the correction holds there (measured
+  fourth-order convergence, 4× points → ~256× smaller error), but its
+  constant grows with the log-slope of the cumulative integral's left
+  tail, so the error is set by how rare the event is. On random
+  three-runner fields with sd 0.3–2 at 257 points: ≤ 2e-7 relative for
+  events above 5e-5 (1e-9 at 1025), up to ~1e-4 near 1e-12; 1e-3–5e-2
+  for the 1e-45–1e-176 orders of a 10–20 sd field (7e-8–7e-6 at 4097). In log terms that is an absolute log-loss error
+  of the same size. (winning's own `ordered_probabilities(k=3)` shows the
+  same rare-event pattern: 5e-5 near 1e-12, 2e-3 below, 0.17 below
+  1e-43.) Each extra
   level adds one such cumulative integral, so the **full permutation
   likelihood** (k = n) is available only through this nested recursion
   and its error grows with k — use short prefixes.
-* `topk_log_prob`: prefix/suffix Poisson-binomial count programs joined
-  per runner (no deconvolution), ≤ 1e-9 relative vs winning; O(n·L·k²),
-  a Python loop over runners, autograd tape O(n·L·k). The count program
-  is in linear space, so a membership below ~1e-308 clamps to
-  log(tiny) = -708.4.
-* Window for k ≥ 2 (#753). Both functions' k ≥ 2 events sit on a lattice
-  whose right edge covers every runner to its own upper quantile
-  (`_lattice_rows(..., cover_all=True)`). The winner window cuts where
-  every winner integrand is negligible, but later places carry their mass
-  past that cut. On the winner window, P(0 then 1) at a gap of 10 came
-  back 0.503 for 1 − 8e-13, and top-2 memberships summed to 1.9999997.
-  k = 1 stays on the winner window, so it is `race_log_prob` exactly. The
-  point count is unchanged, so the cost is unchanged; the spacing is
-  wider on spread fields.
+* `topk_log_prob` (event lattice): prefix/suffix Poisson-binomial count
+  programs joined per runner (no deconvolution), ≤ 1e-10 relative vs
+  exact / winning on ordinary to 40-sd fields, Σ = k to ~1e-12;
+  O(n·L·k²), a Python loop over runners, autograd tape O(n·L·k). The
+  count programs are in the linear domain, so a membership below ~1e-300
+  underflows.
 
 ## Tests (tests/test_torch_heads.py; `importorskip("torch")`)
 
@@ -199,7 +244,14 @@ n batch = row-by-row, permutation equivariance, float32 tails
 its gradcheck, zero loadings = independent race, ordered prefix vs
 `ordered_probabilities` (k = 1, 2, 3) and = Plackett–Luce under Gumbel,
 top-k vs `top_k_probabilities`, MPS float32 vs CPU float64 (if present),
-and `import winning` not importing torch (subprocess).
+and `import winning` not importing torch (subprocess). #753 (event
+lattice): pair orders = closed form at gaps 5–40 sd and mixed sd; k = 2
+and k = 3 orders of three runners and top-2 of three against exact
+quadrature references; full orderings sum to 1 (n = 3, 4); top-k sums to
+k (both bases); random fields (spread 1–25 sd) vs `ordered_probabilities`
+/ `top_k_probabilities`; Plackett–Luce under Gumbel at 40 sd; mixed batch
+= row by row; padding invariance; lattice size rule and cap; gradcheck,
+float32 and MPS on separated fields.
 
 ## Limits and open questions
 
