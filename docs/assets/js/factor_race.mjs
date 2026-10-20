@@ -99,8 +99,11 @@ function lattice(Mall, sd, points, spans, resolution = 1) {
 }
 
 /* The unnormalised single-removal rows q[i][j] = P(j wins | i removed) on
-   an explicit lattice of `pts` points over [lo, hi]: the refinement pass
-   of the deletion ensemble when the shared lattice was capped (#455). */
+   an explicit lattice of `pts` points over [lo, hi]: the deletion
+   ensemble's own resolution pass (#455, #785). REMOVAL_CAP and
+   REMOVAL_POINT_BUDGET are python's _REMOVAL_CAP and
+   _REMOVAL_POINT_BUDGET (winning/factor/races.py). */
+const REMOVAL_CAP = 16385;
 const REMOVAL_POINT_BUDGET = 4000000;
 function removalRows(M, sd, base, W, lo, hi, pts) {
   const N = sd.length, dx = (hi - lo) / (pts - 1);
@@ -612,6 +615,18 @@ export function winProbabilitiesFactor(mu, V, D, F, W, opts = {}) {
   // row mass 1.0096 and threw (#411; python removal_shares)
   const pairRemoval = !!opts.deletions && N === 2;
   const q = opts.deletions && !pairRemoval ? Array.from({ length: N }, () => new Float64Array(N)) : null;
+  // The deletion rows have their own resolution target, spacing sd_min/8
+  // over the same window, as python's removal_shares: a lattice that is
+  // fine for the forward shares can still be too coarse for them. A
+  // Laplace field at 933 uncapped points against a target of 3729 gave a
+  // row 70 bp wrong at mass 0.9962 (#785). When the target exceeds this
+  // lattice the rows are computed on their own lattice of
+  // min(target, REMOVAL_CAP) points (and refined past that below), so
+  // the forward pass skips them.
+  const needRemoval = q ? Math.ceil((grid.hi - grid.lo) / (Math.min(...sd) / 8)) + 1 : 0;
+  const removalPts = Math.min(needRemoval, REMOVAL_CAP);
+  const ownRemoval = q && removalPts > L;
+  const qLoop = q && !ownRemoval;
 
   const logS = Array.from({ length: N }, () => new Float64Array(L));
   const f = Array.from({ length: N }, () => new Float64Array(L));
@@ -660,7 +675,7 @@ export function winProbabilitiesFactor(mu, V, D, F, W, opts = {}) {
         }
       }
     }
-    if (q) {
+    if (qLoop) {
       for (let i = 0; i < N; i++) {
         for (let j = 0; j < N; j++) {
           if (j === i) continue;
@@ -695,12 +710,14 @@ export function winProbabilitiesFactor(mu, V, D, F, W, opts = {}) {
     res.deletionMass = [1, 1];
     res.deletions = [[0, 1], [1, 0]];
   }
-  // grid.capped can come from a base's feature width (a sharp skew-normal)
-  // while the removal spacing needR is already met by this lattice; the
-  // loop then ran zero times and refused on its Infinity sentinel (#697)
-  const needRemoval = q && grid.capped
-    ? Math.ceil((grid.hi - grid.lo) / (Math.min(...sd) / 8)) + 1 : 0;
-  if (q && grid.capped && needRemoval > L) {
+  if (ownRemoval) {
+    const r = removalRows(M, sd, base, W, grid.lo, grid.hi, removalPts);
+    for (let i = 0; i < N; i++) q[i] = r[i];
+  }
+  // a base's feature width can cap the forward lattice while the removal
+  // target is already met; nothing then needs refining (#697)
+  const start = ownRemoval ? removalPts : L;
+  if (q && needRemoval > start) {
     // A capped lattice cannot be policed by the row masses: cell errors
     // of opposite sign cancel in each row sum. A sd-9.3e-4 runner 50
     // units from a sd-10 one gave the row [0, 0.765, 0.235] at mass
@@ -709,12 +726,12 @@ export function winProbabilitiesFactor(mu, V, D, F, W, opts = {}) {
     // moving, and refuse if the budget runs out first.
     const MOVE_TOL = 1e-3;
     const needR = needRemoval;
-    const ceiling = Math.max(L, Math.min(needR, Math.floor(REMOVAL_POINT_BUDGET / N)));
+    const ceiling = Math.max(start, Math.min(needR, Math.floor(REMOVAL_POINT_BUDGET / N)));
     const norm = (rows) => rows.map((r) => {
       const t = r.reduce((a, b) => a + b, 0);
       return Array.from(r, (v) => v / t);
     });
-    let prev = norm(q), moved = Infinity, pts = L, cur = q;
+    let prev = norm(q), moved = Infinity, pts = start, cur = q;
     while (pts < ceiling) {
       pts = Math.min(2 * pts - 1, ceiling);
       cur = removalRows(M, sd, base, W, grid.lo, grid.hi, pts);
@@ -729,7 +746,7 @@ export function winProbabilitiesFactor(mu, V, D, F, W, opts = {}) {
       throw new Error(
         `deletion rows: the field needs ${needR} lattice points to resolve ` +
         `its sharpest runner and the budget stops at ${ceiling}; ` +
-        (pts === L ? `the lattice already has ${L}, so no refinement could be measured. `
+        (pts === start ? `the lattice already has ${start}, so no refinement could be measured. `
                    : `refining to there still moved a share by ${moved.toExponential(2)}. `) +
         "The row " +
         "masses are not evidence here -- cell errors of opposite sign " +
