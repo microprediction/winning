@@ -509,7 +509,7 @@ def _structured(lo, up, mu, V, D):
         var = var[keep]
     if len(D) == 1:
         return _univariate(lo, up, mu, var[0])
-    V = _canonical_loadings(V)
+    V = _canonical_loadings(V, np.sqrt(var))
     if V.shape[1] == 0:
         # rank zero is the exact independent product
         return float(np.exp(_log_interval_mass(up - mu, lo - mu,
@@ -535,7 +535,7 @@ def _structured(lo, up, mu, V, D):
     return _recentered(V, s, mu, lo, up), "factor-recentered"
 
 
-def _canonical_loadings(V):
+def _canonical_loadings(V, scale=None):
     """V with the factor basis fixed by V V' alone.
 
     Any V O with O orthogonal is the same Gaussian, but the node rules
@@ -548,6 +548,15 @@ def _canonical_loadings(V):
     one factor split across dependent columns. One r x r
     eigendecomposition. Signs are fixed by _sign_fixed where a rule needs
     them.
+
+    The RANK is decided in coordinate-free units, from V with each row
+    divided by its marginal sd `scale`. On raw V'V a change of units of
+    one coordinate (rows scaled 2^12 against 2^-11) pushed a real
+    direction below the 1e-13 cutoff and a rank-two law was truncated
+    to rank one, +162% (#786). Where the two tests agree the raw basis
+    is kept, so ordinary inputs are bitwise unchanged; where they differ
+    the kept columns come from the row-normalised eigenvectors, whose
+    span is accurate where the raw eigenvectors' is not.
     """
     V = V[:, np.any(V != 0.0, axis=0)]
     r = V.shape[1]
@@ -557,7 +566,16 @@ def _canonical_loadings(V):
         lam, U = np.linalg.eigh(V.T @ V)
         order = np.argsort(lam)[::-1]
         lam, U = lam[order], U[:, order]
-        U = U[:, lam > 1e-13 * lam[0]]
+        keep = lam > 1e-13 * lam[0]
+        if scale is not None:
+            Vn = V / scale[:, None]
+            G = Vn.T @ Vn
+            ln = np.linalg.eigvalsh(G)
+            k = int((ln > 1e-13 * ln[-1]).sum())
+            if k != int(keep.sum()):
+                Un = np.linalg.eigh(G)[1][:, ::-1]
+                return V @ Un[:, :k]
+        U = U[:, keep]
         V = V @ U
     return V
 

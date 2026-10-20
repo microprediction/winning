@@ -426,3 +426,56 @@ def test_small_unit_orthant_is_the_same_law_173(fm, c):
                         V=np.full((2, 1), c * math.sqrt(rho)),
                         D=np.full(2, c * c * (1 - rho)))
     assert p == pytest.approx(exact, abs=1e-8)
+
+
+# --- #786: the factor rank does not depend on coordinate units ---
+
+def test_row_units_do_not_delete_a_factor_786(fm):
+    # the #518 fixture with coordinate i expressed in c_i times its unit
+    # (exact powers of two). Raw V'V's eigenvalue ratio reached ~1e-13
+    # and the second real factor was dropped: 3.726e-4, +162%
+    V = np.array([[0.30812945940123476, -1.8936005031221805],
+                  [0.05423700319905680, -1.8882188805898732],
+                  [-0.04568751096449155, 1.2303149108078115],
+                  [-1.2824267666411462, -0.7947487032502422]])
+    D = np.array([0.48381594889619123, 0.607241434401239,
+                  0.2137039397661559, 0.5038986029743953])
+    mu = np.array([1.3435081180060733, 0.48784958537212353,
+                   0.20068268880906692, 1.449261738300165])
+    up = np.array([0.3670668335351432, -0.9140137229005407,
+                   -0.16906974496655425, 0.6067127817398206])
+    base = fm.mvn_cdf_fast_info(upper=up, mean=mu, V=V, D=D)
+    c = np.ldexp(np.ones(4), [-11, -11, -10, 12])
+    p, m = fm.mvn_cdf_fast_info(upper=up * c, mean=mu * c,
+                                V=V * c[:, None], D=D * c * c)
+    assert m == base[1] and p == pytest.approx(base[0], rel=1e-9)
+
+
+@pytest.mark.parametrize("c", [1.0, 1e6, 1e7, 1e8, 2.0 ** 399])
+def test_one_coordinate_in_large_units_786(fm, c):
+    # rho12 = 0, rho13 = rho23 = 1/sqrt(6) for every c; at 1e7 the rank
+    # test on raw V'V dropped a factor (1/6, 2.5 points low; #720 comment)
+    import math
+    exact = 0.125 + 2 * math.asin(1 / math.sqrt(6)) / (4 * math.pi)
+    s = np.array([c, 1.0, 1.0])
+    p = fm.mvn_cdf_fast(upper=np.zeros(3),
+                        V=np.array([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]])
+                        * s[:, None], D=s * s)
+    assert p == pytest.approx(exact, abs=1e-7)
+
+
+def test_ordinary_canonical_basis_is_unchanged_786(fm):
+    # where the raw and the row-normalised rank tests agree -- every
+    # ordinary input, including dependent columns -- the columns are the
+    # raw-V'V basis, bit for bit
+    mod = fm if fm.__name__ == "winning.fastmvn" else \
+        importlib.import_module("fastmvn.core")
+    canon = mod._canonical_loadings
+    rng = np.random.default_rng(786)
+    for r in (2, 3, 4):
+        for n in (3, 10, 50):
+            V = rng.normal(size=(n, r)) * rng.uniform(0.2, 2.0)
+            D = rng.uniform(0.1, 2.0, n)
+            for W in (V, np.column_stack([V, V[:, :1] * 0.5])):
+                scale = np.sqrt((W ** 2).sum(axis=1) + D)
+                assert np.array_equal(canon(W, scale), canon(W))

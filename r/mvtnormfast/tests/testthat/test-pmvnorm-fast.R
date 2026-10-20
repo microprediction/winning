@@ -514,6 +514,43 @@ test_that("a finite factor row whose sum of squares overflows (#720)", {
                0.5)
 })
 
+test_that("coordinate units do not delete a factor (#786)", {
+  V <- matrix(c(0.30812945940123476, -1.8936005031221805,
+                0.05423700319905680, -1.8882188805898732,
+                -0.04568751096449155, 1.2303149108078115,
+                -1.2824267666411462, -0.7947487032502422), 4, byrow = TRUE)
+  D <- c(0.48381594889619123, 0.607241434401239,
+         0.2137039397661559, 0.5038986029743953)
+  mu <- c(1.3435081180060733, 0.48784958537212353,
+          0.20068268880906692, 1.449261738300165)
+  up <- c(0.3670668335351432, -0.9140137229005407,
+          -0.16906974496655425, 0.6067127817398206)
+  base <- pmvnorm_fast(upper = up, mean = mu, V = V, D = D)
+  cc <- 2^c(-11, -11, -10, 12)     # was 3.726e-4: a real factor dropped
+  p <- pmvnorm_fast(upper = up * cc, mean = mu * cc, V = V * cc,
+                    D = D * cc^2)
+  expect_lt(abs(as.numeric(p) / as.numeric(base) - 1), 1e-9)
+  expect_identical(attr(p, "method"), attr(base, "method"))
+  # one coordinate in large units: 1/6 at 1e7 before (#720 comment)
+  ex <- 0.125 + 2 * asin(1 / sqrt(6)) / (4 * pi)
+  V3 <- matrix(c(1, 0, 0, 1, 1, 1), 3, byrow = TRUE)
+  for (c1 in c(1, 1e6, 1e7, 1e8, 2^399)) {
+    s <- c(c1, 1, 1)
+    expect_lt(abs(as.numeric(pmvnorm_fast(upper = rep(0, 3), V = V3 * s,
+                                          D = s^2)) - ex), 1e-7)
+  }
+  # ordinary inputs: the raw basis, bit for bit
+  set.seed(786)
+  for (r in 2:4) for (n in c(3, 10, 50)) {
+    W <- matrix(rnorm(n * r), n)
+    W2 <- cbind(W, 0.5 * W[, 1])
+    for (X in list(W, W2)) {
+      sc <- sqrt(rowSums(X^2) + runif(n, 0.1, 2))
+      expect_identical(.canonical_loadings(X, sc), .canonical_loadings(X))
+    }
+  }
+})
+
 test_that("a small-unit orthant is the same law (#173)", {
   rho <- 0.99
   ex <- 0.25 + asin(rho) / (2 * pi)
