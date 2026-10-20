@@ -3085,6 +3085,25 @@ accepts("dividendImpliedAbility keeps the favourite first at unit 0.1 (#649)",
 }
 
 {
+  // classic extended forward, W < L: an offset of exactly +-(L - 2) is
+  // represented by lowHigh, so it does not hang. [0, 1] at L = 3 was
+  // clustered to [0.634, 0.366] against the exact [7/9, 2/9] (#773)
+  const maxAbs = (a, b) => Math.max(...a.map((x, i) => Math.abs(x - b[i])));
+  const d = [0, 0, 1 / 3, 1 / 3, 1 / 3, 0, 0];
+  for (const off of [[0, 1], [0, -1], [1, 0], [-1, 0]])
+    for (const maxDepth of [0, 1, 3])
+      accepts(`[${off}] at L = 3, maxDepth ${maxDepth}, is the exact primitive (#773)`,
+              () => classic.abilityImpliedStatePrices(off, d, { maxDepth }),
+              p => maxAbs(p, classic.statePricesFromOffsets(d, off)) < 1e-15, p => String(p));
+  accepts("just past the L - 2 endpoint still hangs and clusters (#773)",
+          () => classic.abilityImpliedStatePrices([0, 1 + 1e-9], d),
+          p => maxAbs(p, [0.633744856100823, 0.36625514389917707]) < 1e-15, p => String(p));
+  for (const maxDepth of [-1, 1.5, true, NaN, Infinity])
+    rejects(classic.abilityImpliedStatePrices, [[0, 1], d, { maxDepth }],
+            `abilityImpliedStatePrices refuses maxDepth ${maxDepth} as python and R (#775)`, "whole number >= 0");
+}
+
+{
   // fitGrammar reports the worst pairwise contrast misfit (python's
   // contrast_residual_max); ipaf converged on the global residual alone
   // while an exact v v' + diag(D) had its 0-3 contrast 78x too large (#505)
