@@ -3202,6 +3202,151 @@ accepts("dividendImpliedAbility keeps the favourite first at unit 0.1 (#649)",
         loud.length === 0 && flagged === 0 && worst < 1, `worst ${worst}`);
 }
 
+// --- fitGrammar refuses a misspelled option in both call forms (#766):
+// {maxIters: 2} and {toll: 1e-2} were dropped and ipaf ran its default
+// 500-sweep, 1e-12 budget, reporting converged
+{
+  const v = [0, 0, 0, 1, 0, 0.7], Dg = [18, 15, 12, 0.08, 6, 0.05];
+  const Cg = v.map((x, i) => v.map((y, j) => x * y + (i === j ? Dg[i] : 0)));
+  for (const bad of [{ maxIters: 2 }, { toll: 1e-2 }, { method: "ipaf", nonsense: 1 }]) {
+    rejects(demo.fitGrammar, [Cg, 1, 0, { method: "ipaf", ...bad }],
+            `fitGrammar(C, k, m, ${JSON.stringify(bad)}) refuses (#766)`, "unknown option");
+    rejects(demo.fitGrammar, [Cg, { k: 1, m: 0, method: "ipaf", ...bad }],
+            `fitGrammar(C, {${Object.keys(bad)}}) refuses (#766)`, "unknown option");
+  }
+  // the documented keys still run, and the two forms agree exactly
+  const ow = console.warn; console.warn = () => {};
+  try {
+    accepts("fitGrammar's documented keys are unchanged in both forms (#766)",
+            () => [demo.fitGrammar(Cg, 1, 0, { method: "ipaf", maxIter: 2, tol: 1e-12 }),
+                   demo.fitGrammar(Cg, { k: 1, m: 0, method: "ipaf", maxIter: 2, tol: 1e-12 }),
+                   demo.fitGrammar(Cg, 1, 0), demo.fitGrammar(Cg, 1, 0, {}),
+                   demo.fitGrammar(Cg, 1, 0, null)],
+            ([a, b, c, d, e]) => a.ipaf.iterations === 4 && !a.ipaf.converged &&
+              JSON.stringify(a) === JSON.stringify(b) &&
+              JSON.stringify(c) === JSON.stringify(d) && JSON.stringify(c) === JSON.stringify(e));
+  } finally { console.warn = ow; }
+}
+
+// --- structureCov never reads a wide V's row count as the field size
+// under scalar D (#767): Factor(2 x 4 V, 1) is both a 4-runner rank-2
+// and a 2-runner rank-4 race (the pricer takes n from mu), and returned
+// the 2 x 2 covariance, which then crashed mcBatch on a 4-runner field
+{
+  const Vt = [[0.2, 0.3, -0.1, 0.5], [0.4, -0.2, 0.1, 0.6]];
+  const Vr = Vt[0].map((_, i) => Vt.map(row => row[i]));          // 4 x 2
+  rejects(demo.structureCov, [structures.Factor(Vt, 1)],
+          "structureCov(Factor(2 x 4 V, scalar D)) refuses as ambiguous (#767)", "ambiguous");
+  rejects(demo.structureCov, [structures.Factor([[0.1, 0.2, 0.3]], 1)],
+          "structureCov(Factor(1 x 3 V, scalar D)) refuses as ambiguous (#767)", "ambiguous");
+  const want = [[1.2, -0.02, 0.02, 0.34], [-0.02, 1.13, -0.05, 0.03],
+                [0.02, -0.05, 1.02, 0.01], [0.34, 0.03, 0.01, 1.61]];
+  const near = A => A.length === 4 && A.every((r, i) => r.length === 4 &&
+    r.every((v, j) => Math.abs(v - want[i][j]) < 1e-12));
+  accepts("structureCov: vector D disambiguates a transposed V; runner-major V with scalar D is unchanged (#767)",
+          () => [demo.structureCov(structures.Factor(Vt, [1, 1, 1, 1])),
+                 demo.structureCov(structures.Factor(Vr, 1)),
+                 demo.structureCov(structures.Factor(Vr, [1, 1, 1, 1])),
+                 demo.structureCov(structures.Factor([[0.3, 0.1], [0.2, -0.4]], 1)),
+                 demo.structureCov(structures.Factor([0.3, 0.1, -0.2], 1))],
+          ([a, b, c, sq, flat]) => near(a) && near(b) && near(c) &&
+            sq.length === 2 && Math.abs(sq[0][1] - (0.06 - 0.04)) < 1e-15 &&
+            flat.length === 3 && Math.abs(flat[0][1] - 0.03) < 1e-15);
+  // the disambiguated covariance drives the Monte Carlo arm on 4 runners
+  accepts("structureCov(Factor(V transposed, vector D)) feeds mcBatch (#767)",
+          () => { const c = [0, 0, 0, 0];
+                  demo.mcBatch([-0.5, 0, 0.5, 0.8],
+                    demo.raceFactor(demo.structureCov(structures.Factor(Vt, [1, 1, 1, 1]))),
+                    demo.rng(1), 10, c); return c; },
+          c => c.reduce((x, y) => x + y, 0) === 10);
+}
+
+// --- GHK and Mendell-Elston refuse a C whose negative eigenvalue lies in
+// the common-mode direction (#782): differencing hides it, so the contrast
+// pivots passed [[1, -2], [-2, 1]] and both arms priced Phi(1/sqrt 6)
+{
+  const C = [[1, -2], [-2, 1]];
+  rejects(demo.ghkPrepareOne, [[0, 1], C, 0],
+          "ghkPrepareOne refuses an indefinite C with a PSD contrast (#782)", "positive semidefinite");
+  rejects(demo.mendellElstonOne, [[0, 1], C, 0],
+          "mendellElstonOne refuses an indefinite C with a PSD contrast (#782)", "positive semidefinite");
+  // every matrix validateCovariance refuses for indefiniteness, both arms
+  // refuse; every one it accepts, both arms accept: PSD A plus a common
+  // shift a 11', which no contrast can see
+  const r = demo.rng(782);
+  let agree = 0, total = 0, bad = [];
+  for (let t = 0; t < 40; t++) {
+    const n = 2 + (t % 5);
+    const A = Array.from({ length: n }, () => Array.from({ length: n }, () => r.n()));
+    const P = A.map((ri, i) => A.map((rj, j) => ri.reduce((s, v, k) => s + v * rj[k], 0) + (i === j ? 0.1 : 0)));
+    const minDiag = Math.min(...P.map((row, i) => row[i]));
+    const a = -minDiag * (0.2 + 0.75 * r.u());          // keeps every variance positive
+    const Cs = P.map(row => row.map(v => v + a));
+    const mu = Array.from({ length: n }, (_, i) => 0.1 * i);
+    let refV = false, refG = false, refM = false;
+    try { demo.validateCovariance(Cs); } catch (e) { refV = true; }
+    try { demo.ghkPrepareOne(mu, Cs, 0); } catch (e) { refG = true; }
+    try { demo.mendellElstonOne(mu, Cs, 0); } catch (e) { refM = true; }
+    total++;
+    if (refV === refG && refV === refM) agree++; else bad.push(t);
+  }
+  holds("dense baselines refuse exactly what validateCovariance refuses (#782)",
+        agree === total, `${agree}/${total} ${bad}`);
+  // a C edited in place after a valid call is validated again
+  const E = [[1, 0.2], [0.2, 1]];
+  demo.mendellElstonOne([0, 1], E, 0);
+  E[0][1] = E[1][0] = -2;
+  rejects(demo.mendellElstonOne, [[0, 1], E, 0],
+          "a C edited in place to indefinite is validated again (#782)", "positive semidefinite");
+  rejects(demo.ghkPrepareOne, [[0, 1], E, 1],
+          "ghkPrepareOne re-validates an edited C too (#782)", "positive semidefinite");
+  // the boundary is validateCovariance's -1e-8 in correlation units, not
+  // the Cholesky fast path's: I + a 11' with common-mode eigenvalue -eps
+  let same = true;
+  for (const eps of [0.3e-8, 0.7e-8, 0.95e-8, 1.05e-8, 2e-8]) {
+    const a = -(1 + eps) / (3 + eps);
+    const Cb = [0, 1, 2].map(i => [0, 1, 2].map(j => (i === j ? 1 : 0) + a));
+    const ok = g => { try { g(); return true; } catch (e) { return false; } };
+    const v = ok(() => demo.validateCovariance(Cb));
+    same = same && v === (eps < 1e-8) &&
+      v === ok(() => demo.ghkPrepareOne([0, 0.1, 0.2], Cb.map(r => r.slice()), 0)) &&
+      v === ok(() => demo.mendellElstonOne([0, 0.1, 0.2], Cb.map(r => r.slice()), 1));
+  }
+  holds("dense baselines share validateCovariance's -1e-8 boundary (#782)", same);
+}
+
+// --- topKProbabilities refines a lattice that fails its mass check, as
+// python's _refined_topk (#623): the browser threw "membership 1.9800" at
+// the default 513 points on a field python prices (#769)
+{
+  const mu = [3.02, -0.08, -3.70, 4.74, 6.13], D = [2.53, 15.04, 0.30, 22.94, 2.24];
+  const py = [0.13583549218409463, 0.7171972785949864, 0.9977115702258443,
+              0.14264443876219762, 0.006611220232877024];   // python, points=513
+  accepts("topKProbabilities refines the default lattice to python's answer (#769)",
+          () => [topk.topKProbabilities(mu, 2, { D, base: "laplace" }),
+                 topk.topKProbabilities(mu, 2, { D, base: "laplace", points: 1025 })],
+          ([a, b]) => a.every((v, i) => v === b[i] && Math.abs(v - py[i]) < 1e-14) &&
+            Math.abs(a.reduce((x, y) => x + y, 0) - 2) < 1e-12);
+  // the factor path refines the same way (a zero loading is the same race)
+  accepts("topKProbabilities refines a factor field too (#769)",
+          () => topk.topKProbabilities(mu, 2, { D, base: "laplace", V: [[0], [0], [0], [0], [0]] }),
+          a => a.every((v, i) => Math.abs(v - py[i]) < 1e-12));
+  // bounded: four times the request, and the message names the last lattice
+  rejects(topk.topKProbabilities, [mu, 2, { D, base: "laplace", points: 129 }],
+          "an unresolved field still throws after refining to 4x points (#769)",
+          "refined from points=129 to 513");
+  // a call that passes first time is untouched
+  const ord = [[[0, 0.3, 0.7, 1.1], 1, {}], [[0, 0.3, 0.7, 1.1], 2, { base: "laplace" }],
+               [[0.2, -0.4, 0.9, 0.1, 0.5], 3, { D: [1, 2, 0.5, 1.5, 1], points: 257 }]];
+  const before = [[0.43640781082941793, 0.29974779469506657, 0.17191567638244531, 0.09192871809307027],
+                  [0.7604141243769369, 0.6276385841353082, 0.39268836630393084, 0.21925892518382423],
+                  [0.6687365897834013, 0.778344734061206, 0.33639256407588486, 0.6736163251345413,
+                   0.5429097869449666]];                    // main, before #769
+  accepts("ordinary top-k calls are bitwise unchanged by the refinement (#769)",
+          () => ord.map(([m, k, o]) => topk.topKProbabilities(m, k, o)),
+          rs => rs.every((r, a) => r.every((v, i) => v === before[a][i])));
+}
+
 // --- a pair under a caller's NON-normal node law is the exact mixture
 // over the nodes, as the lattice prices it (#742); referees are scipy's
 // sum_q w_q Phi((mu1 - mu0 - (V0 - V1) . F_q) / sqrt(D0 + D1)). The
