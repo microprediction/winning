@@ -3216,5 +3216,42 @@ for (const [mu, V, D, F, W, want] of [
         sub.converged && sub.iterations === 0 && Math.abs(psub[0] / 1e-310 - 1) < 1e-6, `${sub.mu} p0 ${psub[0]}`);
 }
 
+// --- quick fixes, round 8 -------------------------------------------------
+// #764 / #658: an infinite IPAF tolerance is refused, not certified
+rejects(C => demo.fitGrammar(C, 1, 0, { method: "ipaf", tol: Infinity }),
+        [[[1, 0.6, 0.2], [0.6, 1, 0.3], [0.2, 0.3, 1]]],
+        "fitGrammar ipaf refuses tol = Infinity (#764)", "finite positive");
+rejects(C => demo.fitGrammar(C, 1, 0, { method: "ipaf", tol: 0 }),
+        [[[1, 0.6, 0.2], [0.6, 1, 0.3], [0.2, 0.3, 1]]],
+        "fitGrammar ipaf refuses tol = 0 (#764)", "finite positive");
+// #763: an empty constraint set reports the same diagnostics
+{
+  const r = polish.polishRace({ mu0: [0, 0.5, 1], D: [1, 1, 1], A: [], b: [] });
+  holds("polishRace with no constraints reports converged and diagnostics (#763)",
+        r.info.converged === true && r.info.maxViolation === 0 && r.info.muDistance === 0
+        && Array.isArray(r.info.active) && r.info.active.length === 0, JSON.stringify(r.info));
+}
+// #734: Mendell-Elston keeps a representable tail below 1e-300
+{
+  const g53 = demo.mendellElstonOne([0, 53], [[1, 0], [0, 1]], 1);
+  holds("mendellElstonOne gap 53 is the exact 1.10545e-307, not 1e-300 (#734)",
+        Math.abs(g53 / 1.1054538321318671e-307 - 1) < 1e-9, String(g53));
+  const ord = demo.mendellElstonOne([0, 0.3, -0.2, 0.5], [[1, 0.2, 0.1, 0], [0.2, 1, 0.3, 0.1],
+                                    [0.1, 0.3, 1, 0.2], [0, 0.1, 0.2, 1]], 2);
+  holds("mendellElstonOne ordinary field unchanged bitwise (#734)", ord === 0.37938695769318526, String(ord));
+}
+// #747 / #461: runner-sized arrays are reduced in loops, never spread
+{
+  const n = 150000;
+  accepts("classic state prices at 150k runners do not overflow the stack (#747)",
+          () => classic.abilityImpliedStatePrices(Array.from({ length: n }, (_, i) => i % 7),
+                                                  classic.skewNormalDensity(200, 0.1, { a: 0 }), { unit: 0.1 }),
+          p => p.length === n && Math.abs(p.reduce((a, b) => a + b, 0) - 1) < 1e-9);
+  holds("maxOf / minOf equal the spread on ordinary arrays, NaN and signed zero included",
+        core.maxOf([3, -1, 2]) === 3 && core.minOf([3, -1, 2]) === -1
+        && Number.isNaN(core.maxOf([1, NaN, 2])) && Object.is(core.maxOf([-0, 0]), 0)
+        && Object.is(core.minOf([0, -0]), -0) && core.maxOf([]) === -Infinity);
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");
