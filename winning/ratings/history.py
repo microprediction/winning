@@ -81,8 +81,8 @@ def update_margins_full(m, S, margins=None, V=None, beta2=1.0,
     return _lift_contrast_update(m, S, np.eye(n), y, Cn, log_jac)
 
 
-def rate_history(races, ids=None, prior_mean=0.0, prior_var=1.0,
-                 timescale=200.0, tau2=0.25, beta2=1.0, lengths_scale=0.2,
+def rate_history(races, ids=None, prior_mean=None, prior_var=None,
+                 timescale=None, tau2=0.25, beta2=1.0, lengths_scale=0.2,
                  meas_var=0.0, transform=None, state=None,
                  return_state=False, base="normal"):
     """Forward filter over a racing history (full-covariance belief),
@@ -103,10 +103,23 @@ def rate_history(races, ids=None, prior_mean=0.0, prior_var=1.0,
       'winner'   -- index into runners
       optional 'V' -- (k, r) loadings for the race's k runners
 
+    prior_mean, prior_var, timescale: the OU drift (defaults 0, 1, 200).
+    Omitted on a resumed filter (state=...), they are read from the
+    state, so a split history equals the single pass (#776).
+
     Returns (ratings, history_logZ): ratings maps runner id ->
     (mean, sd) at the final time; history_logZ is the total evidence,
     the objective for tuning the hyperparameters.
     """
+    # The drift hyperparameters are saved in the state; a resume that
+    # omitted them silently reverted to 0 / 1 / 200 (#776).
+    _saved = state if state is not None else {}
+    if prior_mean is None:
+        prior_mean = _saved.get("prior_mean", 0.0)
+    if prior_var is None:
+        prior_var = _saved.get("prior_var", 1.0)
+    if timescale is None:
+        timescale = _saved.get("timescale", 200.0)
     if state is not None:
         index = dict(state["index"])
         m = np.asarray(state["m"], dtype=float).copy()
@@ -251,6 +264,17 @@ def predict_race(state, runners, t=None, V=None, beta2=1.0, points=257,
 
     m = np.asarray(state["m"], dtype=float)
     S = np.asarray(state["S"], dtype=float)
+    # Same clock contract as rate_history (#654): an older or NaN t fell
+    # through as "now", pricing an earlier race with a posterior that
+    # holds later evidence; +inf decayed everything to the prior (#772).
+    if t is not None:
+        if not np.isfinite(float(t)):
+            raise ValueError(f"prediction time t = {t!r} is not finite")
+        if state["t"] is not None and t < state["t"]:
+            raise ValueError(
+                f"prediction time t = {t!r} is older than the filter state "
+                f"(t = {state['t']!r}); the state already holds later "
+                "evidence. Predict from a state saved before t.")
     if t is not None and state["t"] is not None and t > state["t"]:
         m, S = diffuse_full(m, S, dt=t - state["t"],
                             timescale=state.get("timescale", 200.0),
@@ -294,18 +318,34 @@ def tune_history(races, tune=("tau2", "beta2", "timescale",
     defaults.update(fixed)
     x0 = np.log([defaults[k] for k in tune])
 
+    # A trial point may fail numerically and is penalized, but if NO
+    # evaluation came back finite the data or the fixed settings are
+    # invalid: the defaults were returned as if calibrated, with best
+    # logZ -1e12 (#774). Remember the first failure and raise it.
+    seen = {"finite": False, "error": None}
+
     def neg_evidence(x):
         params = dict(defaults)
         params.update({k: float(np.exp(v)) for k, v in zip(tune, x)})
         try:
             _, lz = rate_history(races, **params)
-        except Exception:
+        except Exception as e:
+            if seen["error"] is None:
+                seen["error"] = e
             return 1e12
+        if np.isfinite(lz):
+            seen["finite"] = True
         return -lz
 
     res = minimize(neg_evidence, x0, method="Nelder-Mead",
                    options={"maxiter": maxiter, "xatol": 1e-3,
                             "fatol": 1e-3})
+    if not seen["finite"]:
+        if seen["error"] is not None:
+            raise seen["error"]
+        raise ValueError(
+            "tune_history: no evaluation of the filter evidence was finite; "
+            "nothing was calibrated")
     best = dict(defaults)
     best.update({k: float(np.exp(v)) for k, v in zip(tune, res.x)})
     return best, -float(res.fun)
@@ -319,8 +359,18 @@ def walk_forward(races, warmup=20, market_arm=True, V_key="V",
     consumes prices historically unless market_arm=False strips them),
     and the market's own log-loss as the benchmark when prices are
     present. Returns a dict of totals and per-race records."""
+    if warmup < 0:
+        raise ValueError(f"warmup must be >= 0; got {warmup!r}")
     races = list(races)
     state = None
+    # Before the first race the belief is the population prior: an
+    # empty state prices every runner as a debut. predict_race got
+    # state=None and crashed when warmup=0 (#770).
+    prior_state = {"index": {}, "m": np.zeros(0), "S": np.zeros((0, 0)),
+                   "t": None}
+    for _k in ("prior_mean", "prior_var", "timescale"):
+        if params.get(_k) is not None:
+            prior_state[_k] = params[_k]
     recs = []
     ll_model = ll_market = 0.0
     n_scored = 0
@@ -329,7 +379,8 @@ def walk_forward(races, warmup=20, market_arm=True, V_key="V",
                             or race.get("order") is not None
                             or race.get("margins") is not None
                             or race.get("scores") is not None):
-            p, _ = predict_race(state, race["runners"],
+            p, _ = predict_race(state if state is not None else prior_state,
+                                race["runners"],
                                 t=race.get("t"),
                                 V=race.get(V_key),
                                 beta2=params.get("beta2", 1.0),
