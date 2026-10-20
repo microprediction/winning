@@ -297,12 +297,18 @@ def _block_max(mu, sd, cluster, v, points, qa):
     return np.maximum(p, 0.0)
 
 
-def _scalar_loading(loading, kind):
+def _scalar_loading(loading, kind, n=None):
     """Tree races take SCALAR (rank-one) leaf-cluster loadings; the paper's
     tree grammar is written that way and only the block grammar prices
     rank r. Refuse a matrix rather than mis-broadcast (python crashed
-    cryptically; the R port silently priced the flattened matrix)."""
+    cryptically; the R port silently priced the flattened matrix).
+
+    Given n, a 0-d loading is one common loading for every runner, as
+    shapes.as_loadings spells it; the tree kernels indexed it by runner
+    order and raised IndexError (#780)."""
     L = np.asarray(loading, float)
+    if L.ndim == 0 and n is not None:
+        return np.full(n, float(L))
     if L.ndim == 2 and L.shape[1] == 1:
         return L.ravel()
     if L.ndim > 1:
@@ -730,7 +736,8 @@ def tree_race_probabilities(mu, cluster, loading, D, parent, strength,
     mu = _home(mu, D)
     m = -mu
     sd = np.sqrt(as_idio(D, len(mu), positive=True))
-    v = _scalar_loading(loading, "tree races"); cluster = np.asarray(cluster)
+    v = _scalar_loading(loading, "tree races", len(mu))
+    cluster = np.asarray(cluster)
     parent = _as_parent(parent); lam = np.asarray(strength, float)
     n = len(m); nT = len(parent)
     _, inv = np.unique(cluster, return_inverse=True)
@@ -837,7 +844,8 @@ def tree_race_jacobian(mu, cluster, loading, D, parent, strength,
     mu = _home(mu, D)
     m = -mu
     sd = np.sqrt(as_idio(D, len(mu), positive=True))
-    v = _scalar_loading(loading, "tree races"); cluster = np.asarray(cluster)
+    v = _scalar_loading(loading, "tree races", len(mu))
+    cluster = np.asarray(cluster)
     parent = _as_parent(parent); lam = np.asarray(strength, float)
     n = len(m); nT = len(parent)
     _, inv = np.unique(cluster, return_inverse=True)

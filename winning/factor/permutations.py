@@ -104,6 +104,11 @@ def ordered_probabilities(mu, k=3, V=None, D=None, F=None, W=None,
     mu, V, D, F, W, fn, left, right = _setup(mu, V, D, F, W, base)
     sd = np.sqrt(D)
     n = len(mu)
+    if k > n:
+        # an ordered k-prefix needs k distinct runners: k > n is an
+        # impossible event, which reached the kernel as zero mass and was
+        # reported as a lattice failure (#768)
+        raise ValueError(f"k must be in [1, min(3, n)]; got k={k}, n={n}")
     tau = float(temperature)
     M_all = mu[None, :] + F @ V.T
     pad_lo = left * sd.max() + (30.0 * tau if tau > 0 else 0.0)

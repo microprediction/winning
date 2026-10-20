@@ -729,7 +729,7 @@ fn ordered_prefixes<'py>(
     check_factor_values(&mu, &v, &d, &f, &w)?;
     need_points(points)?;
     check_optional_window(lo, hi)?;
-    winning::check_ordered_k(k).map_err(bad)?;
+    winning::check_ordered_prefix(k, mu.as_array().len()).map_err(bad)?;
     let mu_o: Array1<f64> = mu.as_array().to_owned();
     let v_o: Array2<f64> = v.as_array().to_owned();
     let d_o: Array1<f64> = d.as_array().to_owned();
