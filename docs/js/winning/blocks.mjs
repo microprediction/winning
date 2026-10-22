@@ -289,12 +289,15 @@ function clusterNodes(r, qa) {
    high-dimensional Halton projections (#130). Each cluster's rows are
    put in canonical form (canonicalBasis: principal axes, null
    directions dropped, cube-sum signs) and zero-padded to the largest
-   cluster rank, so the rule depends on each V_c V_c' alone. Ranks one
-   and two keep python's Gauss-Hermite tensor in the caller's axes. */
+   cluster rank, so the rule depends on each V_c V_c' alone. Rank two
+   too (python's blocks._canonical_block_loadings): the product
+   Gauss-Hermite rule is symmetric under column signs and swaps but not
+   rotations, and a 45-degree rotation of one block moved a share by
+   0.0052 (#787). At rank two the product grid is laid at 45 degrees to
+   the principal axes, where its default error was ~10x smaller than on
+   them. A rank-one loading is Gauss-Hermite, symmetric, and kept. */
 function canonicalBlockLoadings(L, cluster) {
-  // rank <= 2 is python's tensor Gauss-Hermite in the caller's axes:
-  // kept exactly, for parity (symmetric under permutations and signs)
-  if (L[0].length < 3) return L;
+  if (L[0].length < 2) return L;
   const inv = clusterIndex(cluster);
   const nC = Math.max(...inv) + 1;
   const members = Array.from({ length: nC }, () => []);
@@ -305,7 +308,9 @@ function canonicalBlockLoadings(L, cluster) {
   members.forEach((ix, c) => ix.forEach((i, k) => {
     parts[c][k].forEach((v, j) => { out[i][j] = v; });
   }));
-  return out;
+  if (R !== 2) return out;
+  const h = Math.SQRT1_2;          // python's _ROT45: [[h, -h], [h, h]]
+  return out.map(([a, b]) => [h * a + h * b, -h * a + h * b]);
 }
 
 /* python's blocks._warn_if_sharp: the fixed Gauss-Hermite cluster rule
