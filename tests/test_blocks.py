@@ -477,3 +477,95 @@ def test_tree_rank_r_loading_still_refused():
     with pytest.raises(NotImplementedError, match="rank-one"):
         tree_race_probabilities(mu, cluster, np.full((4, 2), .3), D, parent,
                                 np.array([0., 0., .4]), points=129)
+
+
+# --- #787: rank-two block loadings are canonical per cluster -------------
+_MU787 = [2.43, .27, -.01, -.19, 1.07, -1.03]
+_CL787 = [0, 0, 0, 1, 1, 1]
+_D787 = [1, 1.39, 1.48, .85, .94, .61]
+_V787 = np.array([[.69, -.65], [.29, -.95], [-.69, -1.15],
+                  [-.04, -1.28], [.61, -.27], [-.20, 2.02]])
+
+
+def _rot45(V):
+    c = np.sqrt(0.5)
+    return V @ np.array([[c, -c], [c, c]])
+
+
+def test_rank_two_rotation_is_the_same_race_787():
+    from winning.factor import race_probabilities
+    from winning.factor.structures import Blocks, Nested
+    Vr = _rot45(_V787)
+    assert np.allclose(Vr @ Vr.T, _V787 @ _V787.T, atol=1e-15)
+    p = block_race_probabilities(_MU787, _CL787, _V787, _D787)
+    q = block_race_probabilities(_MU787, _CL787, Vr, _D787)
+    assert np.abs(p - q).max() < 1e-14            # was 5.2e-3
+    s = race_probabilities(_MU787, structure=Blocks(_CL787, Vr, _D787))
+    assert np.abs(s - p).max() < 1e-14
+    g = 0.3 * np.ones(6)
+    pn = nested_race_probabilities(_MU787, _CL787, _V787, _D787, coupling=g)
+    qn = nested_race_probabilities(_MU787, _CL787, Vr, _D787, coupling=g)
+    assert np.abs(pn - qn).max() < 1e-14
+    sn = race_probabilities(_MU787, structure=Nested(_CL787, Vr, _D787, g))
+    assert np.abs(sn - pn).max() < 1e-14
+
+
+def test_rank_two_per_cluster_rotations_signs_swaps_787():
+    rng = np.random.default_rng(787)
+    for _ in range(20):
+        n = int(rng.integers(3, 9))
+        cl = rng.integers(0, 3, n)
+        mu = rng.normal(size=n); D = rng.uniform(.4, 1.6, n)
+        V = 0.7 * rng.normal(size=(n, 2))
+        p = block_race_probabilities(mu, cl, V, D)
+        Vr = V.copy()
+        for c in np.unique(cl):
+            Q, _ = np.linalg.qr(rng.normal(size=(2, 2)))
+            Vr[cl == c] = V[cl == c] @ Q
+        for W in (Vr, V * [-1, 1], V[:, ::-1]):
+            q = block_race_probabilities(mu, cl, W, D)
+            assert np.abs(p - q).max() < 1e-13
+
+
+def test_rank_two_converges_to_the_canonical_answer_787():
+    # the product grid at 45 degrees to the principal axes: the default
+    # error on the issue fixture fell from 5.7e-3 (caller's axes) to
+    # 5.7e-4, and refining qa converges from either basis
+    ref = block_race_probabilities(_MU787, _CL787, _V787, _D787, qa=61)
+    for V in (_V787, _rot45(_V787)):
+        p = block_race_probabilities(_MU787, _CL787, V, _D787)
+        assert np.abs(p - ref).max() < 1e-3
+        p = block_race_probabilities(_MU787, _CL787, V, _D787, qa=31)
+        assert np.abs(p - ref).max() < 1e-4
+
+
+def test_rank_deficient_rank_two_is_rank_one_787():
+    v = _V787[:, 0]
+    p1 = block_race_probabilities(_MU787, _CL787, np.sqrt(5) * v, _D787)
+    p2 = block_race_probabilities(_MU787, _CL787, np.c_[v, 2 * v], _D787)
+    assert np.abs(p1 - p2).max() < 1e-14
+    # one cluster rank two, one cluster with no loading at all
+    V = _V787.copy(); V[3:] = 0.0
+    q = block_race_probabilities(_MU787, _CL787, _rot45(V), _D787)
+    assert np.abs(q - block_race_probabilities(_MU787, _CL787, V,
+                                               _D787)).max() < 1e-14
+
+
+def test_rank_one_and_three_untouched_by_787():
+    # pinned on main before #787: rank one, a zero-padded rank one and
+    # rank three keep their exact rules
+    r1 = [0.00244822624473019, 0.1180086074271331, 0.19963224309434435,
+          0.14866389613894831, 0.03235943719199677, 0.4988875899028474]
+    r3 = [0.00211546966829846, 0.08845359071227708, 0.15724230043463078,
+          0.26820481052305434, 0.02406773393700397, 0.4599160947247354]
+    v1 = _V787[:, 0]
+    V3 = np.c_[_V787, [.3, -.2, .1, .4, -.1, .2]]
+    assert np.allclose(block_race_probabilities(_MU787, _CL787, v1, _D787),
+                       r1, rtol=0, atol=1e-15)
+    assert np.allclose(block_race_probabilities(_MU787, _CL787, -v1, _D787),
+                       r1, rtol=0, atol=1e-14)
+    assert np.allclose(block_race_probabilities(_MU787, _CL787, V3, _D787),
+                       r3, rtol=0, atol=1e-14)
+    padded = np.c_[v1, np.zeros(6)]
+    assert np.allclose(block_race_probabilities(_MU787, _CL787, padded,
+                                                _D787), r1, rtol=0, atol=1e-14)

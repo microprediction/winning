@@ -145,11 +145,43 @@
   stop("rank >= 3 cluster effects need Sobol nodes; supply nodes= or rank <= 2")
 }
 
+# Rank-two block loadings in a basis fixed by each V_c V_c' alone
+# (python's blocks._canonical_block_loadings). V_c -> V_c Q_c is the same
+# race, but the product Gauss-Hermite rule is not rotation invariant: a
+# 45-degree rotation of one block moved a share by 0.0052 (#787). Per
+# cluster: V_c U_c, U_c the eigenvectors of V_c'V_c in decreasing order,
+# each column negated if its largest-|entry| (first on ties) is negative;
+# null directions dropped, clusters zero-padded to the largest rank R, and
+# at R = 2 the product grid laid at 45 degrees to the principal axes.
+.canonical_block_loadings <- function(V, cluster) {
+  inv <- .cluster_index(cluster)
+  parts <- lapply(sort(unique(inv)), function(c) {
+    ix <- which(inv == c)
+    Vc <- V[ix, , drop = FALSE]
+    Vc <- Vc %*% eigen(crossprod(Vc), symmetric = TRUE)$vectors
+    for (j in seq_len(ncol(Vc))) {
+      if (Vc[which.max(abs(Vc[, j])), j] < 0) Vc[, j] <- -Vc[, j]
+    }
+    nrm <- sqrt(colSums(Vc^2))
+    list(ix = ix, C = Vc[, nrm > 1e-12 * max(nrm) & nrm > 0, drop = FALSE])
+  })
+  R <- max(vapply(parts, function(p) ncol(p$C), 0L))
+  out <- matrix(0, nrow(V), R)
+  for (p in parts) if (ncol(p$C)) out[p$ix, seq_len(ncol(p$C))] <- p$C
+  if (R == 2L) out <- out %*% (sqrt(0.5) * matrix(c(1, 1, -1, 1), 2))
+  out
+}
+
 # Max-wins rank-1 field kernel (public functions negate).
 .block_max <- function(mu, sd, cluster, v, points, qa) {
   # rank zero is the independent race; as.numeric() made it numeric(0)
   # and the kernel indexed past it (#508)
   if (is.matrix(v) && ncol(v) == 0L) v <- rep(0, length(mu))
+  if (is.matrix(v) && ncol(v) == 2L) {
+    # rank two: the rule sees each cluster's V_c V_c' only (#787)
+    v <- .canonical_block_loadings(v, cluster)
+    if (ncol(v) == 0L) v <- rep(0, length(mu))
+  }
   if (is.matrix(v) && ncol(v) > 1) {
     return(.block_max_r(mu, sd, cluster, v, points, qa))
   }

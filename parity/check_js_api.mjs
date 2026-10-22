@@ -3417,5 +3417,42 @@ rejects(C => demo.fitGrammar(C, 1, 0, { method: "ipaf", tol: 0 }),
         && Object.is(core.minOf([0, -0]), -0) && core.maxOf([]) === -Infinity);
 }
 
+// #787: rank-two block loadings are canonical per cluster
+{
+  const mu = [2.43, .27, -.01, -.19, 1.07, -1.03], cl = [0, 0, 0, 1, 1, 1];
+  const D = [1, 1.39, 1.48, .85, .94, .61];
+  const V = [[.69, -.65], [.29, -.95], [-.69, -1.15], [-.04, -1.28], [.61, -.27], [-.20, 2.02]];
+  const h = Math.SQRT1_2, rot = W => W.map(([a, b]) => [(a + b) * h, (-a + b) * h]);
+  const mx = (a, b) => Math.max(...a.map((x, i) => Math.abs(x - b[i])));
+  const p = blocks.blockRaceProbabilities(mu, cl, V, D);
+  holds("a 45-degree rank-two block rotation prices the same race (#787)",
+        mx(p, blocks.blockRaceProbabilities(mu, cl, rot(V), D)) < 1e-14);
+  holds("the Blocks structure sees the same canonical rule (#787)",
+        mx(p, races.raceProbabilities(mu, { structure: { kind: "Blocks", cluster: cl, loading: rot(V), D } })) < 1e-14);
+  const g = mu.map(() => 0.3);
+  holds("Nested's rank-two block component is canonical too (#787)",
+        mx(blocks.nestedRaceProbabilities(mu, cl, V, D, { coupling: g }),
+           blocks.nestedRaceProbabilities(mu, cl, rot(V), D, { coupling: g })) < 1e-14);
+  holds("per-cluster rotations, column signs and swaps price the same race (#787)",
+        [V.map((r, i) => (i < 3 ? rot([r])[0] : r)), V.map(([a, b]) => [-a, b]),
+         V.map(([a, b]) => [b, a])].every(W => mx(p, blocks.blockRaceProbabilities(mu, cl, W, D)) < 1e-14));
+  holds("the default matches python's canonical rank-two price (#787)",
+        mx(p, [0.0016660074987572178, 0.08641098200675351, 0.15703265532332839,
+               0.26876786125311775, 0.02195242706689778, 0.4641700668511454]) < 1e-13);
+  const v = V.map(r => r[0]);
+  const r1 = blocks.blockRaceProbabilities(mu, cl, v, D);
+  holds("rank one and a zero-padded rank one are untouched (#787)",
+        mx(r1, [0.00244822624473019, 0.1180086074271331, 0.19963224309434435,
+                0.14866389613894831, 0.03235943719199677, 0.4988875899028474]) < 1e-14
+        && mx(r1, blocks.blockRaceProbabilities(mu, cl, v.map(x => [x, 0]), D)) < 1e-15);
+  holds("a rank-deficient rank-two loading is the rank-one race (#787)",
+        mx(blocks.blockRaceProbabilities(mu, cl, v.map(x => Math.sqrt(5) * x), D),
+           blocks.blockRaceProbabilities(mu, cl, v.map(x => [x, 2 * x]), D)) < 1e-14);
+  const nodes = { nodes: [[-1, 0], [1, 0], [0, -1], [0, 1]], w: [.25, .25, .25, .25] };
+  holds("caller nodes stay in the caller's coordinates (#787)",
+        mx(blocks.blockRaceProbabilities(mu, cl, V, D, { nodes }),
+           blocks.blockRaceProbabilities(mu, cl, rot(V), D, { nodes })) > 1e-6);
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");
