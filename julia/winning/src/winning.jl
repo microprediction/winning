@@ -336,6 +336,25 @@ function _translated_home(mu, D)
     return abs(off) > 1e6 * scale ? mu .- off : mu
 end
 
+# The rank-one Gauss-Hermite/midpoint handover was a hard switch at
+# ceil(8 sharp) > 80, where the two rules disagree: a 1e-7 change in one
+# runner's sd moved a top-2 membership by 31bp (#783). Across (lo, hi]
+# the rule is the weighted union (1 - w) GH(8 lo) + w midpoint(8 hi + 1),
+# w a C1 smoothstep in the sharpness, matching the python reference
+# (which says why the band sits on the Gauss-Hermite side); each order is
+# the one its side uses at the band's edge, so the band meets the
+# unchanged rule outside it continuously at both ends.
+const R1_BLEND_LO = 9.0
+const R1_BLEND_HI = 10.0
+function _rank1_blend_rule(sharp)
+    t = (sharp - R1_BLEND_LO) / (R1_BLEND_HI - R1_BLEND_LO)
+    w = t * t * (3.0 - 2.0 * t)
+    g = hermite_nodes(1, Int(8 * R1_BLEND_LO))
+    Q = Int(8 * R1_BLEND_HI) + 1
+    Fm = reshape(qnorm.(((1:Q) .- 0.5) ./ Q), :, 1)
+    return vcat(g.F, Fm), vcat((1.0 - w) .* g.W, fill(w / Q, Q))
+end
+
 function _race_setup(mu, V, D, F, W, base)
     mu = Float64.(collect(mu))
     n = length(mu)
@@ -377,6 +396,8 @@ function _race_setup(mu, V, D, F, W, base)
             if r >= 2 && sharp > sharp_max
                 hw = halton_normal_nodes(r, 2^13)
                 Fm, Wv = hw.F, hw.W
+            elseif r == 1 && R1_BLEND_LO < sharp <= R1_BLEND_HI
+                Fm, Wv = _rank1_blend_rule(sharp)              # (#783)
             elseif r == 1 && ceil(8 * sharp) > 80
                 Q = Int(min(ceil(8 * sharp), 4001))
                 Fm = reshape(qnorm.(((1:Q) .- 0.5) ./ Q), :, 1)
