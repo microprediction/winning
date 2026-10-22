@@ -412,3 +412,46 @@ test_that("a common translation of the abilities moves nothing (#477)", {
   # a field near the origin is left exactly where it is
   expect_identical(.translated_home(mu, D), mu)
 })
+
+test_that("a failed inverse is retried from fixed starts (#779, #781)", {
+  # #779: exact-second logistic target, warm start within 0.048 of truth
+  mu7 <- c(0.016, -0.356, 0.552, -0.212)
+  D7 <- c(1.444, 0.799, 0.818, 1.163)^2
+  t7 <- rank_probabilities(mu7, D = D7, base = "logistic")[, 2]
+  f <- abilities_from_rank_marginal(t7, 2, mu0 = c(-0.002, -0.308, 0.574,
+                                                    -0.242),
+                                    D = D7, base = "logistic", n_iter = 200,
+                                    return_info = TRUE)
+  expect_true(f$converged)
+  expect_lt(max(abs(rank_probabilities(f$mu, D = D7,
+                                       base = "logistic")[, 2] - t7)), 1e-8)
+  expect_lt(max(abs(f$mu - (mu7 - mean(mu7)))), 1e-6)
+  # #781: exact normal win/top-2 board from the default cold start
+  mu <- c(-0.6669408707331521, -0.04607137189844819, -0.9239086741190706,
+          1.2201504898506477, -0.7018494832934388, 1.1186199101934622)
+  sd <- c(2.601365880665001, 1.5539670145121982, 1.122141854005653,
+          0.4148305666148936, 0.43663998310753704, 0.3415875902805172)
+  q1 <- top_k_probabilities(mu, 1, D = sd^2)
+  q2 <- top_k_probabilities(mu, 2, D = sd^2)
+  for (fit in list(loc_scale_from_topk_pair(q1, 1, q2, 2, return_info = TRUE),
+                   loc_scale_from_win_and_second(q1, q2 - q1,
+                                                 return_info = TRUE))) {
+    expect_true(fit$converged)
+    expect_lt(max(abs(top_k_probabilities(fit$mu, 1, D = fit$sd^2) - q1),
+                  abs(top_k_probabilities(fit$mu, 2, D = fit$sd^2) - q2)),
+              1e-8)
+  }
+  # a first-try success never builds a retry start, and a caller's D0 is
+  # not overridden
+  w <- loc_scale_from_topk_pair(q1, 1, q2, 2, D0 = sd^2, return_info = TRUE)
+  expect_true(w$converged)
+  expect_lte(w$iterations, 3)
+  # every start failing: honest non-convergence, still warned
+  bad1 <- c(0.8, 0.1, 0.1); bad2 <- c(0.2, 0.9, 0.9)
+  z <- suppressWarnings(loc_scale_from_topk_pair(bad1, 1, bad2, 2,
+                                                 return_info = TRUE))
+  expect_false(z$converged)
+  expect_null(z$tol)
+  expect_warning(loc_scale_from_topk_pair(bad1, 1, bad2, 2),
+                 "did not converge")
+})
