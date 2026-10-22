@@ -104,6 +104,22 @@ const runs = {
     { mu0: vec.scenarios.invert_topk2.value, D, points: 257 }),
   rank_marginals_factor: () =>
     topk.rankProbabilities(mu, { D, V: V1, points: 257 }),
+  // the inverse retry (#779, #781): both solves fail from their first start
+  retry779_target: () => topk.rankProbabilities(inp.retry779_mu,
+    { D: inp.retry779_D, base: "logistic", points: 513 }).map(r => r[1]),
+  retry779_mu: () => topk.abilitiesFromRankMarginal(
+    vec.scenarios.retry779_target.value, 2, { mu0: inp.retry779_mu0,
+      D: inp.retry779_D, base: "logistic", points: 513, nIter: 200 }),
+  retry781_win: () => topk.topKProbabilities(inp.retry781_mu, 1,
+    { D: inp.retry781_sd.map(s => s * s) }),
+  retry781_top2: () => topk.topKProbabilities(inp.retry781_mu, 2,
+    { D: inp.retry781_sd.map(s => s * s) }),
+  retry781_mu: () => topk.locScaleFromTopkPair(
+    vec.scenarios.retry781_win.value, 1,
+    vec.scenarios.retry781_top2.value, 2).mu,
+  retry781_sd: () => topk.locScaleFromTopkPair(
+    vec.scenarios.retry781_win.value, 1,
+    vec.scenarios.retry781_top2.value, 2).sd,
   invert_gumbel: () => races.abilitiesFromRace(pt, {
     D: mu.map(() => Math.PI ** 2 / 6), base: "gumbel", points: 1001 }),
   bottomk2_normal: () => topk.bottomKProbabilities(mu, 2, { D, points: 257 }),

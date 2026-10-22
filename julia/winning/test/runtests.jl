@@ -578,3 +578,38 @@ end
                              D = [1.0, 0.7]) ≈
           [0.68189917673080014, 0.31810082326919986] rtol = 1e-14
 end
+
+@testset "a failed inverse is retried from fixed starts (#779, #781)" begin
+    # #779: exact-second logistic target, warm start within 0.048 of truth
+    mu7 = [0.016, -0.356, 0.552, -0.212]
+    D7 = [1.444, 0.799, 0.818, 1.163] .^ 2
+    t7 = rank_probabilities(mu7; D = D7, base = "logistic")[:, 2]
+    f = abilities_from_rank_marginal(t7, 2; mu0 = [-0.002, -0.308, 0.574, -0.242],
+                                     D = D7, base = "logistic", n_iter = 200,
+                                     return_info = true)
+    @test f.converged && f.max_log_residual < 1e-8
+    # julia's exact-rank inverse fits the raw lattice column, not the
+    # mass-normalised public map (python's #267 change is not ported), so
+    # the public repricing carries that lattice-mass gap, not the solve's
+    @test maximum(abs.(rank_probabilities(f.mu; D = D7, base = "logistic")[:, 2]
+                       .- t7)) < 1e-6
+    @test maximum(abs.(f.mu .- (mu7 .- sum(mu7) / 4))) < 1e-4
+    # #781: exact normal win/top-2 board from the default cold start
+    mu = [-0.6669408707331521, -0.04607137189844819, -0.9239086741190706,
+          1.2201504898506477, -0.7018494832934388, 1.1186199101934622]
+    sd = [2.601365880665001, 1.5539670145121982, 1.122141854005653,
+          0.4148305666148936, 0.43663998310753704, 0.3415875902805172]
+    q1 = top_k_probabilities(mu, 1; D = sd .^ 2)
+    q2 = top_k_probabilities(mu, 2; D = sd .^ 2)
+    for fit in (loc_scale_from_topk_pair(q1, 1, q2, 2; return_info = true),
+                loc_scale_from_win_and_second(q1, q2 .- q1; return_info = true))
+        @test fit.converged
+        @test max(maximum(abs.(top_k_probabilities(fit.mu, 1; D = fit.sd .^ 2) .- q1)),
+                  maximum(abs.(top_k_probabilities(fit.mu, 2; D = fit.sd .^ 2) .- q2))) < 1e-8
+    end
+    w = loc_scale_from_topk_pair(q1, 1, q2, 2; D0 = sd .^ 2, return_info = true)
+    @test w.converged && w.iterations <= 3
+    z = loc_scale_from_topk_pair([0.8, 0.1, 0.1], 1, [0.2, 0.9, 0.9], 2;
+                                 return_info = true)
+    @test !z.converged
+end

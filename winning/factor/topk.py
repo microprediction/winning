@@ -1215,6 +1215,35 @@ def _validated_topk_target(q, k, n, target_floor):
     return target, floored
 
 
+def _retry_on_failure(first, attempt, starts):
+    """Bounded deterministic retry for a failed inverse (#779, #781).
+
+    first is the default attempt's (result, info). When it converged it
+    is returned as is: a call that converges today is bitwise unchanged
+    and costs nothing extra. Otherwise attempt(start) is run from each
+    start of the fixed, finite list starts(first) in order, and the
+    first converged outcome is returned. If none converges, the attempt
+    with the smallest max logit residual is returned, still reporting
+    converged=False. Either way info["iterations"] becomes the total
+    over every attempt made, so the reported cost is honest. A first
+    attempt that made no iteration (n_iter=0) is not retried: that
+    budget prices the start and must not move it."""
+    if first[-1]["converged"] or first[-1]["iterations"] == 0:
+        # n_iter=0 prices the start and performs no update (#441, #497)
+        return first
+    best, total = first, first[-1]["iterations"]
+    for start in starts(first):
+        out = attempt(start)
+        total += out[-1]["iterations"]
+        if out[-1]["converged"]:
+            best = out
+            break
+        if out[-1]["max_logit_residual"] < best[-1]["max_logit_residual"]:
+            best = out
+    best[-1]["iterations"] = int(total)
+    return best
+
+
 def _topk_inverse_return(mu, converged, resid_max, iters, floored, tol,
                          return_info, caller):
     if not converged and not return_info:
@@ -1403,7 +1432,89 @@ def loc_scale_from_topk_pair(q1, k1, q2, k2, D0=None, base="normal",
     are the continuum derivatives to spectral accuracy; on the uniform
     lattice they are first order across every runner's kink and exact
     self-generated laplace boards stalled at logit residual 2e-3 (#267).
-    The residual is always the map being fitted."""
+    The residual is always the map being fitted.
+
+    The cold start (neither D0 nor mu0) takes unit scales and fits mu
+    to the shallower curve alone, and on some exact boards the solve
+    from there stalls far from the answer (#781). Only then, it is
+    retried once from a scale-informed start built from both curves
+    (_loc_scale_starts), and the retry must meet the same convergence
+    test; if it fails too, the better attempt is returned with
+    converged=False. A call that converges first time is unchanged,
+    bit for bit."""
+    kw = dict(base=base, points=points, n_iter=n_iter, tol=tol,
+              ridge=ridge, V=V, kink_split=kink_split)
+    out = _loc_scale_once(q1, k1, q2, k2, D0, mu0, **kw)
+    if D0 is None and mu0 is None:
+        out = _retry_on_failure(
+            out, lambda d: _loc_scale_once(q1, k1, q2, k2, d, None, **kw),
+            lambda f: _loc_scale_starts(q1, k1, q2, k2))
+    mu, sd, info = out
+    if return_info:
+        return mu, sd, info
+    mu = _topk_inverse_return(mu, info["converged"],
+                              info["max_logit_residual"],
+                              info["iterations"], info["floored"], tol,
+                              False, "loc_scale_from_topk_pair")
+    return mu, sd
+
+
+def _probit_rational(p):
+    """Acklam's rational inverse normal CDF (relative error ~1e-9), the
+    browser's invNormalRational: plain arithmetic, so every port computes
+    the same retry start. Only a start is built from it."""
+    a = (-39.6968302866538, 220.946098424521, -275.928510446969,
+         138.357751867269, -30.6647980661472, 2.50662827745924)
+    b = (-54.4760987982241, 161.585836858041, -155.698979859887,
+         66.8013118877197, -13.2806815528857)
+    c = (-0.00778489400243029, -0.322396458041136, -2.40075827716184,
+         -2.54973253934373, 4.37466414146497, 2.93816398269878)
+    d = (0.00778469570904146, 0.32246712907004, 2.445134137143,
+         3.75440866190742)
+    pl = 0.02425
+    if p < pl:
+        q = np.sqrt(-2.0 * np.log(p))
+        return ((((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4])
+                 * q + c[5])
+                / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1.0))
+    if p > 1.0 - pl:
+        return -_probit_rational(1.0 - p)
+    q = p - 0.5
+    r2 = q * q
+    return ((((((a[0] * r2 + a[1]) * r2 + a[2]) * r2 + a[3]) * r2 + a[4])
+             * r2 + a[5]) * q
+            / (((((b[0] * r2 + b[1]) * r2 + b[2]) * r2 + b[3]) * r2 + b[4])
+               * r2 + 1.0))
+
+
+def _loc_scale_starts(q1, k1, q2, k2):
+    """The retry start of loc_scale_from_topk_pair's cold solve (#781): a
+    scale per runner read off BOTH curves. With the depth thresholds
+    t_k held fixed, P(top k) ~ Phi((t_k - mu_i) / sigma_i), so the gap
+    between a runner's deeper and shallower probits is (t_k2 - t_k1) /
+    sigma_i: sigma_i is proportional to its reciprocal. The common
+    factor is a gauge; the spread is clipped to the solver's own
+    log-scale box. Returned as a D0, so the start's locations come
+    from the same warm start the cold solve uses. On hard boards (log
+    sigma spread ~1, memberships down to 1e-15) the cold solve failed
+    85 times in 800 and this start rescued 25; supplying the true
+    scales would rescue 60, so a caller with a scale prior should pass
+    D0."""
+    n = len(np.asarray(q1, dtype=float))
+    (lo, klo), (hi, khi) = sorted(((q1, k1), (q2, k2)), key=lambda t: t[1])
+    tlo, _ = _validated_topk_target(lo, klo, n, None)
+    thi, _ = _validated_topk_target(hi, khi, n, None)
+    gap = np.array([_probit_rational(b) - _probit_rational(a)
+                    for a, b in zip(tlo, thi)])
+    ls = -np.log(np.maximum(gap, 1e-3))
+    ls = np.clip(ls - ls.mean(), -3.0, 3.0)
+    return [np.exp(2.0 * ls)]
+
+
+def _loc_scale_once(q1, k1, q2, k2, D0, mu0, base, points, n_iter, tol,
+                    ridge, V, kink_split):
+    """One Levenberg solve of loc_scale_from_topk_pair from its start;
+    returns (mu, sd, info) and never warns."""
     if V is not None:
         raise NotImplementedError(
             "loc_scale_from_topk_pair with fixed factor loadings is "
@@ -1584,14 +1695,12 @@ def loc_scale_from_topk_pair(q1, k1, q2, k2, D0=None, base="normal",
                                  and last_grad <= 1e-6 * max(1.0, cost)))
     converged = fit_ok or (sqr > 0.0 and stationary and nested)
     out = _topk_inverse_return(mu, converged, resid_max, iters,
-                               np.zeros(n, dtype=bool), tol, return_info,
+                               np.zeros(n, dtype=bool), tol, True,
                                "loc_scale_from_topk_pair")
-    if return_info:
-        info = dict(out[1])
-        info.update(fit_converged=bool(fit_ok), stationary=stationary,
-                    nested=nested)
-        return out[0], sd, info
-    return out, sd
+    info = dict(out[1])
+    info.update(fit_converged=bool(fit_ok), stationary=stationary,
+                nested=nested)
+    return out[0], sd, info
 
 
 def loc_scale_from_win_and_second(p_win, p_second, D0=None, base="normal",
@@ -1722,7 +1831,50 @@ def abilities_from_rank_marginal(p, r, mu0=None, D=None, base="normal",
     rank_probabilities(..., kink_split=True). Either way a kinked base
     takes its Jacobian from the split lattice (#267: on the uniform one
     an exact self-generated laplace target stopped at log residual
-    2.7e-3); the residual is always the map being inverted."""
+    2.7e-3); the residual is always the map being inverted.
+
+    One damped trajectory can stall at a positive-residual stationary
+    point of this multi-branched map even from a near-truth mu0 (#779).
+    Only then, the solve is retried from a few fixed deterministic
+    starts near the original one (_rank_marginal_starts) and the first
+    that meets tol is returned; if none does, the best attempt is
+    returned with converged=False. A call that converges first time is
+    unchanged, bit for bit."""
+    kw = dict(D=D, base=base, points=points, n_iter=n_iter, tol=tol,
+              kink_split=kink_split)
+    first = _rank_marginal_once(p, r, mu0, **kw)
+    mu, _, info = _retry_on_failure(
+        first, lambda m: _rank_marginal_once(p, r, m, **kw),
+        lambda f: _rank_marginal_starts(mu0, f[0], f[1], D))
+    return _topk_inverse_return(mu, info["converged"],
+                                info["max_logit_residual"],
+                                info["iterations"], info["floored"], tol,
+                                return_info, "abilities_from_rank_marginal")
+
+
+def _rank_marginal_starts(mu0, mu_stall, resid, D):
+    """The retry starts of abilities_from_rank_marginal (#779), nearest
+    the caller's start first. The stalled residual says which runners
+    the failed trajectory left mispriced, so the first two starts nudge
+    the ORIGINAL start (mu0, or zeros) along it, -0.3 then +0.3 of the
+    typical scale (the map is non-monotone for r >= 2, so its sign is
+    not known in advance); the third reflects the failed trajectory
+    through the start, sending the solver the other way. On a hard
+    battery (n 3-8, r 2-4, warm starts off by up to 0.5, and cold) one
+    trajectory failed 72 times in 2840 and these three rescued 64."""
+    n = len(mu_stall)
+    m0 = np.zeros(n) if mu0 is None else np.asarray(mu0, float) - np.mean(mu0)
+    u = resid - resid.mean()
+    u = u / max(float(np.abs(u).max()), 1e-300)
+    D = np.ones(n) if D is None else np.broadcast_to(np.asarray(D, float), (n,))
+    h = 0.3 * float(np.sqrt(np.mean(D)))
+    return [m0 - h * u, m0 + h * u, 2.0 * m0 - mu_stall]
+
+
+def _rank_marginal_once(p, r, mu0, D, base, points, n_iter, tol,
+                        kink_split):
+    """One Levenberg trajectory of abilities_from_rank_marginal from mu0;
+    returns (mu, final log residual, info) and never warns."""
     from ..shapes import as_target
     target = as_target(p, "p")
     n = len(target)
@@ -1858,9 +2010,10 @@ def abilities_from_rank_marginal(p, r, mu0=None, D=None, base="normal",
             continue
         if not accepted:
             break
-    return _topk_inverse_return(mu, resid_max < tol, resid_max, iters,
-                                np.zeros(n, dtype=bool), tol, return_info,
-                                "abilities_from_rank_marginal")
+    mu, info = _topk_inverse_return(mu, resid_max < tol, resid_max, iters,
+                                    np.zeros(n, dtype=bool), tol, True,
+                                    "abilities_from_rank_marginal")
+    return mu, resid, info
 
 
 _TINY = 1e-300

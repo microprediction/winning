@@ -9,7 +9,7 @@ import { TINY, hermite1, solve, checkOpts, OPT_HINTS, asLoadings, asIdio,
          jacobiSweeps, rescaledTarget, applyFloor, gaugeCenter, asPoints,
          kinkLattice } from "./core.mjs";
 import { BASES, _factorNodeRule, baseResolution, checkTails,
-         lowerCdf, translatedHome } from "./races.mjs";
+         lowerCdf, translatedHome, invNormalRational } from "./races.mjs";
 
 /* Each exported call declares its own option keys; see checkOpts in
    core.mjs for why an options object needs this at all. */
@@ -902,9 +902,43 @@ export function abilitiesFromTopk(q, k, opts = {}) {
 
 export function locScaleFromTopkPair(q1, k1, q2, k2, opts = {}) {
   checkOpts(opts, LOC_SCALE_FROM_TOPK_PAIR_OPTS, "locScaleFromTopkPair", { ...OPT_HINTS, ...LOC_SCALE_HINTS });
+  // the cold start (no D0, no mu0) can stall far from an exact board;
+  // only then, one retry from a scale-informed D0 (#781), as python
   const { D0 = null, base = "normal", points = 513, nIter = 60,
           tol = 1e-8, ridge = 0.0, mu0 = null,
           returnInfo = false } = opts;
+  const o = { D0, base, points, nIter, tol, ridge, mu0 };
+  let out = locScaleOnce(q1, k1, q2, k2, o);
+  if (D0 == null && mu0 == null)
+    out = retryOnFailure(out, d => locScaleOnce(q1, k1, q2, k2, { ...o, D0: d }),
+                         () => locScaleStarts(q1, k1, q2, k2), "maxLogitResidual");
+  const { mu, sd, info } = out;
+  if (!info.converged && !returnInfo)
+    console.warn(`locScaleFromTopkPair did not converge: max |logit ` +
+                 `residual| ${info.maxLogitResidual.toExponential(2)} after ` +
+                 `${info.iterations} iterations`);
+  if (returnInfo) return { mu, sd, info };
+  return { mu, sd };
+}
+
+/* The retry start of the cold loc/scale solve (#781), as python's
+   _loc_scale_starts: with the depth thresholds held fixed, the gap between
+   a runner's deeper and shallower probits is proportional to 1/sigma_i.
+   Geometric-mean-one, clipped to the solver's log-scale box, as a D0. */
+function locScaleStarts(q1, k1, q2, k2) {
+  const n = q1.length;
+  const [lo, klo, hi, khi] = k1 < k2 ? [q1, k1, q2, k2] : [q2, k2, q1, k1];
+  const tlo = validatedTarget(lo, klo, n, null).target;
+  const thi = validatedTarget(hi, khi, n, null).target;
+  const ls = tlo.map((a, i) => -Math.log(Math.max(
+    invNormalRational(thi[i]) - invNormalRational(a), 1e-3)));
+  const m = ls.reduce((a, b) => a + b, 0) / n;
+  return [ls.map(v => Math.exp(2 * Math.min(Math.max(v - m, -3), 3)))];
+}
+
+function locScaleOnce(q1, k1, q2, k2, opts) {
+  const { D0 = null, base = "normal", points = 513, nIter = 60,
+          tol = 1e-8, ridge = 0.0, mu0 = null } = opts;
   asIterations(nIter, "locScaleFromTopkPair");
   asTolerance(tol, "locScaleFromTopkPair");
   if (!(Array.isArray(q1) || ArrayBuffer.isView(q1)))
@@ -1079,14 +1113,9 @@ export function locScaleFromTopkPair(q1, k1, q2, k2, opts = {}) {
   const stationary = fitConverged ||
     (!lastAccepted && iters > 0 && lastGrad <= 1e-6 * Math.max(1, cost));
   const converged = fitConverged || (sqr > 0 && stationary && nested);
-  if (!converged && !returnInfo)
-    console.warn(`locScaleFromTopkPair did not converge: max |logit ` +
-                 `residual| ${residMax.toExponential(2)} after ${iters} iterations`);
-  if (returnInfo)
-    return { mu, sd, info: { converged, maxLogitResidual: residMax,
-                             iterations: iters, fitConverged, stationary,
-                             nested } };
-  return { mu, sd };
+  return { mu, sd, info: { converged, maxLogitResidual: residMax,
+                           iterations: iters, fitConverged, stationary,
+                           nested } };
 }
 
 export function locScaleFromWinAndSecond(pWin, pSecond, opts = {}) {
@@ -1150,12 +1179,73 @@ function rankMarginalWithJacobian(mu, sd, r, fn, points, split = false,
   return { p, J, mass };
 }
 
+/* Bounded deterministic retry for a failed inverse (#779, #781), shared by
+   abilitiesFromRankMarginal and locScaleFromTopkPair as in python. A first
+   attempt that converged is returned untouched (bitwise, no extra cost);
+   otherwise attempt(start) runs from each of the fixed starts(first) in
+   order and the first converged outcome wins, else the attempt with the
+   smallest info[key] is returned, still converged=false. info.iterations
+   becomes the total over every attempt. */
+function retryOnFailure(first, attempt, starts, key) {
+  // n_iter = 0 prices the start and performs no update: never retried
+  if (first.info.converged || first.info.iterations === 0) return first;
+  let best = first, total = first.info.iterations;
+  for (const start of starts(first)) {
+    const out = attempt(start);
+    total += out.info.iterations;
+    if (out.info.converged) { best = out; break; }
+    if (out.info[key] < best.info[key]) best = out;
+  }
+  best.info.iterations = total;
+  return best;
+}
+
+/* The retry starts of abilitiesFromRankMarginal (#779), as python's
+   _rank_marginal_starts: the original start nudged -/+ 0.3 typical scale
+   along the stalled log residual, then the failed trajectory reflected
+   through the start. */
+function rankMarginalStarts(mu0, muStall, resid, D) {
+  const n = muStall.length;
+  let m0 = new Array(n).fill(0);
+  if (mu0 != null) {
+    const m00 = asAbilities(mu0, "mu0");
+    const c = m00.reduce((a, b) => a + b, 0) / n;
+    m0 = m00.map(v => v - c);
+  }
+  const rm = resid.reduce((a, b) => a + b, 0) / n;
+  let u = resid.map(v => v - rm);
+  const um = Math.max(Math.max(...u.map(Math.abs)), 1e-300);
+  u = u.map(v => v / um);
+  const Dv = asIdio(D, n);
+  const h = 0.3 * Math.sqrt(Dv.reduce((a, b) => a + b, 0) / n);
+  return [m0.map((v, i) => v - h * u[i]), m0.map((v, i) => v + h * u[i]),
+          m0.map((v, i) => 2 * v - muStall[i])];
+}
+
 export function abilitiesFromRankMarginal(p, r, opts = {}) {
   checkOpts(opts, ABILITIES_FROM_RANK_MARGINAL_OPTS, "abilitiesFromRankMarginal", OPT_HINTS);
+  // one damped trajectory can stall at a positive-residual stationary
+  // point; only then, a bounded deterministic retry (#779)
+  const { mu0 = null, D = null, base = "normal", points = 513,
+          nIter = 60, tol = 1e-8, returnInfo = false } = opts;
+  const o = { mu0, D, base, points, nIter, tol };
+  const first = rankMarginalOnce(p, r, o);
+  const { mu, info } = retryOnFailure(
+    first, m => rankMarginalOnce(p, r, { ...o, mu0: m }),
+    f => rankMarginalStarts(mu0, f.mu, f.resid, D), "maxLogResidual");
+  if (!info.converged && !returnInfo)
+    console.warn(`abilitiesFromRankMarginal did not converge: max |log ` +
+                 `residual| ${info.maxLogResidual.toExponential(2)} after ` +
+                 `${info.iterations} iterations`);
+  if (returnInfo) return { mu, info };
+  return mu;
+}
+
+function rankMarginalOnce(p, r, opts) {
   // invert one EXACT-rank marginal at frozen scales: two-branched for
   // r >= 2, mu0 selects the branch. See the python docstring.
   const { mu0 = null, D = null, base = "normal", points = 513,
-          nIter = 60, tol = 1e-8, returnInfo = false } = opts;
+          nIter = 60, tol = 1e-8 } = opts;
   asIterations(nIter, "abilitiesFromRankMarginal");
   asTolerance(tol, "abilitiesFromRankMarginal");
   p = asFiniteVector(p, "target", "probability");
@@ -1277,11 +1367,6 @@ export function abilitiesFromRankMarginal(p, r, opts = {}) {
     if (!accepted) break;
   }
   const converged = residMax < tol;
-  if (!converged && !returnInfo)
-    console.warn(`abilitiesFromRankMarginal did not converge: max |log ` +
-                 `residual| ${residMax.toExponential(2)} after ${iters} iterations`);
-  if (returnInfo)
-    return { mu, info: { converged, maxLogResidual: residMax,
-                         iterations: iters } };
-  return mu;
+  return { mu, resid, info: { converged, maxLogResidual: residMax,
+                              iterations: iters } };
 }
