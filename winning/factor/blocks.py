@@ -34,6 +34,19 @@ TINY = 1e-300
 _fastrace, _RUST_OK, _HAVE_RUST = load_fastrace('block_race')
 
 
+def _native_raw(fn, *args):
+    """A compiled block/tree kernel's RAW lattice mass. fastrace checks
+    that mass itself for direct callers (#777); the front door checks the
+    combined mass with _checked_mass instead (a nested race sums the
+    conditional block masses first, and an inverse's trial states run
+    under a looser _MASS_TOL), so the native check is switched off here.
+    An older fastrace without the check takes no mass_tol."""
+    try:
+        return fn(*args, mass_tol=np.inf)
+    except TypeError:
+        return fn(*args)
+
+
 def _warn_if_sharp(v, sd, qa, threshold=3.0):
     """The factor grammar escalates its quadrature past sharpness 3 and
     refines its lattice; these hierarchical kernels do not yet, and at a
@@ -200,7 +213,7 @@ def _block_max_r(mu, sd, cluster, V, points, qa):
     if _HAVE_RUST and hasattr(_fastrace, "block_race_r"):
         lo_r, hi_r = _window_nodes(mu_o, sd_o, amp)
         try:
-            p_o = np.asarray(_fastrace.block_race_r(
+            p_o = np.asarray(_native_raw(_fastrace.block_race_r,
                 np.ascontiguousarray(mu_o), np.ascontiguousarray(sd_o),
                 np.ascontiguousarray(V_o), starts.astype(np.int64),
                 np.ascontiguousarray(nodes), np.ascontiguousarray(w), points,
@@ -268,7 +281,7 @@ def _block_max(mu, sd, cluster, v, points, qa):
     if _HAVE_RUST:
         lo_r, hi_r = _window_nodes(mu_o, sd_o, amp)
         try:
-            p_o = np.asarray(_fastrace.block_race(
+            p_o = np.asarray(_native_raw(_fastrace.block_race,
                 np.ascontiguousarray(mu_o), np.ascontiguousarray(sd_o),
                 np.ascontiguousarray(v_o), starts.astype(np.int64),
                 np.ascontiguousarray(an), np.ascontiguousarray(aw), points,
@@ -765,7 +778,7 @@ def tree_race_probabilities(mu, cluster, loading, D, parent, strength,
     amp = (np.abs(v_o) + depth_shift[c_o]) * float(np.max(np.abs(an)))
     lo, hi = _window_nodes(mu_o, sd_o, amp)
     if _HAVE_RUST and hasattr(_fastrace, "tree_race"):
-        p_o = np.asarray(_fastrace.tree_race(
+        p_o = np.asarray(_native_raw(_fastrace.tree_race,
             np.ascontiguousarray(mu_o), np.ascontiguousarray(sd_o),
             np.ascontiguousarray(v_o), starts.astype(np.int64),
             parent.astype(np.int64), np.ascontiguousarray(lam),
