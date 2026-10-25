@@ -252,6 +252,13 @@ class AbilityTracker:
                  base: str = "normal", order_method: str = "exact",
                  n_aug: int = 60, burn: int = 20, seed: int = 0,
                  rho: float = 0.0, Qf: int = 7, nodes_log2: int = 10):
+        order_methods = ("exact", "moment", "augmented")
+        if not isinstance(order_method, str) or order_method not in order_methods:
+            expected = ", ".join(repr(method) for method in order_methods)
+            raise ValueError(
+                f"order_method must be one of {expected}; got {order_method!r}"
+            )
+
         self.drift = float(drift); self.drift_exp = float(drift_exp)
         self.init_var = float(init_var)
         self.beta2 = float(beta2); self.tau2 = float(tau2)

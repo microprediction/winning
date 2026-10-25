@@ -19,6 +19,23 @@ from winning.ratings.tracker import (AbilityTracker, AbilityState,
 from winning.ratings.nway import update_ranking_exact
 
 
+@pytest.mark.parametrize("method", ["exact", "moment", "augmented"])
+def test_order_method_accepts_documented_values(method):
+    tracker = AbilityTracker(order_method=method)
+
+    assert tracker.order_method == method
+
+
+@pytest.mark.parametrize("method", ["excat", None])
+def test_order_method_rejects_invalid_values_before_mutating_state(method):
+    tracker = AbilityTracker.__new__(AbilityTracker)
+
+    with pytest.raises(ValueError, match="order_method must be one of"):
+        tracker.__init__(order_method=method)
+
+    assert tracker.__dict__ == {}
+
+
 def test_exact_ranking_matches_gibbs_reference():
     rng = np.random.default_rng(11)
     m = np.array([0.5, 0.2, -0.1, -0.3, -0.3])
