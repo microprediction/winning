@@ -586,6 +586,34 @@ def skew_normal_base(a):
 GH_RULE = {1: (201, float("inf")), 2: (41, 3.75), 3: (31, 4.75)}
 GH_RULE_DEFAULT = (15, 3.0)
 
+# The rank-one handover from Gauss-Hermite to the midpoint-quantile grid
+# was a hard switch at ceil(8 sharp) > 80, and the two rules disagree
+# there: a 1e-7 change in one runner's sd moved a top-2 membership by
+# 31bp (#783). Across (lo, hi] the rule is the weighted union of both,
+# (1 - w) GH + w midpoint, with w a C1 smoothstep in the sharpness, the
+# blend #420 uses for the likelihood's family switch. Each order is
+# frozen at the value its side uses at the band's edge -- GH at 8 lo,
+# the midpoint grid at 8 hi + 1, its first order past the switch -- so
+# the band meets the unchanged rule continuously at both ends. The band
+# sits on the Gauss-Hermite side: there the grid is the more accurate
+# rule (GH 1e-3 to 6e-3 off at sharpness 9-10 on six fields where the
+# grid at the same order was 2e-4 or better), so the blend leans the GH
+# side toward the better rule, while the grid's own side is left exactly
+# as it was.
+# The cost inside the band is the two rules together, 72 + 81 nodes.
+_R1_BLEND_LO, _R1_BLEND_HI = 9.0, 10.0
+
+
+def _rank1_blend_rule(sharp):
+    """The rank-one rule on (_R1_BLEND_LO, _R1_BLEND_HI] (#783)."""
+    t = (sharp - _R1_BLEND_LO) / (_R1_BLEND_HI - _R1_BLEND_LO)
+    w = t * t * (3.0 - 2.0 * t)
+    Fg, Wg = hermite_nodes(1, Q=int(8 * _R1_BLEND_LO))
+    Q = int(8 * _R1_BLEND_HI) + 1
+    Fm = ndtri((np.arange(Q) + 0.5) / Q)[:, None]
+    return (np.concatenate([Fg, Fm]),
+            np.concatenate([(1.0 - w) * Wg, np.full(Q, w / Q)]))
+
 
 def _translated_home(mu, D):
     """mu moved next to the origin when a common offset dwarfs the field.
@@ -708,6 +736,8 @@ def _setup(mu, V, D, F, W, base):
                 # dependency-free).
                 from .core import qmc_nodes
                 F, W = qmc_nodes(r, m=13)
+            elif r == 1 and _R1_BLEND_LO < sharp <= _R1_BLEND_HI:
+                F, W = _rank1_blend_rule(sharp)               # (#783)
             elif r == 1 and np.ceil(8.0 * sharp) > 80:
                 # rank-1 sharpness (gap-stress find): Gauss-Hermite's
                 # clustered nodes and wild weights are the wrong family

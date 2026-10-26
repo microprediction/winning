@@ -63,3 +63,24 @@ test_that("abilities_from_topk is unit-equivariant (#100)", {
     expect_equal(m$mu / cc, mu0 - mean(mu0), tolerance = 1e-6)
   }
 })
+
+test_that("the rank-one Hermite/midpoint handover is a band (#783)", {
+  # sd0 = 1 sits at the old ceiling(8 sharp) > 80 switch, where a 1e-7
+  # change in sd moved a top-2 membership by 31bp; outside the band the
+  # rule is the one it always was
+  a <- 10 / sqrt(2); V <- matrix(c(-a, a / 3, a / 3, a / 3), ncol = 1)
+  mu <- c(-0.7, -0.1, 0.2, 0.8)
+  p <- function(sd0) top_k_probabilities(mu, 2, V = V,
+                                         D = c(sd0^2, 1, 1, 1),
+                                         points = 513)[1]
+  expect_lt(abs(p(1 - 1e-7) - p(1)), 1e-7)
+  expect_lt(abs(p(1 + 1e-7) - p(1)), 1e-7)
+  sh <- seq(9.0, 10.0, by = 0.05)
+  expect_lt(max(abs(diff(vapply(sh, function(s) p(10 / s), 0)))), 5e-4)
+  st <- .race_setup(mu, V, c((10 / 10.6)^2, 1, 1, 1), NULL, NULL, "normal")
+  expect_equal(length(st$W), 85L)          # midpoint, untouched
+  st <- .race_setup(mu, V, c((10 / 8.9)^2, 1, 1, 1), NULL, NULL, "normal")
+  expect_equal(length(st$W), 72L)          # Gauss-Hermite, untouched
+  st <- .race_setup(mu, V, c((10 / 9.5)^2, 1, 1, 1), NULL, NULL, "normal")
+  expect_equal(length(st$W), 72L + 81L)    # both, inside the band
+})

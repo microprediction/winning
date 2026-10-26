@@ -578,3 +578,22 @@ end
                              D = [1.0, 0.7]) ≈
           [0.68189917673080014, 0.31810082326919986] rtol = 1e-14
 end
+
+@testset "the rank-one Hermite/midpoint handover is a band (#783)" begin
+    # sd0 = 1 sits at the old ceil(8 sharp) > 80 switch, where a 1e-7
+    # change in sd moved a top-2 membership by 31bp; outside the band the
+    # rule is the one it always was
+    a = 10 / sqrt(2)
+    V = reshape([-a, a / 3, a / 3, a / 3], :, 1)
+    mu = [-0.7, -0.1, 0.2, 0.8]
+    p(sd0) = top_k_probabilities(mu, 2; V = V, D = [sd0^2, 1, 1, 1],
+                                 points = 513)[1]
+    @test abs(p(1 - 1e-7) - p(1.0)) < 1e-7
+    @test abs(p(1 + 1e-7) - p(1.0)) < 1e-7
+    @test maximum(abs.(diff([p(10 / s) for s in 9.0:0.05:10.0]))) < 5e-4
+    nw(sd0) = length(winning._race_setup(mu, V, [sd0^2, 1, 1, 1], nothing,
+                                         nothing, "normal")[5])
+    @test nw(10 / 10.6) == 85          # midpoint, untouched
+    @test nw(10 / 8.9) == 72           # Gauss-Hermite, untouched
+    @test nw(10 / 9.5) == 72 + 81      # both, inside the band
+end
