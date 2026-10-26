@@ -569,3 +569,78 @@ def test_rank_one_and_three_untouched_by_787():
     padded = np.c_[v1, np.zeros(6)]
     assert np.allclose(block_race_probabilities(_MU787, _CL787, padded,
                                                 _D787), r1, rtol=0, atol=1e-14)
+
+
+# --- #777: block/tree endpoints check their own lattice mass ---------------
+
+def _structured_calls(mu, sd, points):
+    """The three structured endpoints on one two-cluster field with zero
+    loadings (a one-node rule), so all three price the same race. These
+    direct-extension tests live here, not in test_fastrace_boundary.py,
+    because the native CI job runs this file against the checkout's build."""
+    fastrace = pytest.importorskip("fastrace")
+    if not hasattr(fastrace, "tree_race"):
+        pytest.skip("fastrace without the structured kernels")
+    n = len(mu)
+    v = np.zeros(n)
+    starts = np.array([0, 1], dtype=np.int64)
+    an, aw = np.array([0.0]), np.array([1.0])
+    parent = np.array([2, 2, -1], dtype=np.int64)
+    lam = np.array([0.0, 0.0, 0.5])
+    return {
+        "block_race": lambda **kw: fastrace.block_race(
+            mu, sd, v, starts, an, aw, points, np.nan, np.nan, **kw),
+        "block_race_r": lambda **kw: fastrace.block_race_r(
+            mu, sd, v[:, None], starts, an[:, None], aw, points,
+            np.nan, np.nan, **kw),
+        "tree_race": lambda **kw: fastrace.tree_race(
+            mu, sd, v, starts, parent, lam, an, aw, points, -8.0, 8.0,
+            **kw),
+    }
+
+
+@pytest.mark.parametrize("name", ["block_race", "block_race_r", "tree_race"])
+@pytest.mark.parametrize("mu, sd, points", [
+    ([0.0, -0.2], [0.01, 1.0], 257),    # the issue's default-size field
+    ([0.0, 0.0], [1.0, 1.0], 3),        # raw mass 3.19
+    ([0.0, 0.0], [1.0, 1.0], 2),        # raw mass 1.6e-13
+])
+def test_structured_endpoints_refuse_a_mass_defect_777(name, mu, sd, points):
+    """These returned raw lattice integrals summing to 1.07, 3.19 and
+    1.6e-13 as if they were probabilities; the Python front door refuses
+    the same defect, and so does the endpoint now."""
+    call = _structured_calls(np.array(mu), np.array(sd), points)[name]
+    with pytest.raises(RuntimeError, match="lattice captured total mass"):
+        call()
+    raw = np.asarray(call(mass_tol=np.inf))     # explicit opt-out: raw
+    assert abs(raw.sum() - 1.0) > 5e-3
+
+
+@pytest.mark.parametrize("name", ["block_race", "block_race_r", "tree_race"])
+def test_structured_endpoints_resolved_race_unchanged_777(name):
+    """A well-resolved lattice passes the check and is returned raw,
+    bit for bit as with the check switched off."""
+    call = _structured_calls(np.array([0.0, -0.2]), np.ones(2), 257)[name]
+    p = np.asarray(call())
+    assert np.array_equal(p, np.asarray(call(mass_tol=np.inf)))
+    assert abs(p.sum() - 1.0) < 1e-12
+    assert np.allclose(p, [0.55623146, 0.44376854], atol=1e-8)
+    for tol in (np.nan, -1e-3):
+        with pytest.raises(ValueError, match="mass_tol"):
+            call(mass_tol=tol)
+
+
+def test_front_door_keeps_its_own_mass_tolerance_777():
+    """winning checks the combined mass itself: a trial state inside an
+    inverse runs under the looser tolerance, which the native check at
+    the strict default must not pre-empt. points=6 captures mass 1.009.
+    Runs on both paths; it is the compiled one that #777 could break."""
+    from winning.factor import blocks as B
+    args = (np.array([0.0, 0.2, 0.1]), np.array([0, 1, 1]),
+            np.full(3, 0.3), np.ones(3))
+    with pytest.raises(RuntimeError, match="block race lattice captured "
+                       r"total mass 1\.0090 \(defect 9\.0\de-03"):
+        B.block_race_probabilities(*args, points=6)
+    with B._trial_mass_tolerance():
+        p = B.block_race_probabilities(*args, points=6)
+    assert abs(p.sum() - 1.0) < 1e-12
