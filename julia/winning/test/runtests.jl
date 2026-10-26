@@ -594,6 +594,24 @@ end
     nw(sd0) = length(winning._race_setup(mu, V, [sd0^2, 1, 1, 1], nothing,
                                          nothing, "normal")[5])
     @test nw(10 / 10.6) == 85          # midpoint, untouched
-    @test nw(10 / 8.9) == 72           # Gauss-Hermite, untouched
+    @test nw(10 / 8.9) == 33 + 34 + 72 # handed back to GH(72) (#850)
     @test nw(10 / 9.5) == 72 + 81      # both, inside the band
+end
+
+@testset "the rank-one Gauss-Hermite order is continuous (#850)" begin
+    # GH prices alternate with the parity of the order, so ceil(8 sharp)
+    # jumped by up to 59bp on this field at every 1/8 of sharpness
+    a = 10 / sqrt(2)
+    V = reshape([-a, a / 3, a / 3, a / 3], :, 1)
+    mu = [-0.7, -0.1, 0.2, 0.8]
+    p(sd0) = top_k_probabilities(mu, 2; V = V, D = [sd0^2, 1, 1, 1],
+                                 points = 513)[1]
+    for s in (4.0, 6.0, 71 / 8)
+        @test abs(p(10 / s * (1 + 1e-9)) - p(10 / s * (1 - 1e-9))) < 1e-7
+    end
+    nw(sharp) = length(winning._rank1_hermite_rule(sharp)[2])
+    @test nw(2.0) == 16                # an old order, exactly
+    @test nw(5.0) == 24 + 25           # the parity pair
+    @test nw(8.0) == 33 + 34           # held at the cap
+    @test winning._rank1_hermite_rule(9.0)[2] == winning.hermite_nodes(1, 72).W
 end

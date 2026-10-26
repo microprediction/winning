@@ -355,6 +355,43 @@ function _rank1_blend_rule(sharp)
     return vcat(g.F, Fm), vcat((1.0 - w) .* g.W, fill(w / Q, Q))
 end
 
+# Below the band the rank-one rule was Gauss-Hermite of order
+# ceil(8 sharp), whose prices alternate with the parity of the order and so
+# jumped at every 1/8 of sharpness (#850). Matching the python reference
+# (_rank1_hermite_rule, which has the measurements), with x = 8 sharp and S
+# the smoothstep above: on (15, 24] the adjacent orders interpolated,
+# (1 - w) GH(m) + w GH(m+1); on (24, 25] GH(24) takes on GH(23) up to half
+# weight; past 25 the parity-balanced pair GH(m-1)/2 + GH(m)/2 at order
+# y = 5 sharp in [24, 34], sliding its lower half to GH(m+1) as y crosses
+# (m, m+1); on (71, 72] handed back to GH(72), the band's lower edge.
+const R1_PAIR_FROM = 24
+const R1_PAIR_PER_SHARP = 5.0
+const R1_PAIR_CAP = 34
+function _rank1_hermite_rule(sharp)
+    S(t) = t * t * (3.0 - 2.0 * t)
+    x = 8.0 * sharp
+    lo = R1_PAIR_FROM
+    if x <= lo
+        m = floor(x); w = S(x - m)
+        parts = [(Int(m), 1.0 - w), (Int(m) + 1, w)]
+    elseif x <= lo + 1
+        w = S(x - lo)
+        parts = [(lo - 1, 0.5 * w), (lo, 1.0 - 0.5 * w)]
+    else
+        y = min(max(R1_PAIR_PER_SHARP * sharp, Float64(lo)), Float64(R1_PAIR_CAP))
+        m = floor(y); w = S(y - m)
+        parts = [(Int(m) - 1, 0.5 * (1.0 - w)), (Int(m), 0.5), (Int(m) + 1, 0.5 * w)]
+        top = Int(8 * R1_BLEND_LO)
+        if x > top - 1
+            v = S(x - (top - 1))
+            parts = vcat([(q, c * (1.0 - v)) for (q, c) in parts], [(top, v)])
+        end
+    end
+    parts = [(q, c) for (q, c) in parts if c > 0.0]
+    g = [hermite_nodes(1, q) for (q, _) in parts]
+    return vcat([h.F for h in g]...), vcat([c .* h.W for (h, (_, c)) in zip(g, parts)]...)
+end
+
 function _race_setup(mu, V, D, F, W, base)
     mu = Float64.(collect(mu))
     n = length(mu)
@@ -402,6 +439,8 @@ function _race_setup(mu, V, D, F, W, base)
                 Q = Int(min(ceil(8 * sharp), 4001))
                 Fm = reshape(qnorm.(((1:Q) .- 0.5) ./ Q), :, 1)
                 Wv = fill(1.0 / Q, Q)
+            elseif r == 1 && 8 * sharp > 15
+                Fm, Wv = _rank1_hermite_rule(sharp)            # (#850)
             elseif Float64(cap)^r > 1e5
                 hw = halton_normal_nodes(r, 2^13)
                 Fm, Wv = hw.F, hw.W

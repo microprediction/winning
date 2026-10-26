@@ -15,7 +15,8 @@ import numpy as np
 import pytest
 
 from winning.factor.core import hermite_nodes, qmc_nodes
-from winning.factor.races import GH_RULE, GH_RULE_DEFAULT, _setup
+from winning.factor.races import (GH_RULE, GH_RULE_DEFAULT, _setup,
+                                  _rank1_hermite_rule)
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 R_SRC = (ROOT / "r" / "winning" / "R" / "races.R").read_text()
@@ -98,9 +99,9 @@ def test_rank_one_is_untouched_by_the_sharpness_escalation():
     """The escalation is guarded r >= 2; rank 1 hands over to the
     midpoint-quantile grid at Q > 80 instead."""
     mu, V, D, sharp = field(60, 1, 6.0)
-    assert sharp > 3.0
-    Q = int(min(np.ceil(8.0 * sharp), 4001))
-    assert chosen(mu, V, D) == (Q if Q > 80 else len(hermite_nodes(1, Q=max(Q, 15))[0]))
+    assert 3.0 < sharp <= 9.0
+    # below the band, the rank-one Gauss-Hermite rule (#850)
+    assert chosen(mu, V, D) == len(_rank1_hermite_rule(sharp)[1]) < SOBOL
 
 
 def test_table_agrees_across_the_three_ports():

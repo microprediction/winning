@@ -615,6 +615,62 @@ def _rank1_blend_rule(sharp):
             np.concatenate([(1.0 - w) * Wg, np.full(Q, w / Q)]))
 
 
+# Below the band the rank-one rule was Gauss-Hermite of order
+# ceil(8 sharp), and GH prices alternate with the parity of the order: on
+# a near-step integrand GH(Q) and GH(Q + 1) err by similar amounts of
+# opposite sign. At every 1/8 of sharpness the price jumped, by up to
+# 2.2bp at sharpness 2, 40bp at 5 and 90bp just below 9 on seven fields
+# (#850). Half of each cancels the alternation: the pair GH(m-1)/2 +
+# GH(m)/2 at m = 5 sharp (at most 34) had 2-11x less worst-case error
+# than GH(ceil 8 sharp) against a 4001-node midpoint reference over
+# sharpness 4.5 to 8.875, and from 8.4 up it has fewer nodes. With
+# x = 8 sharp:
+#   x <= 15       GH(15), as before;
+#   15 < x <= 24  (1 - w) GH(m) + w GH(m+1), m = floor x, w = S(x - m):
+#                 the old orders interpolated, and the old rule itself at
+#                 every integer x, where those orders are accurate enough
+#                 that a pair would cost more than it gains;
+#   24 < x <= 25  GH(24) takes on its partner GH(23), up to half weight;
+#   x > 25        the pair at y = 5 sharp, held in [24, 34]: GH(m-1)/2 +
+#                 GH(m)/2 at integer y, its GH(m-1) half moving to GH(m+1)
+#                 as y crosses (m, m+1);
+#   71 < x <= 72  handed back to GH(72), the band's lower edge, so the
+#                 band is met continuously and is unchanged.
+# S is the band's C1 smoothstep. The orders keep the cost within 2x of
+# the old rule: interpolation pays 2m + 1 nodes where the old rule paid
+# m + 1, the sliding pair 3m at m <= 5 sharp where it paid 8 sharp, and
+# the cap at 34 keeps the hand-back (the pair plus GH(72)) at 139 nodes.
+_R1_PAIR_FROM, _R1_PAIR_PER_SHARP, _R1_PAIR_CAP = 24, 5.0, 34
+
+
+def _rank1_hermite_rule(sharp):
+    """The rank-one rule on 15/8 < sharp <= _R1_BLEND_LO (#850)."""
+    def S(t):
+        return t * t * (3.0 - 2.0 * t)
+    x = 8.0 * sharp
+    lo = _R1_PAIR_FROM
+    if x <= lo:
+        m = int(np.floor(x))
+        w = S(x - m)
+        parts = [(m, 1.0 - w), (m + 1, w)]
+    elif x <= lo + 1:
+        w = S(x - lo)
+        parts = [(lo - 1, 0.5 * w), (lo, 1.0 - 0.5 * w)]
+    else:
+        y = min(max(_R1_PAIR_PER_SHARP * sharp, float(lo)),
+                float(_R1_PAIR_CAP))
+        m = int(np.floor(y))
+        w = S(y - m)
+        parts = [(m - 1, 0.5 * (1.0 - w)), (m, 0.5), (m + 1, 0.5 * w)]
+        top = int(8 * _R1_BLEND_LO)
+        if x > top - 1:
+            v = S(x - (top - 1))
+            parts = [(q, c * (1.0 - v)) for q, c in parts] + [(top, v)]
+    rules = [(hermite_nodes(1, Q=q), c) for q, c in parts if c > 0.0]
+    return (np.concatenate([F for (F, _), _ in rules]),
+            np.concatenate([c * W for (_, W), c in rules]))
+
+
 def _translated_home(mu, D):
     """mu moved next to the origin when a common offset dwarfs the field.
 
@@ -756,6 +812,8 @@ def _setup(mu, V, D, F, W, base):
                 u = (np.arange(Q) + 0.5) / Q
                 F = ndtri(u)[:, None]
                 W = np.full(Q, 1.0 / Q)
+            elif r == 1 and 8.0 * sharp > 15:
+                F, W = _rank1_hermite_rule(sharp)             # (#850)
             elif cap ** r > 100_000:
                 # high-rank ecology footgun (bandits, 120 horses x 12
                 # stable factors): the tensor grid is cap^r nodes BEFORE

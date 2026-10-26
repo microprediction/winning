@@ -215,6 +215,44 @@ attr(.base_laplace, "log_sf") <- function(z) {
        W = c((1 - w) * g$W, rep(w / Q, Q)))
 }
 
+# Below the band the rank-one rule was Gauss-Hermite of order
+# ceiling(8 sharp), whose prices alternate with the parity of the order and
+# so jumped at every 1/8 of sharpness (#850). Matching the python reference
+# (_rank1_hermite_rule, which has the measurements), with x = 8 sharp and S
+# the smoothstep above: on (15, 24] the adjacent orders interpolated,
+# (1 - w) GH(m) + w GH(m+1); on (24, 25] GH(24) takes on GH(23) up to half
+# weight; past 25 the parity-balanced pair GH(m-1)/2 + GH(m)/2 at order
+# y = 5 sharp in [24, 34], sliding its lower half to GH(m+1) as y crosses
+# (m, m+1); on (71, 72] handed back to GH(72), the band's lower edge.
+.R1_PAIR_FROM <- 24
+.R1_PAIR_PER_SHARP <- 5.0
+.R1_PAIR_CAP <- 34
+.rank1_hermite_rule <- function(sharp) {
+  S <- function(t) t * t * (3 - 2 * t)
+  x <- 8 * sharp
+  lo <- .R1_PAIR_FROM
+  if (x <= lo) {
+    m <- floor(x); w <- S(x - m)
+    q <- c(m, m + 1); cw <- c(1 - w, w)
+  } else if (x <= lo + 1) {
+    w <- S(x - lo)
+    q <- c(lo - 1, lo); cw <- c(0.5 * w, 1 - 0.5 * w)
+  } else {
+    y <- min(max(.R1_PAIR_PER_SHARP * sharp, lo), .R1_PAIR_CAP)
+    m <- floor(y); w <- S(y - m)
+    q <- c(m - 1, m, m + 1); cw <- c(0.5 * (1 - w), 0.5, 0.5 * w)
+    top <- 8 * .R1_BLEND_LO
+    if (x > top - 1) {
+      v <- S(x - (top - 1))
+      q <- c(q, top); cw <- c(cw * (1 - v), v)
+    }
+  }
+  keep <- cw > 0
+  g <- lapply(q[keep], function(o) hermite_nodes(1, order = as.integer(o)))
+  list(F = do.call(rbind, lapply(g, function(h) h$F)),
+       W = unlist(Map(function(h, c) c * h$W, g, cw[keep])))
+}
+
 .race_setup <- function(mu, V, D, F, W, base) {
   mu <- as.numeric(mu)
   n <- length(mu)
@@ -287,6 +325,10 @@ attr(.base_laplace, "log_sf") <- function(z) {
         Q <- as.integer(min(ceiling(8 * sharp), 4001))
         F <- matrix(qnorm((seq_len(Q) - 0.5) / Q), ncol = 1)
         W <- rep(1 / Q, Q)
+      } else if (r == 1 && 8 * sharp > 15) {
+        hw <- .rank1_hermite_rule(sharp)                        # (#850)
+        F <- hw$F
+        W <- hw$W
       } else if (cap^r > 1e5) {
         # high-rank tensor footgun (matching python): past a 1e5-node
         # tensor budget escalate to low-discrepancy nodes

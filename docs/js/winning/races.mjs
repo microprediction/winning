@@ -250,6 +250,45 @@ function rank1BlendRule(sharp) {
   };
 }
 
+/* Below the band the rank-one rule was Gauss-Hermite of order ceil(8 sharp),
+   whose prices alternate with the parity of the order and so jumped at
+   every 1/8 of sharpness (#850). As python (_rank1_hermite_rule, which has
+   the measurements), with x = 8 sharp and S the smoothstep above: on
+   (15, 24] the adjacent orders interpolated, (1 - w) GH(m) + w GH(m+1);
+   on (24, 25] GH(24) takes on GH(23) up to half weight; past 25 the
+   parity-balanced pair GH(m-1)/2 + GH(m)/2 at order y = 5 sharp in
+   [24, 34], sliding its lower half to GH(m+1) as y crosses (m, m+1); on
+   (71, 72] handed back to GH(72), the band's lower edge. */
+const R1_PAIR_FROM = 24, R1_PAIR_PER_SHARP = 5.0, R1_PAIR_CAP = 34;
+function rank1HermiteRule(sharp) {
+  const S = t => t * t * (3.0 - 2.0 * t);
+  const x = 8 * sharp, lo = R1_PAIR_FROM;
+  let parts;
+  if (x <= lo) {
+    const m = Math.floor(x), w = S(x - m);
+    parts = [[m, 1.0 - w], [m + 1, w]];
+  } else if (x <= lo + 1) {
+    const w = S(x - lo);
+    parts = [[lo - 1, 0.5 * w], [lo, 1.0 - 0.5 * w]];
+  } else {
+    const y = Math.min(Math.max(R1_PAIR_PER_SHARP * sharp, lo), R1_PAIR_CAP);
+    const m = Math.floor(y), w = S(y - m);
+    parts = [[m - 1, 0.5 * (1.0 - w)], [m, 0.5], [m + 1, 0.5 * w]];
+    const top = 8 * R1_BLEND_LO;
+    if (x > top - 1) {
+      const v = S(x - (top - 1));
+      parts = parts.map(([q, c]) => [q, c * (1.0 - v)]).concat([[top, v]]);
+    }
+  }
+  const F = [], W = [];
+  for (const [q, c] of parts) {
+    if (!(c > 0.0)) continue;
+    const g = hermiteNodes(1, q);
+    for (let i = 0; i < g.W.length; i++) { F.push(g.F[i]); W.push(c * g.W[i]); }
+  }
+  return { F, W, hermite: true };   // kept in V's own axes, as python builds it
+}
+
 function ruleFamily(V, D) {
   const n = V.length, r = V[0].length;
   let sharp = 0;
@@ -294,6 +333,8 @@ function canonicalRule(V, D, maxNodes) {
     // rank-1 extreme sharpness (matching python/R): equal-weight
     // midpoint-quantile grid scaled with sharpness replaces GH
     rule = midpointRule(Math.min(Math.ceil(8 * sharp), 4001));
+  } else if (r === 1 && 8 * sharp > 15) {
+    rule = rank1HermiteRule(sharp);                         // (#850)
   } else if (Math.pow(cap, r) > 100000) {
     // high-rank tensor footgun (matching python/R): Halton fallback
     rule = haltonRule(r, 8192);
