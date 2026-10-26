@@ -223,3 +223,39 @@ test_that("tree scalar loading equals its expansion (#780)", {
   expect_lt(max(abs(p - c(0.42684000, 0.25205727, 0.17948344, 0.14161929))),
             1e-6)
 })
+
+test_that("rank-two block loadings are canonical per cluster (#787)", {
+  mu <- c(2.43, .27, -.01, -.19, 1.07, -1.03); cl <- c(0, 0, 0, 1, 1, 1)
+  D <- c(1, 1.39, 1.48, .85, .94, .61)
+  V <- matrix(c(.69, -.65, .29, -.95, -.69, -1.15, -.04, -1.28, .61, -.27,
+                -.20, 2.02), ncol = 2, byrow = TRUE)
+  h <- sqrt(.5); Q <- matrix(c(h, h, -h, h), 2); Vr <- V %*% Q
+  expect_lt(max(abs(Vr %*% t(Vr) - V %*% t(V))), 1e-15)
+  p <- block_race_probabilities(mu, cl, V, D)
+  expect_lt(max(abs(p - block_race_probabilities(mu, cl, Vr, D))), 1e-14)
+  expect_lt(max(abs(p - race_probabilities(mu, structure = Blocks(cl, Vr, D)))),
+            1e-14)
+  g <- rep(.3, 6)
+  expect_lt(max(abs(nested_race_probabilities(mu, cl, V, D, coupling = g) -
+                    nested_race_probabilities(mu, cl, Vr, D, coupling = g))),
+            1e-14)
+  # per-cluster rotation, a column sign and a column swap
+  Vc <- V; Vc[1:3, ] <- V[1:3, ] %*% Q
+  for (W in list(Vc, V %*% diag(c(-1, 1)), V[, 2:1]))
+    expect_lt(max(abs(p - block_race_probabilities(mu, cl, W, D))), 1e-14)
+  # python's canonical price
+  expect_lt(max(abs(p - c(0.0016660074987572178, 0.08641098200675351,
+                          0.15703265532332839, 0.26876786125311775,
+                          0.02195242706689778, 0.4641700668511454))), 1e-13)
+  # rank one untouched; zero-padded and rank-deficient rank two are rank one
+  v <- V[, 1]
+  r1 <- block_race_probabilities(mu, cl, v, D)
+  expect_lt(max(abs(r1 - c(0.00244822624473019, 0.1180086074271331,
+                           0.19963224309434435, 0.14866389613894831,
+                           0.03235943719199677, 0.4988875899028474))), 1e-14)
+  expect_lt(max(abs(r1 - block_race_probabilities(mu, cl, cbind(v, 0), D))),
+            1e-15)
+  expect_lt(max(abs(block_race_probabilities(mu, cl, sqrt(5) * v, D) -
+                    block_race_probabilities(mu, cl, cbind(v, 2 * v), D))),
+            1e-14)
+})

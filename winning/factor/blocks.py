@@ -194,6 +194,45 @@ def _sobol_log2(r, qa):
     return m
 
 
+# the rank-two product rule's orientation to a cluster's principal axes
+_ROT45 = np.sqrt(0.5) * np.array([[1.0, -1.0], [1.0, 1.0]])
+
+
+def _canonical_block_loadings(V, cluster):
+    """Rank-two block loadings in a basis fixed by each V_c V_c' alone.
+
+    Each cluster's effect is its own N(0, I) draw, so V_c -> V_c Q_c
+    (Q_c orthogonal) is the same race, but the product Gauss-Hermite
+    rule is not rotation invariant: a 45-degree rotation of one block
+    moved a share by 0.0052 at the default qa (#787). Per cluster the
+    columns become V_c U_c, U_c the eigenvectors of V_c'V_c, with
+    factor.core's sign rule (#745); null directions (norm <= 1e-12 of
+    the cluster's largest) are dropped and the clusters zero-padded to
+    the largest rank R, as the browser's canonicalBasis does. R = 1 is
+    then the rank-one Gauss-Hermite rule. At R = 2 the product grid is
+    laid at 45 degrees to the principal axes: on its own axes the
+    dominant direction sees only qa distinct node offsets and the
+    default error was ~3x that of an arbitrary basis; at 45 degrees it
+    was ~10x smaller than on the axes (docs/notes/cov-determinism.md).
+    The grid is symmetric under the sign flips and swaps the sign rule
+    leaves open. One 2 x 2 eigendecomposition per cluster."""
+    from .core import _canonical_factor_basis
+    _, inv = np.unique(cluster, return_inverse=True)
+    inv = inv.reshape(-1)
+    order = np.argsort(inv, kind="stable")
+    starts = np.flatnonzero(np.r_[True, np.diff(inv[order]) != 0])
+    parts = []
+    for ix in np.split(order, starts[1:]):
+        C = _canonical_factor_basis(V[ix])
+        norm = np.linalg.norm(C, axis=0)
+        parts.append((ix, C[:, (norm > 1e-12 * norm.max()) & (norm > 0)]))
+    R = max(C.shape[1] for _, C in parts)
+    out = np.zeros((V.shape[0], R))
+    for ix, C in parts:
+        out[ix, :C.shape[1]] = C
+    return out @ _ROT45 if R == 2 else out
+
+
 def _block_max_r(mu, sd, cluster, V, points, qa):
     """Max-wins kernel for RANK-R blocks: loading matrix V (n, r), each
     cluster with its own independent r-dim effect. Conditional independence
@@ -268,6 +307,13 @@ def _block_max(mu, sd, cluster, v, points, qa):
         # rank-one reshape and raised a broadcast error (#508)
         v = np.zeros(len(mu))
     _warn_if_sharp(v, sd, qa)
+    if v.ndim == 2 and v.shape[-1] > 1:
+        V = as_loadings(v, len(mu))
+        if V.shape[1] == 2:
+            # rank two: the rule sees each cluster's V_c V_c' only (#787)
+            v = _canonical_block_loadings(V, cluster)
+            if v.shape[1] == 0:
+                v = np.zeros(len(mu))
     if v.ndim == 2 and v.shape[-1] > 1:
         return _block_max_r(mu, sd, cluster, v, points, qa)
     v = v.reshape(len(mu))
