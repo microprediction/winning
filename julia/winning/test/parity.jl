@@ -80,6 +80,22 @@ function run_parity(vectors_path::AbstractString)
             points = 257).sd,
         "invert_second" => () -> abilities_from_rank_marginal(R[:, 2], 2;
             mu0 = it2, D = D, points = 257),
+        # the inverse retry (#781). retry779_mu stays unported: julia's
+        # exact-rank inverse fits the raw lattice column, not the
+        # mass-normalised public map (#267), so its logistic solution sits
+        # ~1e-5 from python's; runtests.jl covers its retry directly.
+        "retry779_target" => () -> rank_probabilities(vec1(inp["retry779_mu"]);
+            D = vec1(inp["retry779_D"]), base = "logistic", points = 513)[:, 2],
+        "retry781_win" => () -> top_k_probabilities(vec1(inp["retry781_mu"]), 1;
+            D = vec1(inp["retry781_sd"]) .^ 2),
+        "retry781_top2" => () -> top_k_probabilities(vec1(inp["retry781_mu"]), 2;
+            D = vec1(inp["retry781_sd"]) .^ 2),
+        "retry781_mu" => () -> loc_scale_from_topk_pair(
+            vec1(sc["retry781_win"]["value"]), 1,
+            vec1(sc["retry781_top2"]["value"]), 2).mu,
+        "retry781_sd" => () -> loc_scale_from_topk_pair(
+            vec1(sc["retry781_win"]["value"]), 1,
+            vec1(sc["retry781_top2"]["value"]), 2).sd,
     )
     fails = 0
     skipped = String[]

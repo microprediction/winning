@@ -134,6 +134,25 @@ runs <- list(
     abilities_from_rank_marginal(
       as.matrix(vec$scenarios$rank_marginals$value)[, 2], 2,
       mu0 = vec$scenarios$invert_topk2$value, D = D, points = 257),
+  # the inverse retry (#779, #781): both solves fail from their first start
+  retry779_target = function()
+    rank_probabilities(inp$retry779_mu, D = inp$retry779_D,
+                       base = "logistic", points = 513)[, 2],
+  retry779_mu = function()
+    abilities_from_rank_marginal(vec$scenarios$retry779_target$value, 2,
+                                 mu0 = inp$retry779_mu0, D = inp$retry779_D,
+                                 base = "logistic", points = 513,
+                                 n_iter = 200),
+  retry781_win = function()
+    top_k_probabilities(inp$retry781_mu, 1, D = inp$retry781_sd^2),
+  retry781_top2 = function()
+    top_k_probabilities(inp$retry781_mu, 2, D = inp$retry781_sd^2),
+  retry781_mu = function()
+    loc_scale_from_topk_pair(vec$scenarios$retry781_win$value, 1,
+                             vec$scenarios$retry781_top2$value, 2)$mu,
+  retry781_sd = function()
+    loc_scale_from_topk_pair(vec$scenarios$retry781_win$value, 1,
+                             vec$scenarios$retry781_top2$value, 2)$sd,
   cov_degraded_route = function() {
     C <- .parity_degraded_cov(8, 3)
     race_probabilities(seq(-0.6, 0.6, length.out = 8), cov = C)

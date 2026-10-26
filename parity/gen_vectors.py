@@ -102,6 +102,17 @@ def make_inputs(seed=2026):
         "dividends": [2.0, 3.5, 6.0, 12.0, 20.0, 41.0],
         "linkage_Z": _linkage_Z(n),
         "classic_L": 500, "classic_unit": 0.01, "classic_a": 1.5,
+        # the inverse-retry fixtures (#779, #781): fields whose single
+        # damped solve stalls, so every port must take the retry path
+        "retry779_mu": [0.016, -0.356, 0.552, -0.212],
+        "retry779_D": [1.444 ** 2, 0.799 ** 2, 0.818 ** 2, 1.163 ** 2],
+        "retry779_mu0": [-0.002, -0.308, 0.574, -0.242],
+        "retry781_mu": [-0.6669408707331521, -0.04607137189844819,
+                        -0.9239086741190706, 1.2201504898506477,
+                        -0.7018494832934388, 1.1186199101934622],
+        "retry781_sd": [2.601365880665001, 1.5539670145121982,
+                        1.122141854005653, 0.4148305666148936,
+                        0.43663998310753704, 0.3415875902805172],
     }
 
 
@@ -264,6 +275,24 @@ def build(inputs):
         points=1001), 1e-6)
     sc("bottomk2_normal", bottom_k_probabilities(mu, 2, D=D, points=257))
     sc("bottomk2_factor", bottom_k_probabilities(mu, 2, V=V1, D=D, points=257))
+    # the inverse retry (#779, #781): each solve fails from its first
+    # start, so these pin the shared retry and its deterministic starts.
+    # Targets are embedded, as for loc_scale_win, so every port inverts
+    # identical floats.
+    t779 = rank_probabilities(inputs["retry779_mu"], D=inputs["retry779_D"],
+                              base="logistic", points=513)[:, 1]
+    sc("retry779_target", t779)
+    sc("retry779_mu", abilities_from_rank_marginal(
+        t779, 2, mu0=inputs["retry779_mu0"], D=inputs["retry779_D"],
+        base="logistic", points=513, n_iter=200), 1e-6)
+    D781 = np.asarray(inputs["retry781_sd"]) ** 2
+    q781a = top_k_probabilities(inputs["retry781_mu"], 1, D=D781)
+    q781b = top_k_probabilities(inputs["retry781_mu"], 2, D=D781)
+    sc("retry781_win", q781a)
+    sc("retry781_top2", q781b)
+    mu781, sd781 = loc_scale_from_topk_pair(q781a, 1, q781b, 2)
+    sc("retry781_mu", mu781, 1e-6)
+    sc("retry781_sd", sd781, 1e-6)
     Fh, Wh = hermite_nodes(2, Q=9)
     sc("hermite2_nodes", Fh, 1e-12)
     sc("hermite2_weights", Wh, 1e-12)
