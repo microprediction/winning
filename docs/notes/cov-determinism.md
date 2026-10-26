@@ -91,3 +91,32 @@ signs only, not rotations. Symmetrising has also cost accuracy before:
 -1212.87). #728 went back to the plain cloud and kept the symmetric
 helpers opt-in. Any symmetric cloud for cov= would need the same
 measurement first.
+
+## Rank-two blocks (#787, 2026-10)
+
+The same defect sat in the block grammar. `Blocks`, `Nested` and the
+direct block calls price each cluster's rank-two effect with a 9 x 9
+product Gauss-Hermite grid. That grid is symmetric under column signs and
+swaps but not under rotations, and rank two was left in the caller's
+axes (rank three and up were already canonical in the browser). A
+45-degree rotation of one block moved a share by 0.0052
+([#787](https://github.com/microprediction/winning/issues/787)).
+
+Rank-two block loadings are now canonical in Python, R and the browser.
+Per cluster the columns become V_c U_c, U_c the eigenvectors of V_c'V_c,
+with the sign rule above. Null directions are dropped and clusters are
+zero-padded to the largest rank, so a rank-deficient or zero-padded
+loading prices as rank one. Caller-supplied `nodes` stay in the caller's
+coordinates. The Rust kernel takes the loadings from the Python wrapper.
+
+The grid is laid at 45 degrees to the principal axes, not on them. On its
+own axes the grid shows the dominant direction only qa distinct offsets.
+Against a qa = 51 reference over 60 random ordinary fields, the mean
+max-abs error was 2.8e-4 on the axes, 9.7e-5 in an arbitrary basis (main's
+behaviour) and 2.9e-5 at 45 degrees. On the issue fixture it was 5.7e-3
+on main and 5.7e-4 now. Every moved default moved by about main's own
+error against that reference (at most 2x it). Rank one and rank three or
+more are bitwise unchanged, except a browser loading with three or more
+columns whose clusters all have rank two: it already went to the
+principal axes and now gets the 45-degree grid too. Python's rank-three-plus Sobol rule is still not
+canonical; that case is not addressed here.

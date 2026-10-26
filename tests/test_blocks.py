@@ -477,3 +477,170 @@ def test_tree_rank_r_loading_still_refused():
     with pytest.raises(NotImplementedError, match="rank-one"):
         tree_race_probabilities(mu, cluster, np.full((4, 2), .3), D, parent,
                                 np.array([0., 0., .4]), points=129)
+
+
+# --- #787: rank-two block loadings are canonical per cluster -------------
+_MU787 = [2.43, .27, -.01, -.19, 1.07, -1.03]
+_CL787 = [0, 0, 0, 1, 1, 1]
+_D787 = [1, 1.39, 1.48, .85, .94, .61]
+_V787 = np.array([[.69, -.65], [.29, -.95], [-.69, -1.15],
+                  [-.04, -1.28], [.61, -.27], [-.20, 2.02]])
+
+
+def _rot45(V):
+    c = np.sqrt(0.5)
+    return V @ np.array([[c, -c], [c, c]])
+
+
+def test_rank_two_rotation_is_the_same_race_787():
+    from winning.factor import race_probabilities
+    from winning.factor.structures import Blocks, Nested
+    Vr = _rot45(_V787)
+    assert np.allclose(Vr @ Vr.T, _V787 @ _V787.T, atol=1e-15)
+    p = block_race_probabilities(_MU787, _CL787, _V787, _D787)
+    q = block_race_probabilities(_MU787, _CL787, Vr, _D787)
+    assert np.abs(p - q).max() < 1e-14            # was 5.2e-3
+    s = race_probabilities(_MU787, structure=Blocks(_CL787, Vr, _D787))
+    assert np.abs(s - p).max() < 1e-14
+    g = 0.3 * np.ones(6)
+    pn = nested_race_probabilities(_MU787, _CL787, _V787, _D787, coupling=g)
+    qn = nested_race_probabilities(_MU787, _CL787, Vr, _D787, coupling=g)
+    assert np.abs(pn - qn).max() < 1e-14
+    sn = race_probabilities(_MU787, structure=Nested(_CL787, Vr, _D787, g))
+    assert np.abs(sn - pn).max() < 1e-14
+
+
+def test_rank_two_per_cluster_rotations_signs_swaps_787():
+    rng = np.random.default_rng(787)
+    for _ in range(20):
+        n = int(rng.integers(3, 9))
+        cl = rng.integers(0, 3, n)
+        mu = rng.normal(size=n); D = rng.uniform(.4, 1.6, n)
+        V = 0.7 * rng.normal(size=(n, 2))
+        p = block_race_probabilities(mu, cl, V, D)
+        Vr = V.copy()
+        for c in np.unique(cl):
+            Q, _ = np.linalg.qr(rng.normal(size=(2, 2)))
+            Vr[cl == c] = V[cl == c] @ Q
+        for W in (Vr, V * [-1, 1], V[:, ::-1]):
+            q = block_race_probabilities(mu, cl, W, D)
+            assert np.abs(p - q).max() < 1e-13
+
+
+def test_rank_two_converges_to_the_canonical_answer_787():
+    # the product grid at 45 degrees to the principal axes: the default
+    # error on the issue fixture fell from 5.7e-3 (caller's axes) to
+    # 5.7e-4, and refining qa converges from either basis
+    ref = block_race_probabilities(_MU787, _CL787, _V787, _D787, qa=61)
+    for V in (_V787, _rot45(_V787)):
+        p = block_race_probabilities(_MU787, _CL787, V, _D787)
+        assert np.abs(p - ref).max() < 1e-3
+        p = block_race_probabilities(_MU787, _CL787, V, _D787, qa=31)
+        assert np.abs(p - ref).max() < 1e-4
+
+
+def test_rank_deficient_rank_two_is_rank_one_787():
+    v = _V787[:, 0]
+    p1 = block_race_probabilities(_MU787, _CL787, np.sqrt(5) * v, _D787)
+    p2 = block_race_probabilities(_MU787, _CL787, np.c_[v, 2 * v], _D787)
+    assert np.abs(p1 - p2).max() < 1e-14
+    # one cluster rank two, one cluster with no loading at all
+    V = _V787.copy(); V[3:] = 0.0
+    q = block_race_probabilities(_MU787, _CL787, _rot45(V), _D787)
+    assert np.abs(q - block_race_probabilities(_MU787, _CL787, V,
+                                               _D787)).max() < 1e-14
+
+
+def test_rank_one_and_three_untouched_by_787():
+    # pinned on main before #787: rank one, a zero-padded rank one and
+    # rank three keep their exact rules
+    r1 = [0.00244822624473019, 0.1180086074271331, 0.19963224309434435,
+          0.14866389613894831, 0.03235943719199677, 0.4988875899028474]
+    r3 = [0.00211546966829846, 0.08845359071227708, 0.15724230043463078,
+          0.26820481052305434, 0.02406773393700397, 0.4599160947247354]
+    v1 = _V787[:, 0]
+    V3 = np.c_[_V787, [.3, -.2, .1, .4, -.1, .2]]
+    assert np.allclose(block_race_probabilities(_MU787, _CL787, v1, _D787),
+                       r1, rtol=0, atol=1e-15)
+    assert np.allclose(block_race_probabilities(_MU787, _CL787, -v1, _D787),
+                       r1, rtol=0, atol=1e-14)
+    assert np.allclose(block_race_probabilities(_MU787, _CL787, V3, _D787),
+                       r3, rtol=0, atol=1e-14)
+    padded = np.c_[v1, np.zeros(6)]
+    assert np.allclose(block_race_probabilities(_MU787, _CL787, padded,
+                                                _D787), r1, rtol=0, atol=1e-14)
+
+
+# --- #777: block/tree endpoints check their own lattice mass ---------------
+
+def _structured_calls(mu, sd, points):
+    """The three structured endpoints on one two-cluster field with zero
+    loadings (a one-node rule), so all three price the same race. These
+    direct-extension tests live here, not in test_fastrace_boundary.py,
+    because the native CI job runs this file against the checkout's build."""
+    fastrace = pytest.importorskip("fastrace")
+    if not hasattr(fastrace, "tree_race"):
+        pytest.skip("fastrace without the structured kernels")
+    n = len(mu)
+    v = np.zeros(n)
+    starts = np.array([0, 1], dtype=np.int64)
+    an, aw = np.array([0.0]), np.array([1.0])
+    parent = np.array([2, 2, -1], dtype=np.int64)
+    lam = np.array([0.0, 0.0, 0.5])
+    return {
+        "block_race": lambda **kw: fastrace.block_race(
+            mu, sd, v, starts, an, aw, points, np.nan, np.nan, **kw),
+        "block_race_r": lambda **kw: fastrace.block_race_r(
+            mu, sd, v[:, None], starts, an[:, None], aw, points,
+            np.nan, np.nan, **kw),
+        "tree_race": lambda **kw: fastrace.tree_race(
+            mu, sd, v, starts, parent, lam, an, aw, points, -8.0, 8.0,
+            **kw),
+    }
+
+
+@pytest.mark.parametrize("name", ["block_race", "block_race_r", "tree_race"])
+@pytest.mark.parametrize("mu, sd, points", [
+    ([0.0, -0.2], [0.01, 1.0], 257),    # the issue's default-size field
+    ([0.0, 0.0], [1.0, 1.0], 3),        # raw mass 3.19
+    ([0.0, 0.0], [1.0, 1.0], 2),        # raw mass 1.6e-13
+])
+def test_structured_endpoints_refuse_a_mass_defect_777(name, mu, sd, points):
+    """These returned raw lattice integrals summing to 1.07, 3.19 and
+    1.6e-13 as if they were probabilities; the Python front door refuses
+    the same defect, and so does the endpoint now."""
+    call = _structured_calls(np.array(mu), np.array(sd), points)[name]
+    with pytest.raises(RuntimeError, match="lattice captured total mass"):
+        call()
+    raw = np.asarray(call(mass_tol=np.inf))     # explicit opt-out: raw
+    assert abs(raw.sum() - 1.0) > 5e-3
+
+
+@pytest.mark.parametrize("name", ["block_race", "block_race_r", "tree_race"])
+def test_structured_endpoints_resolved_race_unchanged_777(name):
+    """A well-resolved lattice passes the check and is returned raw,
+    bit for bit as with the check switched off."""
+    call = _structured_calls(np.array([0.0, -0.2]), np.ones(2), 257)[name]
+    p = np.asarray(call())
+    assert np.array_equal(p, np.asarray(call(mass_tol=np.inf)))
+    assert abs(p.sum() - 1.0) < 1e-12
+    assert np.allclose(p, [0.55623146, 0.44376854], atol=1e-8)
+    for tol in (np.nan, -1e-3):
+        with pytest.raises(ValueError, match="mass_tol"):
+            call(mass_tol=tol)
+
+
+def test_front_door_keeps_its_own_mass_tolerance_777():
+    """winning checks the combined mass itself: a trial state inside an
+    inverse runs under the looser tolerance, which the native check at
+    the strict default must not pre-empt. points=6 captures mass 1.009.
+    Runs on both paths; it is the compiled one that #777 could break."""
+    from winning.factor import blocks as B
+    args = (np.array([0.0, 0.2, 0.1]), np.array([0, 1, 1]),
+            np.full(3, 0.3), np.ones(3))
+    with pytest.raises(RuntimeError, match="block race lattice captured "
+                       r"total mass 1\.0090 \(defect 9\.0\de-03"):
+        B.block_race_probabilities(*args, points=6)
+    with B._trial_mass_tolerance():
+        p = B.block_race_probabilities(*args, points=6)
+    assert abs(p.sum() - 1.0) < 1e-12

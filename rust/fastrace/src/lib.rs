@@ -84,6 +84,46 @@ fn finite2(name: &str, x: &PyReadonlyArray2<f64>) -> PyResult<()> {
     Ok(())
 }
 
+/// The structured-race mass check (#777), as winning.factor.blocks'
+/// _checked_mass: block_race, block_race_r and tree_race return the raw
+/// rectangle-rule integrals, and a lattice that missed the winner's
+/// region returned a finite, nonnegative vector far from a distribution
+/// (mass 1.07 for sd = [0.01, 1], 3.19 at points = 3, 1.6e-13 at
+/// points = 2) with no diagnostic. A material defect now raises the
+/// RuntimeError the Python front door raises, at the same default
+/// tolerance; a healthy lattice is returned bit for bit, unnormalized.
+/// An infinite mass_tol switches the check off: winning's front door
+/// passes it because it checks the combined mass itself (the nested
+/// race sums conditional block masses before checking, and an inverse's
+/// trial states use a looser tolerance).
+const MASS_TOL: f64 = 5e-3;
+
+fn need_mass_tol(mass_tol: f64) -> PyResult<()> {
+    if mass_tol.is_nan() || mass_tol < 0.0 {
+        return Err(bad(format!(
+            "mass_tol = {mass_tol}; it must be nonnegative (inf disables the check)")));
+    }
+    Ok(())
+}
+
+fn checked_mass<'a>(raw: impl IntoIterator<Item = &'a f64>, kind: &str, mass_tol: f64) -> PyResult<()> {
+    if mass_tol.is_infinite() {
+        return Ok(());
+    }
+    let t: f64 = raw.into_iter().sum();
+    let defect = (t - 1.0).abs();
+    // NaN compares false against any tolerance: test finiteness explicitly
+    if !t.is_finite() || defect > mass_tol {
+        return Err(pyo3::exceptions::PyRuntimeError::new_err(format!(
+            "{kind} lattice captured total mass {t:.4} (defect {defect:.2e} > \
+             {mass_tol}): the window missed part of the winner distribution \
+             and the shares would be silently wrong if normalized. Raise \
+             points= (or widen lo/hi), or report this field: the node-aware \
+             window should have covered it.")));
+    }
+    Ok(())
+}
+
 fn positive1(name: &str, x: &PyReadonlyArray1<f64>) -> PyResult<()> {
     winning::check_positive(name, x.as_array().iter()).map_err(bad)
 }
@@ -425,7 +465,8 @@ fn ghk_all_shares<'py>(
 
 
 #[pyfunction]
-#[pyo3(signature = (mu, sd, v, starts, a_nodes, a_weights, points=257, lo=f64::NAN, hi=f64::NAN, fast_max_entries=10_000_000))]
+#[pyo3(signature = (mu, sd, v, starts, a_nodes, a_weights, points=257, lo=f64::NAN, hi=f64::NAN, fast_max_entries=10_000_000, mass_tol=MASS_TOL))]
+#[allow(clippy::too_many_arguments)]
 fn block_race<'py>(
     py: Python<'py>,
     mu: PyReadonlyArray1<f64>,
@@ -438,6 +479,7 @@ fn block_race<'py>(
     lo: f64,
     hi: f64,
     fast_max_entries: usize,
+    mass_tol: f64,
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
     let n = mu.as_array().len();
     need_field(n)?;
@@ -445,6 +487,7 @@ fn block_race<'py>(
     need_len("v", v.as_array().len(), n, "one cluster loading per contestant")?;
     need_len("a_weights", a_weights.as_array().len(), a_nodes.as_array().len(), "one weight per node")?;
     need_points(points)?;
+    need_mass_tol(mass_tol)?;
     finite1("mu", &mu)?;
     positive1("sd", &sd)?;
     finite1("v", &v)?;
@@ -461,12 +504,14 @@ fn block_race<'py>(
         block_kernel(mu_o.view(), sd_o.view(), v_o.view(), &st, an.view(),
                      aw.view(), points, lo, hi, fast_max_entries)
     }));
+    checked_mass(p.iter(), "block race", mass_tol)?;
     Ok(p.into_pyarray(py))
 }
 
 
 #[pyfunction]
-#[pyo3(signature = (mu, sd, v, starts, nodes, weights, points=257, lo=f64::NAN, hi=f64::NAN))]
+#[pyo3(signature = (mu, sd, v, starts, nodes, weights, points=257, lo=f64::NAN, hi=f64::NAN, mass_tol=MASS_TOL))]
+#[allow(clippy::too_many_arguments)]
 fn block_race_r<'py>(
     py: Python<'py>,
     mu: PyReadonlyArray1<f64>,
@@ -478,6 +523,7 @@ fn block_race_r<'py>(
     points: usize,
     lo: f64,
     hi: f64,
+    mass_tol: f64,
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
     let n = mu.as_array().len();
     need_field(n)?;
@@ -491,6 +537,7 @@ fn block_race_r<'py>(
     }
     need_len("weights", weights.as_array().len(), nodes.as_array().nrows(), "one weight per node (row of nodes)")?;
     need_points(points)?;
+    need_mass_tol(mass_tol)?;
     finite1("mu", &mu)?;
     positive1("sd", &sd)?;
     finite2("v", &v)?;
@@ -507,12 +554,13 @@ fn block_race_r<'py>(
         block_kernel_r(mu_o.view(), sd_o.view(), v_o.view(), &st, nd.view(),
                        ww.view(), points, lo, hi)
     }));
+    checked_mass(p.iter(), "block race", mass_tol)?;
     Ok(p.into_pyarray(py))
 }
 
 
 #[pyfunction]
-#[pyo3(signature = (mu, sd, v, starts, parent, lam, a_nodes, a_weights, points, lo, hi))]
+#[pyo3(signature = (mu, sd, v, starts, parent, lam, a_nodes, a_weights, points, lo, hi, mass_tol=MASS_TOL))]
 #[allow(clippy::too_many_arguments)]
 fn tree_race<'py>(
     py: Python<'py>,
@@ -527,6 +575,7 @@ fn tree_race<'py>(
     points: usize,
     lo: f64,
     hi: f64,
+    mass_tol: f64,
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
     let n = mu.as_array().len();
     need_field(n)?;
@@ -534,6 +583,7 @@ fn tree_race<'py>(
     need_len("v", v.as_array().len(), n, "one cluster loading per contestant")?;
     need_len("a_weights", a_weights.as_array().len(), a_nodes.as_array().len(), "one weight per node")?;
     need_points(points)?;
+    need_mass_tol(mass_tol)?;
     let st = check_starts(&starts.as_array().to_vec(), n)?;
     let pa: Vec<i64> = parent.as_array().to_vec();
     check_tree(&pa, st.len())?;
@@ -554,6 +604,7 @@ fn tree_race<'py>(
     let p = py.detach(|| with_usable_rayon(|| {
         tree_kernel(&mu_o, &sd_o, &v_o, &st, &pa, &lm, &an, &aw, points, lo, hi)
     }));
+    checked_mass(p.iter(), "tree race", mass_tol)?;
     Ok(Array1::from_vec(p).into_pyarray(py))
 }
 

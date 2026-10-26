@@ -229,6 +229,27 @@ function midpointRule(Q) {
   return { F, W: new Array(Q).fill(1 / Q) };
 }
 
+/* The rank-one Gauss-Hermite/midpoint handover was a hard switch at
+   ceil(8 sharp) > 80, where the two rules disagree: a 1e-7 change in one
+   runner's sd moved a top-2 membership by 31bp (#783). Across (lo, hi]
+   the rule is the weighted union (1 - w) GH(8 lo) + w midpoint(8 hi + 1),
+   with w a C1 smoothstep in the sharpness, as python (_R1_BLEND_LO/HI,
+   which says why the band sits on the Gauss-Hermite side) and R/Julia;
+   each order is the one its side uses at the band's edge, so the band
+   meets the unchanged rule outside it continuously at both ends. */
+const R1_BLEND_LO = 9.0, R1_BLEND_HI = 10.0;
+function rank1BlendRule(sharp) {
+  const t = (sharp - R1_BLEND_LO) / (R1_BLEND_HI - R1_BLEND_LO);
+  const w = t * t * (3.0 - 2.0 * t);
+  const g = hermiteNodes(1, 8 * R1_BLEND_LO);
+  const m = midpointRule(8 * R1_BLEND_HI + 1);
+  return {
+    F: g.F.concat(m.F),
+    W: g.W.map(x => (1.0 - w) * x).concat(m.W.map(() => w / m.W.length)),
+    hermite: true,   // kept in V's own axes, as python builds it
+  };
+}
+
 function ruleFamily(V, D) {
   const n = V.length, r = V[0].length;
   let sharp = 0;
@@ -240,6 +261,7 @@ function ruleFamily(V, D) {
   const cap = r === 1 ? 201 : r === 2 ? 41 : r === 3 ? 31 : 15;
   const sharpMax = r === 2 ? 3.75 : r === 3 ? 4.75 : 3.0;
   if (r >= 2 && sharp > sharpMax) return "halton";
+  if (r === 1 && sharp > R1_BLEND_LO && sharp <= R1_BLEND_HI) return "hermite";
   if (r === 1 && Math.ceil(8 * sharp) > 80) return "midpoint";
   if (Math.pow(cap, r) > 100000) return "halton";
   return "hermite";
@@ -266,6 +288,8 @@ function canonicalRule(V, D, maxNodes) {
   if (r >= 2 && sharp > sharpMax) {
     // escalate the FAMILY, not the order (matching python/R)
     rule = haltonRule(r, 8192);
+  } else if (r === 1 && sharp > R1_BLEND_LO && sharp <= R1_BLEND_HI) {
+    rule = rank1BlendRule(sharp);                           // (#783)
   } else if (r === 1 && Math.ceil(8 * sharp) > 80) {
     // rank-1 extreme sharpness (matching python/R): equal-weight
     // midpoint-quantile grid scaled with sharpness replaces GH

@@ -196,6 +196,25 @@ attr(.base_laplace, "log_sf") <- function(z) {
   if (isTRUE(abs(off) > 1e6 * scale)) mu - off else mu
 }
 
+# The rank-one Gauss-Hermite/midpoint handover was a hard switch at
+# ceiling(8 sharp) > 80, where the two rules disagree: a 1e-7 change in
+# one runner's sd moved a top-2 membership by 31bp (#783). Across
+# (lo, hi] the rule is the weighted union (1 - w) GH(8 lo) +
+# w midpoint(8 hi + 1), w a C1 smoothstep in the sharpness, matching the
+# python reference (which says why the band sits on the Gauss-Hermite
+# side); each order is the one its side uses at the band's edge, so the
+# band meets the unchanged rule outside it continuously at both ends.
+.R1_BLEND_LO <- 9.0
+.R1_BLEND_HI <- 10.0
+.rank1_blend_rule <- function(sharp) {
+  t <- (sharp - .R1_BLEND_LO) / (.R1_BLEND_HI - .R1_BLEND_LO)
+  w <- t * t * (3 - 2 * t)
+  g <- hermite_nodes(1, order = as.integer(8 * .R1_BLEND_LO))
+  Q <- as.integer(8 * .R1_BLEND_HI) + 1L
+  list(F = rbind(g$F, matrix(qnorm((seq_len(Q) - 0.5) / Q), ncol = 1)),
+       W = c((1 - w) * g$W, rep(w / Q, Q)))
+}
+
 .race_setup <- function(mu, V, D, F, W, base) {
   mu <- as.numeric(mu)
   n <- length(mu)
@@ -254,6 +273,10 @@ attr(.base_laplace, "log_sf") <- function(z) {
         # any order; escalate the FAMILY to a low-discrepancy rule.
         # Python uses scrambled Sobol; here dependency-free Halton.
         hw <- .halton_normal_nodes(r, 2^13)
+        F <- hw$F
+        W <- hw$W
+      } else if (r == 1 && sharp > .R1_BLEND_LO && sharp <= .R1_BLEND_HI) {
+        hw <- .rank1_blend_rule(sharp)                          # (#783)
         F <- hw$F
         W <- hw$W
       } else if (r == 1 && ceiling(8 * sharp) > 80) {

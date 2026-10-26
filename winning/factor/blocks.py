@@ -34,6 +34,19 @@ TINY = 1e-300
 _fastrace, _RUST_OK, _HAVE_RUST = load_fastrace('block_race')
 
 
+def _native_raw(fn, *args):
+    """A compiled block/tree kernel's RAW lattice mass. fastrace checks
+    that mass itself for direct callers (#777); the front door checks the
+    combined mass with _checked_mass instead (a nested race sums the
+    conditional block masses first, and an inverse's trial states run
+    under a looser _MASS_TOL), so the native check is switched off here.
+    An older fastrace without the check takes no mass_tol."""
+    try:
+        return fn(*args, mass_tol=np.inf)
+    except TypeError:
+        return fn(*args)
+
+
 def _warn_if_sharp(v, sd, qa, threshold=3.0):
     """The factor grammar escalates its quadrature past sharpness 3 and
     refines its lattice; these hierarchical kernels do not yet, and at a
@@ -181,6 +194,45 @@ def _sobol_log2(r, qa):
     return m
 
 
+# the rank-two product rule's orientation to a cluster's principal axes
+_ROT45 = np.sqrt(0.5) * np.array([[1.0, -1.0], [1.0, 1.0]])
+
+
+def _canonical_block_loadings(V, cluster):
+    """Rank-two block loadings in a basis fixed by each V_c V_c' alone.
+
+    Each cluster's effect is its own N(0, I) draw, so V_c -> V_c Q_c
+    (Q_c orthogonal) is the same race, but the product Gauss-Hermite
+    rule is not rotation invariant: a 45-degree rotation of one block
+    moved a share by 0.0052 at the default qa (#787). Per cluster the
+    columns become V_c U_c, U_c the eigenvectors of V_c'V_c, with
+    factor.core's sign rule (#745); null directions (norm <= 1e-12 of
+    the cluster's largest) are dropped and the clusters zero-padded to
+    the largest rank R, as the browser's canonicalBasis does. R = 1 is
+    then the rank-one Gauss-Hermite rule. At R = 2 the product grid is
+    laid at 45 degrees to the principal axes: on its own axes the
+    dominant direction sees only qa distinct node offsets and the
+    default error was ~3x that of an arbitrary basis; at 45 degrees it
+    was ~10x smaller than on the axes (docs/notes/cov-determinism.md).
+    The grid is symmetric under the sign flips and swaps the sign rule
+    leaves open. One 2 x 2 eigendecomposition per cluster."""
+    from .core import _canonical_factor_basis
+    _, inv = np.unique(cluster, return_inverse=True)
+    inv = inv.reshape(-1)
+    order = np.argsort(inv, kind="stable")
+    starts = np.flatnonzero(np.r_[True, np.diff(inv[order]) != 0])
+    parts = []
+    for ix in np.split(order, starts[1:]):
+        C = _canonical_factor_basis(V[ix])
+        norm = np.linalg.norm(C, axis=0)
+        parts.append((ix, C[:, (norm > 1e-12 * norm.max()) & (norm > 0)]))
+    R = max(C.shape[1] for _, C in parts)
+    out = np.zeros((V.shape[0], R))
+    for ix, C in parts:
+        out[ix, :C.shape[1]] = C
+    return out @ _ROT45 if R == 2 else out
+
+
 def _block_max_r(mu, sd, cluster, V, points, qa):
     """Max-wins kernel for RANK-R blocks: loading matrix V (n, r), each
     cluster with its own independent r-dim effect. Conditional independence
@@ -200,7 +252,7 @@ def _block_max_r(mu, sd, cluster, V, points, qa):
     if _HAVE_RUST and hasattr(_fastrace, "block_race_r"):
         lo_r, hi_r = _window_nodes(mu_o, sd_o, amp)
         try:
-            p_o = np.asarray(_fastrace.block_race_r(
+            p_o = np.asarray(_native_raw(_fastrace.block_race_r,
                 np.ascontiguousarray(mu_o), np.ascontiguousarray(sd_o),
                 np.ascontiguousarray(V_o), starts.astype(np.int64),
                 np.ascontiguousarray(nodes), np.ascontiguousarray(w), points,
@@ -256,6 +308,13 @@ def _block_max(mu, sd, cluster, v, points, qa):
         v = np.zeros(len(mu))
     _warn_if_sharp(v, sd, qa)
     if v.ndim == 2 and v.shape[-1] > 1:
+        V = as_loadings(v, len(mu))
+        if V.shape[1] == 2:
+            # rank two: the rule sees each cluster's V_c V_c' only (#787)
+            v = _canonical_block_loadings(V, cluster)
+            if v.shape[1] == 0:
+                v = np.zeros(len(mu))
+    if v.ndim == 2 and v.shape[-1] > 1:
         return _block_max_r(mu, sd, cluster, v, points, qa)
     v = v.reshape(len(mu))
     n = len(mu)
@@ -268,7 +327,7 @@ def _block_max(mu, sd, cluster, v, points, qa):
     if _HAVE_RUST:
         lo_r, hi_r = _window_nodes(mu_o, sd_o, amp)
         try:
-            p_o = np.asarray(_fastrace.block_race(
+            p_o = np.asarray(_native_raw(_fastrace.block_race,
                 np.ascontiguousarray(mu_o), np.ascontiguousarray(sd_o),
                 np.ascontiguousarray(v_o), starts.astype(np.int64),
                 np.ascontiguousarray(an), np.ascontiguousarray(aw), points,
@@ -765,7 +824,7 @@ def tree_race_probabilities(mu, cluster, loading, D, parent, strength,
     amp = (np.abs(v_o) + depth_shift[c_o]) * float(np.max(np.abs(an)))
     lo, hi = _window_nodes(mu_o, sd_o, amp)
     if _HAVE_RUST and hasattr(_fastrace, "tree_race"):
-        p_o = np.asarray(_fastrace.tree_race(
+        p_o = np.asarray(_native_raw(_fastrace.tree_race,
             np.ascontiguousarray(mu_o), np.ascontiguousarray(sd_o),
             np.ascontiguousarray(v_o), starts.astype(np.int64),
             parent.astype(np.int64), np.ascontiguousarray(lam),
