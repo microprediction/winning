@@ -732,10 +732,94 @@ abilities_from_topk <- function(q, k, V = NULL, D = NULL, base = "normal",
   mu
 }
 
+# Bounded deterministic retry for a failed inverse (#779, #781), shared by
+# abilities_from_rank_marginal and loc_scale_from_topk_pair as in python. A
+# first attempt that converged is returned untouched (bitwise, no extra
+# cost); otherwise attempt(start) runs from each of the fixed starts(first)
+# in order and the first converged outcome wins, else the attempt with the
+# smallest out[[key]] is returned, still converged = FALSE. iterations
+# becomes the total over every attempt.
+.retry_on_failure <- function(first, attempt, starts, key) {
+  # n_iter = 0 prices the start and performs no update: never retried
+  if (first$converged || first$iterations == 0) return(first)
+  best <- first
+  total <- first$iterations
+  for (start in starts(first)) {
+    out <- attempt(start)
+    total <- total + out$iterations
+    if (out$converged) { best <- out; break }
+    if (out[[key]] < best[[key]]) best <- out
+  }
+  best$iterations <- total
+  best
+}
+
+# Acklam's rational inverse normal CDF, the browser's invNormalRational:
+# plain arithmetic, so every port computes the same retry start.
+.probit_rational <- function(p) {
+  a <- c(-39.6968302866538, 220.946098424521, -275.928510446969,
+         138.357751867269, -30.6647980661472, 2.50662827745924)
+  b <- c(-54.4760987982241, 161.585836858041, -155.698979859887,
+         66.8013118877197, -13.2806815528857)
+  cc <- c(-0.00778489400243029, -0.322396458041136, -2.40075827716184,
+          -2.54973253934373, 4.37466414146497, 2.93816398269878)
+  d <- c(0.00778469570904146, 0.32246712907004, 2.445134137143,
+         3.75440866190742)
+  pl <- 0.02425
+  if (p < pl) {
+    q <- sqrt(-2 * log(p))
+    return((((((cc[1]*q+cc[2])*q+cc[3])*q+cc[4])*q+cc[5])*q+cc[6]) /
+           ((((d[1]*q+d[2])*q+d[3])*q+d[4])*q+1))
+  }
+  if (p > 1 - pl) return(-.probit_rational(1 - p))
+  q <- p - 0.5
+  r2 <- q * q
+  (((((a[1]*r2+a[2])*r2+a[3])*r2+a[4])*r2+a[5])*r2+a[6])*q /
+    (((((b[1]*r2+b[2])*r2+b[3])*r2+b[4])*r2+b[5])*r2+1)
+}
+
+# The retry start of the cold loc/scale solve (#781), as python's
+# _loc_scale_starts: with the depth thresholds held fixed, the gap between
+# a runner's deeper and shallower probits is proportional to 1/sigma_i.
+# Geometric-mean-one, clipped to the solver's log-scale box, as a D0.
+.loc_scale_starts <- function(q1, k1, q2, k2) {
+  n <- length(q1)
+  if (k1 < k2) { lo <- q1; klo <- k1; hi <- q2; khi <- k2 }
+  else { lo <- q2; klo <- k2; hi <- q1; khi <- k1 }
+  tlo <- .validated_topk_target(lo, klo, n, NULL)$target
+  thi <- .validated_topk_target(hi, khi, n, NULL)$target
+  gap <- vapply(seq_len(n), function(i)
+    .probit_rational(thi[i]) - .probit_rational(tlo[i]), numeric(1))
+  ls <- -log(pmax(gap, 1e-3))
+  list(exp(2 * pmin(pmax(ls - mean(ls), -3), 3)))
+}
+
 loc_scale_from_topk_pair <- function(q1, k1, q2, k2, D0 = NULL,
                                      base = "normal", points = 513,
                                      n_iter = 60, tol = 1e-8, ridge = 0,
                                      mu0 = NULL, return_info = FALSE) {
+  # the cold start (no D0, no mu0) can stall far from an exact board;
+  # only then, one retry from a scale-informed D0 (#781), as python
+  once <- function(d, m)
+    .loc_scale_once(q1, k1, q2, k2, D0 = d, base = base, points = points,
+                    n_iter = n_iter, tol = tol, ridge = ridge, mu0 = m)
+  out <- once(D0, mu0)
+  if (is.null(D0) && is.null(mu0))
+    out <- .retry_on_failure(out, function(d) once(d, NULL),
+                             function(f) .loc_scale_starts(q1, k1, q2, k2),
+                             "max_logit_residual")
+  if (!out$converged && !return_info)
+    warning(sprintf(paste0(
+      "loc_scale_from_topk_pair did not converge: max |logit residual| ",
+      "%.2e after %d iterations (tol %.0e)"), out$max_logit_residual,
+      out$iterations, out$tol))
+  out$tol <- NULL
+  if (return_info) return(out)
+  list(mu = out$mu, sd = out$sd)
+}
+
+.loc_scale_once <- function(q1, k1, q2, k2, D0, base, points, n_iter, tol,
+                            ridge, mu0) {
   n <- length(q1)
   n_iter <- .as_iter_budget(n_iter)
   tol <- .as_tolerance(tol)                                   # (#551)
@@ -875,16 +959,10 @@ loc_scale_from_topk_pair <- function(q1, k1, q2, k2, D0 = NULL,
   stationary <- fit_ok || (!last_accepted && iters > 0 &&
                              last_grad <= 1e-6 * max(1, cost))
   converged <- fit_ok || (sqr > 0 && stationary && nested)
-  if (!converged && !return_info)
-    warning(sprintf(paste0(
-      "loc_scale_from_topk_pair did not converge: max |logit residual| ",
-      "%.2e after %d iterations (tol %.0e)"), resid_max, iters, tol))
-  if (return_info)
-    return(list(mu = mu, sd = sd, converged = converged,
-                max_logit_residual = resid_max, iterations = iters,
-                fit_converged = fit_ok, stationary = stationary,
-                nested = nested))
-  list(mu = mu, sd = sd)
+  list(mu = mu, sd = sd, converged = converged,
+       max_logit_residual = resid_max, iterations = iters,
+       fit_converged = fit_ok, stationary = stationary,
+       nested = nested, tol = tol)
 }
 
 loc_scale_from_win_and_second <- function(p_win, p_second, D0 = NULL,
@@ -937,10 +1015,45 @@ loc_scale_from_win_and_second <- function(p_win, p_second, D0 = NULL,
   list(p = p, J = J, mass = mass)
 }
 
+# The retry starts of abilities_from_rank_marginal (#779), as python's
+# _rank_marginal_starts: the original start nudged -/+ 0.3 typical scale
+# along the stalled log residual, then the failed trajectory reflected
+# through the start.
+.rank_marginal_starts <- function(mu0, mu_stall, resid, D) {
+  n <- length(mu_stall)
+  m0 <- if (is.null(mu0)) rep(0, n) else .as_warm_start(mu0, n)
+  u <- resid - mean(resid)
+  u <- u / max(max(abs(u)), 1e-300)
+  h <- 0.3 * sqrt(mean(.as_idio(D, n)))
+  list(m0 - h * u, m0 + h * u, 2 * m0 - mu_stall)
+}
+
 abilities_from_rank_marginal <- function(p, r, mu0 = NULL, D = NULL,
                                          base = "normal", points = 513,
                                          n_iter = 60, tol = 1e-8,
                                          return_info = FALSE) {
+  # one damped trajectory can stall at a positive-residual stationary
+  # point; only then, a bounded deterministic retry (#779)
+  once <- function(m)
+    .rank_marginal_once(p, r, mu0 = m, D = D, base = base, points = points,
+                        n_iter = n_iter, tol = tol)
+  out <- .retry_on_failure(once(mu0), once,
+                           function(f) .rank_marginal_starts(mu0, f$mu,
+                                                             f$resid, D),
+                           "max_log_residual")
+  if (!out$converged && !return_info)
+    warning(sprintf(paste0(
+      "abilities_from_rank_marginal did not converge: max |log ",
+      "residual| %.2e after %d iterations (tol %.0e)"),
+      out$max_log_residual, out$iterations, out$tol))
+  if (return_info)
+    return(list(mu = out$mu, converged = out$converged,
+                max_log_residual = out$max_log_residual,
+                iterations = out$iterations))
+  out$mu
+}
+
+.rank_marginal_once <- function(p, r, mu0, D, base, points, n_iter, tol) {
   # invert one EXACT-rank marginal at frozen scales: two-branched for
   # r >= 2, mu0 selects the branch. See the python docstring.
   n <- length(p)
@@ -1048,13 +1161,6 @@ abilities_from_rank_marginal <- function(p, r, mu0 = NULL, D = NULL,
     if (!accepted) break
   }
   converged <- resid_max < tol
-  if (!converged && !return_info)
-    warning(sprintf(paste0(
-      "abilities_from_rank_marginal did not converge: max |log ",
-      "residual| %.2e after %d iterations (tol %.0e)"),
-      resid_max, iters, tol))
-  if (return_info)
-    return(list(mu = mu, converged = converged,
-                max_log_residual = resid_max, iterations = iters))
-  mu
+  list(mu = mu, resid = resid, converged = converged,
+       max_log_residual = resid_max, iterations = iters, tol = tol)
 }
