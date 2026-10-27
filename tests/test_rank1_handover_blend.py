@@ -93,10 +93,11 @@ def test_sweep_across_the_band_has_no_jump(verb):
     assert np.max(np.abs(np.diff(p))) < 2e-4
 
 
-@pytest.mark.parametrize("sharp", [4.0, 6.0, 8.5, 8.99, 10.01, 10.5, 10.6,
-                                   12.0, 40.0])
+@pytest.mark.parametrize("sharp", [9.0, 10.01, 10.5, 10.6, 12.0, 40.0])
 def test_rule_outside_the_band_is_unchanged(sharp):
-    """Bitwise the old rule just outside the band's edges."""
+    """Bitwise the old rule just outside the band's edges. Below 9 the
+    Gauss-Hermite orders are now interpolated (#850), meeting GH(72) at 9;
+    tests/test_rank1_hermite_order.py pins that side."""
     F, W = _rule(sharp)
     Fo, Wo = _old_rule(sharp)
     assert np.array_equal(F, Fo) and np.array_equal(W, Wo)

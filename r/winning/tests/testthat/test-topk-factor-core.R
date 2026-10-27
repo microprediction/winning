@@ -80,7 +80,24 @@ test_that("the rank-one Hermite/midpoint handover is a band (#783)", {
   st <- .race_setup(mu, V, c((10 / 10.6)^2, 1, 1, 1), NULL, NULL, "normal")
   expect_equal(length(st$W), 85L)          # midpoint, untouched
   st <- .race_setup(mu, V, c((10 / 8.9)^2, 1, 1, 1), NULL, NULL, "normal")
-  expect_equal(length(st$W), 72L)          # Gauss-Hermite, untouched
+  expect_equal(length(st$W), 33L + 34L + 72L)  # handed back to GH(72) (#850)
   st <- .race_setup(mu, V, c((10 / 9.5)^2, 1, 1, 1), NULL, NULL, "normal")
   expect_equal(length(st$W), 72L + 81L)    # both, inside the band
+})
+
+test_that("the rank-one Gauss-Hermite order is continuous (#850)", {
+  # GH prices alternate with the parity of the order, so ceiling(8 sharp)
+  # jumped by up to 59bp on this field at every 1/8 of sharpness
+  a <- 10 / sqrt(2); V <- matrix(c(-a, a / 3, a / 3, a / 3), ncol = 1)
+  mu <- c(-0.7, -0.1, 0.2, 0.8)
+  p <- function(sd0) top_k_probabilities(mu, 2, V = V,
+                                         D = c(sd0^2, 1, 1, 1),
+                                         points = 513)[1]
+  for (s in c(4, 6, 71 / 8))
+    expect_lt(abs(p(10 / s * (1 + 1e-9)) - p(10 / s * (1 - 1e-9))), 1e-7)
+  nw <- function(sharp) length(.rank1_hermite_rule(sharp)$W)
+  expect_equal(nw(2.0), 16L)               # an old order, exactly
+  expect_equal(nw(5.0), 24L + 25L)         # the parity pair
+  expect_equal(nw(8.0), 33L + 34L)         # held at the cap
+  expect_identical(.rank1_hermite_rule(9.0)$W, hermite_nodes(1, order = 72L)$W)
 })
