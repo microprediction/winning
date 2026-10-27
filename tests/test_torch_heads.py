@@ -49,7 +49,7 @@ def test_parity_with_winning_race_probabilities(base, name, hetero):
     sd = np.linspace(0.6, 1.8, len(mu)) if hetero else np.ones(len(mu))
     lp = wt.race_log_prob(_t(mu), _t(sd), base=base).numpy()
 
-    def rel_err(ref):
+    def rel_err(ref, lp=lp):
         ok = ref > 1e-290
         return np.abs(np.exp(lp[ok]) / ref[ok] - 1.0).max()
 
@@ -58,10 +58,19 @@ def test_parity_with_winning_race_probabilities(base, name, hetero):
     if err >= 1e-10 and base != "normal":
         # winning's bulk window post-checks rare winners for the normal
         # base only: on gumbel rare_middle (hetero) its default is 8e-6
-        # off the converged span lattice, which this module matches
-        # (the span window has its own ~1e-10 relative floor on 1e-13)
-        err = 0.1 * rel_err(race_probabilities(mu, D=sd ** 2, base=base,
-                                               window="span", points=20001))
+        # off. The converged span lattice is the reference instead; it
+        # agrees with mpmath quadrature to 5e-13 there (its floor). Raw
+        # against it, this module is 3.2e-10 off at 257 points: its OWN
+        # spacing error on the gumbel's sharp flank (dx = 0.3 min sd),
+        # since 513 points give 3e-14. So: the default within that
+        # measured 3.2e-10, and the refined lattice to the span floor.
+        span = race_probabilities(mu, D=sd ** 2, base=base, window="span",
+                                  points=20001)
+        assert rel_err(span) < 1e-9, (name, rel_err(span))
+        lp513 = wt.race_log_prob(_t(mu), _t(sd), base=base,
+                                 points=513).numpy()
+        err = rel_err(span, lp513)
+        assert err < 1e-12, (name, err)
     assert err < 1e-10, (name, err)
 
 

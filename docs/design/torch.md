@@ -137,8 +137,10 @@ module does not — see open questions). A field spread over many sd, or a
 near-deterministic runner, needs more points. On one gumbel field
 (`[0, 20, 40]`, sd 0.6–1.8) this window is **more** accurate than
 winning's default bulk window, whose rare-winner post-check is
-normal-only (8e-6 relative off the converged span lattice; this module
-3e-10, the span reference's own floor).
+normal-only (8e-6 relative off the converged span lattice, which agrees
+with mpmath quadrature to 5e-13). This module is 3e-10 off there at 257
+points: its own spacing error on the Gumbel's sharp flank, not the
+reference's floor (3e-14 at 513 points).
 
 ### Prefix and top-k: the event lattice (#753)
 
