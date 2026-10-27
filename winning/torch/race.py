@@ -323,9 +323,12 @@ def _window_rows(mu, sd, mask, fam, delta):
     lo_rel = torch.where(mask, m64 + s64 * fam.lower_quantile(target),
                          torch.full_like(m64, big))
     lo = torch.minimum(lo, lo_rel.min(-1).values)
-    # a one-runner (or degenerate) row still needs a non-empty lattice
+    # a one-runner (or degenerate) row still needs a non-empty lattice:
+    # at least the row's own widest sd. No absolute floor: sd is finite
+    # and positive on valid runners (_prepare), and a 1e-12 floor here
+    # repriced a race written in units of 1e-15 (#865)
     smax = torch.where(mask, s64, torch.zeros_like(s64)).max(-1).values
-    hi = torch.maximum(hi, lo + smax.clamp(min=1e-12))
+    hi = torch.maximum(hi, lo + smax)
     return lo, hi
 
 

@@ -1084,3 +1084,44 @@ def test_864_first_order_analytic_gradient_is_unchanged():
                              (mu, sd))
     for a, b in zip(ga, gb):
         torch.testing.assert_close(a, b, rtol=1e-10, atol=1e-12)
+
+
+# ------------------------------------------ #865: the lattice is scale-free
+@pytest.mark.parametrize("scale", [1e-15, 1e-8, 1e8, 1e15])
+def test_865_race_prefix_topk_are_invariant_under_rescaling(scale):
+    # an absolute 1e-12 floor on the window width repriced [0, 1] with
+    # sd 1 from [0.760, 0.240] to [0.681, 0.319] at scale 1e-15
+    rng = np.random.default_rng(865)
+    fields = [(np.array([0.0, 1.0]), np.ones(2)),
+              (rng.normal(size=6) * 2.0, rng.uniform(0.5, 2.0, size=6)),
+              (np.array([0.0, 0.0, 0.0, 0.0, 20.0]), np.ones(5))]
+
+    def heads(mu, sd):
+        return [wt.race_log_prob(mu, sd),
+                wt.race_log_prob(mu, sd, base="gumbel"),
+                wt.ordered_prefix_log_prob(mu, torch.tensor([1, 0]), sd),
+                wt.ordered_prefix_log_prob(mu, torch.tensor([1, 0, 2])
+                                           [:min(3, len(mu))], sd),
+                wt.topk_log_prob(mu, 1, sd),
+                wt.topk_log_prob(mu, 2, sd)]
+
+    for mu, sd in fields:
+        ref = heads(_t(mu), _t(sd))
+        got = heads(_t(mu * scale), _t(sd * scale))
+        for g, r in zip(got, ref):
+            err = float(((g - r).abs() / r.abs().clamp(min=1.0)).max())
+            assert err < 1e-12, (scale, mu, err)
+
+
+def test_865_ordinary_lattices_never_reach_the_width_guard():
+    # the guard is hi >= lo + max sd; on ordinary fields the window is
+    # many sd wide, so neither the old floor nor the new one binds and
+    # the lattice is bitwise what it was
+    rng = np.random.default_rng(8650)
+    for n in (1, 2, 3, 8, 20):
+        for spread in (0.5, 2.0, 6.0):
+            mu = rng.normal(size=n) * spread
+            sd = rng.uniform(0.5, 2.0, size=n)
+            for base in ("normal", "gumbel"):
+                x = wt.race_lattice(_t(mu), _t(sd), base=base)
+                assert float(x[-1] - x[0]) > 5.0 * sd.max(), (n, spread)

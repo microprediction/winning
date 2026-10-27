@@ -115,6 +115,11 @@ MPS):
   non-increasing function, so its normalised right tail is dominated by
   that of `f_i S_k` (monotone likelihood ratio).
 * `points` fixed (static shapes); `x = linspace(lo, hi, points)`.
+* **scale-free:** the only width guard (for a one-runner row) is
+  `hi ≥ lo + max_i sd_i`, relative to the row's own scale. An absolute
+  `1e-12` floor there repriced `[0, 1]`, sd 1, from `[0.760, 0.240]` to
+  `[0.681, 0.319]` when written in units of 1e-15 (#865); race, prefix
+  and top-k are now invariant to 1e-12 under rescaling by 1e-15…1e15.
 
 Cost O(17·n) per row. Accuracy measured against
 `race_probabilities` (tests/test_torch_heads.py, float64, 257 points):
