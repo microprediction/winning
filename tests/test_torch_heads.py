@@ -1031,3 +1031,56 @@ def test_863_ordinary_topk_equals_the_linear_count_program():
                                        -1) - logZ[0])
         torch.testing.assert_close(wt.topk_log_prob(mu, k, sd),
                                    torch.stack(ref), rtol=1e-13, atol=1e-13)
+
+
+# ------------------------------------- #864: analytic backward is once-only
+def _hess(mode, checkpoint=False):
+    m = _t([0.0, 1.0], grad=True)
+    x = wt.race_lattice(m.detach())
+    return torch.autograd.functional.hessian(
+        lambda v: -wt.race_log_prob(v, lattice=x, backward=mode,
+                                    checkpoint=checkpoint)[1], m)
+
+
+@pytest.mark.parametrize("checkpoint", [False, True])
+def test_864_analytic_double_backward_raises(checkpoint):
+    # it used to return a wrong, asymmetric Hessian silently
+    with pytest.raises(RuntimeError, match="first-order only"):
+        _hess("analytic", checkpoint)
+
+
+def test_864_callers_of_the_analytic_backward_refuse_too():
+    mu = _t([0.0, 0.5, 1.0], grad=True)
+    V = _t([[0.3], [0.1], [-0.2]])
+    for f in (lambda m: wt.thurstone_nll(m, torch.tensor(1)),
+              lambda m: wt.race_log_prob_factor(m, V)[1]):
+        with pytest.raises(RuntimeError, match="first-order only"):
+            torch.autograd.grad(f(mu), mu, create_graph=True)
+        # and plain first-order use is unaffected
+        (g,) = torch.autograd.grad(f(mu), mu)
+        assert torch.all(torch.isfinite(g))
+
+
+@pytest.mark.parametrize("base", ["normal", "gumbel"])
+def test_864_autograd_backward_is_twice_differentiable(base):
+    mu = _t([0.0, 0.7, 1.5], grad=True)
+    sd = _t([1.0, 0.8, 1.3], grad=True)
+    x = wt.race_lattice(mu.detach(), sd.detach(), base=base)
+    f = lambda m, s: wt.race_log_prob(m, s, base=base, lattice=x,
+                                      backward="autograd")
+    assert torch.autograd.gradgradcheck(f, (mu, sd), eps=1e-6, atol=1e-6)
+    H = _hess("autograd")
+    torch.testing.assert_close(H, H.T, rtol=0, atol=1e-12)
+    # the pair Hessian of -log Phi((mu0 - mu1)/sqrt 2): [[a, -a], [-a, a]]
+    # (to lattice accuracy: the fixed lattice breaks translation exactly)
+    assert abs(float(H[0, 0] + H[0, 1])) < 1e-9
+
+
+def test_864_first_order_analytic_gradient_is_unchanged():
+    mu = _t([0.0, 1.0, 2.5], grad=True)
+    sd = _t([1.0, 0.7, 1.4], grad=True)
+    ga = torch.autograd.grad(wt.race_log_prob(mu, sd)[1], (mu, sd))
+    gb = torch.autograd.grad(wt.race_log_prob(mu, sd, backward="autograd")[1],
+                             (mu, sd))
+    for a, b in zip(ga, gb):
+        torch.testing.assert_close(a, b, rtol=1e-10, atol=1e-12)

@@ -55,7 +55,9 @@ def race_log_prob_factor(mu, V, sd=None, *, nodes=15, base="normal",
     exactly that shape (no spelling normalisation: with leading batch
     dims a (rank, n) matrix is ambiguous). sd: idiosyncratic sd, as in
     race_log_prob. nodes: Gauss-Hermite order per factor dimension.
-    Gradients flow to mu, V and sd.
+    Gradients flow to mu, V and sd. backward= is race_log_prob's: the
+    default "analytic" is first-order only (double backward raises,
+    #864); pass backward="autograd" for second derivatives.
     """
     if not torch.is_tensor(V):
         raise TypeError("V must be a torch tensor of shape (..., n, rank)")

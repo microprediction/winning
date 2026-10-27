@@ -79,6 +79,19 @@ are never formed (the column sum `R(x)` carries them). The function saves
 `log S` (one `(R, n, L)` tensor) so the backward never re-evaluates
 `log_ndtr`; `checkpoint=True` saves nothing of that size and recomputes.
 
+**First-order only.** `A` and `log S` are computed in the forward without
+a graph, so differentiating this backward again silently gave a wrong,
+asymmetric Hessian (and `checkpoint=True` the same). The backward is
+therefore first-order only: run with `create_graph=True` (a Hessian, a
+gradient penalty) it raises a `RuntimeError` (#864). (`@once_differentiable`
+was not enough: it only guards when the upstream gradient itself requires
+grad, so `torch.autograd.functional.hessian` got a silent zero Hessian.) This covers everything that
+calls it with the default `backward="analytic"`: `race_log_prob`,
+`race_log_prob_factor` and `thurstone_nll`. `backward="autograd"`
+(on `race_log_prob` and `race_log_prob_factor`) differentiates the
+forward itself and passes `gradgradcheck`; for a second-order NLL gather
+from that. The prefix and top-k losses are autograd throughout.
+
 The lattice depends on `(mu, sd)` but is treated as a constant (computed
 under `no_grad`). The exact integral does not depend on the lattice, so
 the omitted term is the derivative of the discretisation error; gradcheck

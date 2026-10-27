@@ -364,8 +364,17 @@ def _forward_rows(mu, sd, mask, x, fam):
     return _normalise(_win_integrand(logf, logS), mask) + (z, logf, logS)
 
 
+_FIRST_ORDER_ONLY = (
+    "winning.torch: the analytic backward of race_log_prob (also used by "
+    "race_log_prob_factor and thurstone_nll) is first-order only; double "
+    "backward / create_graph=True is not supported (#864). Pass "
+    "backward=\"autograd\" to race_log_prob or race_log_prob_factor for "
+    "second derivatives.")
+
+
 class _RaceLogProb(torch.autograd.Function):
-    """Forward as _forward_rows; backward the O(n L) VJP.
+    """Forward as _forward_rows; backward the O(n L) VJP (first-order
+    only: a backward with create_graph=True raises, #864).
 
     Saves log S (one (R, n, L) tensor) so the backward never re-evaluates
     the expensive tail function; checkpoint=True saves nothing of that
@@ -387,6 +396,15 @@ class _RaceLogProb(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, G):
+        # first derivatives only: A and log S come from forward without a
+        # graph, so differentiating this backward gave a wrong, asymmetric
+        # Hessian (#864). Grad mode is on here exactly when the caller
+        # asked for a graph of the gradient (create_graph=True). Refuse
+        # that outright: @once_differentiable alone only guards when the
+        # upstream gradient itself requires grad, and returned a silent
+        # zero Hessian from torch.autograd.functional.hessian.
+        if torch.is_grad_enabled():
+            raise RuntimeError(_FIRST_ORDER_ONLY)
         saved = list(ctx.saved_tensors)
         mu, sd, x, out, A = saved[:5]
         rest_ = saved[5:]
@@ -441,8 +459,10 @@ def race_log_prob(mu, sd=None, *, base="normal", points=257, delta=1e-12,
     lattice: optional precomputed (..., points) lattice (e.g. from
           race_lattice) -- fixed, so finite differences see the same grid.
     backward: "analytic" (default; the O(n L) vector-Jacobian product)
-          or "autograd" (differentiate the forward with autograd; for
-          testing and timing comparison only).
+          or "autograd" (differentiate the forward with autograd). The
+          analytic backward is first-order only: a backward with
+          create_graph=True (Hessians, gradient penalties) raises a
+          RuntimeError (#864). Pass backward="autograd" for second derivatives.
     checkpoint: analytic backward only. False (default) saves log S, one
           (R, n, L) tensor, for the backward; True saves nothing that
           size and recomputes it (less memory, more time).

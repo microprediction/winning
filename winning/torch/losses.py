@@ -45,7 +45,10 @@ def thurstone_nll(mu, winner, sd=None, *, V=None, nodes=15, base="normal",
 
     mu: (..., n) locations (min-wins: pass -scores for a max-wins head).
     winner: (...) long tensor of winning indices. V: optional (..., n,
-    rank) loadings, for the factor race (race_log_prob_factor)."""
+    rank) loadings, for the factor race (race_log_prob_factor).
+    First-order only: it uses race_log_prob's analytic backward, so a
+    double backward raises (#864); for second derivatives gather from
+    race_log_prob(..., backward="autograd") instead."""
     if V is None:
         lp = race_log_prob(mu, sd, base=base, points=points, mask=mask)
     else:
