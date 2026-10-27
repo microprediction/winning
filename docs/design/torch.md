@@ -228,8 +228,14 @@ accuracy, same as CPU float32) and the window is computed on the CPU.
   programs joined per runner (no deconvolution), ≤ 1e-10 relative vs
   exact / winning on ordinary to 40-sd fields, Σ = k to ~1e-12;
   O(n·L·k²), a Python loop over runners, autograd tape O(n·L·k). The
-  count programs are in the linear domain, so a membership below ~1e-300
-  underflows.
+  count programs and their prefix/suffix join run in the **log domain**
+  (`logaddexp` per count; log 0 is a finite stand-in so the backward has
+  no NaN). The linear programs, clamped at `finfo.tiny`, floored a rare
+  membership at log(tiny) — top-1 of a 20-sd longshot was −87.3 for
+  −170.1 in float32, −708 for −1454 at a 60-sd gap in float64 — with
+  near-zero gradients (#863). Now k = 1 equals `race_log_prob` in both
+  dtypes and memberships far below 1e-308 keep their digits; on ordinary
+  fields the values agree with the linear programs to rounding (~1e-15).
 
 ## Tests (tests/test_torch_heads.py; `importorskip("torch")`)
 
