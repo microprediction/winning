@@ -79,6 +79,19 @@ are never formed (the column sum `R(x)` carries them). The function saves
 `log S` (one `(R, n, L)` tensor) so the backward never re-evaluates
 `log_ndtr`; `checkpoint=True` saves nothing of that size and recomputes.
 
+**First-order only.** `A` and `log S` are computed in the forward without
+a graph, so differentiating this backward again silently gave a wrong,
+asymmetric Hessian (and `checkpoint=True` the same). The backward is
+therefore first-order only: run with `create_graph=True` (a Hessian, a
+gradient penalty) it raises a `RuntimeError` (#864). (`@once_differentiable`
+was not enough: it only guards when the upstream gradient itself requires
+grad, so `torch.autograd.functional.hessian` got a silent zero Hessian.) This covers everything that
+calls it with the default `backward="analytic"`: `race_log_prob`,
+`race_log_prob_factor` and `thurstone_nll`. `backward="autograd"`
+(on `race_log_prob` and `race_log_prob_factor`) differentiates the
+forward itself and passes `gradgradcheck`; for a second-order NLL gather
+from that. The prefix and top-k losses are autograd throughout.
+
 The lattice depends on `(mu, sd)` but is treated as a constant (computed
 under `no_grad`). The exact integral does not depend on the lattice, so
 the omitted term is the derivative of the discretisation error; gradcheck
@@ -102,6 +115,11 @@ MPS):
   non-increasing function, so its normalised right tail is dominated by
   that of `f_i S_k` (monotone likelihood ratio).
 * `points` fixed (static shapes); `x = linspace(lo, hi, points)`.
+* **scale-free:** the only width guard (for a one-runner row) is
+  `hi ≥ lo + max_i sd_i`, relative to the row's own scale. An absolute
+  `1e-12` floor there repriced `[0, 1]`, sd 1, from `[0.760, 0.240]` to
+  `[0.681, 0.319]` when written in units of 1e-15 (#865); race, prefix
+  and top-k are now invariant to 1e-12 under rescaling by 1e-15…1e15.
 
 Cost O(17·n) per row. Accuracy measured against
 `race_probabilities` (tests/test_torch_heads.py, float64, 257 points):
@@ -119,8 +137,10 @@ module does not — see open questions). A field spread over many sd, or a
 near-deterministic runner, needs more points. On one gumbel field
 (`[0, 20, 40]`, sd 0.6–1.8) this window is **more** accurate than
 winning's default bulk window, whose rare-winner post-check is
-normal-only (8e-6 relative off the converged span lattice; this module
-3e-10, the span reference's own floor).
+normal-only (8e-6 relative off the converged span lattice, which agrees
+with mpmath quadrature to 5e-13). This module is 3e-10 off there at 257
+points: its own spacing error on the Gumbel's sharp flank, not the
+reference's floor (3e-14 at 513 points).
 
 ### Prefix and top-k: the event lattice (#753)
 
@@ -228,8 +248,14 @@ accuracy, same as CPU float32) and the window is computed on the CPU.
   programs joined per runner (no deconvolution), ≤ 1e-10 relative vs
   exact / winning on ordinary to 40-sd fields, Σ = k to ~1e-12;
   O(n·L·k²), a Python loop over runners, autograd tape O(n·L·k). The
-  count programs are in the linear domain, so a membership below ~1e-300
-  underflows.
+  count programs and their prefix/suffix join run in the **log domain**
+  (`logaddexp` per count; log 0 is a finite stand-in so the backward has
+  no NaN). The linear programs, clamped at `finfo.tiny`, floored a rare
+  membership at log(tiny) — top-1 of a 20-sd longshot was −87.3 for
+  −170.1 in float32, −708 for −1454 at a 60-sd gap in float64 — with
+  near-zero gradients (#863). Now k = 1 equals `race_log_prob` in both
+  dtypes and memberships far below 1e-308 keep their digits; on ordinary
+  fields the values agree with the linear programs to rounding (~1e-15).
 
 ## Tests (tests/test_torch_heads.py; `importorskip("torch")`)
 

@@ -45,7 +45,10 @@ def thurstone_nll(mu, winner, sd=None, *, V=None, nodes=15, base="normal",
 
     mu: (..., n) locations (min-wins: pass -scores for a max-wins head).
     winner: (...) long tensor of winning indices. V: optional (..., n,
-    rank) loadings, for the factor race (race_log_prob_factor)."""
+    rank) loadings, for the factor race (race_log_prob_factor).
+    First-order only: it uses race_log_prob's analytic backward, so a
+    double backward raises (#864); for second derivatives gather from
+    race_log_prob(..., backward="autograd") instead."""
     if V is None:
         lp = race_log_prob(mu, sd, base=base, points=points, mask=mask)
     else:
@@ -256,10 +259,11 @@ def topk_log_prob(mu, k, sd=None, *, base="normal", points=257,
 
     The count law of the OTHER runners at each lattice point comes from
     prefix and suffix Poisson-binomial programs (truncated at k counts),
-    joined per runner -- no deconvolution, so no cancellation. Cost
-    O(n L k^2), with a Python loop over runners (2n steps) and an
-    autograd tape of O(n L k); float64 recommended for k > 1. The sum
-    over valid runners is k (to lattice accuracy).
+    joined per runner -- no deconvolution, so no cancellation. The
+    programs run in the log domain, so a rare membership keeps its value
+    and gradient in float32 as well (#863). Cost O(n L k^2), with a
+    Python loop over runners (2n steps) and an autograd tape of
+    O(n L k). The sum over valid runners is k (to lattice accuracy).
     """
     if not (isinstance(k, int) and k >= 1):
         raise ValueError(f"k must be a positive int; got {k!r}")
@@ -267,32 +271,42 @@ def topk_log_prob(mu, k, sd=None, *, base="normal", points=257,
         mu, sd, mask, base, points, delta)
     R, _, L = z.shape
     m3 = mask_r[:, :, None]
-    S = torch.where(m3, torch.exp(logS), torch.ones_like(logS))
-    F = torch.where(m3, torch.exp(fam.log_cdf(z)), torch.zeros_like(logS))
-    zero = torch.zeros(R, L, 1, dtype=z.dtype, device=z.device)
+    # The count programs run in the LOG domain: a linear pmf clamped at
+    # finfo.tiny turned a 20-sd longshot's e^-170 top-1 into e^-87 in
+    # float32 (gap 60: e^-708 for e^-1454 in float64), with near-zero
+    # gradients (#863). log 0 is a finite stand-in, far below any real
+    # term, since -inf would put NaN into logaddexp's backward.
+    neg = torch.finfo(z.dtype).min / 64
+    lS = torch.where(m3, logS, torch.zeros_like(logS))
+    lF = torch.where(m3, fam.log_cdf(z).clamp(min=neg),
+                     torch.full_like(logS, neg))
 
-    def step(pmf, j):
-        # add runner j to a count pmf (R, L, k), truncated at k - 1
-        shifted = torch.cat([zero, pmf[..., :-1]], dim=-1)
-        return pmf * S[:, j, :, None] + shifted * F[:, j, :, None]
+    def step(c, j):
+        # add runner j to a log count pmf, a list of k (R, L) tensors
+        # (count 0 .. k-1, truncated); count 0 only gains a survivor
+        s, f = lS[:, j], lF[:, j]
+        return [c[0] + s] + [torch.logaddexp(c[a] + s, c[a - 1] + f)
+                             for a in range(1, k)]
 
-    start = torch.zeros(R, L, k, dtype=z.dtype, device=z.device)
-    start[..., 0] = 1.0
+    zero = torch.zeros((R, L), dtype=z.dtype, device=z.device)
+    start = [zero] + [torch.full_like(zero, neg)] * (k - 1)
     pre = [start]
-    for j in range(n):
+    for j in range(n - 1):
         pre.append(step(pre[-1], j))
     suf = [start]
-    for j in range(n - 1, -1, -1):
+    for j in range(n - 1, 0, -1):
         suf.append(step(suf[-1], j))
-    suf = suf[::-1]                         # suf[j]: runners j..n-1
-    out = []
-    for i in range(n):
-        # P(count of others <= k-1) = sum_a pre_i[a] * cdf(suf_{i+1})[k-1-a]
-        cdf = torch.cumsum(suf[i + 1], dim=-1)
-        le = (pre[i] * torch.flip(cdf, dims=[-1])).sum(-1)       # (R, L)
-        integrand = logf[:, i] + torch.log(le.clamp(min=torch.finfo(
-            z.dtype).tiny))
-        out.append(torch.logsumexp(integrand, dim=-1))
-    lp = torch.stack(out, dim=-1) - logZ[:, None]
+    suf = suf[::-1]
+    # every runner at once: pre[i] holds runners 0..i-1 and suf[i]
+    # runners i+1..n-1, so runner i's others are their join, and
+    # P(count of others <= k-1) = sum_a pre_i[a] cdf(suf_i)[k-1-a]
+    P = [torch.stack([c[a] for c in pre], dim=1) for a in range(k)]
+    C = [torch.stack([c[0] for c in suf], dim=1)]       # (R, n, L) each
+    for a in range(1, k):
+        C.append(torch.logaddexp(C[-1], torch.stack([c[a] for c in suf],
+                                                    dim=1)))
+    lle = torch.logsumexp(torch.stack([P[a] + C[k - 1 - a]
+                                       for a in range(k)]), dim=0)
+    lp = torch.logsumexp(logf + lle, dim=-1) - logZ[:, None]
     lp = torch.where(mask_r, lp, torch.full_like(lp, -math.inf))
     return lp.reshape(*lead, n)

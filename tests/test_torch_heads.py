@@ -49,7 +49,7 @@ def test_parity_with_winning_race_probabilities(base, name, hetero):
     sd = np.linspace(0.6, 1.8, len(mu)) if hetero else np.ones(len(mu))
     lp = wt.race_log_prob(_t(mu), _t(sd), base=base).numpy()
 
-    def rel_err(ref):
+    def rel_err(ref, lp=lp):
         ok = ref > 1e-290
         return np.abs(np.exp(lp[ok]) / ref[ok] - 1.0).max()
 
@@ -58,10 +58,19 @@ def test_parity_with_winning_race_probabilities(base, name, hetero):
     if err >= 1e-10 and base != "normal":
         # winning's bulk window post-checks rare winners for the normal
         # base only: on gumbel rare_middle (hetero) its default is 8e-6
-        # off the converged span lattice, which this module matches
-        # (the span window has its own ~1e-10 relative floor on 1e-13)
-        err = 0.1 * rel_err(race_probabilities(mu, D=sd ** 2, base=base,
-                                               window="span", points=20001))
+        # off. The converged span lattice is the reference instead; it
+        # agrees with mpmath quadrature to 5e-13 there (its floor). Raw
+        # against it, this module is 3.2e-10 off at 257 points: its OWN
+        # spacing error on the gumbel's sharp flank (dx = 0.3 min sd),
+        # since 513 points give 3e-14. So: the default within that
+        # measured 3.2e-10, and the refined lattice to the span floor.
+        span = race_probabilities(mu, D=sd ** 2, base=base, window="span",
+                                  points=20001)
+        assert rel_err(span) < 1e-9, (name, rel_err(span))
+        lp513 = wt.race_log_prob(_t(mu), _t(sd), base=base,
+                                 points=513).numpy()
+        err = rel_err(span, lp513)
+        assert err < 1e-12, (name, err)
     assert err < 1e-10, (name, err)
 
 
@@ -745,12 +754,13 @@ def test_topk_memberships_sum_to_k_on_separated_fields(spread, k):
         assert abs(s - k) < 1e-10, (n, s)
 
 
-def _fine_topk(mu, sd, i, k):
+def _fine_topk(mu, sd, i, k, width=40.0):
     """Independent referee: P(i among the k smallest) on a 200k-point
-    log-domain grid around runner i (Poisson-binomial count of others)."""
+    log-domain grid of +-width sd around runner i (Poisson-binomial count
+    of others)."""
     from scipy.special import log_ndtr
     from scipy.stats import norm
-    x = np.linspace(mu[i] - 40 * sd[i], mu[i] + 40 * sd[i], 200001)
+    x = np.linspace(mu[i] - width * sd[i], mu[i] + width * sd[i], 200001)
     lp = np.full((k, len(x)), -np.inf)
     lp[0] = 0.0
     for j in range(len(mu)):
@@ -777,11 +787,9 @@ def test_topk_far_tail_matches_an_independent_referee():
         sd = rng.uniform(0.5, 1.5, size=n)
         lp = wt.topk_log_prob(_t(mu), k, _t(sd)).numpy()
         for i in np.argsort(mu)[-3:]:          # the weakest three
+            # below float64's normal range too, since the count program
+            # went log-domain (#863)
             ref = _fine_topk(mu, sd, i, k)
-            if ref < -690.0:
-                # below float64's normal range the linear count program
-                # underflows (a separate limitation); skip those
-                continue
             assert abs(lp[i] - ref) < 1e-6 * max(1.0, abs(ref)), (
                 spread, n, k, i)
 
@@ -944,3 +952,185 @@ def test_invalid_active_inputs_refuse(bad, match):
     mask = torch.tensor(bad["mask"]) if "mask" in bad else None
     with pytest.raises(ValueError, match=match):
         wt.race_log_prob(mu, sd, mask=mask)
+
+
+# ------------------------------------------- #863: log-domain count program
+def _fd_fine_topk(mu, sd, i, k, h=1e-4):
+    g = np.zeros(len(mu))
+    for j in range(len(mu)):
+        up, dn = mu.copy(), mu.copy()
+        up[j] += h
+        dn[j] -= h
+        g[j] = (_fine_topk(up, sd, i, k) - _fine_topk(dn, sd, i, k)) / (2 * h)
+    return g
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, F64])
+def test_863_rare_top1_is_the_race_value_and_gradient(dtype):
+    # the linear count program clamped at finfo.tiny: float32 top-1 of a
+    # 20-sd longshot came out -87.3 (log tiny) for -170.1, with ~zero
+    # gradient; float64 did the same at a gap of 60 (-708 for -1454)
+    gaps = (20.0, 60.0) if dtype == F64 else (20.0,)
+    tol = 1e-12 if dtype == F64 else 1e-6
+    for gap in gaps:
+        mu = _t([0.0, 0.0, 0.0, 0.0, gap], dtype=dtype, grad=True)
+        top = wt.topk_log_prob(mu, 1)[-1]
+        (g_top,) = torch.autograd.grad(top, mu)
+        m64 = mu.detach().to(F64).requires_grad_()
+        race = wt.race_log_prob(m64)[-1]
+        (g_race,) = torch.autograd.grad(race, m64)
+        top, race = float(top.detach()), float(race.detach())
+        assert abs(top / race - 1.0) < tol, (gap, top)
+        torch.testing.assert_close(g_top.to(F64), g_race, rtol=10 * tol,
+                                   atol=0)
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, F64])
+@pytest.mark.parametrize("k", [2, 3])
+def test_863_rare_topk_matches_a_log_domain_referee(dtype, k):
+    mu_np = np.array([0.0, 0.0, 0.0, 0.0, 20.0])
+    sd_np = np.ones(5)
+    ref = _fine_topk(mu_np, sd_np, 4, k)              # -156.9 / -137.7
+    g_ref = _fd_fine_topk(mu_np, sd_np, 4, k)
+    mu = _t(mu_np, dtype=dtype, grad=True)
+    lp = wt.topk_log_prob(mu, k)[-1]
+    (g,) = torch.autograd.grad(lp, mu)
+    tol = 1e-9 if dtype == F64 else 1e-6
+    lp = float(lp.detach())
+    assert abs(lp / ref - 1.0) < tol, (lp, ref)
+    # the gradient is O(10) per runner; finite differences of the
+    # referee are good to ~1e-6
+    np.testing.assert_allclose(g.to(F64).numpy(), g_ref, rtol=1e-5,
+                               atol=1e-5)
+
+
+def test_863_below_float64_normal_range_keeps_its_digits():
+    # memberships far below 1e-308 used to floor at log(tiny) = -708;
+    # their mass sits ~48 sd left of the longshot, hence the wide referee
+    mu_np = np.array([0.0, 0.0, 0.0, 0.0, 60.0])
+    for k in (1, 2, 3):
+        lp = float(wt.topk_log_prob(_t(mu_np), k)[-1])
+        ref = _fine_topk(mu_np, np.ones(5), 4, k, width=70.0)
+        assert ref < -1000.0
+        assert abs(lp / ref - 1.0) < 1e-9, (k, lp, ref)
+
+
+def test_863_ordinary_topk_equals_the_linear_count_program():
+    # where nothing underflows the old linear program is exact; the log
+    # domain must agree with it to rounding on ordinary fields
+    from winning.torch.losses import _setup
+    rng = np.random.default_rng(863)
+    for n, spread, k in ((5, 1.0, 2), (12, 3.0, 3), (20, 2.0, 2)):
+        mu = _t(rng.normal(size=n) * spread)
+        sd = _t(rng.uniform(0.5, 2.0, size=n))
+        _, _, _, mask, _, _, x, z, logf, logS, logZ = _setup(
+            mu, sd, None, "normal", 257, 1e-12)
+        S = torch.exp(logS)[0]
+        F = torch.exp(torch.special.log_ndtr(z))[0]
+        ref = []
+        for i in range(n):
+            pmf = torch.zeros(x.shape[-1], k, dtype=F64)
+            pmf[:, 0] = 1.0
+            for j in range(n):
+                if j != i:
+                    sh = torch.cat([torch.zeros_like(pmf[:, :1]),
+                                    pmf[:, :-1]], dim=-1)
+                    pmf = pmf * S[j, :, None] + sh * F[j, :, None]
+            ref.append(torch.logsumexp(logf[0, i] + torch.log(pmf.sum(-1)),
+                                       -1) - logZ[0])
+        torch.testing.assert_close(wt.topk_log_prob(mu, k, sd),
+                                   torch.stack(ref), rtol=1e-13, atol=1e-13)
+
+
+# ------------------------------------- #864: analytic backward is once-only
+def _hess(mode, checkpoint=False):
+    m = _t([0.0, 1.0], grad=True)
+    x = wt.race_lattice(m.detach())
+    return torch.autograd.functional.hessian(
+        lambda v: -wt.race_log_prob(v, lattice=x, backward=mode,
+                                    checkpoint=checkpoint)[1], m)
+
+
+@pytest.mark.parametrize("checkpoint", [False, True])
+def test_864_analytic_double_backward_raises(checkpoint):
+    # it used to return a wrong, asymmetric Hessian silently
+    with pytest.raises(RuntimeError, match="first-order only"):
+        _hess("analytic", checkpoint)
+
+
+def test_864_callers_of_the_analytic_backward_refuse_too():
+    mu = _t([0.0, 0.5, 1.0], grad=True)
+    V = _t([[0.3], [0.1], [-0.2]])
+    for f in (lambda m: wt.thurstone_nll(m, torch.tensor(1)),
+              lambda m: wt.race_log_prob_factor(m, V)[1]):
+        with pytest.raises(RuntimeError, match="first-order only"):
+            torch.autograd.grad(f(mu), mu, create_graph=True)
+        # and plain first-order use is unaffected
+        (g,) = torch.autograd.grad(f(mu), mu)
+        assert torch.all(torch.isfinite(g))
+
+
+@pytest.mark.parametrize("base", ["normal", "gumbel"])
+def test_864_autograd_backward_is_twice_differentiable(base):
+    mu = _t([0.0, 0.7, 1.5], grad=True)
+    sd = _t([1.0, 0.8, 1.3], grad=True)
+    x = wt.race_lattice(mu.detach(), sd.detach(), base=base)
+    f = lambda m, s: wt.race_log_prob(m, s, base=base, lattice=x,
+                                      backward="autograd")
+    assert torch.autograd.gradgradcheck(f, (mu, sd), eps=1e-6, atol=1e-6)
+    H = _hess("autograd")
+    torch.testing.assert_close(H, H.T, rtol=0, atol=1e-12)
+    # the pair Hessian of -log Phi((mu0 - mu1)/sqrt 2): [[a, -a], [-a, a]]
+    # (to lattice accuracy: the fixed lattice breaks translation exactly)
+    assert abs(float(H[0, 0] + H[0, 1])) < 1e-9
+
+
+def test_864_first_order_analytic_gradient_is_unchanged():
+    mu = _t([0.0, 1.0, 2.5], grad=True)
+    sd = _t([1.0, 0.7, 1.4], grad=True)
+    ga = torch.autograd.grad(wt.race_log_prob(mu, sd)[1], (mu, sd))
+    gb = torch.autograd.grad(wt.race_log_prob(mu, sd, backward="autograd")[1],
+                             (mu, sd))
+    for a, b in zip(ga, gb):
+        torch.testing.assert_close(a, b, rtol=1e-10, atol=1e-12)
+
+
+# ------------------------------------------ #865: the lattice is scale-free
+@pytest.mark.parametrize("scale", [1e-15, 1e-8, 1e8, 1e15])
+def test_865_race_prefix_topk_are_invariant_under_rescaling(scale):
+    # an absolute 1e-12 floor on the window width repriced [0, 1] with
+    # sd 1 from [0.760, 0.240] to [0.681, 0.319] at scale 1e-15
+    rng = np.random.default_rng(865)
+    fields = [(np.array([0.0, 1.0]), np.ones(2)),
+              (rng.normal(size=6) * 2.0, rng.uniform(0.5, 2.0, size=6)),
+              (np.array([0.0, 0.0, 0.0, 0.0, 20.0]), np.ones(5))]
+
+    def heads(mu, sd):
+        return [wt.race_log_prob(mu, sd),
+                wt.race_log_prob(mu, sd, base="gumbel"),
+                wt.ordered_prefix_log_prob(mu, torch.tensor([1, 0]), sd),
+                wt.ordered_prefix_log_prob(mu, torch.tensor([1, 0, 2])
+                                           [:min(3, len(mu))], sd),
+                wt.topk_log_prob(mu, 1, sd),
+                wt.topk_log_prob(mu, 2, sd)]
+
+    for mu, sd in fields:
+        ref = heads(_t(mu), _t(sd))
+        got = heads(_t(mu * scale), _t(sd * scale))
+        for g, r in zip(got, ref):
+            err = float(((g - r).abs() / r.abs().clamp(min=1.0)).max())
+            assert err < 1e-12, (scale, mu, err)
+
+
+def test_865_ordinary_lattices_never_reach_the_width_guard():
+    # the guard is hi >= lo + max sd; on ordinary fields the window is
+    # many sd wide, so neither the old floor nor the new one binds and
+    # the lattice is bitwise what it was
+    rng = np.random.default_rng(8650)
+    for n in (1, 2, 3, 8, 20):
+        for spread in (0.5, 2.0, 6.0):
+            mu = rng.normal(size=n) * spread
+            sd = rng.uniform(0.5, 2.0, size=n)
+            for base in ("normal", "gumbel"):
+                x = wt.race_lattice(_t(mu), _t(sd), base=base)
+                assert float(x[-1] - x[0]) > 5.0 * sd.max(), (n, spread)
