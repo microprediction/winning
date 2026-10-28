@@ -848,8 +848,10 @@ def test_equal_means_any_scales_give_exact_identities(ratio):
     p01 = torch.exp(wt.ordered_prefix_log_prob(mu, torch.tensor([0, 1]), sd))
     p10 = torch.exp(wt.ordered_prefix_log_prob(mu, torch.tensor([1, 0]), sd))
     assert abs(float(p01) - 0.5) < 1e-9 and abs(float(p10) - 0.5) < 1e-9
-    top2 = torch.exp(wt.topk_log_prob(mu, 2, sd))
-    torch.testing.assert_close(top2, _t([1.0, 1.0]), rtol=0, atol=1e-9)
+    # top-1 on the event lattice (top-2 of a pair, membership 1, is
+    # outside the k <= n-1 contract, #869)
+    top1 = torch.exp(wt.topk_log_prob(mu, 1, sd))
+    torch.testing.assert_close(top1, _t([0.5, 0.5]), rtol=0, atol=1e-9)
 
 
 def test_unresolvable_scale_ratio_warns_and_points_resolves_it():
@@ -857,11 +859,11 @@ def test_unresolvable_scale_ratio_warns_and_points_resolves_it():
     # probability above one; points= large enough resolves it
     mu, sd = _t([0.0, 0.0]), _t([1.0, 1000.0])
     with pytest.warns(RuntimeWarning, match="cannot resolve the narrowest"):
-        wt.topk_log_prob(mu, 2, sd)
+        wt.topk_log_prob(mu, 1, sd)
     with warnings.catch_warnings():
         warnings.simplefilter("error")
-        top2 = torch.exp(wt.topk_log_prob(mu, 2, sd, points=60001))
-    torch.testing.assert_close(top2, _t([1.0, 1.0]), rtol=0, atol=1e-8)
+        top1 = torch.exp(wt.topk_log_prob(mu, 1, sd, points=60001))
+    torch.testing.assert_close(top1, _t([0.5, 0.5]), rtol=0, atol=1e-8)
 
 
 def test_event_lattice_is_quiet_on_ordinary_heads():
@@ -1112,7 +1114,8 @@ def test_865_race_prefix_topk_are_invariant_under_rescaling(scale):
                 wt.ordered_prefix_log_prob(mu, torch.tensor([1, 0, 2])
                                            [:min(3, len(mu))], sd),
                 wt.topk_log_prob(mu, 1, sd),
-                wt.topk_log_prob(mu, 2, sd)]
+                # k <= n - 1: top-2 of a pair is outside the contract (#869)
+                wt.topk_log_prob(mu, min(2, len(mu) - 1), sd)]
 
     for mu, sd in fields:
         ref = heads(_t(mu), _t(sd))
@@ -1134,3 +1137,155 @@ def test_865_ordinary_lattices_never_reach_the_width_guard():
             for base in ("normal", "gumbel"):
                 x = wt.race_lattice(_t(mu), _t(sd), base=base)
                 assert float(x[-1] - x[0]) > 5.0 * sd.max(), (n, spread)
+
+
+# ------------- #865 (reopened): the pair window past sd**2 over/underflow
+@pytest.mark.parametrize("scale", [1e-154, 1e-160, 1e-170, 1e-300,
+                                   1.4e154, 1e160, 1e300])
+def test_865_pair_window_survives_sd_squared_over_and_underflow(scale):
+    # sd**2 in caller units overflowed or underflowed here: the pair
+    # product gave a 5-point repricing at 1e-154 and NaN at 1e-170 and
+    # 1.4e154. Every row is the same race as at scale 1.
+    mu = _t([0.0, 1.0])
+    s = torch.tensor(scale, dtype=F64)
+    want = [0.5 * math.erfc(-math.sqrt(0.5) / math.sqrt(2.0))]
+    want.append(1.0 - want[0])
+    got = wt.race_log_prob(mu * s, s).exp()
+    assert np.allclose(got.numpy(), want, rtol=0, atol=1e-12), (scale, got)
+    mu3, sd3 = _t([0.0, 0.7, 1.5]), _t([1.0, 0.6, 1.3])
+    for head in (lambda m, d: wt.ordered_prefix_log_prob(m, [1, 0], d),
+                 lambda m, d: wt.topk_log_prob(m, 2, d),
+                 lambda m, d: wt.race_log_prob(m, d, base="gumbel")):
+        ref, got = head(mu3, sd3), head(mu3 * s, sd3 * s)
+        assert torch.all(torch.isfinite(got))
+        assert float((got - ref).abs().max()) < 1e-12, scale
+
+
+def test_865_power_of_two_unit_leaves_ordinary_windows_bitwise():
+    # the pair is normalised by a power of two, which scales every step
+    # exactly: the window is the caller-unit formula's, bit for bit
+    from winning.torch.race import _Normal, _window_rows
+    rng = np.random.default_rng(8651)
+    for n in (2, 3, 8, 20):
+        mu = _t(rng.normal(size=(4, n)) * 2.0)
+        sd = _t(rng.uniform(0.3, 3.0, size=(4, n)))
+        mask = torch.ones(mu.shape, dtype=torch.bool)
+        lo, hi = _window_rows(mu, sd, mask, _Normal, 1e-12)
+        # the old caller-unit right edge
+        key = mu.clone()
+        two = torch.topk(key, 2, dim=-1, largest=False).indices
+        idx = torch.arange(n)[None, :]
+        kk = torch.where(idx == two[:, :1], two[:, 1:2], two[:, :1])
+        mk, sk = torch.gather(mu, -1, kk), torch.gather(sd, -1, kk)
+        prec = 1.0 / sd ** 2 + 1.0 / sk ** 2
+        m_pair = (mu / sd ** 2 + mk / sk ** 2) / prec
+        qn = -torch.special.ndtri(torch.tensor(1e-12, dtype=F64))
+        own = mu + sd * _Normal.upper_quantile(torch.tensor(1e-12, dtype=F64))
+        old = torch.minimum(own, m_pair + qn * prec.rsqrt()).max(-1).values
+        assert torch.equal(hi, torch.maximum(old, lo + sd.max(-1).values))
+
+
+# ------------------- #866: the min-Gumbel log-CDF in its far-left tail
+def _gumbel_log_cdf_ref(z):
+    import mpmath
+    mpmath.mp.dps = 50
+    c = mpmath.pi / mpmath.sqrt(6)
+    u = c * mpmath.mpf(z) - mpmath.euler
+    e = mpmath.exp(u)
+    return (float(mpmath.log(-mpmath.expm1(-e))),
+            float(c * e / mpmath.expm1(e)))
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, F64])
+@pytest.mark.parametrize("z", [-100.0, -70.0, -68.0, -40.0, -5.0, 0.0,
+                               -560.0, -800.0])
+def test_866_gumbel_log_cdf_value_and_gradient_far_left(dtype, z):
+    pytest.importorskip("mpmath")
+    from winning.torch.race import _Gumbel
+    t = torch.tensor(z, dtype=dtype, requires_grad=True)
+    y = _Gumbel.log_cdf(t)
+    y.backward()
+    v, d = _gumbel_log_cdf_ref(z)
+    eps = 2e-6 if dtype == torch.float32 else 1e-13
+    assert math.isfinite(y.item()) and math.isfinite(t.grad.item())
+    assert abs(y.item() - v) <= eps * max(1.0, abs(v)), (y.item(), v)
+    assert abs(t.grad.item() - d) <= eps * max(1.0, abs(d)), (t.grad, d)
+
+
+def test_866_gumbel_log_cdf_is_bitwise_where_it_was_finite():
+    # the existing branches, as they were, on everything they resolved
+    from winning.torch.race import _Gumbel, _GUMBEL_C, _EULER
+    for dtype, z0 in ((torch.float32, -67.0), (F64, -550.0)):
+        z = torch.linspace(z0, 20.0, 20001, dtype=dtype)
+        e = torch.exp(torch.clamp(_GUMBEL_C * z - _EULER, max=_Gumbel._UMAX))
+        old = torch.where(e < 0.6931,
+                          torch.log(-torch.expm1(-e.clamp(max=0.6931))),
+                          torch.log1p(-torch.exp(-e.clamp(min=0.6931))))
+        assert torch.equal(_Gumbel.log_cdf(z), old)
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, F64])
+@pytest.mark.parametrize("head", ["prefix3", "prefix2", "top2"])
+def test_866_heterogeneous_gumbel_field_is_finite_in_both_dtypes(dtype,
+                                                                  head):
+    # float32 gave NaN (prefix [1, 0, 2]) or NaN gradients for the narrow
+    # runner (prefix [1, 0], top-2); float64 is the reference
+    def run(dt):
+        mu = torch.zeros(3, dtype=dt, requires_grad=True)
+        sd = torch.tensor([1.0, 0.2, 1.0], dtype=dt, requires_grad=True)
+        if head == "top2":
+            lp = wt.topk_log_prob(mu, 2, sd, base="gumbel")
+        else:
+            order = [1, 0, 2] if head == "prefix3" else [1, 0]
+            lp = wt.ordered_prefix_log_prob(mu, order, sd, base="gumbel")
+        lp.sum().backward()
+        return [a.detach().double().numpy() for a in (lp, mu.grad, sd.grad)]
+
+    got, ref = run(dtype), run(F64)
+    tol = 1e-4 if dtype == torch.float32 else 1e-12
+    for g, r in zip(got, ref):
+        assert np.all(np.isfinite(g))
+        assert np.abs(g - r).max() < tol, (g, r)
+
+
+# ----------------- #869: top-k depth is 1 <= k <= n-1, per active row
+@pytest.mark.parametrize("n,k", [(1, 1), (2, 2), (2, 3), (3, 3), (3, 50)])
+def test_869_topk_refuses_k_at_or_beyond_n(n, k):
+    with pytest.raises(ValueError, match=r"\[1, n-1\]"):
+        wt.topk_log_prob(_t(np.arange(float(n))), k)
+    # numpy refuses the same depths
+    if n >= 2:
+        with pytest.raises(ValueError, match=r"\[1, n-1\]"):
+            top_k_probabilities(np.arange(float(n)), k)
+
+
+def test_869_topk_refuses_a_masked_row_with_too_few_active_runners():
+    mu = _t([[0.0, 1.0, 2.0, 3.0], [0.0, 1.0, 2.0, 3.0]])
+    mask = torch.tensor([[True, True, True, True],
+                         [True, False, True, False]])
+    with pytest.raises(ValueError, match="n=2 active"):
+        wt.topk_log_prob(mu, 2, mask=mask)
+    # k = 1 is legal on both rows and unchanged
+    lp = wt.topk_log_prob(mu, 1, mask=mask)
+    assert torch.allclose(lp[1, [0, 2]], wt.topk_log_prob(_t([0.0, 2.0]), 1),
+                          atol=1e-12)
+
+
+def test_869_an_oversized_k_is_refused_before_the_count_program(monkeypatch):
+    # an oversized depth fails fast, without building O(k) count states
+    import winning.torch.losses as L
+    calls = []
+    real = torch.logaddexp
+    monkeypatch.setattr(L.torch, "logaddexp",
+                        lambda *a, **kw: calls.append(1) or real(*a, **kw))
+    with pytest.raises(ValueError):
+        wt.topk_log_prob(_t([0.0, 1.0, 2.0]), 400)
+    assert not calls
+
+
+def test_869_legal_depths_are_unchanged():
+    mu, sd = _t([0.3, -0.2, 1.1, 0.0]), _t([1.0, 0.7, 1.4, 0.9])
+    for k in (1, 2, 3):
+        lp = wt.topk_log_prob(mu, k, sd)
+        ref = top_k_probabilities(mu.numpy(), k, D=sd.numpy() ** 2)
+        assert np.abs(np.exp(lp.numpy()) / ref - 1).max() < 1e-9

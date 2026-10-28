@@ -269,6 +269,17 @@ def topk_log_prob(mu, k, sd=None, *, base="normal", points=257,
         raise ValueError(f"k must be a positive int; got {k!r}")
     fam, mu_r, sd_r, mask_r, lead, n, x, z, logf, logS, logZ = _setup(
         mu, sd, mask, base, points, delta)
+    # the numpy contract, 1 <= k <= n-1 (factor.topk._as_depth); with a
+    # mask, n is each row's active count. k >= n saturated every
+    # membership at 1 (sum n, not k) after O(k) work (#869)
+    if not k <= n - 1:
+        raise ValueError(f"k must be in [1, n-1]; got k={k}, n={n}")
+    if mask is not None and not torch.jit.is_tracing():
+        n_min = int(mask_r.sum(-1).min())
+        if not k <= n_min - 1:
+            raise ValueError(
+                f"k must be in [1, n-1] on every row; got k={k} with a row "
+                f"of n={n_min} active runners")
     R, _, L = z.shape
     m3 = mask_r[:, :, None]
     # The count programs run in the LOG domain: a linear pmf clamped at

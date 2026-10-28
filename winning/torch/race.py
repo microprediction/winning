@@ -142,11 +142,19 @@ class _Gumbel:
         # log(1 - exp(-e^u)), stable both ways. Each branch sees a clamped
         # argument (same values where it is selected): far left, e < 1e-16
         # makes log1p(-exp(-e)) = log(0), and its infinite derivative times
-        # torch.where's zero gave NaN gradients on separated fields (#753)
-        e = torch.exp(cls._u(z))
-        return torch.where(e < 0.6931,
-                           torch.log(-torch.expm1(-e.clamp(max=0.6931))),
-                           torch.log1p(-torch.exp(-e.clamp(min=0.6931))))
+        # torch.where's zero gave NaN gradients on separated fields (#753).
+        # Farther left still, e = e^u is subnormal or 0 and log(1-e^-e)
+        # came out -inf (NaN gradient) where it is u - e/2 + O(e^2) = u
+        # to rounding (#866): below u = log(tiny) that is the answer.
+        u = cls._u(z)
+        far = math.log(torch.finfo(u.dtype).tiny)
+        e = torch.exp(u.clamp(min=far))
+        return torch.where(u < far, u,
+                           torch.where(e < 0.6931,
+                                       torch.log(-torch.expm1(
+                                           -e.clamp(max=0.6931))),
+                                       torch.log1p(-torch.exp(
+                                           -e.clamp(min=0.6931)))))
 
     @classmethod
     def dlog_pdf(cls, z):
@@ -295,9 +303,17 @@ def _window_rows(mu, sd, mask, fam, delta):
         mk = torch.gather(m64, -1, kk)
         sk = torch.gather(s64, -1, kk)
         okk = torch.gather(mask, -1, kk)
-        prec = 1.0 / s64 ** 2 + 1.0 / sk ** 2
-        m_pair = (m64 / s64 ** 2 + mk / sk ** 2) / prec
-        pair = m_pair + qn * prec.rsqrt()
+        # the Gaussian product in units of the pair's wider sd, rounded up
+        # to a power of two: sd ** 2 in caller units overflowed or
+        # underflowed near 1e+-154 (NaN, or a 5-point repricing, #865).
+        # A power-of-two unit scales every step exactly, so ordinary
+        # inputs give the same bits as the caller-unit formula.
+        unit = torch.ldexp(torch.ones_like(s64),
+                           torch.frexp(torch.maximum(s64, sk)).exponent)
+        ws, wk = s64 / unit, sk / unit
+        prec = 1.0 / ws ** 2 + 1.0 / wk ** 2
+        m_pair = (m64 / ws ** 2 + mk / wk ** 2) / prec
+        pair = m_pair + qn * (unit * prec.rsqrt())
         own = m64 + s64 * q_hi
         hi_i = torch.where(okk, torch.minimum(own, pair), own)
     else:
