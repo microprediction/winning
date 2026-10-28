@@ -668,6 +668,24 @@ def _as_rank(r, n, where="r"):
     return rr
 
 
+def _as_runner_index(i, n, where="i"):
+    """A runner index: a Python or NumPy integer in [0, n), not a bool.
+
+    The single-row Jacobians and the reduced-rank representation indexed
+    with it directly, so -1 silently meant the last runner, and int(y)
+    read 0.9 as runner 0 and True as runner 1 -- a plausible gradient
+    for the wrong alternative (#846)."""
+    if isinstance(i, (bool, np.bool_)) or not isinstance(i, (int, np.integer)):
+        raise ValueError(
+            f"{where} must be an integer runner index; got {i!r}")
+    ii = int(i)
+    if not 0 <= ii < n:
+        raise ValueError(
+            f"{where} must be a runner index in [0, n); got {where}={i!r}, "
+            f"n={n}")
+    return ii
+
+
 def _is_symmetric(base_rows):
     """S(z) + S(-z) == 1 on a probe set: the noise law is symmetric."""
     z = np.array([-2.3, -1.1, -0.35, 0.6, 1.7])
@@ -907,6 +925,7 @@ def top_k_jacobian_row(mu, i, k, D=None, base="normal", points=513):
     mu = np.asarray(mu, float)
     n = len(mu)
     k = _as_depth(k, n)
+    i = _as_runner_index(i, n)                                   # (#846)
     D = np.ones(n) if D is None else as_idio(D, n, positive=True)
     # scalar, length-n, and no
     # negative or zero variance: a bare asarray made a scalar 0-d, and
@@ -963,6 +982,7 @@ def top_k_jacobian_row_sigma(mu, i, k, D=None, base="normal", points=513):
     mu = np.asarray(mu, float)
     n = len(mu)
     k = _as_depth(k, n)
+    i = _as_runner_index(i, n)                                   # (#846)
     D = np.ones(n) if D is None else as_idio(D, n, positive=True)
     # scalar, length-n, and no
     # negative or zero variance: a bare asarray made a scalar 0-d, and

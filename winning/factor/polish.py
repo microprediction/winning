@@ -162,17 +162,20 @@ def race_jacobian_row(mu, y, V=None, D=None, F=None, W=None, base="normal",
     the shared lattice and the quotient rule, so the score it feeds is
     the fixed-grid-exact gradient of the objective the forward map
     defines (grid motion omitted; see race_jacobian). kink_split as in
-    race_jacobian."""
+    race_jacobian. y is an integer runner index in [0, n): int(y) read
+    0.9 as runner 0 and True as runner 1, and -1 meant the last (#846)."""
+    from .topk import _as_runner_index
     mu, V, D, F, W, fn, left, right = _setup(mu, V, D, F, W, base)
+    y = _as_runner_index(y, len(mu), "y")
     sd = np.sqrt(D)
     M_all = mu[None, :] + F @ V.T
     x, points = forward_grid(M_all, sd, V, fn, left, right, points,
                              window=window, delta=delta)
     dx = x[1] - x[0]
     a, A, dT = _raw_and_derivative(mu, V, D, F, W, fn, sd, x, dx,
-                                   rows=[int(y)], kink_split=kink_split)
+                                   rows=[y], kink_split=kink_split)
     T = float(a.sum())
-    p_y = float(a[int(y)]) / T
+    p_y = float(a[y]) / T
     return (A[0] - p_y * dT) / T
 
 
