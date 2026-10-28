@@ -8,23 +8,23 @@ experiment 1, all: 230 subjects, 5134 restricted-menu choices scored, shares fro
 
 experiment 1, forced choice: 76 subjects, 1900 restricted-menu choices scored, shares from 60 full-menu choices
   renormalization log loss   0.9639
-  Gaussian race log loss     0.9197
-  gain                       +0.0442  [+0.0171, +0.0867]
-  fitted-Luce null median    -0.0024   95th +0.0135   (200 reps)
-  excess over null           +0.0466   p = 0.005
+  Gaussian race log loss     0.9196
+  gain                       +0.0443  [+0.0171, +0.0868]
+  fitted-Luce null median    -0.0024   95th +0.0134   (200 reps)
+  excess over null           +0.0467   p = 0.005
 
 experiment 2, all: 134 subjects, 3105 restricted-menu choices scored, shares from 102 full-menu choices
   renormalization log loss   0.9162
   Gaussian race log loss     0.9103
-  gain                       +0.0059  [+0.0009, +0.0306]
+  gain                       +0.0059  [+0.0009, +0.0307]
   fitted-Luce null median    +0.0003   95th +0.0127   (200 reps)
-  excess over null           +0.0056   p = 0.199
+  excess over null           +0.0056   p = 0.194
 
 experiment 2, forced choice: 61 subjects, 1525 restricted-menu choices scored, shares from 48 full-menu choices
   renormalization log loss   0.8939
   Gaussian race log loss     0.8799
   gain                       +0.0140  [+0.0034, +0.0560]
-  fitted-Luce null median    +0.0010   95th +0.0240   (200 reps)
+  fitted-Luce null median    +0.0010   95th +0.0239   (200 reps)
   excess over null           +0.0131   p = 0.129
 
 both experiments pooled: 364 subjects, 8239 restricted-menu choices scored, shares from 268 full-menu choices
@@ -37,7 +37,6 @@ both experiments pooled: 364 subjects, 8239 restricted-menu choices scored, shar
 both experiments pooled, forced choice: 137 subjects, 3425 restricted-menu choices scored, shares from 109 full-menu choices
   renormalization log loss   0.9112
   Gaussian race log loss     0.8846
-  gain                       +0.0265  [+0.0116, +0.0700]
-  fitted-Luce null median    -0.0041   95th +0.0117   (200 reps)
-  excess over null           +0.0306   p = 0.010
-EXIT=0
+  gain                       +0.0266  [+0.0117, +0.0700]
+  fitted-Luce null median    -0.0041   95th +0.0118   (200 reps)
+  excess over null           +0.0307   p = 0.010

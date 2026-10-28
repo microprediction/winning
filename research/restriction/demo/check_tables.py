@@ -26,12 +26,12 @@ CLAIMS = [
     ("0.4942", "yeonrahnev.txt", "exp 1 renormalization loss"),
     ("0.4795", "yeonrahnev.txt", "exp 1 race loss"),
     ("0.0147", "yeonrahnev.txt", "exp 1 gain"),
-    ("0.0118", "yeonrahnev.txt", "exp 1 bootstrap lower"),
-    ("0.0179", "yeonrahnev.txt", "exp 1 bootstrap upper"),
+    ("0.0117", "yeonrahnev.txt", "exp 1 bootstrap lower"),
+    ("0.0178", "yeonrahnev.txt", "exp 1 bootstrap upper"),
     ("0.6276", "yeonrahnev.txt", "exp 2 renormalization loss"),
     ("0.5999", "yeonrahnev.txt", "exp 2 race loss"),
-    ("0.0278", "yeonrahnev.txt", "exp 2 gain"),
-    ("0.0234", "yeonrahnev.txt", "exp 2 bootstrap lower"),
+    ("0.0277", "yeonrahnev.txt", "exp 2 gain"),
+    ("0.0233", "yeonrahnev.txt", "exp 2 bootstrap lower"),
     ("0.0324", "yeonrahnev.txt", "exp 2 bootstrap upper"),
     ("0.3967", "yeonrahnev.txt", "advance-warning renormalization loss"),
     ("0.3928", "yeonrahnev.txt", "advance-warning race loss"),
@@ -39,28 +39,28 @@ CLAIMS = [
     ("0.7802", "yeonrahnev.txt", "observed accuracy, menu after"),
     ("0.8504", "yeonrahnev.txt", "observed accuracy, menu before"),
     ("0.8493", "yeonrahnev.txt", "renormalization predicted accuracy"),
-    ("0.8347", "yeonrahnev.txt", "race predicted accuracy"),
+    ("0.8348", "yeonrahnev.txt", "race predicted accuracy"),
     # ---- Getty, results/getty.txt
     ("0.8144", "getty.txt", "all rows renormalization loss"),
     ("0.7872", "getty.txt", "all rows race loss"),
     ("0.0272", "getty.txt", "all rows gain"),
     ("0.4504", "getty.txt", "signal rows renormalization loss"),
-    ("0.4393", "getty.txt", "signal rows race loss"),
-    ("0.0111", "getty.txt", "signal rows gain"),
+    ("0.4394", "getty.txt", "signal rows race loss"),
+    ("0.0110", "getty.txt", "signal rows gain"),
     ("0.0021", "getty.txt", "signal rows bootstrap lower"),
-    ("0.0225", "getty.txt", "signal rows bootstrap upper"),
+    ("0.0224", "getty.txt", "signal rows bootstrap upper"),
     ("0.0453", "getty.txt", "condition 1 gain"),
-    ("0.0127", "getty.txt", "condition 2 gain"),
+    ("0.0128", "getty.txt", "condition 2 gain"),
     ("0.0490", "getty.txt", "condition 3 gain"),
     ("0.103", "getty.txt", "condition 1 within-set confusion"),
     ("0.790", "getty.txt", "condition 2 within-set confusion"),
     ("0.335", "getty.txt", "condition 3 within-set confusion"),
     # ---- tones, results/tones.txt
     ("1.1176", "tones.txt", "narrow ten to six renormalization loss"),
-    ("1.1309", "tones.txt", "narrow ten to six race loss"),
-    ("0.0133", "tones.txt", "narrow ten to six gain"),
+    ("1.1308", "tones.txt", "narrow ten to six race loss"),
+    ("0.0132", "tones.txt", "narrow ten to six gain"),
     ("0.0051", "tones.txt", "narrow ten to eight gain"),
-    ("0.0173", "tones.txt", "wide ten to six gain"),
+    ("0.0172", "tones.txt", "wide ten to six gain"),
     ("0.0041", "tones.txt", "wide ten to eight gain"),
     # ---- Rouder lines, results/rouder_chunk.txt
     ("0.7846", "rouder_chunk.txt", "all blocks renormalization loss"),
@@ -72,24 +72,24 @@ CLAIMS = [
     ("0.0090", "rouder_chunk.txt", "twelve to four gain"),
     # ---- recognition foils, results/recognition.txt
     ("0.3859", "recognition.txt", "all foils renormalization loss"),
-    ("0.3821", "recognition.txt", "all foils race loss"),
+    ("0.3822", "recognition.txt", "all foils race loss"),
     ("0.0037", "recognition.txt", "all foils gain"),
-    ("0.0029", "recognition.txt", "all foils bootstrap lower"),
-    ("0.0047", "recognition.txt", "all foils bootstrap upper"),
+    ("0.0027", "recognition.txt", "all foils bootstrap lower"),
+    ("0.0049", "recognition.txt", "all foils bootstrap upper"),
     # ---- Wills categories, results/wills.txt
     ("0.6839", "wills.txt", "renormalization loss"),
-    ("0.6540", "wills.txt", "race loss"),
+    ("0.6541", "wills.txt", "race loss"),
     ("0.0299", "wills.txt", "gain"),
     ("0.0175", "wills.txt", "bootstrap lower"),
-    ("0.0717", "wills.txt", "bootstrap upper"),
+    ("0.0716", "wills.txt", "bootstrap upper"),
     ("0.0413", "wills.txt", "disallowed category 2 gain"),
-    ("0.0485", "wills.txt", "disallowed category 3 gain"),
+    ("0.0484", "wills.txt", "disallowed category 3 gain"),
     # ---- news slates and the observed-restriction table
     ("0.0496", "mind_slates.txt", "news slate gain"),
-    # ---- gain by size of the surviving menu
-    ("0.0412", "gain_by_size.txt", "sushi pairwise gain"),
-    ("0.0263", "gain_by_size.txt", "sushi |T|=3 gain"),
-    ("0.0130", "gain_by_size.txt", "GSS socialization pairwise gain"),
+    # ---- gain by size of the surviving menu (estimand.py; gain_by_size.py is superseded)
+    ("0.0412", "estimand.txt", "sushi pairwise gain"),
+    ("0.0263", "estimand.txt", "sushi |T|=3 gain"),
+    ("0.0130", "estimand.txt", "GSS socialization pairwise gain"),
 ]
 
 # Figures the paper prints that are computed in the paper itself rather than by a script.
@@ -97,7 +97,7 @@ CLAIMS = [
 CHECKED_IN_JS = {
     "0.9078": "concentrated shares, favourite when the tail is withdrawn",
     "0.9091": "concentrated shares, renormalized favourite",
-    "0.8028": "concentrated shares, survivor when the leader is withdrawn",
+    "0.8027": "concentrated shares, survivor when the leader is withdrawn",
     "0.9000": "concentrated shares, renormalized survivor",
 }
 
@@ -182,8 +182,8 @@ def main():
     # ---- arithmetic check on the derived excess column: excess = gain - null median
     print("\nderived columns, checked by arithmetic rather than traced to a file:")
     for label, gain, med, printed in [
-            ("Sushi", 0.0111, -0.0062, 0.0174),
-            ("menu experiment, forced choice", 0.0265, -0.0041, 0.0306),
+            ("Sushi", 0.0111, -0.0065, 0.0176),
+            ("menu experiment, forced choice", 0.0266, -0.0041, 0.0307),
             ("menu experiment, all subjects", 0.0100, -0.0023, 0.0123)]:
         got = round(gain - med, 4)
         mark = "ok" if abs(got - printed) <= 1e-4 else "MISMATCH"
