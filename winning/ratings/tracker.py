@@ -507,7 +507,7 @@ def tune_block_rho(contests: Sequence[dict], rho_grid=(0.0, 0.1, 0.25, 0.4, 0.6)
         evidence = np.asarray([walk(rho, {}) for rho in rho_grid])
         best = int(np.argmax(evidence))
         _, report = select({r: -e for r, e in zip(rho_grid, evidence)},
-                           "rho", order=list(rho_grid))
+                           "rho", order=list(dict.fromkeys(rho_grid)))
         return {"rho_grid": rho_grid, "beta2_grid": None, "evidence": evidence,
                 "rho": rho_grid[best], "beta2": float(params.get("beta2", 1.0)),
                 "at_edge": best in (0, len(rho_grid) - 1),

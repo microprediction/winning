@@ -125,3 +125,49 @@ def test_809_zero_noise_variance_is_legal():
     assert np.array_equal(as_noise_variances(0.0, 3, "tau2"), np.zeros(3))
     assert np.array_equal(as_noise_variances([0.0, 2.0], 2, "beta2"),
                           [0.0, 2.0])
+
+
+# --- #810: tuning selectors -------------------------------------------------
+
+def test_810_order_must_be_a_permutation_of_the_scores():
+    from winning.ratings import select
+    scores = {1.0: 0.50, 2.0: 0.10, 3.0: 0.40}
+    with pytest.raises(ValueError, match="omits"):
+        select(scores, "lam", order=[1.0, 3.0])          # drops the optimum
+    with pytest.raises(ValueError, match="twice"):
+        select(scores, "lam", order=[1.0, 2.0, 3.0, 3.0])
+
+
+@pytest.mark.parametrize("bad", [np.nan, np.inf, -np.inf])
+def test_810_non_finite_scores_raise(bad):
+    from winning.ratings import select, select_grid
+    with pytest.raises(ValueError, match="finite"):
+        select({1.0: bad, 2.0: 0.1, 3.0: 0.4}, "lam")
+    with pytest.raises(ValueError, match="finite"):
+        select_grid({("bad", 0): bad, ("good", 0): 0.5, ("worse", 0): 0.8},
+                    ["model", "axis"])
+
+
+def test_810_complete_orders_and_finite_scores_unchanged():
+    from winning.ratings import select, select_grid
+    scores = {1.0: 0.50, 2.0: 0.10, 3.0: 0.40}
+    best, rep = select(scores, "lam", order=[3.0, 2.0, 1.0])
+    assert best == 2.0 and not rep.at_edge and rep.spread == 0.4
+    best, reps = select_grid({("a", 0): 0.5, ("b", 0): 0.3, ("b", 1): 0.4},
+                             ["model", "axis"])
+    assert best == ("b", 0) and reps["model"].best == "b"
+
+
+def test_810_sweeps_with_a_repeated_grid_value_still_select():
+    # the sweeps collapse a repeated value in their score dict, so they
+    # hand select a duplicate-free order (main's result, no late raise)
+    from winning.ratings.factor_ratings import sweep_offset_ridge
+    from winning.ratings.tracker import tune_block_rho
+    ev = [([0, 1, 2], [0, 1], [1.0, 0.5]), ([2, 0, 1], [1], [1.0, -0.5])]
+    out = sweep_offset_ridge(ev, ev, 3, 2, offset_grid=(1.0, 3.0, 3.0),
+                             n_iter=20)
+    assert len(out["val_loss"]) == 3
+    contests = [{"runners": ["a", "b", "c"], "t": float(i), "winner": i % 3,
+                 "groups": [0, 0, 1]} for i in range(4)]
+    out = tune_block_rho(contests, rho_grid=(0.0, 0.2, 0.2))
+    assert len(out["evidence"]) == 3

@@ -703,7 +703,7 @@ def sweep_offset_ridge(train_events, val_events, n_entities, n_cov,
         fits.append(B)
     best = int(np.argmin(losses))
     _, report = select({g: L for g, L in zip(grid, losses)},
-                       "offset_ridge", order=list(grid))
+                       "offset_ridge", order=list(dict.fromkeys(grid)))
     return {"offset_grid": grid, "val_loss": np.asarray(losses),
             "offset_ridge": grid[best], "B": fits[best],
             "at_scalar_limit": best == len(grid) - 1,
