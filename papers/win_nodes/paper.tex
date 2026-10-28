@@ -252,8 +252,8 @@ query & setting & pass vs.\ referee & cost \\
 max-CDF & AR(1), $n{=}50$, $\phi{=}0.99$ & $5\times10^{-3}$ (MC $4{\times}10^5$) & 3 ms \\
 max-CDF & i.i.d.\ closed form, $n{=}12$ & $1.5\times10^{-14}$ & --- \\
 argmax & AR(1), $\phi{=}0.9$, $n{=}20$ & $8\times10^{-4}$ (MC $4{\times}10^5$) & ms \\
-argmax & random walk, $n{=}40$ & $4\times10^{-3}$ (MC) & ms \\
-band $b{=}2$ & AR(2) incl.\ cyclical & $1.2\times10^{-2}$ (grid-limited) & 230 ms/thr. \\
+argmax & random walk, $n{=}40$ & $6\times10^{-4}$ (MC $4{\times}10^5$) & ms \\
+band $b{=}2$ & AR(2) incl.\ cyclical & $1.2\times10^{-2}$ (grid-limited) & --- \\
 $b{=}2$ embed & $\phi_2{=}0$ vs.\ $b{=}1$ & $5.6\times10^{-16}$ & --- \\
 max-CDF & inhomogeneous chain, $n{=}10$ & $4\times10^{-4}$ (MC $4{\times}10^5$) & --- \\
 first passage & same & $7\times10^{-4}$ (MC) & $O(nL)$ \\
@@ -412,7 +412,7 @@ sparsity are refused with a pointer to the lifted pass and to
 The reduction requires structure. Factor coupling of rank $r$ costs
 a $Q$-node quadrature and is deterministic and quadrature-accurate;
 precision
-bandwidth $b$ costs $O(nL^{b+1})$ and is practical for $b\le 3$;
+bandwidth $b$ costs $O(nL^{b+1})$;
 general sparse precision gets neither treatment here, and the
 excursion functionals then belong to the sampling methods of
 \citet{bolin2015}. The win-node concept itself is not new: TrueSkill
