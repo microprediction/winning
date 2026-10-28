@@ -434,12 +434,18 @@ def structure_variances(structure):
     if isinstance(structure, Tree):
         from .blocks import _scalar_loading
         tot = D + _scalar_loading(structure.loading, "tree races") ** 2
-        from .blocks import _without_common_shock, _as_parent
+        from .blocks import (_without_common_shock, _as_parent,
+                             _validate_tree)
         parent = _as_parent(structure.parent)
         # Cluster labels are remapped below; a common ancestor's shock
         # cancels and is no part of the surrogate's variance (#489)
         cluster = structure.leaf_index                  # (#146, #372)
         n_clusters = int(cluster.max()) + 1
+        # the pricers' topology door: a forest (two roots) got variances
+        # as if a zero-strength common root joined it, and a cycle spun
+        # the walk below forever (#822)
+        _validate_tree(parent, np.asarray(structure.strength, float),
+                       n_clusters)
         strength = _without_common_shock(
             parent, np.asarray(structure.strength, float), n_clusters)
         # Cluster labels are arbitrary comparable values, and the forward

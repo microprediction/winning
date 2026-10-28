@@ -3507,5 +3507,34 @@ rejects(C => demo.fitGrammar(C, 1, 0, { method: "ipaf", tol: 0 }),
                    coupling: [1, 0, 1] }), withG(1)));
 }
 
+// --- structureCov runs the pricers' Tree topology check (#822)
+{
+  const S = structures, sc = demo.structureCov;
+  const eq = (A, B) => JSON.stringify(A) === JSON.stringify(B);
+  // #822: the pricers' Tree topology door
+  const tree = (parent, strength, loading = [0, 0, 0]) =>
+    S.Tree([0, 1, 2], loading, [1, 1, 1], parent, strength);
+  for (const [name, t, msg] of [
+    ["a forest", tree([3, 3, 4, -1, -1], [0, 0, 0, 2, 0]), "exactly one root"],
+    ["a fractional parent", tree([3, 3, 3.5, -1], [0, 0, 0, 1]), "not -1 or a node index"],
+    ["an out-of-range parent", tree([3, 3, 9, -1], [0, 0, 0, 1]), "not -1 or a node index"],
+    ["a short strength", tree([3, 3, 3, -1], [0, 0, 0]), "one entry per tree node"],
+    ["a non-finite strength", tree([3, 3, 3, -1], [0, 0, 0, NaN]), "is not finite"],
+    ["a cycle", tree([3, 3, 4, 4, 3, -1], [0, 0, 0, 1, 1, 0]), "cycle"],
+  ]) {
+    rejects(sc, [t], `structureCov refuses ${name} (#822)`, msg);
+    rejects(() => races.raceProbabilities([0, 0.1, 0.2], { structure: t }), [],
+            `and so does the Tree pricer for ${name} (#822)`, msg);
+  }
+  holds("structureCov valid Tree unchanged (#822)",
+        eq(sc(S.Tree([0, 0, 1], [1, 1, 1], [1, 1, 1], [2, 2, -1], [0, 0, 2])),
+           [[6, 5, 4], [5, 6, 4], [4, 4, 6]]));
+  // unequal depths with explicit leaves: leaf "b" sits under node 3
+  const deep = S.Tree(["a", "b", "c"], [0, 0, 0], [1, 1, 1], [4, 3, 4, 4, -1], [0, 0, 0, 2, 1], ["a", "b", "c"]);
+  holds("structureCov valid unequal-depth Tree with leaves unchanged (#822)",
+        eq(sc(deep), [[2, 1, 1], [1, 6, 1], [1, 1, 2]]), JSON.stringify(sc(deep)));
+  accepts("and the pricer takes it too (#822)", () => races.raceProbabilities([0, 0.1, 0.2], { structure: deep }));
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");

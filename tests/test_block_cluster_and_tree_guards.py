@@ -62,3 +62,29 @@ def test_valid_cluster_spellings_are_unchanged_792():
     t = B.tree_race_probabilities(mu, [0, 0, 1, 1], [0.4, 0.2, 0.3, 0.5],
                                   ONES, PARENT, STRENGTH)
     assert abs(t.sum() - 1) < 1e-12
+
+
+def test_structure_variances_refuses_a_forest_822():
+    forest = Tree([0, 1, 2], [0, 0, 0], [1, 1, 1], [3, 3, 4, -1, -1],
+                  [0, 0, 0, 2, 0])
+    with pytest.raises(ValueError, match="exactly one root"):
+        structure_variances(forest)
+    with pytest.raises(ValueError, match="exactly one root"):
+        race_probabilities(np.zeros(3), structure=forest)
+
+
+def test_structure_variances_refuses_a_cycle_822():
+    cyc = Tree([0, 1, 2], [0, 0, 0], [1, 1, 1], [3, 3, 4, 4, 3, -1],
+               [0, 0, 0, 1, 1, 0])
+    with pytest.raises(ValueError, match="cycle"):
+        structure_variances(cyc)
+
+
+def test_structure_variances_of_a_valid_tree_is_unchanged_822():
+    # the forest above joined by an explicit zero-strength root 4:
+    # leaves 0 and 1 carry node 3's 2^2, leaf 2 its idiosyncratic 1
+    t = Tree([0, 1, 2], [0, 0, 0], [1, 1, 1], [3, 3, 4, 4, -1],
+             [0, 0, 0, 2, 0])
+    assert structure_variances(t).tolist() == [5.0, 5.0, 1.0]
+    deep = Tree([0, 0, 1], [0.5, 0.5, 0.5], [1, 1, 1], [2, 2, -1], [0, 0, 3])
+    assert structure_variances(deep).tolist() == [1.25, 1.25, 1.25]

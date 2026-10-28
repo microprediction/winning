@@ -3,7 +3,7 @@
 // a Monte Carlo sampler to race against.
 import { hermite1, interpClamped, solve, firstPrimes, asLoadings,
          isVector, asCount, asIdio, asTolerance } from "./core.mjs";
-import { treeCluster, asGamma } from "./blocks.mjs";
+import { treeCluster, asGamma, validateTree } from "./blocks.mjs";
 
 /* Halton sequence through the normal quantile: equal-weight nodes for
    E over N(0, I_r). The fitted grammar has rank k+m > 2, where tensor
@@ -709,12 +709,16 @@ export function structureCov(s) {
     const cluster = treeCluster(s);                       // (#372)
     const anc = [];
     const nc = Math.max(...cluster) + 1;
+    // the kernels' topology door: a forest (two roots) was walked as if a
+    // zero-strength common root joined it (#822)
+    const tv = validateTree(s.parent, s.strength, nc, "structureCov");
+    const parent = tv.parent, strength = tv.strength;
     for (let c = 0; c < nc; c++) {
       const a = new Set();
       let u = c, hops = 0;
-      while (s.parent[u] >= 0) {
-        a.add(s.parent[u]); u = s.parent[u];
-        if (++hops > s.parent.length)
+      while (parent[u] >= 0) {
+        a.add(parent[u]); u = parent[u];
+        if (++hops > parent.length)
           throw new Error("structureCov: Tree parent contains a cycle");
       }
       anc.push(a);
@@ -724,7 +728,7 @@ export function structureCov(s) {
       for (let j = 0; j < n; j++) {
         let v = 0;
         for (const t of anc[cluster[i]])
-          if (anc[cluster[j]].has(t)) v += s.strength[t] ** 2;
+          if (anc[cluster[j]].has(t)) v += strength[t] ** 2;
         if (s.cluster[i] === s.cluster[j]) v += dot(L[i], L[j]);
         C[i][j] += v;
       }
