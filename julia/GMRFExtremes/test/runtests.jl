@@ -160,6 +160,44 @@ end
     @test abs(am[1] - am[end]) < 0.01
 end
 
+# --- hard-constrained GMRFs are refused, not repriced (#804) -----------
+#
+# precision_matrix of a ConstrainedGMRF (and of a constrained
+# WorkspaceGMRF) is the unconstrained base precision while mean() is the
+# constrained mean, so the generic conversion priced X1, X2 iid N(0,1)
+# for the law X1 == X2: max_cdf(0) came back 0.25 (exact 0.5) and
+# expected_max 0.564 (exact 0). The extension now refuses these types.
+@testset "hard-constrained GMRFs are refused (#804)" begin
+    using GaussianMarkovRandomFields
+    GMF = GaussianMarkovRandomFields
+    Q2 = sparse([1.0 0.0; 0.0 1.0])
+    base = GMF.GMRF(zeros(2), Q2)
+    A, e = [1.0 -1.0], [0.0]
+    cg = GMF.ConstrainedGMRF(base, A, e)
+    wg = GMF.WorkspaceGMRF(zeros(2), Q2, GMF.GMRFWorkspace(Q2), A, e)
+    for g in (cg, wg)
+        @test_throws ArgumentError GaussMarkovChain(g)
+        @test_throws ArgumentError max_cdf(g, 0.0)
+        @test_throws ArgumentError excursion_probability(g, 0.0)
+        @test_throws ArgumentError first_passage(g, 0.0)
+        @test_throws ArgumentError argmax_marginals(g)
+        @test_throws ArgumentError expected_max(g)
+    end
+    msg = sprint(showerror, try max_cdf(cg, 0.0) catch err; err end)
+    @test occursin("hard linear constraints", msg)
+
+    # the unconstrained base, plain or workspace-backed, still prices
+    # identically to the chain built from its precision
+    ref = chain_from_precision(zeros(2), Q2)
+    wg0 = GMF.WorkspaceGMRF(zeros(2), Q2)
+    for g in (base, wg0)
+        @test max_cdf(g, 0.0) === max_cdf(ref, 0.0)
+        @test first_passage(g, 0.0) == first_passage(ref, 0.0)
+        @test expected_max(g) === expected_max(ref)
+    end
+    @test abs(max_cdf(base, 0.0) - 0.25) < 1e-8
+end
+
 # --- a transition narrower than the lattice spacing (#244) -------------
 #
 # The kernel was discretised as density x spacing, which is a probability
