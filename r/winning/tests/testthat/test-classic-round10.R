@@ -55,3 +55,30 @@ test_that("a whole half-width still builds the same density (#868)", {
   expect_length(state_prices_from_offsets(d3, c(0, 1)), 2)
   expect_length(skew_normal_density(50, 0.1), 101)
 })
+
+# --- np_interp at a duplicated lower knot (#842) ----------------------
+#
+# v <= xp[1] returned fp[1], the FIRST of a duplicated lower knot, where
+# numpy takes the last. A runner priced at exactly zero mid-calibration
+# then read its offset off the wrong end of the zero-price plateau, and
+# a self-generated compact five-runner book missed by 0.0152.
+
+test_that("np_interp takes the last of a duplicated lower knot, as numpy (#842)", {
+  expect_identical(np_interp(0, c(0, 0, 0.5), c(10, 5, 0)), 5)
+  expect_identical(np_interp(0, c(0, 0, 0, 0.5), c(10, 5, 3, 0)), 3)
+  # unchanged: below the lower knot, duplicated interior and upper knots,
+  # ordinary ascending knots
+  expect_identical(np_interp(-1, c(0, 0, 0.5), c(10, 5, 0)), 10)
+  expect_identical(np_interp(1, c(0, 1, 1, 2), c(0, 5, 7, 9)), 7)
+  expect_identical(np_interp(2, c(0, 2, 2), c(0, 5, 7)), 7)
+  expect_identical(np_interp(c(0, 0.5, 1, 3), c(0, 1, 2), c(4, 5, 7)), c(4, 4.5, 5, 7))
+})
+
+test_that("the compact five-runner inverse reaches its own target (#842)", {
+  d <- c(rep(0, 9), 0.0625, 0.125, 0.1875, 0.25, 0.1875, 0.125, 0.0625, rep(0, 9))
+  truth <- c(-0.3870526359606288, -3.8859224668266945, -0.5618939753478802,
+             -6.990429141603045, 0.6690584211927497)
+  target <- state_prices_from_offsets(d, truth)
+  expect_no_warning(ab <- solve_for_implied_offsets(target, d))
+  expect_lt(max(abs(state_prices_from_offsets(d, ab) - target)), 1e-5)
+})
