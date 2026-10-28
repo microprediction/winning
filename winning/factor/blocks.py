@@ -505,7 +505,12 @@ def _coupled_shift(g, gamma, node):
     identified: coupling c g with gamma / c is the same race, but at
     c = 1e308 the raw g @ node overflowed before gamma was applied and
     the lattice mass came back NaN (#722). That spelling is kept
-    wherever it is finite; otherwise gamma is absorbed into g first."""
+    wherever it is finite; otherwise gamma is absorbed into g first.
+    The sign of gamma is not identified either (gamma f and -gamma f are
+    the same Gaussian law), but the rank-3+ scrambled-Sobol rule is not
+    symmetric under f -> -f, so gamma = -1 priced differently from
+    gamma = 1 (#871): |gamma| is used."""
+    gamma = abs(gamma)
     with np.errstate(over="ignore", invalid="ignore"):
         s = g @ node
     if np.all(np.isfinite(s)):

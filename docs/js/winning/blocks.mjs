@@ -397,14 +397,23 @@ function blockMax(mu, sd, cluster, loading, points, qa, nodesOverride) {
     ? checkedNodes(nodesOverride, r) : clusterNodes(r, qa);
   if (!nodesOverride && r <= 2) warnIfSharp(VO, sdO, qa);
   const Q = nodes.length;
-  const maxNodeNorm = Math.max(...nodes.map(nq => Math.sqrt(nq.reduce((a, b) => a + b * b, 0))));
-  const amp = VO.map(vi => Math.sqrt(vi.reduce((a, b) => a + b * b, 0)) * maxNodeNorm);
+  const shifts = VO.map(vi => nodes.map(nq => vi.reduce((a, b, k) => a + b * nq[k], 0)));
+  // a custom rule is sized by the shifts it actually makes: the bound
+  // ||v|| max ||f|| counted node coordinates in the loadings' null space,
+  // and an irrelevant +-1000 there failed a 257-point call on mass (#807).
+  // The automatic rule keeps its bound.
+  let amp;
+  if (nodesOverride) {
+    amp = shifts.map(row => Math.max(...row.map(Math.abs)));
+  } else {
+    const maxNodeNorm = Math.max(...nodes.map(nq => Math.sqrt(nq.reduce((a, b) => a + b * b, 0))));
+    amp = VO.map(vi => Math.sqrt(vi.reduce((a, b) => a + b * b, 0)) * maxNodeNorm);
+  }
   const [lo, hi] = windowNodes(muO, sdO, amp);
   const P = asPoints(points);              // #444
   const x = new Array(P);
   for (let t = 0; t < P; t++) x[t] = lo + t * (hi - lo) / (P - 1);
   const dx = x[1] - x[0];
-  const shifts = VO.map(vi => nodes.map(nq => vi.reduce((a, b, k) => a + b * nq[k], 0)));
   const { S, logF, pdf } = fieldPass(muO, sdO, shifts, cO, nC, x);
   const G = Array.from({ length: nC }, () => new Array(P).fill(0));
   for (let c = 0; c < nC; c++)
@@ -492,8 +501,12 @@ export function pairFactor(mu, s) {
    gamma / c is the same race, but at c = 1e308 the raw g @ node
    overflowed before gamma was applied (NaN lattice mass, #722). That
    spelling is kept wherever it is finite; otherwise gamma is absorbed
-   into g first. */
+   into g first. The sign of gamma is not identified either (gamma f and
+   -gamma f are the same Gaussian law), but the rank-3+ Halton rule is
+   not symmetric under f -> -f, so gamma = -1 priced differently from
+   gamma = 1 (#871): |gamma| is used. */
 function coupledShift(g, gamma, node) {
+  gamma = Math.abs(gamma);
   const s = g.map(gi => gi.reduce((a, b, r) => a + b * node[r], 0));
   if (s.every(Number.isFinite)) return s.map(v => gamma * v);
   return g.map(gi => gi.reduce((a, b, r) => a + (gamma * b) * node[r], 0));

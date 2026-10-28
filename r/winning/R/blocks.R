@@ -345,6 +345,11 @@ nested_race_probabilities <- function(mu, cluster, loading, D,
 # race and its Jacobian failed on a NaN mass (#722). That spelling is kept
 # wherever it is finite; otherwise gamma is absorbed into g first.
 .coupled_shift <- function(g, gamma, node) {
+  # the sign of gamma is not identified (gamma f and -gamma f are the same
+  # Gaussian law); python's rank-3+ Sobol rule is not symmetric under
+  # f -> -f and priced gamma = -1 differently (#871), so |gamma| is used
+  # here too and the ports agree to the bit on a sign flip
+  gamma <- abs(gamma)
   s <- as.numeric(g %*% node)
   if (all(is.finite(s))) return(gamma * s)
   as.numeric((gamma * g) %*% node)

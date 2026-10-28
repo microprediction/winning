@@ -1902,6 +1902,28 @@ accepts("the inverse takes a scalar D, matching python",
   holds("average linkages are never refused as inverted (#667)", refused === 0, String(refused));
 }
 
+// --- cutLinkage takes treeFromLinkage's row contract, not coerced rows (#801)
+{
+  for (const [Z, why, says] of [
+    [[[0.4, 1, 1, 2]], "a fractional id", "whole numbers"],
+    [[["0", 1, 1, 2]], "a string id", "whole numbers"],
+    [[[0, 1, "1", 2]], "a string height", "non-negative"],
+    [[[0, 1, -1, 2], [2, 3, 0, 3]], "a negative first height", "non-negative"]]) {
+    rejects(structures.cutLinkage, [Z, Z.length + 1, Math.max(1, Z.length)],
+            `cutLinkage refuses ${why} (#801)`, says);
+    rejects(structures.treeFromLinkage, [Z], `...as treeFromLinkage does (#801)`, says);
+  }
+  // valid linkages nearby: same partitions as before, integer-valued floats included
+  const Zv = [[0, 1, 0, 2], [2, 3, 0.25, 2], [4, 5, 1, 4]];
+  const want = { 1: [0, 0, 0, 0], 2: [0, 0, 1, 1], 3: [0, 0, 1, 2], 4: [0, 1, 2, 3] };
+  for (const k of [1, 2, 3, 4])
+    holds(`a valid linkage still cuts as before at k=${k} (#801)`,
+          JSON.stringify(structures.cutLinkage(Zv, 4, k)) === JSON.stringify(want[k]),
+          JSON.stringify(structures.cutLinkage(Zv, 4, k)));
+  holds("a one-leaf linkage is still one cluster (#801)",
+        JSON.stringify(structures.cutLinkage([], 1, 1)) === "[0]");
+}
+
 // --- demo helpers: structureCov for every grammar (#337); fitGrammar
 // validates its input (#357), keeps a pair's contrast and is scale
 // equivariant (#341), and does not cut a tied eigenspace (#383); the
@@ -2273,9 +2295,9 @@ for (const r of [NaN, -1, 2.5, Infinity])
   rejects(demo.haltonNormalNodes, [r, 3], `haltonNormalNodes refuses rank ${r} (#557)`, "rank");
 rejects(core.firstPrimes, [Infinity], "firstPrimes refuses Infinity rather than hanging (#557)");
 rejects(structures.cutLinkage, [[[0, 0, 0.1, 2], [1, 3, 0.2, 3]], 3, 1],
-        "cutLinkage refuses a self-merge (#603)", "same cluster");
+        "cutLinkage refuses a self-merge (#603)", "with itself");     // checkLinkage's words (#801)
 rejects(structures.cutLinkage, [[[0, 1, 0.1, 2], [0, 3, 0.2, 3]], 3, 1],
-        "cutLinkage refuses a reused cluster (#603)", "same cluster");
+        "cutLinkage refuses a reused cluster (#603)", "reuses cluster");
 
 // --- demo covariance helpers keep the shape and PSD contracts (#563, #564)
 {
@@ -2423,6 +2445,67 @@ accepts("raceProbabilities takes delta=1e-3 (#445)",
   accepts("zero-weight block node padding is a no-op (#416)",
           () => blocks.blockRaceProbabilities(m2, [0, 1, 2], V2, D2, { points: 501, qa: 7, nodes: { nodes: [[-100], [0], [100]], w: [0, 1, 0] } }),
           p => md(p, c) < 1e-12);
+}
+
+// --- a custom block node's coordinates in the loadings' null space do not
+// size the window: only v . f moves a runner (#807)
+{
+  const mu = [0, 0.2, 0.5, -0.1], cl = [0, 0, 1, 1], D = [1, 1, 1, 1];
+  const L = [[0.7, 0], [0.3, 0], [0.6, 0], [0.2, 0]];
+  const md = (a, b) => Math.max(...a.map((x, i) => Math.abs(x - b[i])));
+  const rule = M => ({ nodes: [[-1, -M], [-1, M], [1, -M], [1, M]], w: [0.25, 0.25, 0.25, 0.25] });
+  const base = blocks.blockRaceProbabilities(mu, cl, L, D, { nodes: rule(0) });
+  holds("the null-coordinate-free rule prices as before (#807)",
+        md(base, [0.3073128641534906, 0.20814267517446675, 0.16320134218035226, 0.32134311849169056]) < 1e-14);
+  for (const M of [1, 1000, 1e6])
+    accepts(`a null coordinate of ${M} leaves the 257-point block race unchanged (#807)`,
+            () => blocks.blockRaceProbabilities(mu, cl, L, D, { nodes: rule(M) }),
+            p => md(p, base) < 1e-14, p => md(p, base).toExponential(2));
+  // ordinary inputs nearby: the automatic rule and a full-rank custom rule
+  holds("the automatic rule is unchanged (#807)",
+        md(blocks.blockRaceProbabilities(mu, cl, L, D),
+           [0.3061703107471863, 0.2091839026995875, 0.16248513700275158, 0.3221606495504745]) < 1e-14);
+  holds("a full-rank custom rule is unchanged (#807)",
+        md(blocks.blockRaceProbabilities(mu, cl, L, D,
+             { nodes: { nodes: [[-1, 0], [1, 0], [0, -1], [0, 1]], w: [0.25, 0.25, 0.25, 0.25] } }),
+           [0.3010448211736288, 0.21615827747634736, 0.15439283696956393, 0.3284040643804598]) < 1e-14);
+}
+
+// --- Nested gamma and -gamma are the same Gaussian law, at every coupling
+// rank: the rank-3+ Halton rule is not symmetric under f -> -f (#871)
+{
+  const n = 6, ph = 8, scale = 0.7;
+  const mu = Array.from({ length: n }, (_, i) => 0.7 * Math.sin((i + 1) * (ph + 1) * 0.37) + 0.2 * i);
+  const G = Array.from({ length: n }, (_, i) =>
+    Array.from({ length: 12 }, (_, j) => scale * Math.sin((i + 1) * (j + 2) + ph * 0.31)));
+  const cl = Array.from({ length: n }, (_, i) => i), L = new Array(n).fill(0);
+  const D = Array.from({ length: n }, (_, i) => 0.03 + 0.015 * (i % 4));
+  const md = (a, b) => Math.max(...a.map((x, i) => Math.abs(x - b[i])));
+  for (const k of [1, 2, 3, 12]) {
+    const g = G.map(row => row.slice(0, k));
+    for (const a of [1, 0.5]) {
+      const o = gm => ({ coupling: g, gamma: gm, points: 65 });
+      holds(`nested prices at rank ${k} agree for gamma = +-${a} (#871)`,
+            md(blocks.nestedRaceProbabilities(mu, cl, L, D, o(a)),
+               blocks.nestedRaceProbabilities(mu, cl, L, D, o(-a))) < 1e-15);
+      holds(`nested Jacobians at rank ${k} agree for gamma = +-${a} (#871)`,
+            md(blocks.nestedRaceJacobian(mu, cl, L, D, o(a)).flat(),
+               blocks.nestedRaceJacobian(mu, cl, L, D, o(-a)).flat()) < 1e-15);
+    }
+  }
+  const S = gm => structures.Nested(cl, L, D, G, gm);
+  holds("the structured Nested race agrees for gamma = +-1 (#871)",
+        md(races.raceProbabilities(mu, { structure: S(1), points: 65 }),
+           races.raceProbabilities(mu, { structure: S(-1), points: 65 })) < 1e-15);
+  // ordinary inputs nearby: positive gamma prices as before
+  holds("rank-12 gamma = 1 is unchanged (#871)",
+        md(blocks.nestedRaceProbabilities(mu, cl, L, D, { coupling: G, gamma: 1, points: 65 }),
+           [0.25786619827701934, 0.15482977250869812, 0.29190668241523776,
+            0.07515511139859908, 0.15360040729715324, 0.06664182810329264]) < 1e-14);
+  holds("rank-12 gamma = 0.5 is unchanged (#871)",
+        md(blocks.nestedRaceProbabilities(mu, cl, L, D, { coupling: G, gamma: 0.5, points: 65 }),
+           [0.33741142156854376, 0.1409954341891887, 0.33006376648414,
+            0.03262864561864453, 0.14214578479423912, 0.01675494734524407]) < 1e-14);
 }
 
 // --- treeFromLinkage checks topology and heights itself (#328, #459)

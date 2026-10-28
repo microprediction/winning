@@ -25,28 +25,28 @@ export const Tree = (cluster, loading, D, parent, strength, leaves = null) =>
    already exist and are still active, at a finite non-negative height.
    A self-reference built a cyclic parent (#328), ids were rounded, and a
    negative height was squared into the tree of its absolute value (#459). */
-function checkLinkage(Z) {
+function checkLinkage(Z, where = "treeFromLinkage") {
   if (!isVector(Z))
-    throw new Error("treeFromLinkage: a linkage must be an array of (n-1) rows");
+    throw new Error(`${where}: a linkage must be an array of (n-1) rows`);
   const n = Z.length + 1;
   const used = new Array(2 * n - 1).fill(false);
   for (let k = 0; k < Z.length; k++) {
     const row = Z[k];
     if (!isVector(row) || row.length < 3)
-      throw new Error(`treeFromLinkage: linkage row ${k} must be [a, b, height, count]`);
+      throw new Error(`${where}: linkage row ${k} must be [a, b, height, count]`);
     const h = row[2];
     if (typeof h !== "number" || !Number.isFinite(h) || h < 0)
-      throw new Error(`treeFromLinkage: linkage row ${k} merges at height ${h}: merge heights are finite non-negative distances (#459)`);
+      throw new Error(`${where}: linkage row ${k} merges at height ${h}: merge heights are finite non-negative distances (#459)`);
     for (const c of [row[0], row[1]]) {
       if (typeof c !== "number" || !Number.isInteger(c))
-        throw new Error(`treeFromLinkage: linkage row ${k} names cluster ${c}: cluster ids are whole numbers (#328)`);
+        throw new Error(`${where}: linkage row ${k} names cluster ${c}: cluster ids are whole numbers (#328)`);
       if (c < 0 || c >= n + k)
-        throw new Error(`treeFromLinkage: linkage row ${k} uses cluster ${c} before it is formed: row ${k} may merge only ids below ${n + k} (#328)`);
+        throw new Error(`${where}: linkage row ${k} uses cluster ${c} before it is formed: row ${k} may merge only ids below ${n + k} (#328)`);
       if (used[c])
-        throw new Error(`treeFromLinkage: linkage row ${k} reuses cluster ${c}, already merged by an earlier row (#328)`);
+        throw new Error(`${where}: linkage row ${k} reuses cluster ${c}, already merged by an earlier row (#328)`);
     }
     if (row[0] === row[1])
-      throw new Error(`treeFromLinkage: linkage row ${k} merges cluster ${row[0]} with itself (#328)`);
+      throw new Error(`${where}: linkage row ${k} merges cluster ${row[0]} with itself (#328)`);
     used[row[0]] = used[row[1]] = true;
   }
 }
@@ -391,11 +391,15 @@ export function cutLinkage(Z, n, k) {
     throw new Error(`cutLinkage: k must be a positive integer number of clusters; got ${k}`);
   if (!isVector(Z) || Z.length !== n - 1)
     throw new Error(`cutLinkage: a linkage of ${n} leaves has ${n - 1} rows; got ${isVector(Z) ? Z.length : typeof Z}`);
+  // the row contract treeFromLinkage enforces: rounding and Number()
+  // turned a fractional or string id into a real cluster and passed a
+  // negative height (#801)
+  checkLinkage(Z, "cutLinkage");
   const nT = 2 * n - 1;
   const parent = new Array(nT).fill(-1);
   const maxd = new Array(nT).fill(-Infinity);
   for (let m = 0; m < Z.length; m++) {
-    const a = Math.round(Z[m][0]), b = Math.round(Z[m][1]), h = Number(Z[m][2]);
+    const a = Z[m][0], b = Z[m][1], h = Z[m][2];
     if (!(a >= 0 && a < n + m && b >= 0 && b < n + m) || !Number.isFinite(h))
       throw new Error(`cutLinkage: row ${m} of the linkage is malformed`);
     // each cluster is merged exactly once, and never with itself: a
