@@ -3454,6 +3454,155 @@ rejects(C => demo.fitGrammar(C, 1, 0, { method: "ipaf", tol: 0 }),
            blocks.blockRaceProbabilities(mu, cl, rot(V), D, { nodes })) > 1e-6);
 }
 
+// --- structureCov needs one cluster label per contestant (#792)
+{
+  const S = structures, sc = demo.structureCov;
+  const eq = (A, B) => JSON.stringify(A) === JSON.stringify(B);
+  const price = s => () => races.raceProbabilities([0, 0.1, 0.2, 0.3], { structure: s });
+  // #792: one cluster label per contestant, short or overlong
+  for (const [name, cl] of [["short", [0, 1]], ["overlong", [0, 0, 1, 1, 1]]]) {
+    const bad = [S.Blocks(cl, [10, 10, 10, 10], [1, 1, 1, 1]),
+                 S.Nested(cl, [10, 10, 10, 10], [1, 1, 1, 1], [0, 0, 0, 0], 1),
+                 S.Tree(cl, [1, 1, 1, 1], [1, 1, 1, 1], [2, 2, -1], [0, 0, 1])];
+    for (const s of bad) {
+      rejects(sc, [s], `structureCov refuses a ${name} ${s.kind} cluster (#792)`,
+              "one label per contestant");
+      rejects(price(s), [], `and so does the ${s.kind} pricer (#792)`, "one label per contestant");
+    }
+  }
+  holds("structureCov Blocks with one label per contestant unchanged (#792)",
+        eq(sc(S.Blocks([0, 0, 1], [1, 2, 3], [1, 1, 1])), [[2, 2, 0], [2, 5, 0], [0, 0, 10]]));
+  holds("structureCov rank-two Blocks unchanged (#792)",
+        eq(sc(S.Blocks([0, 0, 1], [[1, 1], [2, 0], [3, 1]], [1, 1, 1])),
+           [[3, 2, 0], [2, 5, 0], [0, 0, 11]]));
+  holds("structureCov scalar-loading Blocks unchanged (#792)",
+        eq(sc(S.Blocks([0, 0, 1], 2, [1, 1, 1])), [[5, 4, 0], [4, 5, 0], [0, 0, 5]]));
+}
+
+// --- structureCov reads Nested gamma through the pricers' door (#812)
+{
+  const S = structures, sc = demo.structureCov;
+  const eq = (A, B) => JSON.stringify(A) === JSON.stringify(B);
+  const price = s => () => races.raceProbabilities([0, 0.1, 0.2, 0.3], { structure: s });
+  // #812: gamma through the pricers' door
+  const nest = gamma => S.Nested([0, 0, 1, 1], [0.2, 0.4, 0.3, 0.5], [1, 1, 1, 1],
+                                 [1, -1, 0.5, -0.5], gamma);
+  for (const g of [null, false, true, "2", NaN, Infinity, -Infinity]) {
+    rejects(sc, [nest(g)], `structureCov refuses gamma ${String(g)} (#812)`, "gamma must be a finite number");
+    rejects(price(nest(g)), [], `and so does the Nested pricer for gamma ${String(g)} (#812)`,
+            "gamma must be a finite number");
+  }
+  rejects(sc, [S.Nested([0, 0, 1], [1, 1, 1], [1, 1, 1], null, "1")],
+          "structureCov refuses a malformed gamma without a coupling, as the pricer (#812)",
+          "gamma must be a finite number");
+  const nb = (cl, g) => S.Nested([0, 0, 1], [1, 2, 3], [1, 1, 1], [1, 0, 1], g);
+  const blocks3 = [[2, 2, 0], [2, 5, 0], [0, 0, 10]];
+  const withG = g2 => blocks3.map((r, i) => r.map((v, j) => v + g2 * [1, 0, 1][i] * [1, 0, 1][j]));
+  holds("structureCov Nested gamma 0, 1, 2, -0.5 unchanged (#812)",
+        eq(sc(nb(0, 0)), blocks3) && eq(sc(nb(0, 1)), withG(1)) && eq(sc(nb(0, 2)), withG(4))
+        && eq(sc(nb(0, -0.5)), withG(0.25)));
+  holds("structureCov Nested default and omitted gamma are gamma 1 (#812)",
+        eq(sc(S.Nested([0, 0, 1], [1, 2, 3], [1, 1, 1], [1, 0, 1])), withG(1))
+        && eq(sc({ kind: "Nested", cluster: [0, 0, 1], loading: [1, 2, 3], D: [1, 1, 1],
+                   coupling: [1, 0, 1] }), withG(1)));
+}
+
+// --- structureCov runs the pricers' Tree topology check (#822)
+{
+  const S = structures, sc = demo.structureCov;
+  const eq = (A, B) => JSON.stringify(A) === JSON.stringify(B);
+  // #822: the pricers' Tree topology door
+  const tree = (parent, strength, loading = [0, 0, 0]) =>
+    S.Tree([0, 1, 2], loading, [1, 1, 1], parent, strength);
+  for (const [name, t, msg] of [
+    ["a forest", tree([3, 3, 4, -1, -1], [0, 0, 0, 2, 0]), "exactly one root"],
+    ["a fractional parent", tree([3, 3, 3.5, -1], [0, 0, 0, 1]), "not -1 or a node index"],
+    ["an out-of-range parent", tree([3, 3, 9, -1], [0, 0, 0, 1]), "not -1 or a node index"],
+    ["a short strength", tree([3, 3, 3, -1], [0, 0, 0]), "one entry per tree node"],
+    ["a non-finite strength", tree([3, 3, 3, -1], [0, 0, 0, NaN]), "is not finite"],
+    ["a cycle", tree([3, 3, 4, 4, 3, -1], [0, 0, 0, 1, 1, 0]), "cycle"],
+  ]) {
+    rejects(sc, [t], `structureCov refuses ${name} (#822)`, msg);
+    rejects(() => races.raceProbabilities([0, 0.1, 0.2], { structure: t }), [],
+            `and so does the Tree pricer for ${name} (#822)`, msg);
+  }
+  holds("structureCov valid Tree unchanged (#822)",
+        eq(sc(S.Tree([0, 0, 1], [1, 1, 1], [1, 1, 1], [2, 2, -1], [0, 0, 2])),
+           [[6, 5, 4], [5, 6, 4], [4, 4, 6]]));
+  // unequal depths with explicit leaves: leaf "b" sits under node 3
+  const deep = S.Tree(["a", "b", "c"], [0, 0, 0], [1, 1, 1], [4, 3, 4, 4, -1], [0, 0, 0, 2, 1], ["a", "b", "c"]);
+  holds("structureCov valid unequal-depth Tree with leaves unchanged (#822)",
+        eq(sc(deep), [[2, 1, 1], [1, 6, 1], [1, 1, 2]]), JSON.stringify(sc(deep)));
+  accepts("and the pricer takes it too (#822)", () => races.raceProbabilities([0, 0.1, 0.2], { structure: deep }));
+}
+
+// --- structureCov takes rank-one Tree leaf loadings only, as the pricers (#827)
+{
+  const S = structures, sc = demo.structureCov;
+  const eq = (A, B) => JSON.stringify(A) === JSON.stringify(B);
+  // #827: rank-one leaf loadings only
+  const T = L => S.Tree([0, 0, 1, 1], L, [0.4, 0.5, 0.6, 0.7], [2, 2, -1], [0, 0, 0.55]);
+  const r2 = T([[0.9, 0.1], [-0.5, 0.7], [0.25, -0.8], [-0.6, -0.2]]);
+  rejects(sc, [r2], "structureCov refuses a rank-two Tree loading (#827)", "rank-one");
+  rejects(() => races.raceProbabilities([-0.6, -0.1, 0.35, 0.8], { structure: r2 }), [],
+          "and so does the Tree pricer (#827)", "rank-one");
+  const flat = [0.9, -0.5, 0.25, -0.6];
+  const Cflat = sc(T(flat));
+  holds("structureCov Tree flat, (n, 1) and (1, n) loadings agree and are unchanged (#827)",
+        eq(sc(T(flat.map(x => [x]))), Cflat) && eq(sc(T([flat])), Cflat)
+        && Math.abs(Cflat[0][1] - (0.9 * -0.5 + 0.3025)) < 1e-15 && Cflat[0][2] === 0.30250000000000005);
+  holds("structureCov scalar Tree loading is a common loading (#827)",
+        eq(sc(T(0.5)), sc(T([0.5, 0.5, 0.5, 0.5]))));
+  const rb = sc(S.Blocks([0, 0, 1, 1], [[0.9, 0.1], [-0.5, 0.7], [0.25, -0.8], [-0.6, -0.2]],
+                         [0.4, 0.5, 0.6, 0.7]))[0];
+  holds("structureCov rank-two Blocks stays general (#827)",
+        Math.max(...rb.map((x, j) => Math.abs(x - [1.22, -0.38, 0, 0][j]))) < 1e-15, String(rb));
+}
+
+// --- an ipaf fit spreads into raceProbabilities as { V, D } (#852)
+{
+  const v = [0.2, -0.4, 0.7], D = [0.8, 0.6, 0.9];
+  const C = v.map((x, i) => v.map((y, j) => x * y + (i === j ? D[i] : 0)));
+  for (const [name, scale] of [["unit", 1], ["rescaled", 1e300]]) {
+    const Cs = C.map(r => r.map(x => x * scale));
+    const fit = demo.fitGrammar(Cs, 1, 0, { method: "ipaf" });
+    holds(`${name} ipaf fit keys are exactly V, D and fit.ipaf still reads (#852)`,
+          JSON.stringify(Object.keys(fit)) === '["V","D"]' && fit.ipaf && fit.ipaf.converged === true
+          && typeof fit.ipaf.contrastResidualMax === "number", JSON.stringify(Object.keys(fit)));
+    if (scale === 1)
+      accepts("raceProbabilities(mu, { ...ipafFit }) prices as explicit V, D (#852)",
+              () => races.raceProbabilities([-0.3, 0, 0.2], { ...fit }),
+              p => JSON.stringify(p) === JSON.stringify(
+                races.raceProbabilities([-0.3, 0, 0.2], { V: fit.V, D: fit.D })));
+  }
+  const eig = demo.fitGrammar(C, 1, 0);
+  holds("the eig fit still spreads as V, D with no ipaf report (#852)",
+        JSON.stringify(Object.keys(eig)) === '["V","D"]' && eig.ipaf === undefined);
+}
+
+// --- Mendell-Elston is unit free at both ends of the range (#795)
+{
+  const shares = (mu, C, s) => {
+    const m = mu.map(x => s * x), S = C.map(r => r.map(x => s * s * x));
+    const raw = m.map((_, i) => demo.mendellElstonOne(m, S, i));
+    const t = raw.reduce((a, b) => a + b, 0);
+    return raw.map(x => x / t);
+  };
+  const mx = (a, b) => Math.max(...a.map((x, i) => Math.abs(x - b[i])));
+  const C1 = [[1, 0.5, 0.2], [0.5, 1, 0.3], [0.2, 0.3, 1]];
+  const py1 = [0.20755944, 0.01733613, 0.77510443];   // python mendell_elston
+  const v = [-50, 0, 50];
+  const C2 = v.map((x, i) => v.map((y, j) => x * y + (i === j ? 1e-4 : 0)));
+  const base1 = shares([0, 1, -1], C1, 1), base2 = shares([0, -4, 0], C2, 1);
+  holds("Mendell-Elston ordinary field is python's (#795)", mx(base1, py1) < 1e-8, String(base1));
+  for (const s of [1e-100, 1e78, 1e100]) {
+    const a = shares([0, 1, -1], C1, s), b = shares([0, -4, 0], C2, s);
+    holds(`Mendell-Elston is unchanged by units ${s} (#795)`,
+          mx(a, base1) < 1e-12 && mx(b, base2) < 1e-12,
+          `${mx(a, base1).toExponential(2)}, ${mx(b, base2).toExponential(2)}`);
+  }
+}
+
 // #805: a p0 call is only as good as its inversion. This seeded fixture
 // (four runners, rank one, a deliberately coarse 33-point lattice) is
 // priced by the forward itself, yet abilitiesFromRace stalls at a max
