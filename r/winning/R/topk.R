@@ -738,14 +738,16 @@ abilities_from_topk <- function(q, k, V = NULL, D = NULL, base = "normal",
 # cost); otherwise attempt(start) runs from each of the fixed starts(first)
 # in order and the first converged outcome wins, else the attempt with the
 # smallest out[[key]] is returned, still converged = FALSE. iterations
-# becomes the total over every attempt.
+# becomes the total over every attempt. A retry that raises is skipped: it
+# must not discard the completed attempts (#855).
 .retry_on_failure <- function(first, attempt, starts, key) {
   # n_iter = 0 prices the start and performs no update: never retried
   if (first$converged || first$iterations == 0) return(first)
   best <- first
   total <- first$iterations
   for (start in starts(first)) {
-    out <- attempt(start)
+    out <- tryCatch(attempt(start), error = function(e) NULL)
+    if (is.null(out)) next
     total <- total + out$iterations
     if (out$converged) { best <- out; break }
     if (out[[key]] < best[[key]]) best <- out

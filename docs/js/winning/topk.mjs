@@ -1204,13 +1204,15 @@ function rankMarginalWithJacobian(mu, sd, r, fn, points, split = false,
    otherwise attempt(start) runs from each of the fixed starts(first) in
    order and the first converged outcome wins, else the attempt with the
    smallest info[key] is returned, still converged=false. info.iterations
-   becomes the total over every attempt. */
+   becomes the total over every attempt. A retry that throws is skipped:
+   it must not discard the completed attempts (#855). */
 function retryOnFailure(first, attempt, starts, key) {
   // n_iter = 0 prices the start and performs no update: never retried
   if (first.info.converged || first.info.iterations === 0) return first;
   let best = first, total = first.info.iterations;
   for (const start of starts(first)) {
-    const out = attempt(start);
+    let out;
+    try { out = attempt(start); } catch (e) { continue; }
     total += out.info.iterations;
     if (out.info.converged) { best = out; break; }
     if (out.info[key] < best.info[key]) best = out;
@@ -1218,6 +1220,8 @@ function retryOnFailure(first, attempt, starts, key) {
   best.info.iterations = total;
   return best;
 }
+// exported for the contract test only (tests/test_topk_retry.py, #855)
+export { retryOnFailure as _retryOnFailure };
 
 /* The retry starts of abilitiesFromRankMarginal (#779), as python's
    _rank_marginal_starts: the original start nudged -/+ 0.3 typical scale

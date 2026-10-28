@@ -1240,13 +1240,18 @@ def _retry_on_failure(first, attempt, starts):
     converged=False. Either way info["iterations"] becomes the total
     over every attempt made, so the reported cost is honest. A first
     attempt that made no iteration (n_iter=0) is not retried: that
-    budget prices the start and must not move it."""
+    budget prices the start and must not move it. A retry that raises
+    (say its start's first pricing exhausts the lattice refinement) is
+    skipped: it must not discard the completed attempts (#855)."""
     if first[-1]["converged"] or first[-1]["iterations"] == 0:
         # n_iter=0 prices the start and performs no update (#441, #497)
         return first
     best, total = first, first[-1]["iterations"]
     for start in starts(first):
-        out = attempt(start)
+        try:
+            out = attempt(start)
+        except Exception:
+            continue
         total += out[-1]["iterations"]
         if out[-1]["converged"]:
             best = out

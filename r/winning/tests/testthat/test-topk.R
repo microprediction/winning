@@ -455,3 +455,22 @@ test_that("a failed inverse is retried from fixed starts (#779, #781)", {
   expect_warning(loc_scale_from_topk_pair(bad1, 1, bad2, 2),
                  "did not converge")
 })
+
+test_that("a retry that raises keeps the completed attempts (#855)", {
+  first <- list(mu = 0, converged = FALSE, iterations = 7,
+                max_logit_residual = 0.2)
+  boom <- function(s) stop("lattice")
+  out <- .retry_on_failure(first, boom, function(f) list(1),
+                           "max_logit_residual")
+  expect_identical(out, first)
+  good <- list(mu = 1, converged = TRUE, iterations = 3,
+               max_logit_residual = 0)
+  out <- .retry_on_failure(first, function(s) if (s == "bad") stop("x") else good,
+                           function(f) list("bad", "good"),
+                           "max_logit_residual")
+  expect_true(out$converged)
+  expect_equal(out$iterations, 10)
+  conv <- modifyList(first, list(converged = TRUE))
+  expect_identical(.retry_on_failure(conv, boom, function(f) list(1),
+                                     "max_logit_residual"), conv)
+})
