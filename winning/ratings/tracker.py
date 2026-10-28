@@ -97,6 +97,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 import numpy as np
 
 from ..shapes import as_variance
+from ._checks import require_distinct
 
 from scipy.special import ndtr, ndtri
 
@@ -316,6 +317,7 @@ class AbilityTracker:
         marginalised into the performance variance (same factor forward map).
         With ``groups`` and rho > 0 the field is priced under the blocked
         model that observe() fits -- the same V, never a different one."""
+        require_distinct(ids, "ids")                                # #811
         m, v = self._gather(ids, t)
         V, b2 = self._blocks(groups, len(m))
         if self.base != "normal":
@@ -348,6 +350,7 @@ class AbilityTracker:
         # for an infinite score and for a NaN price. The lengths are
         # checked here too: they did raise, but as "operands could not
         # be broadcast together", which names nothing the caller passed.
+        require_distinct(ids, "ids")                                # #811
         n_ids = len(ids)
         for _name, _seq in (("scores", scores), ("prices", prices)):
             if _seq is None:

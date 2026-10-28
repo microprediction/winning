@@ -30,6 +30,7 @@ from __future__ import annotations
 import numpy as np
 
 from ..shapes import as_loadings
+from ._checks import require_distinct
 
 
 from .full import _psd_repair
@@ -139,6 +140,9 @@ def rate_history(races, ids=None, prior_mean=None, prior_var=None,
                     if rid not in seen:
                         seen.append(rid)
             all_ids = seen
+        else:
+            all_ids = list(all_ids)
+            require_distinct(all_ids, "ids")                        # #811
         index = {rid: i for i, rid in enumerate(all_ids)}
         n = len(index)
         m = np.full(n, float(prior_mean))
@@ -155,6 +159,7 @@ def rate_history(races, ids=None, prior_mean=None, prior_var=None,
         # tracker had the same hole. Lengths are checked here too: a
         # mismatch did raise, but as "operands could not be broadcast
         # together", which names nothing the caller passed.
+        require_distinct(race["runners"])                          # #811
         _k = len(race["runners"])
         for _name in ("margins", "scores", "p_market"):
             _seq = race.get(_name)
@@ -280,6 +285,7 @@ def predict_race(state, runners, t=None, V=None, beta2=1.0, points=257,
                             timescale=state.get("timescale", 200.0),
                             prior_mean=state.get("prior_mean", 0.0),
                             prior_var=state.get("prior_var", 1.0))
+    require_distinct(runners)                                       # #811
     k = len(runners)
     mu = np.full(k, float(state.get("prior_mean", 0.0)))
     Sf = np.eye(k) * float(state.get("prior_var", 1.0))

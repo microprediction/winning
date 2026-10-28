@@ -29,3 +29,22 @@ def as_noise_variances(x, k, name):
         raise ValueError(f"{name} must be a non-negative noise variance; "
                          f"got {float(A.min())!r}")
     return A
+
+
+def require_distinct(ids, name="runners"):
+    """Identities within one contest must be distinct.
+
+    A repeated id is an entity racing itself. The tracker priced the
+    copies as independent runners and then wrote both posteriors to the
+    same key, so the last slot won and a winner could be stored as a
+    loser; the history and factor fits built repeated rows (#811).
+    Deduplicating is not a repair, because scores, order positions and
+    covariate rows are aligned by slot.
+    """
+    seen = {}
+    for pos, r in enumerate(ids):
+        if r in seen:
+            raise ValueError(
+                f"{name} repeats {r!r} at positions {seen[r]} and {pos}; "
+                f"the entities in one contest must be distinct")
+        seen[r] = pos

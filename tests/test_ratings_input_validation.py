@@ -171,3 +171,68 @@ def test_810_sweeps_with_a_repeated_grid_value_still_select():
                  "groups": [0, 0, 1]} for i in range(4)]
     out = tune_block_rho(contests, rho_grid=(0.0, 0.2, 0.2))
     assert len(out["evidence"]) == 3
+
+
+# --- #811: duplicate runner ids within one contest ---------------------------
+
+@pytest.mark.parametrize("kw", [{"winner": 0}, {"winner": 1},
+                                {"order": [0, 1, 2]},
+                                {"scores": [0.0, 2.0, 1.0]},
+                                {"prices": [0.4, 0.4, 0.2]}])
+def test_811_tracker_refuses_duplicate_ids_and_keeps_state(kw):
+    from winning.ratings.tracker import AbilityTracker
+    trk = AbilityTracker(drift=0.0)
+    trk.observe(["a", "b"], t=0.0, winner=0)
+    before = (dict(trk.state), trk.evidence)
+    with pytest.raises(ValueError, match="repeats 'a'"):
+        trk.observe(["a", "a", "b"], t=1.0, **kw)
+    assert (dict(trk.state), trk.evidence) == before
+    with pytest.raises(ValueError, match="repeats 'a'"):
+        trk.predict(["a", "a", "b"], t=1.0)
+
+
+@pytest.mark.parametrize("obs", [{"winner": 0}, {"order": [0, 1, 2]},
+                                 {"scores": [0.0, 2.0, 1.0]},
+                                 {"p_market": [0.4, 0.4, 0.2]}])
+def test_811_history_refuses_duplicate_runners(obs):
+    from winning.ratings.history import predict_race, rate_history
+    with pytest.raises(ValueError, match="repeats 'a'"):
+        rate_history([{"runners": ["a", "a", "b"], "t": 0.0, **obs}])
+    state = rate_history([{"runners": ["a", "b"], "t": 0.0, "winner": 0}],
+                         return_state=True)[2]
+    with pytest.raises(ValueError, match="repeats 'a'"):
+        predict_race(state, ["a", "a", "b"])
+
+
+def test_811_history_refuses_duplicate_population_ids():
+    from winning.ratings.history import rate_history
+    with pytest.raises(ValueError, match="repeats 'a'"):
+        rate_history([{"runners": ["a", "b"], "t": 0.0, "winner": 0}],
+                     ids=["a", "a", "b"])
+    r, _ = rate_history([{"runners": ["a", "b"], "t": 0.0, "winner": 0}],
+                        ids=iter(["a", "b"]))
+    assert set(r) == {"a", "b"}
+
+
+def test_811_factor_form_refuses_duplicate_entities():
+    from winning.ratings.factor_ratings import factor_design, predict_factor
+    event = [([0, 0, 1], [0, 1, 2], [1.0])]
+    with pytest.raises(ValueError, match="repeats 0"):
+        factor_design([0, 0, 1], [1.0], 2, 1)
+    with pytest.raises(ValueError, match="repeats 0"):
+        fit_factor_ratings(event, n_entities=2, n_cov=1)
+    with pytest.raises(ValueError, match="repeats 0"):
+        factor_loglik(np.zeros((2, 1)), event)
+    with pytest.raises(ValueError, match="repeats 0"):
+        predict_factor(np.zeros((2, 1)), [0, 0, 1], [1.0])
+
+
+def test_811_distinct_ids_unchanged():
+    from winning.ratings.history import rate_history
+    from winning.ratings.tracker import AbilityTracker
+    trk = AbilityTracker(drift=0.0)
+    trk.observe(["a", "b", "c"], t=0.0, winner=0)
+    assert trk.rating("a")[0] > 0 > trk.rating("b")[0]
+    r, lz = rate_history([{"runners": ["a", "b", "c"], "t": 0.0,
+                           "winner": 0}])
+    assert r["a"][0] > 0 and np.isfinite(lz)

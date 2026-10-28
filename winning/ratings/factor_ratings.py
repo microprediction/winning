@@ -111,6 +111,7 @@ from scipy.special import log_ndtr
 
 from .nway import _base_rows, _order_pass_batch
 from .tuning import select
+from ._checks import require_distinct
 
 _LOG_SQRT_2PI = 0.5 * np.log(2.0 * np.pi)
 _WORK_BUDGET = 4_000_000        # floats per (K, chunk, L) lattice work array
@@ -211,6 +212,7 @@ def _factor_rows(subset, x, n_entities, n_cov):
         raise ValueError("empty subset")
     if subset.min() < 0 or subset.max() >= n_entities:
         raise ValueError("entity index out of range for n_entities")
+    require_distinct(subset.tolist(), "subset")                 # #811
     x = np.asarray(x, dtype=float)
     if x.ndim == 1:
         if x.shape != (n_cov,):
