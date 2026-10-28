@@ -601,4 +601,27 @@ check("calibrated abilities vs truth", muHat, mu, 5e-6);
         [0, 0.6550416000142272, 0.3449583999857729], 1e-300);
 }
 
+// #832: the pair seed's ndtri refinement overflowed exp(x^2/2) below
+// p ~ 1e-309 and returned Inf/Inf = NaN, so a valid subnormal pair target
+// threw "mu[0] = NaN". Finite, mirror-equivariant, and the Gaussian
+// contrast is scipy's ndtri (the forward's 1e-300 floor leaves it
+// uncertified, which is a separate matter).
+{
+  const oracle = [[1e-315, 18.983650175533683], [1e-320, 19.134562671516324],
+                  [Number.MIN_VALUE, 19.233702808572172]];
+  for (const [t, half] of oracle) {
+    let a, b;
+    try {
+      a = abilitiesFromProbabilitiesFactor([t, 1], [[0], [0]], [0.5, 0.5], [[0]], [1], { returnInfo: true }).mu;
+      b = abilitiesFromProbabilitiesFactor([1, t], [[0], [0]], [0.5, 0.5], [[0]], [1], { returnInfo: true }).mu;
+    } catch (e) { a = [NaN, NaN]; b = [NaN, NaN]; console.log("   " + e.message); }
+    check(`subnormal pair target ${t} is the ndtri contrast (#832)`, a, [half, -half], 1e-7);
+    check(`subnormal pair target ${t} is mirror-equivariant (#832)`, b, [-a[0], -a[1]], 1e-300);
+  }
+  // nearby ordinary deep tail unchanged (pinned from origin/main 3fa326ee)
+  check("pair target 1e-300 unchanged (#832)",
+        abilitiesFromProbabilitiesFactor([1e-300, 1], [[0], [0]], [0.5, 0.5], [[0]], [1]),
+        [18.5235481496806, -18.5235481496806], 1e-300);
+}
+
 process.exit(failures ? 1 : 0);

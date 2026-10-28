@@ -1006,5 +1006,8 @@ function ndtri(p) {
   }
   const e = Math.exp(logndtr(x)) - p;
   const u = e * SQRT_2PI * Math.exp(0.5 * x * x);
-  return x - u / (1 + 0.5 * x * u);
+  // below p ~ 1e-309 exp(x^2/2) overflows and the step is Inf/Inf = NaN:
+  // keep the finite Acklam estimate rather than return NaN (#832)
+  const step = u / (1 + 0.5 * x * u);
+  return Number.isFinite(step) ? x - step : x;
 }
