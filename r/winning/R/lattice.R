@@ -116,6 +116,16 @@ shifted_cdf <- function(cdf, offset, L) {
 #' @return list with elements `density`, `multiplicity`
 #' @export
 winner_of_many <- function(densities) {
+  # every density must share the first one's lattice length: base R
+  # recycled a shorter CDF through the fold, so lengths 7 and 21 returned
+  # a "density" with a -0.53 atom and no warning (#813)
+  if (!length(densities)) stop("winner_of_many needs at least one density")
+  lens <- lengths(densities)
+  bad <- which(lens != lens[1])
+  if (length(bad))
+    stop("winner_of_many needs densities of one lattice length; density ",
+         bad[1], " has length ", lens[bad[1]], " but density 1 has length ",
+         lens[1])
   cdfs <- lapply(densities, pdf_to_cdf)
   m <- length(cdfs[[1]])
   cdf_min <- cdfs[[1]]
