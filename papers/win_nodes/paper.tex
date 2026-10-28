@@ -12,8 +12,8 @@
 
 \newtheorem{proposition}{Proposition}
 
-\title{\textbf{Win Nodes for Bayes Nets:\\ Exact Order-Statistic
-Queries on Gaussian Graphical Models}}
+\title{\textbf{Win Nodes for Bayes Nets:\\ Deterministic
+Order-Statistic Queries on Gaussian Graphical Models}}
 \author{Peter Cotton}
 \date{\today}
 
@@ -21,20 +21,18 @@ Queries on Gaussian Graphical Models}}
 \maketitle
 
 \begin{abstract}
-\noindent The inference stack of a Gaussian graphical model returns
-marginals, joint moments and samples, and none of these answers the
-questions a user of a correlated field most often asks: which
-component is the maximum, when is a threshold first crossed, who
-wins. We formalize these as the queries of a \emph{win node}, an
-$n$-ary node $W=\arg\min_i X_i$ adjoined to Gaussian variables, and
-give exact linear-work passes for them on chains and banded
-precisions, where the graphical-model libraries stop at marginals.
-A rating model supplies the demonstration: latent ability paths with
-match results as evidence give a Laplace posterior that is a
-Gauss--Markov chain, and the peak-career query on 129{,}559 ATP
-matches returns a bimodal law for Nadal and a non-interval credible
-set for Agassi, neither of which any summary of the marginals
-contains.
+\noindent Inference on a Gaussian graphical model returns marginals,
+joint moments and samples. None of these says which
+component is the maximum, when a threshold is first crossed, or who
+wins. We formalize these as queries of a \emph{win node}, an $n$-ary
+node $W=\arg\min_i X_i$ adjoined to Gaussian variables. On
+Gauss--Markov chains we give deterministic linear-work passes for the
+argmax law, the law of the maximum and first passage; a state lift
+carries the law of the maximum to banded precisions. With wins as
+evidence, the Laplace posterior over a player's ability path is a
+Gauss--Markov chain. On 119{,}887 ATP matches the
+peak-career query puts probabilities 0.27 and 0.22 on Nadal's two
+peak seasons, numbers no summary of the marginals supplies.
 \end{abstract}
 
 \section{Queries that are not marginal functionals}
@@ -62,8 +60,9 @@ $X_{t+1}=\phi X_t+\sqrt{1-\phi^2}\,\epsilon_t$ with $X_1\sim N(0,1)$:
 every marginal is $N(0,1)$, and a stationary Kalman filter reports
 exactly that at every index. The argmax marginals at $\phi=0.9$,
 $n=20$, computed by the method of Section~\ref{sec:chain} and
-verified against $4\times10^5$-path Monte Carlo to $0.007$, put mass
-$0.091$ on each endpoint and $0.035$ in the middle. Interior points
+verified against $4\times10^5$-path Monte Carlo to $8\times10^{-4}$,
+put mass $0.097$ on each endpoint and $0.040$ in the middle, about
+$2.5$ times as much. Interior points
 are squeezed by correlated-high neighbours on both sides; endpoints
 have one neighbour. The fact lives in the joint law, so the marginal
 layer cannot state it.
@@ -74,16 +73,17 @@ utilities) adjoined to the Gaussian variables, together with its
 order-statistic relatives. The definition is trivial. The
 observation of this paper is that for the two coupling structures
 that dominate practice, the node's forward query, its derivatives,
-and its conditioning rule are exact and cheap at the same time,
+and its conditioning rule are deterministic and cheap at the same time,
 which is what a graphical-model query type requires.
 
 The ingredients are classical, and we say so once. The
-one-dimensional winning-time integral is the random-utility
-representation of \citet{domencich1975}; the shared survival field
-is competing-risks calculus; the transfer operator on a Markov chain
-is the sum-product algorithm; the derivative identity of
-Section~\ref{sec:factor} was reached for general joint laws by
-\citet{muller2019}. The lattice engine that evaluates and inverts
+one-dimensional winning-time integral is the first-choice integral of
+\citet{thurstone1945} and the random-utility representation of
+\citet{domencich1975}; the shared survival field is competing-risks
+calculus \citep{chiang1961,lambert1975}; the transfer operator on a
+Markov chain is the sum-product algorithm; the derivative identity of
+Section~\ref{sec:factor} is as derived for general joint laws in
+\citet{muller2022}. The lattice engine that evaluates and inverts
 these objects at scale, with its covariance grammar and tie-density
 Jacobians, is \citet{cotton2026}, on which this paper builds
 throughout. What is new here is the chain and band order-statistic
@@ -95,20 +95,22 @@ rating posterior is one of its inputs.
 TrueSkill \citep{herbrich2007} is a Bayes net with win nodes
 already: its factor graph attaches greater-than factors to
 performance differences and propagates moment-matched messages. Its
-win node is binary, multi-entrant events are chains of pairwise
-approximations, and the factor itself is approximated by expectation
-propagation. Section~\ref{sec:observed} gives the exact $n$-ary
+win node is binary. A multi-entrant result factors exactly into
+greater-than factors between adjacent ranks, and expectation
+propagation approximates the messages through them. Section~\ref{sec:observed} gives the exact $n$-ary
 likelihood message; the TrueSkill factor is its $n=2$ case.
 
 Modern Gaussian message-passing systems and GMRF libraries compute
 marginals, free energies and samples for very large models. Their
-query vocabularies do not include the four functionals above. The
+query vocabularies do not include the argmax, first-passage or
+top-$k$ functionals above. The
 win node is proposed as an addition to that vocabulary, not as a
 competitor to the toolkits.
 
 For latent Gaussian models, \citet{bolin2015} compute excursion sets
 and exceedance probabilities by sequential importance sampling, and
-their \texttt{excursions} package is the standard tool. On chains
+their \texttt{excursions} package \citep{bolin2018} is a widely used
+implementation. On chains
 and bands the same functionals admit the deterministic pass of
 Section~\ref{sec:chain}. Simulation remains the recourse for general
 sparsity, and our software points there at its refusal boundary.
@@ -116,10 +118,9 @@ sparsity, and our software points there at its refusal boundary.
 GHK evaluates one orthant probability per alternative by sequential
 importance sampling. \citet{ridgway2016} showed that on an AR(1)
 covariance its normalized variance grows exponentially in dimension.
-That is the correlated-chain case where the restricted transfer
-operator is exact and linear in $n$: high correlation is where the
-exact pass is tightest and the simulator is worst, and
-Section~\ref{sec:checks} measures the former.
+That is the correlated-chain case, where the restricted transfer
+operator is deterministic and linear in $n$, and
+Section~\ref{sec:checks} measures it.
 
 \section{The win node on factor-structured fields}
 \label{sec:factor}
@@ -144,8 +145,8 @@ $O(nLQ)$ for a $Q$-node quadrature.
 \citet[\S5]{cotton2026} shows the derivative to be the tie density
 on the face where $i$ and $j$ tie, so the Jacobian is minus a
 weighted graph Laplacian and applies in $O(nL)$ without forming an
-edge; \citet{muller2019} reach the same identity for general joint
-laws through the surplus function. \citet{cotton2026b} develops this case as the posterior
+edge; the same identity is as derived for general joint laws through
+the surplus function in \citet{muller2022}. \citet{cotton2026b} develops this case as the posterior
 probability of optimality for factor-Gaussian beliefs, including the
 comparison against marginal-only surrogates and the bandit and
 stopping consequences. We take it as given here and spend the paper
@@ -173,7 +174,9 @@ already computes. The message an observed win node passes to its
 Gaussian parents therefore carries exact first-order information. At
 $n=2$ and $r=0$ the likelihood reduces to
 $\Phi\!\left((\mu_k-\mu_j)/\sqrt{D_k+D_j}\right)$, which is
-TrueSkill's greater-than factor. The $n$-ary node needs no pairwise
+TrueSkill's greater-than factor $\mathbf 1(d>\varepsilon)$ at draw
+margin $\varepsilon=0$, with each $D_i$ including the performance
+variance $\beta^2$. The $n$-ary node needs no pairwise
 chaining and no moment approximation of the factor itself; moment
 approximations enter only if the user chooses a Gaussian posterior
 family, exactly as in expectation propagation. The likelihood is the multinomial
@@ -202,15 +205,18 @@ $\pi_u$ the initial sub-density cut at $u$,
 \Big(\prod_{s<t}T_s^{(u)}\Big)\pi_u,
 \qquad T^{(u)}(x'\mid x)=T(x'\mid x)\,\mathbf 1\{x'\le u\},
 \end{equation}
-one forward pass, $O(nL)$ per threshold with banded kernels. The
-survivor-mass decrements of the same pass are the first-passage law.
+one forward pass, $O(nL)$ per threshold with banded kernels. This
+max-CDF special case on a banded chain is classical
+\citep{genz1986,bolin2018}. The survivor-mass decrements of the same
+pass are the first-passage law.
 Integrating the survival of the max over a threshold grid gives
 $\mathbb E[\max]$; the rectangle rule biases this by $O(\Delta u)$,
 measured at $+0.053$ on a ten-node chain, and the trapezoid removes
 it. A hard cell cutoff at $u$ costs $O(\Delta x)$; assigning the
-boundary cell its fractional occupancy restores $O(\Delta x^2)$,
-which is the difference between $10^{-2}$ and $2\times10^{-4}$
-agreement with the i.i.d.\ closed form at 400 lattice points.
+boundary cell its fractional occupancy restores $O(\Delta x^2)$, and
+laying the lattice with $u$ on a cell edge makes that occupancy
+exact. The pass then agrees with the i.i.d.\ closed form to
+$1.5\times10^{-14}$ at 400 lattice points.
 
 \emph{Argmax marginals.} For each lattice threshold $u_k$, a forward
 pass restricted strictly below $u_k$ and reaching $X_t=u_k$ gives
@@ -226,7 +232,8 @@ precomputed the double pass is matrix slices, $O(nL^2)$ in total.
 \emph{Bandwidth $b$ by state lifting.} The vector
 $(X_t,\dots,X_{t+b-1})$ is Markov, so the same restricted passes run
 on the lifted state at $O(nL^{b+1})$: linear in $n$, exponential
-only in the bandwidth. At $b=2$ the lift covers AR(2), including the
+only in the bandwidth. At $b=2$ a prototype of the lifted max-CDF
+covers AR(2), including the
 cyclical regime with complex roots that has no $b=1$ analogue. With
 the second coefficient set to zero the lift reproduces the $b=1$
 pass to $5.6\times10^{-16}$ on the same grid.
@@ -240,16 +247,17 @@ repository. Monte Carlo appears only as a referee.
 \begin{center}
 \begin{tabular}{llll}
 \toprule
-query & setting & exact vs.\ referee & cost \\
+query & setting & pass vs.\ referee & cost \\
 \midrule
 max-CDF & AR(1), $n{=}50$, $\phi{=}0.99$ & $5\times10^{-3}$ (MC $4{\times}10^5$) & 3 ms \\
-max-CDF & i.i.d.\ closed form, $n{=}12$ & $2\times10^{-4}$ & --- \\
-argmax & AR(1), $\phi{=}0.9$, $n{=}20$ & $7\times10^{-3}$ (MC) & ms \\
+max-CDF & i.i.d.\ closed form, $n{=}12$ & $1.5\times10^{-14}$ & --- \\
+argmax & AR(1), $\phi{=}0.9$, $n{=}20$ & $8\times10^{-4}$ (MC $4{\times}10^5$) & ms \\
 argmax & random walk, $n{=}40$ & $4\times10^{-3}$ (MC) & ms \\
-band $b{=}2$ & AR(2) incl.\ cyclical & $1.1\times10^{-2}$ (grid-limited) & 230 ms/thr. \\
+band $b{=}2$ & AR(2) incl.\ cyclical & $1.2\times10^{-2}$ (grid-limited) & 230 ms/thr. \\
 $b{=}2$ embed & $\phi_2{=}0$ vs.\ $b{=}1$ & $5.6\times10^{-16}$ & --- \\
-first passage & inhomogeneous chain, $n{=}10$ & $5\times10^{-3}$ (MC) & $O(nL)$ \\
-$\mathbb E[\max]$ & same & $5\times10^{-3}$ (MC band) & --- \\
+max-CDF & inhomogeneous chain, $n{=}10$ & $4\times10^{-4}$ (MC $4{\times}10^5$) & --- \\
+first passage & same & $7\times10^{-4}$ (MC) & $O(nL)$ \\
+$\mathbb E[\max]$ & same & $7.4\times10^{-4}$ (MC s.e.\ $1.3\times10^{-3}$) & --- \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -257,22 +265,23 @@ $\mathbb E[\max]$ & same & $5\times10^{-3}$ (MC band) & --- \\
 \emph{Tail thresholds.} At a low threshold the max-CDF is an orthant
 probability, $\Pr(X_1\le u,\dots,X_n\le u)$, and as $u$ falls it
 becomes a rare event. A direct sampler needs about $1/p$ draws to see
-it at all, and the GHK family that computes such orthants degrades in
-the same regime \citep{ridgway2016}. The restricted pass costs the
-same whatever $p$ is: 66 ms per threshold here.
+it at all, and on this AR(1) covariance the normalized variance of
+the GHK estimator grows exponentially in dimension
+\citep{ridgway2016}. The restricted pass costs the same whatever $p$
+is: 136 ms per threshold here.
 
 \begin{center}
 \begin{tabular}{lllll}
 \toprule
-$u$ & exact, $L{=}400$ & exact, $L{=}800$ & $10^6$ draws & draws for
+$u$ & pass, $L{=}400$ & pass, $L{=}800$ & $10^6$ draws & draws for
 10\% error \\
 \midrule
 $0.0$  & $6.471\times10^{-3}$ & $6.465\times10^{-3}$ & $6.432\times10^{-3}$ & $1.5\times10^{4}$ \\
-$-1.0$ & $1.753\times10^{-5}$ & $1.752\times10^{-5}$ & $1.60\times10^{-5}$ (16 hits) & $5.7\times10^{6}$ \\
-$-1.5$ & $3.067\times10^{-7}$ & $3.079\times10^{-7}$ & no hits & $3.2\times10^{8}$ \\
-$-2.0$ & $2.520\times10^{-9}$ & $2.521\times10^{-9}$ & no hits & $4.0\times10^{10}$ \\
-$-2.5$ & $9.380\times10^{-12}$ & $9.418\times10^{-12}$ & no hits & $1.1\times10^{13}$ \\
-$-3.0$ & $1.576\times10^{-14}$ & $1.578\times10^{-14}$ & no hits & $6.3\times10^{15}$ \\
+$-1.0$ & $1.756\times10^{-5}$ & $1.753\times10^{-5}$ & $1.60\times10^{-5}$ (16 hits) & $5.7\times10^{6}$ \\
+$-1.5$ & $3.088\times10^{-7}$ & $3.082\times10^{-7}$ & no hits & $3.2\times10^{8}$ \\
+$-2.0$ & $2.531\times10^{-9}$ & $2.525\times10^{-9}$ & no hits & $4.0\times10^{10}$ \\
+$-2.5$ & $9.464\times10^{-12}$ & $9.436\times10^{-12}$ & no hits & $1.1\times10^{13}$ \\
+$-3.0$ & $1.588\times10^{-14}$ & $1.582\times10^{-14}$ & no hits & $6.3\times10^{15}$ \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -280,23 +289,25 @@ $-3.0$ & $1.576\times10^{-14}$ & $1.578\times10^{-14}$ & no hits & $6.3\times10^
 Stationary AR(1), $n=50$, $\phi=0.9$. Simulation agrees where it has
 hits and returns zero where it does not, which is an absence of
 information rather than a small error. Below $u=-1.5$ no referee is
-available at all, and the evidence for the exact values is that they
-are stable under grid refinement: the two passes agree to three or
-four significant figures at every threshold, including
-$1.58\times10^{-14}$.
+available at all, and the evidence for the deterministic values is
+that they are stable under grid refinement: the two passes agree to
+within $0.4\%$ at every threshold, down to $1.6\times10^{-14}$ at
+$u=-3$.
 
 Two consequences follow from the argmax table rather than merely
 illustrating it. The boundary pile-up law is one: positive serial
 correlation pushes the argmax of a stationary path to the endpoints,
-$2.6\times$ at $\phi=0.9$, and no marginal summary can express this.
+$0.097$ against $0.040$ in the middle at $\phi=0.9$, about $2.5\times$,
+and no marginal summary can express this.
 The finite-$n$ arcsine refinement is the other. On a random walk the
 transfer operator matches the finite-$n$ argmax law to $0.3\%$ while
 the continuum arcsine density sits $1\%$ away, because the engine
-computes the exact finite law of which arcsine is the limit. The
+computes the finite-$n$ law of which arcsine is the limit. The
 same pass handles the drifted, barriered and mean-reverting cases
 that have no closed form. The accuracy profile is complementary to
-simulation: the exact pass is tightest at high correlation, exactly
-where \citet{ridgway2016} shows the GHK family degrading.
+simulation: the pass is deterministic, at fixed cost, on the AR(1)
+covariance where \citet{ridgway2016} shows the GHK variance growing
+exponentially in dimension.
 
 \section{Peak seasons from win evidence}
 \label{sec:tennis}
@@ -312,8 +323,11 @@ tridiagonal, the Laplace posterior precision is their sum, and the
 career posterior is therefore a Gauss--Markov chain of the kind
 Section~\ref{sec:chain} reads.
 
-The data are 129{,}559 ATP matches from 1985 to 2024 and the 1{,}453
-players with at least fifteen of them. Static abilities for the field
+The data are the ATP tour-level results compiled by
+\citet{sackmann}, retrieved from
+\url{https://github.com/VictorSquidWei/tennis_atp} on 28 October 2026:
+129{,}559 matches from 1985 to 2024, of which the 119{,}887 between
+the 1{,}453 players with at least fifteen matches are used. Static abilities for the field
 come from a MAP fit of the probit Bradley--Terry likelihood. One
 player at a time then has that constant replaced by a yearly path,
 fitted under the random-walk prior with the innovation scale chosen
@@ -343,19 +357,20 @@ them alone would overclaim. Federer's 2006 carries $0.52$ against
 $0.41$ for 2005. Nadal's most likely peak year carries $0.27$, and
 his law is bimodal: $0.267$ at 2013 and $0.220$ at 2018, with the
 years between them small. Agassi's credible set is not an interval.
-It holds 1995 and the 2002--2003 resurgence and excludes the years
-in between, which is a statement about the joint law and not about
-any year's marginal.
+It holds 1995 and the 2002--2003 resurgence, his three highest
+posterior means, and excludes the years in between; its mass, $0.84$,
+is a statement about the joint law and not about any year's
+marginal.
 
 \begin{figure}[t]
 \centering
 \includegraphics[width=0.86\textwidth]{nadal.pdf}
 \caption{Rafael Nadal's posterior ability path from 1{,}317 matches
-(top) and the law of its argmax (bottom). The path is one broad
-plateau and the argmax law is bimodal, at 2013 and 2018, with the
-seasons between them carrying almost no mass. The band in the top
-panel does not contain that statement, and no summary of the yearly
-marginals does either.}
+(top) and the law of its argmax (bottom). The path has two highs, at
+2013 and 2018, and the argmax law puts $0.27$ and $0.22$ on them, with
+the seasons between them carrying almost no mass. The band in the top
+panel shows where the highs are. It does not give their
+probabilities, and no summary of the yearly marginals does either.}
 \label{fig:nadal}
 \end{figure}
 
@@ -365,14 +380,17 @@ At equal posterior mean, the year with fewer matches carries more
 argmax mass, because fewer matches leave a wider posterior and a
 wider posterior has more room to hold the maximum. Nadal's 2010 has
 posterior mean $2.042$ from 80 matches and probability $0.066$; his
-2012 has mean $2.051$ from 48 matches and probability $0.088$. A
-table of yearly ratings with error bars does not contain that
+2012 has mean $2.051$ from 48 matches and probability $0.088$.
+Setting 2012's mean equal to 2010's leaves it at $0.080$ against
+$0.067$, so the wider posterior, not the higher mean, carries most of
+the gap. A table of yearly ratings with error bars does not contain that
 comparison, because the comparison is between joint events.
 
-Two hundred thousand draws from each posterior referee the exact
-pass, with maximum discrepancy $0.0019$ across all six careers and
+Two hundred thousand draws from each posterior referee the deterministic
+pass, with maximum discrepancy $0.0020$ across all six careers and
 every year. The Gaussian posterior is approximate, as it is in every
-rating system that reports one. The query on that posterior is not.
+rating system that reports one. The query on that posterior is
+computed to quadrature accuracy.
 
 \section{Software}
 
@@ -392,12 +410,13 @@ sparsity are refused with a pointer to the lifted pass and to
 \section{Scope}
 
 The reduction requires structure. Factor coupling of rank $r$ costs
-a $Q$-node quadrature and is exact to quadrature accuracy; precision
+a $Q$-node quadrature and is deterministic and quadrature-accurate;
+precision
 bandwidth $b$ costs $O(nL^{b+1})$ and is practical for $b\le 3$;
 general sparse precision gets neither treatment here, and the
 excursion functionals then belong to the sampling methods of
 \citet{bolin2015}. The win-node concept itself is not new: TrueSkill
-carries a binary one, \citet{muller2019} derived the tie-density
+carries a binary one, \citet{muller2022} derived the tie-density
 derivative for general laws, the lattice engine and its Jacobians are
 \citet{cotton2026}, and the factor query is \citet{cotton2026b}.
 Equation~\eqref{eq:obslik} is the multinomial probit likelihood and
@@ -413,6 +432,16 @@ F.~Lindgren. Excursion and contour uncertainty regions for latent
 Gaussian models. \emph{J.\ R.\ Statist.\ Soc.\ B} 77(1):85--106,
 2015.
 
+\bibitem[Bolin and Lindgren(2018)]{bolin2018} D.~Bolin and
+F.~Lindgren. Calculating probabilistic excursion sets and related
+quantities using \texttt{excursions}. \emph{J.\ Statist.\ Softw.}
+86(5), 2018.
+
+\bibitem[Chiang(1961)]{chiang1961} C.~L.~Chiang. On the probability
+of death from specific causes in the presence of competing risks. In
+\emph{Proc.\ Fourth Berkeley Symp.\ Math.\ Statist.\ Prob.}, vol.~4,
+169--180, 1961.
+
 \bibitem[Cotton(2026a)]{cotton2026} P.~Cotton. Scalable inversion of
 contests with correlated performances, including softmax and
 multinomial probit. arXiv:2609.01133, 2026. Reference implementation
@@ -426,19 +455,36 @@ probabilities for Thompson sampling and entropy search. Working paper,
 and D.~McFadden. \emph{Urban Travel Demand: A Behavioral Analysis}.
 North-Holland, 1975.
 
+\bibitem[Genz and Kahaner(1986)]{genz1986} A.~Genz and D.~Kahaner.
+The numerical evaluation of certain multivariate normal integrals.
+\emph{J.\ Comput.\ Appl.\ Math.} 16(2):255--258, 1986.
+
 \bibitem[Herbrich et~al.(2007)Herbrich, Minka, and
 Graepel]{herbrich2007} R.~Herbrich, T.~Minka, and T.~Graepel.
 TrueSkill: a Bayesian skill rating system. In \emph{Advances in
 Neural Information Processing Systems~19}, 2007.
 
-\bibitem[M\"uller et~al.(2019)M\"uller, Nesterov, and
-Shikhman]{muller2019} D.~M\"uller, Y.~Nesterov, and V.~Shikhman.
-Discrete choice prox-functions on the simplex. arXiv:1909.05591,
-2019.
+\bibitem[Lambert(1975)]{lambert1975} H.~E.~Lambert. \emph{Fault
+Trees for Decision Making in Systems Analysis}. PhD thesis, report
+UCRL-51829, Lawrence Livermore Laboratory, 1975.
+
+\bibitem[M\"uller et~al.(2022)M\"uller, Nesterov, and
+Shikhman]{muller2022} D.~M\"uller, Y.~Nesterov, and V.~Shikhman.
+Discrete choice prox-functions on the simplex. \emph{Math.\ Oper.\
+Res.} 47(1):485--507, 2022.
 
 \bibitem[Ridgway(2016)]{ridgway2016} J.~Ridgway. Computation of
 Gaussian orthant probabilities in high dimension. \emph{Statistics
-and Computing} 26:899--916, 2016.
+and Computing} 26(4):899--916, 2016.
+
+\bibitem[Sackmann(n.d.)]{sackmann} J.~Sackmann. ATP tennis rankings,
+results, and stats (\texttt{tennis\_atp}). Data repository, originally
+\texttt{github.com/JeffSackmann/tennis\_atp}; retrieved from
+\url{https://github.com/VictorSquidWei/tennis_atp} on 28 October
+2026.
+
+\bibitem[Thurstone(1945)]{thurstone1945} L.~L.~Thurstone. The
+prediction of choice. \emph{Psychometrika} 10(4):237--253, 1945.
 
 \end{thebibliography}
 
