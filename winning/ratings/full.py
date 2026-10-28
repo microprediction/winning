@@ -40,6 +40,7 @@ from __future__ import annotations
 import numpy as np
 
 from ..shapes import as_loadings
+from ._checks import as_noise_variances
 
 
 from .nway import _recentre_nodes
@@ -431,7 +432,7 @@ def update_market_full(m, S, p_market, tau2=0.25, invert=None,
             return -abilities_from_race(p, **market_model)
     y = np.asarray(invert(np.asarray(p_market, dtype=float)), dtype=float)
     y = y - y.mean()
-    tau2 = np.broadcast_to(np.asarray(tau2, dtype=float), (n,)).astype(float)
+    tau2 = as_noise_variances(tau2, n, "tau2")                   # #809
     P = np.eye(n) - np.ones((n, n)) / n
     S = _psd_repair(S)
     # posterior (S^-1 + P T^-1 P)^-1 in Woodbury form with L = P T^-1/2,

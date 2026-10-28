@@ -26,6 +26,7 @@ from __future__ import annotations
 import numpy as np
 
 from ..shapes import as_variance
+from ._checks import as_noise_variances
 
 
 from ..shapes import as_loadings
@@ -60,7 +61,7 @@ def update_market(m, v, p_market, tau2=0.25, invert=None, **market_model):
             return -abilities_from_race(p, **market_model)
     y = np.asarray(invert(np.asarray(p_market, dtype=float)), dtype=float)
     y = y - y.mean()
-    tau2 = np.broadcast_to(np.asarray(tau2, dtype=float), (n,)).copy()
+    tau2 = as_noise_variances(tau2, n, "tau2")                   # #809
 
     # posterior covariance: (diag(1/v + 1/tau2) - (1/n) q q'/scale)^{-1}
     # via Sherman-Morrison, with the general per-runner tau2 handled by

@@ -18,6 +18,7 @@ from __future__ import annotations
 import numpy as np
 
 from ..shapes import as_loadings
+from ._checks import as_noise_variances
 
 
 from .full import (_check_full_inputs, _mixture_update_full, _order_kernel,
@@ -146,8 +147,8 @@ def _lift_contrast_update(m, S, A, y, Cn, log_jac=0.0):
 
 
 def _noise_cov(k, beta2, meas_var=0.0, V=None):
-    B = np.broadcast_to(np.asarray(beta2, dtype=float), (k,)).astype(float)
-    Cn = np.diag(B + float(meas_var))
+    B = as_noise_variances(beta2, k, "beta2")                    # #809
+    Cn = np.diag(B + as_noise_variances(float(meas_var), k, "meas_var"))
     if V is not None:
         Vm = as_loadings(V, k)
         Cn = Cn + Vm @ Vm.T
@@ -188,5 +189,5 @@ def update_team_market_full(m, S, A, p_market, tau2=0.25, invert=None,
             return -abilities_from_race(p, **market_model)
     y = np.asarray(invert(np.asarray(p_market, dtype=float)), dtype=float)
     y = y - y.mean()
-    tau = np.broadcast_to(np.asarray(tau2, dtype=float), (k,)).astype(float)
+    tau = as_noise_variances(tau2, k, "tau2")                    # #809
     return _lift_contrast_update(m, S, A, y, np.diag(tau))

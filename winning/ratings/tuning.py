@@ -49,6 +49,7 @@ across two competing systems always is.
 """
 from __future__ import annotations
 
+import math
 from typing import Dict, Mapping, NamedTuple, Optional, Sequence, Tuple
 
 
@@ -90,9 +91,18 @@ def select(scores: Mapping[object, float], name: str = "param",
     keys do not sort meaningfully, and decides which two values count
     as the ends; it defaults to the insertion order of ``scores``.
 
+    ``order`` must list every key of ``scores`` exactly once: a key it
+    omitted used to drop out of the selection, true optimum included
+    (#810).
+
     ``tol`` is the spread below which the parameter counts as inert.
     ``sat_tol`` is the gap between a winning end value and its
     neighbour below which an edge counts as saturated.
+
+    Every score must be finite. A NaN or infinite loss is a failed
+    evaluation, not a ranking: NaN compares false both ways, so the
+    winner depended on insertion order, and skipping it would quietly
+    shrink the grid and could move its edge. So it raises (#810).
 
     Returns ``(best, report)``.
     """
@@ -102,7 +112,15 @@ def select(scores: Mapping[object, float], name: str = "param",
     missing = [k for k in keys if k not in scores]
     if missing:
         raise KeyError(f"order lists values absent from scores: {missing}")
+    if order is not None:
+        listed = set(keys)
+        if len(listed) != len(keys):
+            raise ValueError(f"order lists a value twice: {keys}")
+        omitted = [k for k in scores if k not in listed]
+        if omitted:
+            raise ValueError(f"order omits scored values: {omitted}")
     values = [float(scores[k]) for k in keys]
+    _require_finite(dict(zip(keys, values)))
     best_i = min(range(len(keys)), key=lambda i: values[i])
     best = keys[best_i]
     spread = max(values) - min(values)
@@ -117,6 +135,12 @@ def select(scores: Mapping[object, float], name: str = "param",
                               at_edge, saturated)
 
 
+def _require_finite(scores):
+    bad = [k for k, v in scores.items() if not math.isfinite(float(v))]
+    if bad:
+        raise ValueError(f"scores must be finite; non-finite at {bad}")
+
+
 def select_grid(scores: Mapping[Tuple, float], names: Sequence[str],
                 tol: float = 1e-6, sat_tol: float = 1e-4
                 ) -> Tuple[Tuple, Dict[str, TuningReport]]:
@@ -127,6 +151,8 @@ def select_grid(scores: Mapping[Tuple, float], names: Sequence[str],
     axis sitting at its own end, so each axis is profiled by the best
     score achievable at each of its values and reported on its own.
 
+    Every score must be finite, as in ``select``.
+
     Returns ``(best_tuple, {axis_name: report})``.
     """
     if not scores:
@@ -135,6 +161,7 @@ def select_grid(scores: Mapping[Tuple, float], names: Sequence[str],
     width = len(combos[0])
     if len(names) != width:
         raise ValueError(f"{len(names)} names for {width} axes")
+    _require_finite(scores)                                     # #810
     best = min(combos, key=lambda c: scores[c])
     reports = {}
     for axis, nm in enumerate(names):
