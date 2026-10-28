@@ -229,7 +229,9 @@ end
     hermite_nodes(k, order = 15, prune = 1e-7)
 
 Pruned Gauss-Hermite product rule over N(0, I_k), first coordinate
-slowest, pruned WITHOUT renormalizing (matching the reference exactly).
+slowest, pruned THEN renormalized so the weights sum to one, matching the
+Python reference and the R port (#802: this used to say the reference did
+not renormalize, and `hermite_nodes(2, 5, 0.5).W` summed to 0.284).
 
 `k = 0` is the EMPTY PRODUCT: one node of weight 1 with no columns, so a
 zero-rank loading matrix integrates over the zero-dimensional factor
@@ -255,7 +257,8 @@ function hermite_nodes(k::Int, order::Int = 15, prune::Float64 = 1e-7)
         W = [prod(h.weights[r]) for r in rows]
     end
     keep = W .> prune * maximum(W)
-    return (F = F[keep, :], W = W[keep])
+    Wk = W[keep]
+    return (F = F[keep, :], W = Wk ./ sum(Wk))
 end
 
 """The first `n` primes, generated. `halton_normal_nodes` used a fixed

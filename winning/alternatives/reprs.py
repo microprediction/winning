@@ -25,10 +25,14 @@ def reduced_rank_representation(mu, V, D, i):
 
     Returns a dict with keys B (n-1, k+1), D_minus (n-1,), upper
     (n-1,), so that P(i wins) = P(N(0, B B' + diag(D_minus)) <= upper).
+    i is an integer runner index in [0, n): -1 indexed the last runner
+    but excluded nobody from the mask, an n-row rectangle (#846).
     """
+    from ..factor.topk import _as_runner_index
     mu = np.asarray(mu, dtype=float)
     V = as_loadings(V, len(np.asarray(mu)))
     D = as_idio(D, len(mu))                  # a scalar is everyone's (#84)
+    i = _as_runner_index(i, len(mu))
     mask = np.arange(len(mu)) != i
     B = np.column_stack([V[mask] - V[i], -np.sqrt(D[i])
                          * np.ones(mask.sum())])

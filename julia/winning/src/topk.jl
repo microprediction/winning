@@ -763,14 +763,21 @@ loadings (two curves are then one equation short)."""
 # cost); otherwise attempt(start) runs from each of the fixed starts(first)
 # in order and the first converged outcome wins, else the attempt with the
 # smallest getproperty(out, key) is returned, still converged = false.
-# iterations becomes the total over every attempt.
+# iterations becomes the total over every attempt. A retry that throws is
+# skipped: it must not discard the completed attempts (#855).
 function _retry_on_failure(first, attempt, starts, key)
     # n_iter = 0 prices the start and performs no update: never retried
     (first.converged || first.iterations == 0) && return first
     best = first
     total = first.iterations
     for start in starts(first)
-        out = attempt(start)
+        out = try
+            attempt(start)
+        catch e
+            e isa InterruptException && rethrow()
+            nothing
+        end
+        out === nothing && continue
         total += out.iterations
         if out.converged
             best = out

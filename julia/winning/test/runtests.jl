@@ -126,6 +126,21 @@ end
     @test_throws ArgumentError hermite_nodes(-1, 5)
     @test_throws ArgumentError hermite_nodes(1, 0)
     @test_throws ArgumentError hermite_nodes(1, -3)
+    # pruned weights are renormalized, as in python and R (#802): a 0.5
+    # threshold keeps only the central product node, which summed to 0.284
+    hp = hermite_nodes(2, 5, 0.5)
+    @test size(hp.F) == (1, 2)
+    @test hp.W == [1.0]
+    # the default rule loses ~1.2e-6 of mass to pruning at rank 4, order 15
+    @test abs(sum(hermite_nodes(4, 15).W) - 1.0) < 1e-14
+    # nearby ordinary rules: same nodes, weights only rescaled
+    for (k, q) in ((2, 15), (3, 9))
+        h = hermite_nodes(k, q)
+        h1 = winning.hermite1(q)
+        full = [prod(h1.weights[findfirst(==(x), h1.nodes)] for x in r)
+                for r in eachrow(h.F)]
+        @test h.W ≈ full ./ sum(full) rtol = 1e-14
+    end
 end
 
 @testset "zero-rank loadings reach top-k" begin
@@ -612,6 +627,20 @@ end
     z = loc_scale_from_topk_pair([0.8, 0.1, 0.1], 1, [0.2, 0.9, 0.9], 2;
                                  return_info = true)
     @test !z.converged
+end
+
+@testset "a retry that raises keeps the completed attempts (#855)" begin
+    first = (mu = [0.0], converged = false, iterations = 7,
+             max_logit_residual = 0.2)
+    boom(s) = error("lattice")
+    out = winning._retry_on_failure(first, boom, f -> [1], :max_logit_residual)
+    @test out == first
+    good = (mu = [1.0], converged = true, iterations = 3, max_logit_residual = 0.0)
+    out = winning._retry_on_failure(first, s -> s == "bad" ? error("x") : good,
+                                    f -> ["bad", "good"], :max_logit_residual)
+    @test out.converged && out.iterations == 10
+    conv = merge(first, (converged = true,))
+    @test winning._retry_on_failure(conv, boom, f -> [1], :max_logit_residual) === conv
 end
 
 @testset "the rank-one Hermite/midpoint handover is a band (#783)" begin

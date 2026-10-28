@@ -316,6 +316,10 @@ def tilting(mu, V, D, budget=1000, seed=7):
     budget = as_draws(budget)
     from scipy.optimize import root
     n = len(mu)
+    if n == 1:
+        # a one-runner field wins with certainty; the contrast system is
+        # empty and np.array([]) is a float index, which raised (#814)
+        return np.ones(1), {"draws": int(budget)}
     p = np.zeros(n)
     for i in range(n):
         others = [j for j in range(n) if j != i]
