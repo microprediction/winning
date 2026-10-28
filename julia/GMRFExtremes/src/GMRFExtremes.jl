@@ -278,9 +278,13 @@ const _LATTICE_DOUBLES = 20_000_000
 
 function _check_lattice(L::Int, n::Int)
     n >= 2 || return nothing             # no transition matrix at all
-    L * L <= _LATTICE_DOUBLES || throw(ArgumentError(string(
+    # L * L wrapped for L = 2^32 (to 0) and typemax(Int) (to 1), so the
+    # guard passed and the allocation was attempted (#533); compare in
+    # Float64, exact for every L the budget admits
+    Float64(L)^2 <= _LATTICE_DOUBLES || throw(ArgumentError(string(
         "a ", L, "-point lattice needs ", L, " x ", L, " transition ",
-        "matrices (", round(8 * L^2 / 1e6; digits = 1), " MB each), over ",
+        "matrices (", round(8 * Float64(L)^2 / 1e6; digits = 1),
+        " MB each), over ",
         "the ", 8 * _LATTICE_DOUBLES ÷ 1_000_000, " MB budget; use at most ",
         isqrt(_LATTICE_DOUBLES), " points")))
     return nothing

@@ -551,6 +551,18 @@ end
                                        points = 10_000)
     @test_throws ArgumentError argmax_marginals(stationary_ar1(0.5, 3);
                                                 points = 10_000)
+    # L * L wrapped: 2^32 squared to 0 and typemax(Int) to 1, so the
+    # guard passed; it is checked without the overflow now (#533)
+    for L in (1 << 32, typemax(Int), (1 << 31) + 1, 3037000500)
+        @test_throws ArgumentError GE._check_lattice(L, 2)
+    end
+    @test GE._check_lattice(typemax(Int), 1) === nothing
+    # the budget boundary itself is where it was
+    @test GE._check_lattice(4472, 2) === nothing
+    @test GE._check_lattice(isqrt(GE._LATTICE_DOUBLES), 1000) === nothing
+    @test_throws ArgumentError GE._check_lattice(4473, 2)
+    msg = sprint(showerror, try GE._check_lattice(4473, 2) catch err; err end)
+    @test occursin("160.1 MB each", msg)
     # a single node has no transition, so no matrix to budget
     @test isfinite(max_cdf(GaussMarkovChain([0.0], 1.0, Float64[], Float64[]),
                            0.0; points = 10_000))
