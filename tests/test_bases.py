@@ -357,6 +357,56 @@ def test_exponential_power_order_updates_shrink_variance():
     assert var.mean() < 0.5
 
 
+def test_direct_rust_laplace_kernel_default_and_kink_split():
+    """#541: the direct compiled Laplace kernel, not the wrapper. Its
+    default is the uniform lattice, bit for bit the numpy default (the
+    owner's contract: default Laplace results do not move); the opt-in
+    kink_split=True integrates on python's kink_lattice and meets the
+    certified race, which the uniform lattice misses by 8.4e-5."""
+    import winning.factor.races as R
+    from winning.factor.races import _setup, forward_grid
+
+    if not (R._HAVE_RUST
+            and hasattr(R._fastrace, "forward_and_slopes_base")):
+        pytest.skip("fastrace without forward_and_slopes_base")
+    rng = np.random.default_rng(7)
+    mu = rng.normal(0, 1, 8)
+    D = rng.uniform(0.5, 1.5, 8)
+    # winning.certified.certified_race_probabilities(mu, D, base="laplace")
+    sure = np.array([0.08490588474749404, 0.042145457594430766,
+                     0.08872130695788835, 0.26534145083359484,
+                     0.11737682435719705, 0.3283091842934445,
+                     0.06252321266833341, 0.010676678547616992])
+    m, V, Dv, F, W, fn, left, right = _setup(mu, None, D, None, None,
+                                             "laplace")
+    x, pts = forward_grid(m[None, :] + F @ V.T, np.sqrt(Dv), V, fn, left,
+                          right, 257, window="bulk", delta=1e-12)
+    args = [np.ascontiguousarray(a) for a in (m, V, Dv, F, W)] + [
+        pts, float(x[0]), float(x[-1]), 3, []]
+    p_def, _, _ = R._fastrace.forward_and_slopes_base(*args)
+    saved = R._HAVE_RUST
+    R._HAVE_RUST = False
+    try:
+        p_np = race_probabilities(mu, D=D, base="laplace", points=257)
+        p_np_split, s_np_split = race_probabilities(
+            mu, D=D, base="laplace", points=257, kink_split=True,
+            return_slopes=True)
+    finally:
+        R._HAVE_RUST = saved
+    assert np.abs(np.asarray(p_def) - p_np).max() < 1e-15
+    assert np.abs(np.asarray(p_def) - sure).max() > 1e-5
+    p_s, sl_s, tot = R._fastrace.forward_and_slopes_base(*args,
+                                                         kink_split=True)
+    assert np.abs(np.asarray(p_s) - sure).max() < 1e-12
+    assert np.abs(np.asarray(p_s) - p_np_split).max() < 1e-13
+    assert np.abs(np.asarray(sl_s) / tot - s_np_split).max() < 1e-12
+    # a smooth base ignores the flag
+    a = R._fastrace.forward_and_slopes_base(*args[:-2], 0, [])
+    b = R._fastrace.forward_and_slopes_base(*args[:-2], 0, [],
+                                            kink_split=True)
+    assert np.array_equal(a[0], b[0]) and a[2] == b[2]
+
+
 def test_rust_base_parity_all_families():
     """Every shipped base family through the compiled forward kernel
     against the numpy path: probabilities and slopes. Elementary bases

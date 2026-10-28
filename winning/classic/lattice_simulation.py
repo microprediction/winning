@@ -1,3 +1,4 @@
+import math
 from winning.classic.lattice_conventions import STD_UNIT, STD_SCALE, STD_L, STD_A, NAN_DIVIDEND
 from winning.classic.lattice_calibration import dividend_implied_ability, normalize_dividends, dividends_from_prices
 from winning.classic.lattice import skew_normal_density, densities_from_offsets, pdf_to_cdf, sample_from_cdf
@@ -39,9 +40,15 @@ def placegetter(scores:[float], position:int):
     """ Return the index of the participant finishing in position+1
     :param scores:
     :param position:  0 for first place, 1 for second etc
-    :return:
+    :return:  the index, or None when fewer than position+1 participants
+              have a finite score. A scratched entrant (+inf score) never
+              finishes: nsmallest used to fill the missing places with
+              scratches in input order (#627).
     """
-    return heapq.nsmallest(position + 1, range(len(scores)), key=scores.__getitem__)[position]
+    live = [i for i, x in enumerate(scores) if x < math.inf]
+    if position >= len(live):
+        return None
+    return heapq.nsmallest(position + 1, live, key=scores.__getitem__)[position]
 
 
 def skew_normal_place_pricing(dividends, n_samples=N_SAMPLES, longshot_expon:float=1.0, a:float=STD_A, scale=STD_SCALE, nan_value=NAN_DIVIDEND) -> dict:
@@ -58,13 +65,24 @@ def skew_normal_place_pricing(dividends, n_samples=N_SAMPLES, longshot_expon:flo
     density = skew_normal_density(L=L, unit=unit, scale=scale, a=a)
     adj_dividends = longshot_adjusted_dividends(dividends=dividends,longshot_expon=longshot_expon)
     offsets = dividend_implied_ability(dividends=adj_dividends, density=density,nan_value=nan_value)
-    densities = densities_from_offsets(density=density, offsets=offsets)
+    # a scratched runner (zero price) has ability +inf (#589): it never
+    # finishes ahead of anyone, so give it an infinite performance
+    scratched = [not math.isfinite(o) for o in offsets]
+    densities = densities_from_offsets(density=density, offsets=[0.0 if s else o for s, o in zip(scratched, offsets)])
     performances = simulate_performances(densities=densities, n_samples=n_samples, add_noise=True, unit=unit)
+    if any(scratched):
+        performances = [[math.inf if s else x for s, x in zip(scratched, row)] for row in performances]
     placegetters = placegetters_from_performances(performances=performances, n=4)
     the_counts = exotic_count(placegetters, do_exotics=False)
     n_runners = len(adj_dividends)
+    n_live = n_runners - sum(scratched)
     prices = dict()
     for bet_type, multiplicity in zip(PLACING_NAMES,range(1,5)):
+        if multiplicity > n_live:
+            # a top-k market needs k finishers: with fewer live runners it is
+            # unavailable, not completed with scratches (#627)
+            prices[bet_type] = [np.nan] * n_runners
+            continue
         prices[bet_type] = dividends_from_prices( [the_counts[bet_type][j] for j in range(n_runners)], multiplicity=multiplicity)
     return prices
 
@@ -73,8 +91,21 @@ def longshot_adjusted_dividends(dividends,longshot_expon=1.17):
     """ Use power law to approximately unwind longshot effect
         Obviously this is market dependent
     """
-    dividends = [(o + 1.0) ** (longshot_expon) for o in dividends]
-    return normalize_dividends(dividends)
+    # A scratched entrant -- a +inf, zero or negative dividend, which
+    # prices_from_dividends maps to an exact zero -- stays scratched (+inf).
+    # The normalize_dividends round trip turned it into NaN, which the
+    # inverse then read as a MISSING quote (nan_value=2000), so the
+    # scratched runner was simulated as a live longshot (#620).
+    def scratched(o):
+        return o is not None and not (isinstance(o, float) and math.isnan(o)) and (o <= 0 or o == math.inf)
+
+    mask = [scratched(o) for o in dividends]
+    adjusted = [1.0 if m else (o + 1.0) ** (longshot_expon) for m, o in zip(mask, dividends)]
+    if all(mask):
+        return [math.inf for _ in dividends]
+    live = normalize_dividends([a for m, a in zip(mask, adjusted) if not m])
+    it = iter(live)
+    return [math.inf if m else next(it) for m in mask]
 
 
 def exotic_count(placegetters, do_exotics=False):

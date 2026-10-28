@@ -5,11 +5,112 @@
 # stable-direction deconvolution; see the python module docstring for
 # derivations and the two-branch refusal of exact-rank targets.
 
+# The depth of a top-k curve is a COUNT, so it is an integer. Every
+# guard truncated first -- as.integer(k) here, int(k) in python,
+# Math.trunc in the browser -- and then range-checked the truncated
+# value, so a fractional depth passed and was silently floored:
+# top_k_probabilities(mu, 1.5) returned the top-1 curve and 2.5 the
+# top-2 one, with no warning and a mass of 1 or 2 rather than the 1.5
+# or 2.5 asked for. k=0, k=n and k>n were all refused; only the
+# non-integer slipped through, which is the one case the message
+# "k must be in [1, n-1]" reads as permitting.
+.as_depth <- function(k, n, where = "k") {
+  kk <- as.numeric(k)
+  if (length(kk) != 1L || !is.finite(kk))
+    stop(sprintf("%s must be a single whole number of places", where),
+         call. = FALSE)
+  if (kk != trunc(kk))
+    stop(sprintf(paste("%s must be a whole number of places; got %s. A",
+                       "top-k curve counts finishers, so there is no",
+                       "top-%s."), where, format(kk), format(kk)),
+         call. = FALSE)
+  kk <- as.integer(kk)
+  if (kk < 1L || kk > n - 1L)
+    stop(sprintf("%s must be in [1, n-1]; got k=%d, n=%d", where, kk, n),
+         call. = FALSE)
+  kk
+}
+
 .clip01 <- function(v) pmin(pmax(v, 0), 1)
 
+# A base's central scale in standardized units (attr(fn, "resolution"),
+# default 1), as python's _resolution (#385) and the browser (#600): a
+# unit-variance law can still concentrate on a much narrower centre.
+.base_resolution <- function(fn) {
+  r <- if (is.null(fn)) NULL else attr(fn, "resolution")
+  if (is.null(r)) return(1)
+  if (!is.numeric(r) || length(r) != 1L || !is.finite(r) || r <= 0)
+    stop("base resolution must be a single finite positive number",
+         call. = FALSE)
+  as.numeric(r)
+}
+
+.resolved_points <- function(lo, hi, sd, points, res = 1) {
+  smin <- max(min(sd), 1e-300) * res
+  # in DOUBLE, and clamp before converting: a narrow enough runner makes
+  # the requirement exceed .Machine$integer.max, and as.integer() then
+  # returns NA, so the very `if (need > 8193)` meant to handle that
+  # regime errored with "missing value where TRUE/FALSE needed" (#228).
+  # Python is unaffected only because its integers are unbounded.
+  need <- ceiling((hi - lo) / (0.5 * smin)) + 1
+  if (!is.finite(need) || need > 8193)
+    warning(sprintf(paste("top-k lattice cannot resolve the narrowest",
+                          "runner even at 8193 points (min sd %.1e over a",
+                          "window of %.3g); memberships may carry",
+                          "percent-level error the mass check cannot see."),
+                    smin, hi - lo), call. = FALSE)
+  max(as.integer(points), .dyadic_points(need))
+}
+
+# The adaptive count rounded UP to a dyadic lattice 2^m + 1 (capped at
+# 8193), so it is piecewise constant over a factor-of-two band of the
+# narrowest scale instead of stepping by one point at every ceil: a count
+# moving 611 -> 610 under a 1e-5 relative change of one sd made the
+# public map disagree with its scale Jacobian by 100x, and the loc/scale
+# inverse stalled on an exact target (#515). At most twice the points.
+.dyadic_points <- function(need) {
+  if (!is.finite(need) || need >= 8193) return(8193L)
+  if (need <= 2) return(2L)
+  as.integer(min(2^ceiling(log2(need - 1)) + 1, 8193))
+}
+
 .count_window <- function(mu, sd, k, fn, delta = 1e-12, pad_sds = 2.0) {
+  # searched in STANDARDISED units (centred, over the widest sd) and
+  # mapped back: memberships are invariant under mu -> a + c mu,
+  # sd -> c sd, but an absolute 1e-12 floor on the widest sd gave a field
+  # in units of 1e-18 a window 2e5 times its width (#370, python topk)
+  m0 <- mean(mu); cs <- max(sd)
+  if (!is.finite(cs) || cs <= 0) stop("top-k window needs positive scales")
+  w <- .count_window_std((mu - m0) / cs, sd / cs, k, fn, delta, pad_sds)
+  m0 + cs * w
+}
+
+# delta is a REQUEST. A polynomial tail puts the 1e-12 count quantile so
+# far out that the capped grid cannot resolve the bulk: Student-t(3) got
+# a window of 7.54e3 at spacing 0.92 and failed the mass check at every
+# point request through the cap (#468; python's #386). Relax by factors of
+# 100 (to at most 1e-4) until the window fits the cap at half the
+# narrowest sd times the base's central scale, and say so.
+.count_window_std <- function(mu, sd, k, fn, delta, pad_sds) {
+  afford <- 0.5 * max(min(sd), 1e-300) * .base_resolution(fn) * (8193 - 1)
+  d <- delta
+  w <- .count_window_at(mu, sd, k, fn, d, pad_sds)
+  while (w[2] - w[1] > afford && d < 1e-4) {
+    d <- min(d * 100, 1e-4)
+    w <- .count_window_at(mu, sd, k, fn, d, pad_sds)
+  }
+  if (d > delta)
+    warning(sprintf(paste("top-k window relaxed delta from %.0e to %.0e:",
+                          "this base's tail puts the requested count",
+                          "quantile further out than 8193 points can",
+                          "resolve, so the window is exact at the relaxed",
+                          "delta."), delta, d), call. = FALSE)
+  w
+}
+
+.count_window_at <- function(mu, sd, k, fn, delta, pad_sds) {
   n <- length(mu)
-  smax <- max(max(sd), 1e-12)
+  smax <- max(sd)
   mean_count <- function(x) sum(1 - fn((x - mu) / sd)$S)
   lo <- min(mu) - 9 * smax
   step <- 9 * smax
@@ -41,101 +142,231 @@
   c(xlo - pad_sds * smax, b + pad_sds * smax)
 }
 
-.topk_grid <- function(mu, sd, k, fn, points, delta = 1e-12) {
+# split = TRUE: the kink-split lattice (.kink_lattice) over the same
+# window, for the inverses' derivatives of a kinked base (#267); then w
+# holds the node weights and every reduction is a weighted sum (.wsum).
+# On the default lattice w is NULL and the rectangle sum is unchanged.
+.topk_grid <- function(mu, sd, k, fn, points, delta = 1e-12, split = FALSE) {
   w <- .count_window(mu, sd, k, fn, delta)
+  # about two points per NARROWEST sd, capped at 8193. The window is
+# set by the widest runner and the grid by `points`, so a heterogeneous
+# field leaves the narrowest density between samples, and the mass check
+# cannot see it: that check is one scalar (memberships sum to k) and
+# runner-level errors of opposite sign cancel in it (#224).
+  points <- .resolved_points(w[1], w[2], sd, points, .base_resolution(fn))
   x <- seq(w[1], w[2], length.out = points)
+  wts <- NULL
+  if (split && !is.null(.kinks_of(fn))) {
+    kl <- .kink_lattice(x, mu, sd, .kinks_of(fn))
+    x <- kl$x; wts <- kl$w; points <- length(x)
+  }
   z <- outer(x, mu, "-") / matrix(sd, points, length(mu), byrow = TRUE)
   b <- fn(z)
-  list(x = x, dx = x[2] - x[1], z = z,
-       S = b$S, f = b$f, fp = b$fp, F = .clip01(1 - b$S))
+  # F and S each accurate where small: 1 - S rounds a lower-tail CDF to
+  # zero once S is near one, and those CDFs are what a last place
+  # multiplies together; a base symmetric about zero has the CDF as its
+  # reflected survival S(-z) (#511)
+  # floored survivals (1e-300, a log(0) guard) take the base's exact log
+  # survival: used as count probabilities they fabricated rare-place
+  # mass, 1.0e-300 for a 1.105e-307 top-1 (#502)
+  S <- .clip01(.unfloored(fn, z, b$S))
+  F <- .clip01(1 - S)
+  if (.symmetric_base(fn)) {
+    lower <- S > 0.5
+    if (any(lower)) F[lower] <- .clip01(.unfloored(fn, -z[lower],
+                                                   fn(-z[lower])$S))
+  } else if (!is.null(attr(fn, "cdf"))) {
+    lower <- S > 0.5
+    if (any(lower)) F[lower] <- .clip01(attr(fn, "cdf")(z[lower]))
+  }
+  list(x = x, dx = x[2] - x[1], w = wts, z = z,
+       S = S, f = b$f, fp = b$fp, F = F)
 }
 
-.count_distribution <- function(F) {
+# rows of M (n, L) integrated on the grid g: the rectangle sum, or the
+# split lattice's weighted sum
+.wsum <- function(M, g) {
+  if (is.null(g$w)) {
+    if (is.matrix(M)) rowSums(M) * g$dx else sum(M) * g$dx
+  } else {
+    if (is.matrix(M)) as.vector(M %*% g$w) else sum(M * g$w)
+  }
+}
+
+.unfloored <- function(fn, z, S) {
+  lsf <- attr(fn, "log_sf")
+  if (is.null(lsf)) return(S)
+  low <- S <= 1e-300
+  if (any(low)) S[low] <- exp(pmax(lsf(z[low]), -1e300, na.rm = TRUE))
+  S
+}
+
+.symmetric_base <- function(fn) {
+  identical(fn, .BASES$normal) || identical(fn, .BASES$logistic) ||
+    identical(fn, .BASES$laplace)
+}
+
+.count_distribution <- function(F, S = NULL) {
+  # S, when given, is used in place of 1 - F (accurate where that cancels)
   L <- nrow(F); n <- ncol(F)
+  if (is.null(S)) S <- 1 - F
   C <- matrix(0, L, n + 1)
   C[, 1] <- 1
   for (j in 1:n) {
     f <- F[, j]
+    s <- S[, j]
     idx <- 2:(j + 1)
-    C[, idx] <- C[, idx, drop = FALSE] * (1 - f) +
+    C[, idx] <- C[, idx, drop = FALSE] * s +
       C[, idx - 1, drop = FALSE] * f
-    C[, 1] <- C[, 1] * (1 - f)
+    C[, 1] <- C[, 1] * s
   }
   C
 }
 
-.loo_cdf <- function(C, F, k) {
-  L <- nrow(F); n <- ncol(F)
-  out <- matrix(0, n, L)
-  for (i in 1:n) {
-    Fi <- F[, i]; Si <- 1 - Fi
-    fwd <- Si >= Fi
-    s <- pmax(Si, 1e-300)
-    Q <- .clip01(C[, 1] / s)
-    acc_f <- Q
-    if (k >= 2) for (m in 2:k) {
-      Q <- .clip01((C[, m] - Fi * Q) / s)
-      acc_f <- acc_f + Q
-    }
-    f <- pmax(Fi, 1e-300)
-    Qb <- .clip01(C[, n + 1] / f)
-    acc_b <- Qb
-    if (n - 1 >= k + 1) for (mm in seq(n - 1, k + 1, by = -1)) {
-      Qb <- .clip01((C[, mm + 1] - Si * Qb) / f)
-      acc_b <- acc_b + Qb
-    }
-    out[i, ] <- .clip01(ifelse(fwd, acc_f, 1 - acc_b))
+# Cavity deconvolution with error bounds (#511); mirrors python's
+# topk._deconv. Each count coefficient carries relative roundoff
+# <= 2 (n+1) eps plus an underflow floor; each recursion step adds a
+# subtraction and a division (one eps each, folded into the constant), and
+# the running first-order bound tracks the absolute error of every
+# recovered coefficient, capped at 1. The forward pass is exact at the
+# first coefficient, the backward at the last. The old rule ran ONE
+# direction per lattice point and integrated the subtraction residue as a
+# rare exact place: 62x the true Gumbel last place at mu = c(-9, -2, 2, 10)
+# and 1.6e12x at mu = c(-12, -4, 4, 12) for the normal.
+.count_err <- function(C) {
+  n <- ncol(C) - 1
+  (2 * (n + 1) + 2) * .Machine$double.eps * C + (n + 1) * .Machine$double.xmin
+}
+
+# both passes in full, each coefficient from the pass with the smaller
+# bound: list(Q = pmf (L x n), B = chosen bounds)
+.loo_both <- function(C, E, Fi, Si) {
+  n <- ncol(C) - 1; L <- nrow(C)
+  Q <- matrix(0, L, n); B <- matrix(0, L, n)
+  inv <- 1 / pmax(Si, 1e-300)
+  q <- pmin(C[, 1] * inv, 1)
+  e <- ifelse(Si < 1e-300, 1, pmin(E[, 1] * inv, 1))
+  Q[, 1] <- q; B[, 1] <- e
+  if (n >= 2) for (m in 2:n) {
+    q <- .clip01((C[, m] - Fi * q) * inv)
+    e <- pmin((E[, m] + Fi * e) * inv, 1)
+    Q[, m] <- q; B[, m] <- e
   }
-  out
+  inv <- 1 / pmax(Fi, 1e-300)
+  q <- pmin(C[, n + 1] * inv, 1)
+  e <- ifelse(Fi < 1e-300, 1, pmin(E[, n + 1] * inv, 1))
+  better <- e < B[, n]
+  Q[better, n] <- q[better]; B[better, n] <- e[better]
+  if (n >= 2) for (m in (n - 1):1) {
+    q <- .clip01((C[, m + 1] - Si * q) * inv)
+    e <- pmin((E[, m + 1] + Si * e) * inv, 1)
+    better <- e < B[, m]
+    Q[better, m] <- q[better]; B[better, m] <- e[better]
+  }
+  list(Q = Q, B = B)
 }
 
-.loo_pmf <- function(C, F, i) {
+# P(N_{-i} <= k-1): the forward head sum or one minus the backward tail
+# sum, whichever is better bounded; points where even that bound exceeds
+# 1e-6 of the value are redone per coefficient by .loo_both
+.loo_cdf <- function(C, F, k, S = NULL) {
+  # every runner at once: (L x n) state, C's columns recycled down them
   L <- nrow(F); n <- ncol(F)
-  Fi <- F[, i]; Si <- 1 - Fi
-  fwd <- Si >= Fi
-  s <- pmax(Si, 1e-300)
-  Qf <- matrix(0, L, n)
-  Qf[, 1] <- .clip01(C[, 1] / s)
-  if (n >= 2) for (m in 2:n)
-    Qf[, m] <- .clip01((C[, m] - Fi * Qf[, m - 1]) / s)
-  f <- pmax(Fi, 1e-300)
-  Qb <- matrix(0, L, n)
-  Qb[, n] <- .clip01(C[, n + 1] / f)
-  if (n >= 2) for (m in seq(n - 1, 1, by = -1))
-    Qb[, m] <- .clip01((C[, m + 1] - Si * Qb[, m + 1]) / f)
-  Q <- Qb
-  Q[fwd, ] <- Qf[fwd, , drop = FALSE]
-  Q
+  eps <- .Machine$double.eps
+  if (k >= n) return(matrix(1, n, L))
+  if (is.null(S)) S <- 1 - F
+  E <- .count_err(C)
+  inv <- 1 / pmax(S, 1e-300)
+  q <- pmin(C[, 1] * inv, 1)
+  e <- pmin(E[, 1] * inv, 1)
+  e[S < 1e-300] <- 1
+  head <- q; head_e <- e
+  if (k >= 2) for (m in 2:k) {
+    q <- .clip01((C[, m] - F * q) * inv)
+    e <- pmin((E[, m] + F * e) * inv, 1)
+    head <- head + q; head_e <- head_e + e
+  }
+  inv <- 1 / pmax(F, 1e-300)
+  q <- pmin(C[, n + 1] * inv, 1)
+  e <- pmin(E[, n + 1] * inv, 1)
+  e[F < 1e-300] <- 1
+  tail <- q; tail_e <- eps + e
+  if (n - 1 >= k + 1) for (m in (n - 1):(k + 1)) {
+    q <- .clip01((C[, m + 1] - S * q) * inv)
+    e <- pmin((E[, m + 1] + S * e) * inv, 1)
+    tail <- tail + q; tail_e <- tail_e + e
+  }
+  use_head <- head_e <= tail_e
+  cdf <- 1 - tail
+  cdf[use_head] <- head[use_head]
+  bound <- tail_e
+  bound[use_head] <- head_e[use_head]
+  loose <- which(bound > pmax(1e-6 * cdf, 1e-280))
+  if (length(loose)) {
+    li <- (loose - 1) %% L + 1
+    r <- .loo_both(C[li, , drop = FALSE], E[li, , drop = FALSE],
+                   F[loose], S[loose])
+    hd <- rowSums(r$Q[, 1:k, drop = FALSE])
+    he <- rowSums(r$B[, 1:k, drop = FALSE])
+    tl <- rowSums(r$Q[, (k + 1):n, drop = FALSE])
+    te <- eps + rowSums(r$B[, (k + 1):n, drop = FALSE])
+    cdf[loose] <- ifelse(he <= te, hd, 1 - tl)
+  }
+  t(.clip01(cdf))
 }
 
-.pair_pmf_at <- function(Qi, F, i, k) {
+.loo_pmf <- function(C, F, i, S = NULL) {
+  Fi <- F[, i]
+  Si <- if (is.null(S)) 1 - Fi else S[, i]
+  r <- .loo_both(C, .count_err(C), Fi, Si)
+  structure(r$Q, err = r$B)        # the pair level seeds its bound with B
+}
+
+# P(N_{-ij} = k-1) for every j != i: the forward pass up to coefficient
+# k-1 and the backward pass down to it, each with its running bound
+# (seeded with the bound on Qi itself), the better-bounded one winning at
+# each point -- the rule .loo_both uses one level up. The old rule chose
+# one direction by F_j alone, and its subtraction residue came back as
+# Jacobian off-diagonals 1e5..1e75 times the directly multiplied pair
+# term (#511 residual).
+.pair_pmf_at <- function(Qi, F, i, k, S = NULL) {
   L <- nrow(F); n <- ncol(F)
   out <- matrix(0, n, L)
+  nn <- n - 1                                   # others of i
+  if (k - 1 > nn - 1) return(out)               # only n-2 besides j
+  E <- .count_err(Qi)
+  if (!is.null(attr(Qi, "err"))) E <- E + attr(Qi, "err")
   for (j in 1:n) {
     if (j == i) next
-    Fj <- F[, j]; Sj <- 1 - Fj
-    fwd <- Sj >= Fj
-    s <- pmax(Sj, 1e-300)
-    Q <- .clip01(Qi[, 1] / s)
-    if (k >= 2) for (m in 2:k) Q <- .clip01((Qi[, m] - Fj * Q) / s)
-    f <- pmax(Fj, 1e-300)
-    Qb <- .clip01(Qi[, n] / f)
-    if (n - 1 >= k + 1) for (mm in seq(n - 1, k + 1, by = -1))
-      Qb <- .clip01((Qi[, mm] - Sj * Qb) / f)
-    out[j, ] <- ifelse(fwd, Q, Qb)
+    Fj <- F[, j]; Sj <- if (is.null(S)) 1 - Fj else S[, j]
+    inv <- 1 / pmax(Sj, 1e-300)
+    q <- pmin(Qi[, 1] * inv, 1)
+    e <- ifelse(Sj < 1e-300, 1, pmin(E[, 1] * inv, 1))
+    if (k >= 2) for (m in 2:k) {
+      q <- .clip01((Qi[, m] - Fj * q) * inv)
+      e <- pmin((E[, m] + Fj * e) * inv, 1)
+    }
+    inv <- 1 / pmax(Fj, 1e-300)
+    qb <- pmin(Qi[, n] * inv, 1)
+    eb <- ifelse(Fj < 1e-300, 1, pmin(E[, n] * inv, 1))
+    if (nn - 1 >= k) for (cc in seq(nn - 1, k, by = -1)) {
+      qb <- .clip01((Qi[, cc + 1] - Sj * qb) * inv)
+      eb <- pmin((E[, cc + 1] + Sj * eb) * inv, 1)
+    }
+    out[j, ] <- ifelse(e <= eb, q, qb)
   }
   out
 }
 
-.topk_with_slopes <- function(mu, sd, k, fn, points) {
-  g <- .topk_grid(mu, sd, k, fn, points)
-  C <- .count_distribution(g$F)
-  cdf <- .loo_cdf(C, g$F, k)
+.topk_with_slopes <- function(mu, sd, k, fn, points, split = FALSE) {
+  g <- .topk_grid(mu, sd, k, fn, points, split = split)
+  C <- .count_distribution(g$F, g$S)
+  cdf <- .loo_cdf(C, g$F, k, g$S)
   n <- length(mu)
   dens <- t(g$f) / sd                       # (n, L)
   dmu <- -t(g$fp) / (sd * sd)
-  list(q = rowSums(dens * cdf) * g$dx,
-       slopes = rowSums(dmu * cdf) * g$dx)
+  list(q = .wsum(dens * cdf, g),
+       slopes = .wsum(dmu * cdf, g))
 }
 
 .checked_topk <- function(raw, k, kind, mass_tol = 5e-3) {
@@ -145,31 +376,56 @@
       "%s captured total membership %.4f where exactly %d slots exist: ",
       "the window or the deconvolution missed part of the field. Raise ",
       "points=, or report this field."), kind, t, k))
-  .clip01(raw * (k / t))
+  q <- raw * (k / t)
+  # the clip is not mass-neutral: re-check what is returned (#99)
+  if (max(q) - 1 > mass_tol)
+    stop(sprintf(paste0("%s produced a membership of %.4f > 1: the ",
+                        "lattice did not resolve this field. Raise points=."),
+                 kind, max(q)))
+  q <- .clip01(q)
+  if (abs(sum(q) - k) > mass_tol * k)
+    stop(sprintf("%s memberships total %.4f after clipping, where exactly %d slots exist",
+                 kind, sum(q), k))
+  q
 }
 
-.topk_factor_nodes <- function(V, n, qa) {
-  Vm <- if (is.matrix(V)) V else matrix(V, ncol = 1)
+.topk_factor_nodes <- function(V, n, qa, D = NULL) {
+  # one row per runner, or refuse: a short V was recycled across mu by
+  # `mu + shift` and priced a repeated-loading model in silence (#343)
+  Vm <- .as_loadings(V, n)
   r <- ncol(Vm)
   if (r > 2)
     stop("top_k_probabilities is implemented for factor rank <= 2")
-  Vm <- sweep(Vm, 2, colMeans(Vm))
+  Vm <- .gauge_center(Vm)                                    # (#471)
+  if (is.null(qa)) {
+    # qa = NULL (the default): the general race's sharpness rule, as in
+    # python's topk._factor_nodes. A fixed 15-node rule missed the race by
+    # 10.7 points on a sharp rank-one field and was not rotation
+    # invariant at rank two (#340). The 8192-node escalation is capped
+    # at 1024 here, where every node is a full count-program pass.
+    st <- .race_setup(rep(0, n), Vm, D, NULL, NULL, "normal")
+    nodes <- st$F; w <- st$W
+    if (length(w) > 1024) {
+      hw <- .halton_normal_nodes(r, 2^10)
+      nodes <- hw$F; w <- hw$W
+    }
+    return(list(Vm = Vm, nodes = as.matrix(nodes), w = w / sum(w)))
+  }
   cn <- .cluster_nodes(r, qa)
   list(Vm = Vm, nodes = cn$nodes, w = cn$w / sum(cn$w))
 }
 
 top_k_probabilities <- function(mu, k, V = NULL, D = NULL,
-                                base = "normal", points = 513, qa = 15) {
+                                base = "normal", points = 513, qa = NULL) {
   n <- length(mu)
-  k <- as.integer(k)
-  if (k < 1 || k > n - 1)
-    stop(sprintf("k must be in [1, n-1]; got k=%d, n=%d", k, n))
-  sd <- sqrt(if (is.null(D)) rep(1, n) else D)
+  k <- .as_depth(k, n)
+  sd <- sqrt(.as_idio(D, n))
+  mu <- .translated_home(mu, .as_idio(D, n))     # (#477)
   fn <- if (is.function(base)) base else .BASES[[base]]
   if (is.null(V))
     return(.checked_topk(.topk_with_slopes(mu, sd, k, fn, points)$q,
                          k, "top-k race"))
-  fac <- .topk_factor_nodes(V, n, qa)
+  fac <- .topk_factor_nodes(V, n, qa, D)
   raw <- rep(0, n)
   for (q in seq_len(nrow(fac$nodes))) {
     shift <- as.vector(fac$Vm %*% fac$nodes[q, ])
@@ -179,25 +435,75 @@ top_k_probabilities <- function(mu, k, V = NULL, D = NULL,
   .checked_topk(raw, k, "top-k race")
 }
 
+# P(i among the k LARGEST), computed directly as the top-k integral with
+# the count of runners ABOVE x: 1 - top_k(n - k) cancelled, returning 0
+# for a 7.7e-24 last place and lattice residue when refined (#365)
+.bottomk_independent <- function(mu, sd, k, fn, points) {
+  # a base with its own lower tail (the Gumbel) reflects through it:
+  # 1 - S(-z) rounded a far tail to zero and the window dropped it (#710)
+  lcdf <- attr(fn, "cdf")
+  refl <- function(z) {
+    b <- fn(-z)
+    S <- if (is.null(lcdf)) 1 - b$S else pmax(lcdf(-z), 1e-300)
+    list(S = S, f = b$f, fp = -b$fp)
+  }
+  res <- .base_resolution(fn)
+  attr(refl, "resolution") <- res   # the reflection keeps the centre (#468)
+  wr <- .count_window(-mu, sd, k, refl)
+  w <- c(-wr[2], -wr[1])
+  points <- .resolved_points(w[1], w[2], sd, points, res)
+  x <- seq(w[1], w[2], length.out = points)
+  z <- outer(x, mu, "-") / matrix(sd, points, length(mu), byrow = TRUE)
+  b <- fn(z)
+  # survivals in the role of the CDFs, and the CDFs -- taken directly,
+  # not as 1 - S, which rounds them to zero below a leader -- in the
+  # role of the survivals (#511): mu = c(-30, 0, 0)'s last place came
+  # back ~500x low
+  G <- .clip01(.unfloored(fn, z, b$S))
+  Fc <- .clip01(1 - G)
+  if (.symmetric_base(fn)) {
+    lower <- G > 0.5
+    if (any(lower)) Fc[lower] <- .clip01(.unfloored(fn, -z[lower],
+                                                    fn(-z[lower])$S))
+  } else if (!is.null(attr(fn, "cdf"))) {
+    lower <- G > 0.5
+    if (any(lower)) Fc[lower] <- .clip01(attr(fn, "cdf")(z[lower]))
+  }
+  C <- .count_distribution(G, Fc)
+  cdf <- .loo_cdf(C, G, k, Fc)
+  dens <- t(b$f) / sd
+  rowSums(dens * cdf) * (x[2] - x[1])
+}
+
 bottom_k_probabilities <- function(mu, k, V = NULL, D = NULL,
-                                   base = "normal", points = 513, qa = 15) {
+                                   base = "normal", points = 513, qa = NULL) {
   n <- length(mu)
-  k <- as.integer(k)
-  if (k < 1 || k > n - 1)
-    stop(sprintf("k must be in [1, n-1]; got k=%d, n=%d", k, n))
-  1 - top_k_probabilities(mu, n - k, V = V, D = D, base = base,
-                          points = points, qa = qa)
+  k <- .as_depth(k, n)
+  # through .as_idio like every other top-k path: a bare sqrt(D) let
+  # D = c(1, 9) at n = 4 recycle silently into c(1, 9, 1, 9) (#319)
+  sd <- sqrt(.as_idio(D, n))
+  mu <- .translated_home(mu, .as_idio(D, n))     # (#477)
+  fn <- if (is.function(base)) base else .BASES[[base]]
+  if (is.null(V))
+    return(.checked_topk(.bottomk_independent(mu, sd, k, fn, points), k,
+                         "bottom-k race"))
+  fac <- .topk_factor_nodes(V, n, qa, D)
+  raw <- rep(0, n)
+  for (q in seq_len(nrow(fac$nodes))) {
+    shift <- as.vector(fac$Vm %*% fac$nodes[q, ])
+    raw <- raw + fac$w[q] * .bottomk_independent(mu + shift, sd, k, fn, points)
+  }
+  .checked_topk(raw, k, "bottom-k race")
 }
 
 top_k_jacobians <- function(mu, k, D = NULL, base = "normal",
-                            points = 513, V = NULL, qa = 15) {
+                            points = 513, V = NULL, qa = NULL) {
   n <- length(mu)
-  k <- as.integer(k)
-  if (k < 1 || k > n - 1)
-    stop(sprintf("k must be in [1, n-1]; got k=%d, n=%d", k, n))
+  k <- .as_depth(k, n)
+  mu <- .translated_home(mu, .as_idio(D, n))     # (#477)
   if (!is.null(V)) {
     # exact node mixture: the factor shift commutes with d/dmu, d/dsigma
-    fac <- .topk_factor_nodes(V, n, qa)
+    fac <- .topk_factor_nodes(V, n, qa, D)
     Jm <- matrix(0, n, n)
     Js <- matrix(0, n, n)
     for (q in seq_len(nrow(fac$nodes))) {
@@ -209,50 +515,95 @@ top_k_jacobians <- function(mu, k, D = NULL, base = "normal",
     }
     return(list(Jmu = Jm, Jsigma = Js))
   }
-  Dv <- if (is.null(D)) rep(1, n) else D
-  sd <- sqrt(Dv)
+  Dv <- .as_idio(D, n)
   fn <- if (is.function(base)) base else .BASES[[base]]
-  g <- .topk_grid(mu, sd, k, fn, points)
+  .topk_jacobians_core(mu, k, Dv, fn, points, FALSE)
+}
+
+# The independent-race Jacobians; split as in .topk_grid (#267).
+.topk_jacobians_core <- function(mu, k, Dv, fn, points, split) {
+  n <- length(mu)
+  sd <- sqrt(Dv)
+  g <- .topk_grid(mu, sd, k, fn, points, split = split)
   dens <- t(g$f) / sd                       # (n, L)
   zdens <- t(g$z * g$f) / sd
-  C <- .count_distribution(g$F)
+  C <- .count_distribution(g$F, g$S)
   Jm <- matrix(0, n, n)
   Js <- matrix(0, n, n)
   for (i in 1:n) {
-    Qi <- .loo_pmf(C, g$F, i)
-    pair <- .pair_pmf_at(Qi, g$F, i, k)
+    Qi <- .loo_pmf(C, g$F, i, g$S)
+    pair <- .pair_pmf_at(Qi, g$F, i, k, g$S)
     kern <- pair * matrix(dens[i, ], n, ncol(pair), byrow = TRUE)
-    row_mu <- rowSums(kern * dens) * g$dx
-    row_sd <- rowSums(kern * zdens) * g$dx
+    row_mu <- .wsum(kern * dens, g)
+    row_sd <- .wsum(kern * zdens, g)
     row_mu[i] <- 0
     row_mu[i] <- -sum(row_mu)
     cdf_i <- rowSums(Qi[, seq_len(k), drop = FALSE])
     dfdsd <- -(g$z[, i] * g$fp[, i] + g$f[, i]) / Dv[i]
-    row_sd[i] <- sum(dfdsd * cdf_i) * g$dx
+    row_sd[i] <- .wsum(dfdsd * cdf_i, g)
     Jm[i, ] <- row_mu
     Js[i, ] <- row_sd
   }
   list(Jmu = Jm, Jsigma = Js)
 }
 
-rank_probabilities <- function(mu, D = NULL, base = "normal",
-                               points = 513) {
+.rank_matrix_node <- function(mu, sd, fn, points) {
   n <- length(mu)
-  sd <- sqrt(if (is.null(D)) rep(1, n) else D)
-  fn <- if (is.function(base)) base else .BASES[[base]]
   g <- .topk_grid(mu, sd, n - 1, fn, points)
-  C <- .count_distribution(g$F)
+  C <- .count_distribution(g$F, g$S)
   P <- matrix(0, n, n)
   for (i in 1:n) {
-    Qi <- .loo_pmf(C, g$F, i)
+    Qi <- .loo_pmf(C, g$F, i, g$S)
     P[i, ] <- colSums(Qi * (g$f[, i] / sd[i])) * g$dx
   }
-  rows <- rowSums(P)
-  cols <- colSums(P)
-  if (any(!is.finite(P)) || max(abs(rows - 1)) > 5e-3 ||
-      max(abs(cols - 1)) > 5e-3)
-    stop("rank marginals defective; raise points=")
-  .clip01(P / rows)
+  P
+}
+
+# V (factor rank <= 2) and qa price a factor-correlated race by mixing
+# the conditional rank matrices over the same Gauss-Hermite nodes as
+# top_k_probabilities, as the Python reference does. This port had no V,
+# so the correlated call was an "unused argument" error while the
+# adjacent top-k verbs priced it (#202).
+rank_probabilities <- function(mu, D = NULL, base = "normal",
+                               points = 513, V = NULL, qa = NULL) {
+  n <- length(mu)
+  sd <- sqrt(.as_idio(D, n))
+  mu <- .translated_home(mu, .as_idio(D, n))     # (#477)
+  fn <- if (is.function(base)) base else .BASES[[base]]
+  if (is.null(V)) {
+    P <- .rank_matrix_node(mu, sd, fn, points)
+  } else {
+    fac <- .topk_factor_nodes(V, n, qa, D)
+    P <- matrix(0, n, n)
+    for (q in seq_len(nrow(fac$nodes))) {
+      shift <- as.vector(fac$Vm %*% fac$nodes[q, ])
+      P <- P + fac$w[q] * .rank_matrix_node(mu + shift, sd, fn, points)
+    }
+  }
+  # Check what is RETURNED. Row normalisation makes every row exact and
+  # MOVES the columns, so a matrix that passed the raw check could fail the
+  # stated identity afterwards with nothing looking (#203). The columns are
+  # not forced: alternating scaling would make both exact by hiding the
+  # under-resolution that caused it, and the same field at 2001 points has
+  # a column error of 3.5e-9.
+  # BOTH checks. They are independent and were mistaken for alternatives:
+  # row normalisation can ERASE a gross raw defect and leave the result
+  # just inside tolerance (#221). The raw check sees the quadrature, the
+  # post check sees what the caller gets.
+  .rank_reject <- function(where, re_, ce) {
+    stop(sprintf(paste("rank marginals defective %s: row-sum error %.2e,",
+                       "column-sum error %.2e. Raise points=."),
+                 where, re_, ce), call. = FALSE)
+  }
+  re_raw <- max(abs(rowSums(P) - 1)); ce_raw <- max(abs(colSums(P) - 1))
+  if (any(!is.finite(P)) || re_raw > 5e-3 || ce_raw > 5e-3)
+    .rank_reject("before normalisation", re_raw, ce_raw)
+  P <- .clip01(P / pmax(rowSums(P), 1e-300))
+  re_out <- max(abs(rowSums(P) - 1)); ce_out <- max(abs(colSums(P) - 1))
+  if (any(!is.finite(P)) || re_out > 5e-3 || ce_out > 5e-3)
+    .rank_reject("in the RETURNED matrix after row normalisation",
+                 re_out, ce_out)
+  P
 }
 
 .validated_topk_target <- function(q, k, n, target_floor) {
@@ -261,16 +612,39 @@ rank_probabilities <- function(mu, D = NULL, base = "normal",
     stop(sprintf("target has %d entries for %d runners", length(target), n))
   floored <- rep(FALSE, n)
   if (!is.null(target_floor)) {
-    if (!(target_floor > 0)) stop("target_floor must be positive")
+    target_floor <- .as_tolerance(target_floor, "target_floor")
+    # a membership floor: applied to memberships normalized to k slots,
+    # not to the caller's units (#592)
+    if (any(!is.finite(target)) || any(target < 0))
+      stop("target entries must be finite and non-negative", call. = FALSE)
+    target <- target / max(target)
+    target <- target * (k / sum(target))
+    # in the FINAL k-slot scale: floored entries sit exactly at the floor
+    # and the others give up that mass proportionally (python
+    # races._apply_floor). Clamping then renormalising scaled the floor
+    # back down: c(.7, .3, 0) at floor .2 repriced at 0.167 (#592).
     floored <- target < target_floor
-    target <- pmax(target, target_floor)
+    for (it in seq_len(n)) {
+      free <- k - target_floor * sum(floored)
+      rest <- sum(target[!floored])
+      if (!(free > 0 && rest > 0))
+        stop(sprintf(paste0("target_floor=%g is infeasible: flooring %d of %d ",
+                            "entries at it leaves no mass for the rest of a ",
+                            "target of total %g"),
+                     target_floor, sum(floored), n, k), call. = FALSE)
+      scaled <- ifelse(floored, target_floor, target * (free / rest))
+      newly <- !floored & scaled < target_floor
+      if (!any(newly)) break
+      floored <- floored | newly
+    }
+    target <- scaled
   } else if (any(target <= 0)) {
     stop(paste0(
       "all target memberships must be positive: a zero top-k probability ",
       "has no finite inverse. Pass target_floor= to floor small entries ",
       "deliberately."))
   }
-  target <- target * (k / sum(target))
+  target <- .rescaled_target(target, mass = k)
   if (any(target >= 1))
     stop(paste0(
       "after renormalizing to k slots, a target membership is >= 1: ",
@@ -279,29 +653,43 @@ rank_probabilities <- function(mu, D = NULL, base = "normal",
 }
 
 abilities_from_topk <- function(q, k, V = NULL, D = NULL, base = "normal",
-                                points = 513, qa = 15, n_iter = 80,
+                                points = 513, qa = NULL, n_iter = 80,
                                 tol = 1e-8, target_floor = NULL,
                                 return_info = FALSE) {
   n <- length(q)
-  k <- as.integer(k)
-  if (k < 1 || k > n - 1)
-    stop(sprintf("k must be in [1, n-1]; got k=%d, n=%d", k, n))
+  k <- .as_depth(k, n)
   vt <- .validated_topk_target(q, k, n, target_floor)
   target <- vt$target
-  sd <- sqrt(if (is.null(D)) rep(1, n) else D)
+  sd <- sqrt(.as_idio(D, n))
   fn <- if (is.function(base)) base else .BASES[[base]]
-  fac <- if (is.null(V)) NULL else .topk_factor_nodes(V, n, qa)
+  fac <- if (is.null(V)) NULL else .topk_factor_nodes(V, n, qa, D)
 
   logit_t <- log(target) - log1p(-target)
   logt <- log(target)
-  mu <- -(logt - mean(logt)) / 2
-  alpha <- if (n > 2) 1.0 else 0.7
-  resid_max <- Inf
-  iters <- 0
-  for (it in 1:n_iter) {
-    iters <- it
+  # in the field's own units, as python (#100): a dimensionless start and
+  # absolute caps stalled at a logit residual of 690 at sd 1e-2
+  sv <- if (is.null(fac)) 0 else mean(rowSums(fac$Vm^2))
+  scale <- sqrt(stats::median(sd^2) + sv)
+  mu <- -(logt - mean(logt)) / 2 * scale
+  # damping, as python: the k = 1 gate is the win race's top-two share
+  # (two runners holding nearly all the win mass two-cycle undamped at any
+  # n -- `if (n > 2) 1 else 0.7` failed #151's fixtures at n = 3, 10, 30,
+  # #408), and the sweeps adapt it to the contraction they observe
+  top2 <- if (k == 1 && n > 2) sum(sort(target, decreasing = TRUE)[1:2]) else 1
+  alpha <- if (n == 2 || (k == 1 && top2 > 0.8)) 0.7 else 1.0
+  n_iter <- .as_iter_budget(n_iter)
+  tol <- .as_tolerance(tol)                                   # (#551)
+  # a kinked base takes its slopes from the split lattice, the value from
+  # the map being inverted (#267)
+  kinked <- !is.null(.kinks_of(fn))
+  with_slopes <- function(m) {
+    ws <- .topk_with_slopes(m, sd, k, fn, points)
+    if (kinked) ws$slopes <- .topk_with_slopes(m, sd, k, fn, points, TRUE)$slopes
+    ws
+  }
+  fwd <- function(m) {
     if (is.null(fac)) {
-      ws <- .topk_with_slopes(mu, sd, k, fn, points)
+      ws <- with_slopes(m)
       qraw <- ws$q
       sl <- ws$slopes
     } else {
@@ -309,21 +697,29 @@ abilities_from_topk <- function(q, k, V = NULL, D = NULL, base = "normal",
       sl <- rep(0, n)
       for (j in seq_len(nrow(fac$nodes))) {
         shift <- as.vector(fac$Vm %*% fac$nodes[j, ])
-        ws <- .topk_with_slopes(mu + shift, sd, k, fn, points)
+        ws <- with_slopes(m + shift)
         qraw <- qraw + fac$w[j] * ws$q
         sl <- sl + fac$w[j] * ws$slopes
       }
     }
     qhat <- .checked_topk(qraw, k, "top-k inversion")
+    # a membership above one, clipped to exactly one, leaves a flat logit
+    # residual of ~690 the sweeps stall in: refuse the iterate so they
+    # back off (the uniform lattice overshoots one near saturation for a
+    # kinked base, #267)
+    if (max(qraw) * k > sum(qraw))
+      stop("top-k inversion: a membership above one")
     resid <- (log(pmax(qhat, 1e-300)) - log(pmax(1 - qhat, 1e-300))) -
       logit_t
-    resid_max <- max(abs(resid))
-    if (resid_max < tol) break
-    dlogit <- pmin(sl / pmax(qhat * (1 - qhat), 1e-300), -1e-6)
-    lim <- pmin(2, 10 * abs(resid))
-    mu <- mu - pmin(pmax(alpha * resid / dlogit, -lim), lim)
-    mu <- mu - mean(mu)
+    list(resid = resid,
+         dres = pmin(sl / pmax(qhat * (1 - qhat), 1e-300), -1e-6 / scale))
   }
+  # the residual returned always describes the returned mu, and
+  # n_iter = 0 prices the initializer (#441, #497)
+  out <- .jacobi_sweeps(mu, fwd, scale, alpha, n_iter, tol)
+  mu <- out$mu
+  resid_max <- out$resid
+  iters <- out$iters
   converged <- resid_max < tol
   if (!converged && !return_info)
     warning(sprintf(paste0(
@@ -336,24 +732,114 @@ abilities_from_topk <- function(q, k, V = NULL, D = NULL, base = "normal",
   mu
 }
 
+# Bounded deterministic retry for a failed inverse (#779, #781), shared by
+# abilities_from_rank_marginal and loc_scale_from_topk_pair as in python. A
+# first attempt that converged is returned untouched (bitwise, no extra
+# cost); otherwise attempt(start) runs from each of the fixed starts(first)
+# in order and the first converged outcome wins, else the attempt with the
+# smallest out[[key]] is returned, still converged = FALSE. iterations
+# becomes the total over every attempt.
+.retry_on_failure <- function(first, attempt, starts, key) {
+  # n_iter = 0 prices the start and performs no update: never retried
+  if (first$converged || first$iterations == 0) return(first)
+  best <- first
+  total <- first$iterations
+  for (start in starts(first)) {
+    out <- attempt(start)
+    total <- total + out$iterations
+    if (out$converged) { best <- out; break }
+    if (out[[key]] < best[[key]]) best <- out
+  }
+  best$iterations <- total
+  best
+}
+
+# Acklam's rational inverse normal CDF, the browser's invNormalRational:
+# plain arithmetic, so every port computes the same retry start.
+.probit_rational <- function(p) {
+  a <- c(-39.6968302866538, 220.946098424521, -275.928510446969,
+         138.357751867269, -30.6647980661472, 2.50662827745924)
+  b <- c(-54.4760987982241, 161.585836858041, -155.698979859887,
+         66.8013118877197, -13.2806815528857)
+  cc <- c(-0.00778489400243029, -0.322396458041136, -2.40075827716184,
+          -2.54973253934373, 4.37466414146497, 2.93816398269878)
+  d <- c(0.00778469570904146, 0.32246712907004, 2.445134137143,
+         3.75440866190742)
+  pl <- 0.02425
+  if (p < pl) {
+    q <- sqrt(-2 * log(p))
+    return((((((cc[1]*q+cc[2])*q+cc[3])*q+cc[4])*q+cc[5])*q+cc[6]) /
+           ((((d[1]*q+d[2])*q+d[3])*q+d[4])*q+1))
+  }
+  if (p > 1 - pl) return(-.probit_rational(1 - p))
+  q <- p - 0.5
+  r2 <- q * q
+  (((((a[1]*r2+a[2])*r2+a[3])*r2+a[4])*r2+a[5])*r2+a[6])*q /
+    (((((b[1]*r2+b[2])*r2+b[3])*r2+b[4])*r2+b[5])*r2+1)
+}
+
+# The retry start of the cold loc/scale solve (#781), as python's
+# _loc_scale_starts: with the depth thresholds held fixed, the gap between
+# a runner's deeper and shallower probits is proportional to 1/sigma_i.
+# Geometric-mean-one, clipped to the solver's log-scale box, as a D0.
+.loc_scale_starts <- function(q1, k1, q2, k2) {
+  n <- length(q1)
+  if (k1 < k2) { lo <- q1; klo <- k1; hi <- q2; khi <- k2 }
+  else { lo <- q2; klo <- k2; hi <- q1; khi <- k1 }
+  tlo <- .validated_topk_target(lo, klo, n, NULL)$target
+  thi <- .validated_topk_target(hi, khi, n, NULL)$target
+  gap <- vapply(seq_len(n), function(i)
+    .probit_rational(thi[i]) - .probit_rational(tlo[i]), numeric(1))
+  ls <- -log(pmax(gap, 1e-3))
+  list(exp(2 * pmin(pmax(ls - mean(ls), -3), 3)))
+}
+
 loc_scale_from_topk_pair <- function(q1, k1, q2, k2, D0 = NULL,
                                      base = "normal", points = 513,
                                      n_iter = 60, tol = 1e-8, ridge = 0,
                                      mu0 = NULL, return_info = FALSE) {
+  # the cold start (no D0, no mu0) can stall far from an exact board;
+  # only then, one retry from a scale-informed D0 (#781), as python
+  once <- function(d, m)
+    .loc_scale_once(q1, k1, q2, k2, D0 = d, base = base, points = points,
+                    n_iter = n_iter, tol = tol, ridge = ridge, mu0 = m)
+  out <- once(D0, mu0)
+  if (is.null(D0) && is.null(mu0))
+    out <- .retry_on_failure(out, function(d) once(d, NULL),
+                             function(f) .loc_scale_starts(q1, k1, q2, k2),
+                             "max_logit_residual")
+  if (!out$converged && !return_info)
+    warning(sprintf(paste0(
+      "loc_scale_from_topk_pair did not converge: max |logit residual| ",
+      "%.2e after %d iterations (tol %.0e)"), out$max_logit_residual,
+      out$iterations, out$tol))
+  out$tol <- NULL
+  if (return_info) return(out)
+  list(mu = out$mu, sd = out$sd)
+}
+
+.loc_scale_once <- function(q1, k1, q2, k2, D0, base, points, n_iter, tol,
+                            ridge, mu0) {
   n <- length(q1)
-  k1 <- as.integer(k1); k2 <- as.integer(k2)
+  n_iter <- .as_iter_budget(n_iter)
+  tol <- .as_tolerance(tol)                                   # (#551)
+  ridge <- .as_nonnegative(ridge, "ridge")                    # (#558)
+  k1 <- .as_depth(k1, n, "k1"); k2 <- .as_depth(k2, n, "k2")
   if (k1 == k2)
     stop("k1 == k2 gives one curve twice: scale is unidentified")
-  for (kk in c(k1, k2)) if (kk < 1 || kk > n - 1)
-    stop(sprintf("k must be in [1, n-1]; got k=%d, n=%d", kk, n))
   t1 <- .validated_topk_target(q1, k1, n, NULL)$target
   t2 <- .validated_topk_target(q2, k2, n, NULL)$target
   lt1 <- log(t1) - log1p(-t1)
   lt2 <- log(t2) - log1p(-t2)
 
-  sd <- if (is.null(D0)) rep(1, n) else sqrt(D0)
+  sd <- sqrt(.as_idio(D0, n, name = "D0"))
   if (!is.null(mu0)) {
-    mu <- as.numeric(mu0) - mean(mu0)
+    mu <- .as_warm_start(mu0, n)                     # #554
+    # the return gauge (mean-zero mu, geometric-mean-one sd) applied to
+    # the start too: an exact warm start used to come back in physical
+    # units (#360)
+    c0 <- exp(mean(log(sd)))
+    mu <- mu / c0; sd <- sd / c0
   } else {
     if (k1 < k2) { ka <- k1; ta <- t1 } else { ka <- k2; ta <- t2 }
     # warm start only: the LM loop refines, loose tolerance by design
@@ -361,7 +847,7 @@ loc_scale_from_topk_pair <- function(q1, k1, q2, k2, D0 = NULL,
                               points = points, n_iter = 20, tol = 1e-3,
                               return_info = TRUE)$mu
   }
-  sqr <- sqrt(max(ridge, 0))
+  sqr <- sqrt(ridge)
 
   logits <- function(m, s) {
     qh1 <- pmin(pmax(top_k_probabilities(m, k1, D = s^2, base = base,
@@ -381,24 +867,52 @@ loc_scale_from_topk_pair <- function(q1, k1, q2, k2, D0 = NULL,
   cost <- sum(r * r)
   resid_max <- max(abs(r[1:(2 * n)]))
   lam <- 1e-6
-  iters <- 0
+  iters <- 0L
   last_accepted <- TRUE
-  for (it in 1:n_iter) {
-    iters <- it
-    if (resid_max < tol) break
-    blocks <- list()
-    pairs <- list(list(k = k1, qh = qh1), list(k = k2, qh = qh2))
-    for (bi in 1:2) {
-      Jp <- top_k_jacobians(mu, pairs[[bi]]$k, D = sd^2, base = base,
-                            points = points)
-      g <- 1 / pmax(pairs[[bi]]$qh * (1 - pairs[[bi]]$qh), 1e-300)
-      blocks[[bi]] <- cbind(Jp$Jmu * g,
-                            sweep(Jp$Jsigma, 2, sd, "*") * g)
+  last_grad <- Inf
+  # A kinked base (laplace) takes its Jacobians from the split lattice,
+  # where they are the continuum derivatives; and when LM stalls or
+  # crawls on the uniform map -- whose window slides across the kinks, so
+  # its own derivative is not the continuum one -- the Jacobian is taken
+  # by forward differences of the map itself, as python (#267).
+  fn_b <- if (is.function(base)) base else .BASES[[base]]
+  kinked <- !is.null(.kinks_of(fn_b))
+  fd_mode <- FALSE
+  slow <- 0L
+  fd_jacobian <- function(m, s, r0) {
+    h <- 1e-6
+    cols <- vector("list", 2 * n)
+    for (j in seq_len(n)) {
+      e <- numeric(n); e[j] <- h
+      cols[[j]] <- (logits(m + e, s)$r - r0) / h
+      cols[[n + j]] <- (logits(m, s * exp(e))$r - r0) / h
     }
-    J <- rbind(blocks[[1]], blocks[[2]],
-               cbind(matrix(0, n, n), sqr * diag(n)))
+    do.call(cbind, cols)
+  }
+  for (it in seq_len(n_iter)) {
+    if (resid_max < tol) break
+    iters <- it
+    if (fd_mode) {
+      J <- tryCatch(fd_jacobian(mu, sd, r), error = function(e) NULL)
+      if (is.null(J)) break
+    } else {
+      blocks <- list()
+      pairs <- list(list(k = k1, qh = qh1), list(k = k2, qh = qh2))
+      for (bi in 1:2) {
+        Jp <- if (kinked)
+          .topk_jacobians_core(mu, pairs[[bi]]$k, sd^2, fn_b, points, TRUE)
+        else top_k_jacobians(mu, pairs[[bi]]$k, D = sd^2, base = base,
+                             points = points)
+        g <- 1 / pmax(pairs[[bi]]$qh * (1 - pairs[[bi]]$qh), 1e-300)
+        blocks[[bi]] <- cbind(Jp$Jmu * g,
+                              sweep(Jp$Jsigma, 2, sd, "*") * g)
+      }
+      J <- rbind(blocks[[1]], blocks[[2]],
+                 cbind(matrix(0, n, n), sqr * diag(n)))
+    }
     JtJ <- crossprod(J)
     Jtr <- as.vector(crossprod(J, r))
+    last_grad <- max(abs(Jtr))
     accepted <- FALSE
     for (attempt in 1:8) {
       step <- tryCatch(solve(JtJ + lam * diag(2 * n), -Jtr),
@@ -413,6 +927,8 @@ loc_scale_from_topk_pair <- function(q1, k1, q2, k2, D0 = NULL,
       if (is.null(lg_n)) { lam <- lam * 8; next }
       cost_n <- sum(lg_n$r * lg_n$r)
       if (cost_n < cost) {
+        # crawling: an accepted step that does not halve the residual norm
+        slow <- if (cost_n > 0.25 * cost) slow + 1L else 0L
         mu <- mu_n; sd <- sd_n; r <- lg_n$r
         qh1 <- lg_n$qh1; qh2 <- lg_n$qh2
         cost <- cost_n
@@ -424,19 +940,29 @@ loc_scale_from_topk_pair <- function(q1, k1, q2, k2, D0 = NULL,
       lam <- lam * 8
     }
     last_accepted <- accepted
+    if (kinked && !fd_mode && (!accepted || slow >= 2L)) {
+      fd_mode <- TRUE
+      lam <- 1e-6
+      next
+    }
     if (!accepted) break
   }
-  # with a ridge the penalized optimum keeps a nonzero fit residual by
-  # design: an LM stall there is the answer, not a failure
-  converged <- resid_max < tol || (sqr > 0 && !last_accepted)
-  if (!converged && !return_info)
-    warning(sprintf(paste0(
-      "loc_scale_from_topk_pair did not converge: max |logit residual| ",
-      "%.2e after %d iterations (tol %.0e)"), resid_max, iters, tol))
-  if (return_info)
-    return(list(mu = mu, sd = sd, converged = converged,
-                max_logit_residual = resid_max, iterations = iters))
-  list(mu = mu, sd = sd)
+  # A ridge stall counts as convergence only at a stationary point of the
+  # penalized objective AND on a board passing the exact nesting
+  # necessity P(top k1) <= P(top k2), k1 < k2 -- as in python (#353,
+  # #105). Every rejected step used to be certified, including boards no
+  # (mu, sd) can fit.
+  lo_t <- if (k1 < k2) t1 else t2
+  hi_t <- if (k1 < k2) t2 else t1
+  nested <- all(lo_t <= hi_t + 1e-12)
+  fit_ok <- resid_max < tol
+  stationary <- fit_ok || (!last_accepted && iters > 0 &&
+                             last_grad <= 1e-6 * max(1, cost))
+  converged <- fit_ok || (sqr > 0 && stationary && nested)
+  list(mu = mu, sd = sd, converged = converged,
+       max_logit_residual = resid_max, iterations = iters,
+       fit_converged = fit_ok, stationary = stationary,
+       nested = nested, tol = tol)
 }
 
 loc_scale_from_win_and_second <- function(p_win, p_second, D0 = NULL,
@@ -451,65 +977,158 @@ loc_scale_from_win_and_second <- function(p_win, p_second, D0 = NULL,
     stop("p_win and p_second must have equal length")
   if (any(p_win <= 0) || any(p_second <= 0))
     stop("all win and second probabilities must be positive")
-  p1 <- p_win / sum(p_win)
-  top2 <- p1 + p_second / sum(p_second)
+  p1 <- .rescaled_target(as.numeric(p_win))    # scale-safe (#483)
+  top2 <- p1 + .rescaled_target(as.numeric(p_second))
   loc_scale_from_topk_pair(p1, 1, top2, 2, D0 = D0, base = base,
                            points = points, n_iter = n_iter, tol = tol,
                            ridge = ridge, mu0 = mu0,
                            return_info = return_info)
 }
 
-.rank_marginal_with_jacobian <- function(mu, sd, r, fn, points) {
+# split as in .topk_grid; jacobian = FALSE skips the pair terms; mass is
+# each runner's density mass on this lattice, the row sum
+# rank_probabilities normalises by (#267)
+.rank_marginal_with_jacobian <- function(mu, sd, r, fn, points,
+                                         split = FALSE, jacobian = TRUE) {
   n <- length(mu)
-  g <- .topk_grid(mu, sd, n - 1, fn, points)
+  g <- .topk_grid(mu, sd, n - 1, fn, points, split = split)
   dens <- t(g$f) / sd                       # (n, L)
-  C <- .count_distribution(g$F)
+  mass <- .wsum(dens, g)
+  C <- .count_distribution(g$F, g$S)
   p <- numeric(n)
   J <- matrix(0, n, n)
   for (i in 1:n) {
-    Qi <- .loo_pmf(C, g$F, i)
-    p[i] <- sum(Qi[, r] * dens[i, ]) * g$dx
+    Qi <- .loo_pmf(C, g$F, i, g$S)
+    p[i] <- .wsum(Qi[, r] * dens[i, ], g)
+    if (!jacobian) next
     # P(N_{-ij} = n-1) is identically zero (only n-2 others exist);
     # deconvolving it injects window-edge-sensitive junk
-    pair <- if (r <= n - 1) .pair_pmf_at(Qi, g$F, i, r)
+    pair <- if (r <= n - 1) .pair_pmf_at(Qi, g$F, i, r, g$S)
             else matrix(0, n, length(g$x))
-    if (r >= 2) pair <- pair - .pair_pmf_at(Qi, g$F, i, r - 1)
+    if (r >= 2) pair <- pair - .pair_pmf_at(Qi, g$F, i, r - 1, g$S)
     kern <- pair * matrix(dens[i, ], n, ncol(pair), byrow = TRUE)
-    row <- rowSums(kern * dens) * g$dx
+    row <- .wsum(kern * dens, g)
     row[i] <- 0
     row[i] <- -sum(row)
     J[i, ] <- row
   }
-  list(p = p, J = J)
+  list(p = p, J = J, mass = mass)
+}
+
+# The retry starts of abilities_from_rank_marginal (#779), as python's
+# _rank_marginal_starts: the original start nudged -/+ 0.3 typical scale
+# along the stalled log residual, then the failed trajectory reflected
+# through the start.
+.rank_marginal_starts <- function(mu0, mu_stall, resid, D) {
+  n <- length(mu_stall)
+  m0 <- if (is.null(mu0)) rep(0, n) else .as_warm_start(mu0, n)
+  u <- resid - mean(resid)
+  u <- u / max(max(abs(u)), 1e-300)
+  h <- 0.3 * sqrt(mean(.as_idio(D, n)))
+  list(m0 - h * u, m0 + h * u, 2 * m0 - mu_stall)
 }
 
 abilities_from_rank_marginal <- function(p, r, mu0 = NULL, D = NULL,
                                          base = "normal", points = 513,
                                          n_iter = 60, tol = 1e-8,
                                          return_info = FALSE) {
+  # one damped trajectory can stall at a positive-residual stationary
+  # point; only then, a bounded deterministic retry (#779)
+  once <- function(m)
+    .rank_marginal_once(p, r, mu0 = m, D = D, base = base, points = points,
+                        n_iter = n_iter, tol = tol)
+  out <- .retry_on_failure(once(mu0), once,
+                           function(f) .rank_marginal_starts(mu0, f$mu,
+                                                             f$resid, D),
+                           "max_log_residual")
+  if (!out$converged && !return_info)
+    warning(sprintf(paste0(
+      "abilities_from_rank_marginal did not converge: max |log ",
+      "residual| %.2e after %d iterations (tol %.0e)"),
+      out$max_log_residual, out$iterations, out$tol))
+  if (return_info)
+    return(list(mu = out$mu, converged = out$converged,
+                max_log_residual = out$max_log_residual,
+                iterations = out$iterations))
+  out$mu
+}
+
+.rank_marginal_once <- function(p, r, mu0, D, base, points, n_iter, tol) {
   # invert one EXACT-rank marginal at frozen scales: two-branched for
   # r >= 2, mu0 selects the branch. See the python docstring.
   n <- length(p)
-  r <- as.integer(r)
+  n_iter <- .as_iter_budget(n_iter)
+  tol <- .as_tolerance(tol)                                   # (#551)
+  # a whole-number rank, refused before coercion: as.integer(1.5) solved
+  # first place silently (#317)
+  rr <- suppressWarnings(as.numeric(r))
+  if (length(rr) != 1L || is.logical(r) || !is.finite(rr) || rr != trunc(rr))
+    stop(sprintf("r must be a whole-number rank; got %s", format(r)),
+         call. = FALSE)
+  r <- as.integer(rr)
   if (r < 1 || r > n)
     stop(sprintf("rank must be in [1, n]; got r=%d, n=%d", r, n))
+  if (any(!is.finite(p)))
+    stop("rank probabilities must be finite")
   if (any(p <= 0))
     stop("all rank probabilities must be positive")
-  logt <- log(p / sum(p))
-  sd <- sqrt(if (is.null(D)) rep(1, n) else D)
+  logt <- log(.rescaled_target(as.numeric(p)))
+  sd <- sqrt(.as_idio(D, n))
   fn <- if (is.function(base)) base else .BASES[[base]]
-  mu <- if (is.null(mu0)) rep(0, n) else as.numeric(mu0) - mean(mu0)
+  zz <- c(-2.3, -1.1, -0.35, 0.6, 1.7)
+  symmetric <- isTRUE(all(abs(fn(zz)$S + fn(-zz)$S - 1) < 1e-12))
+  if (is.null(mu0) && n %% 2 == 1 && r == (n + 1) %/% 2 && symmetric)
+    # the exact middle rank of an odd field under a symmetric base is even
+    # in mu: the zero start has a zero Jacobian and no way off it (#378)
+    stop(sprintf(paste0(
+      "the exact middle rank r=%d of an odd field (n=%d) under a symmetric ",
+      "base is unchanged by mu -> -mu, so the zero start is stationary and ",
+      "the inverse two-branched. Pass mu0= to choose the branch."), r, n),
+      call. = FALSE)
+  mu <- if (is.null(mu0)) rep(0, n) else .as_warm_start(mu0, n)  # #554
 
-  st <- .rank_marginal_with_jacobian(mu, sd, r, fn, points)
-  resid <- log(pmax(st$p, 1e-300)) - logt
+  # The model is the PUBLIC map: rows normalised by their lattice mass as
+  # rank_probabilities does, and the column renormalised as the target is.
+  # The raw column is a different map wherever that mass is not one (a
+  # laplace row is up to 1.6e-3 off), and self-generated laplace targets
+  # never converged (#267). A kinked base takes its Jacobian from the
+  # split lattice and falls back to forward differences of the map when
+  # LM stalls or crawls, as python.
+  kinked <- !is.null(.kinks_of(fn))
+  model <- function(m, jac = TRUE) {
+    nx <- .rank_marginal_with_jacobian(m, sd, r, fn, points,
+                                       jacobian = jac && !kinked)
+    u <- nx$p / nx$mass
+    tot <- sum(u)
+    logp <- log(pmax(u / tot, 1e-300))
+    if (!jac) return(list(logp = logp, Jlog = NULL))
+    Jv <- if (kinked)
+      .rank_marginal_with_jacobian(m, sd, r, fn, points, split = TRUE)$J
+    else nx$J
+    Jlog <- Jv / pmax(nx$p, 1e-300) -
+      matrix(colSums(Jv / nx$mass) / tot, n, n, byrow = TRUE)
+    list(logp = logp, Jlog = Jlog)
+  }
+  fd_jacobian <- function(m, logp) {
+    h <- 1e-6
+    sapply(seq_len(n), function(j) {
+      e <- numeric(n); e[j] <- h
+      (model(m + e, FALSE)$logp - logp) / h
+    })
+  }
+  st <- model(mu)
+  logp <- st$logp; Jlog <- st$Jlog
+  resid <- logp - logt
   cost <- sum(resid * resid)
   resid_max <- max(abs(resid))
   lam <- 1e-6
-  iters <- 0
-  for (it in 1:n_iter) {
-    iters <- it
+  iters <- 0L
+  fd_mode <- FALSE
+  slow <- 0L
+  for (it in seq_len(n_iter)) {
     if (resid_max < tol) break
-    Jlog <- st$J / pmax(st$p, 1e-300)
+    iters <- it
+    if (fd_mode) Jlog <- fd_jacobian(mu, logp)
     A <- crossprod(Jlog)
     gvec <- as.vector(crossprod(Jlog, resid))
     accepted <- FALSE
@@ -519,28 +1138,29 @@ abilities_from_rank_marginal <- function(p, r, mu0 = NULL, D = NULL,
       if (is.null(step)) { lam <- lam * 8; next }
       mu_n <- mu + step
       mu_n <- mu_n - mean(mu_n)
-      st_n <- .rank_marginal_with_jacobian(mu_n, sd, r, fn, points)
-      r_n <- log(pmax(st_n$p, 1e-300)) - logt
+      st_n <- model(mu_n, !(kinked || fd_mode))
+      r_n <- st_n$logp - logt
       cost_n <- sum(r_n * r_n)
       if (cost_n < cost) {
-        mu <- mu_n; st <- st_n; resid <- r_n; cost <- cost_n
+        slow <- if (cost_n > 0.25 * cost) slow + 1L else 0L
+        mu <- mu_n; logp <- st_n$logp; resid <- r_n; cost <- cost_n
         resid_max <- max(abs(resid))
         lam <- max(lam / 3, 1e-10)
         accepted <- TRUE
+        if (!is.null(st_n$Jlog)) Jlog <- st_n$Jlog
+        else if (!fd_mode && !(resid_max < tol)) Jlog <- model(mu)$Jlog
         break
       }
       lam <- lam * 8
     }
+    if (kinked && !fd_mode && (!accepted || slow >= 2L)) {
+      fd_mode <- TRUE
+      lam <- 1e-6
+      next
+    }
     if (!accepted) break
   }
   converged <- resid_max < tol
-  if (!converged && !return_info)
-    warning(sprintf(paste0(
-      "abilities_from_rank_marginal did not converge: max |log ",
-      "residual| %.2e after %d iterations (tol %.0e)"),
-      resid_max, iters, tol))
-  if (return_info)
-    return(list(mu = mu, converged = converged,
-                max_log_residual = resid_max, iterations = iters))
-  mu
+  list(mu = mu, resid = resid, converged = converged,
+       max_log_residual = resid_max, iterations = iters, tol = tol)
 }

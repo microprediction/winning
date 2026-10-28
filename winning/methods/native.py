@@ -10,19 +10,22 @@ where each carried correctness anchors before entering any comparison.
 from __future__ import annotations
 
 import numpy as np
-from scipy.special import log_ndtr, ndtr, ndtri
+
+
+from scipy.special import log_ndtr, logsumexp, ndtr, ndtri, ndtri_exp
 from scipy.stats import qmc
 
 from ..factor.core import (
     hermite_nodes,
     win_probabilities_factor,
 )
-from .registry import register
+from .registry import as_draws, register
+from ..shapes import as_points
 
-try:
-    import fastrace as _fastrace
-except ImportError:                       # pragma: no cover
-    _fastrace = None
+from ..rustconfig import load_fastrace
+
+# compiled kernels (rust/fastrace); honours WINNING_PURE and use_rust()
+_fastrace, _RUST_OK, _HAVE_RUST = load_fastrace('win_probabilities_factor')
 
 
 def _nodes(k):
@@ -34,11 +37,18 @@ def _nodes(k):
 def lattice(mu, V, D, budget=None, seed=None):
     """The shared-survival-field transform (this package's algorithm,
     factor-generalized). budget = lattice points L (default 501)."""
-    L = int(budget) if budget else 501
+    # None is the default; an explicit size is a lattice size. 2.5 used
+    # to truncate to a two-point lattice and price [0, .997, .003] (#668)
+    L = 501 if budget is None else as_points(budget, "budget")
     F, W = _nodes(V.shape[1])
-    if _fastrace is not None:
+    if _HAVE_RUST:                       # honours WINNING_PURE and use_rust()
+        # gauge-fix as the numpy path does inside win_probabilities_factor:
+        # the kernel does not center V, and a common loading widened its
+        # window and lost resolution (#114: shift 100 -> 5e-2 error)
+        Vc = np.asarray(V, float)
+        Vc = Vc - Vc.mean(axis=0)
         p, total = _fastrace.win_probabilities_factor(
-            -np.asarray(mu, float), np.asarray(V, float),
+            -np.asarray(mu, float), np.ascontiguousarray(Vc),
             np.asarray(D, float), np.ascontiguousarray(F),
             np.ascontiguousarray(W), L)
         return p, {"backend": "fastrace", "L": L, "prenorm_defect": abs(1 - total)}
@@ -49,6 +59,7 @@ def lattice(mu, V, D, budget=None, seed=None):
 @register("direct_mc")
 def direct_mc(mu, V, D, budget=100_000, seed=9):
     """Draw utilities, argmax, average. budget = draws."""
+    budget = as_draws(budget)
     n, k = V.shape
     rng = np.random.default_rng(seed)
     chunk = max(10_000, int(1.5e9 / (n * 32)))
@@ -66,6 +77,7 @@ def direct_mc(mu, V, D, budget=100_000, seed=9):
 @register("sobol_direct")
 def sobol_direct(mu, V, D, budget=2**17, seed=55):
     """Direct simulation with scrambled-Sobol points in dimension k + N."""
+    budget = as_draws(budget)
     n, k = V.shape
     sob = qmc.Sobol(d=k + n, scramble=True, seed=seed)
     counts = np.zeros(n)
@@ -83,6 +95,7 @@ def sobol_direct(mu, V, D, budget=2**17, seed=55):
 def factor_rqmc(mu, V, D, budget=2**14, seed=11):
     """Per-alternative (k+1)-dimensional conditioned RQMC: the obvious
     fair competitor with the same factor structure, O(R N^2) total."""
+    budget = as_draws(budget)
     n, k = V.shape
     X = qmc.MultivariateNormalQMC(np.zeros(k + 1), np.eye(k + 1),
                                   seed=seed).random(int(budget))
@@ -97,46 +110,189 @@ def factor_rqmc(mu, V, D, budget=2**14, seed=11):
     return p / p.sum(), {"points": int(budget)}
 
 
-def _ghk_prob(mu, Sigma, i, R, u):
+def _contrast(i, Sigma=None, V=None, D=None):
+    """Covariance of the contrasts U_j - U_i, j != i.
+
+    From the factor grammar when there is one, never by materialising
+    Sigma = V V' + diag(D) and differencing it: a common loading of 1e8
+    is a shared shock that cancels from every contrast, but in Sigma it
+    rounds the unit idiosyncratic variances away (1e16 + 1 == 1e16) and
+    the differenced matrix comes back zero -- an ordinary 76/24 race
+    priced as certain (#302). Here the loading differences are taken
+    first, so the common mode never enters the arithmetic.
+    """
+    if Sigma is not None:
+        n = len(Sigma)
+        others = [j for j in range(n) if j != i]
+        M = np.zeros((n - 1, n))
+        M[np.arange(n - 1), others] = 1.0
+        M[:, i] -= 1.0
+        return M @ Sigma @ M.T
+    n = len(D)
+    others = np.array([j for j in range(n) if j != i], dtype=int)
+    Vd = V[others] - V[i][None, :]
+    return Vd @ Vd.T + D[i] + np.diag(D[others])
+
+
+def _contrast_cholesky(C):
+    """Cholesky of a contrast covariance, as given whenever it has one.
+
+    An absolute 1e-12 on every diagonal was model noise in the utility
+    unit (#409, #101), and the relative ridge that replaced it still
+    changed valid races: it was added ALWAYS, so a positive pivot far
+    below the mean variance -- two near-twins whose small gap is the
+    whole question -- was inflated, and an ordinary-scale race with a
+    2^-43 twin variance came back [0.5, 0.167, 0.333] against the exact
+    [0.5, 0.079, 0.421]. Its 1e-300 floor also left an absolute ridge
+    below that scale (D = 1e-320 priced 0.50 for 0.76).
+
+    So the matrix is first brought to unit scale by an exact power of
+    two (no rounding, subnormals included), factorised unmodified, and
+    only if that fails is a ridge of 1e-12 of the (now unit) mean
+    variance added; the factor is scaled back exactly. An exactly zero
+    contrast is a tie, outside what this prices (Dirac scope), and keeps
+    the old floor.
+    """
+    m = len(C)
+    dg = np.diagonal(C)
+    with np.errstate(over="ignore"):
+        tr = float(np.sum(dg)) / max(m, 1)
+    if tr == np.inf and np.all(np.isfinite(dg)):
+        # finite variances whose SUM overflows (D = 5e307): scale first,
+        # or the fallback below priced the race on an infinite ridge in
+        # the ports and warned here (#409)
+        mx = float(np.max(dg))
+        tr = mx * float(np.mean(dg / mx))
+    if not (tr > 0.0 and np.isfinite(tr)):
+        return np.linalg.cholesky(C + 1e-312 * np.eye(m))
+    k = -(int(np.frexp(tr)[1]) // 2)
+    Cs = np.ldexp(C, 2 * k)
+    try:
+        L = np.linalg.cholesky(Cs)
+    except np.linalg.LinAlgError:
+        L = np.linalg.cholesky(Cs + 1e-12 * (np.trace(Cs) / m) * np.eye(m))
+    return np.ldexp(L, -k)
+
+
+def _ghk_prob(mu, C, i, R, u, return_slope=False):
+    """log P(U_i is the maximum) by GHK sequential conditioning, in log
+    space throughout so a runner far behind gets a finite log probability
+    rather than an underflow to zero (the inverse under cov= Newton-steps
+    on log residuals, and a warm start 3 sd out used to return P = 0).
+    With return_slope=True also log dP_i/dmu_i, accumulated in the same
+    pass as the score of the conditional product, sum_t phi(b_t) /
+    (Phi(b_t) L_tt), holding the truncated draws fixed: the exact
+    derivative of the estimator also carries the draws' dependence on mu
+    through the truncation, which this omits, so it is an own-slope for
+    a preconditioner, not a gradient for an optimiser (measured 5-25%
+    above central differences)."""
     n = len(mu)
     others = [j for j in range(n) if j != i]
     a = mu[others] - mu[i]
-    M = np.zeros((n - 1, n))
-    M[np.arange(n - 1), others] = 1.0
-    M[:, i] -= 1.0
-    C = M @ Sigma @ M.T
-    L = np.linalg.cholesky(C + 1e-12 * np.eye(n - 1))
+    L = _contrast_cholesky(C)
     R = u.shape[0]
     z = np.zeros((R, n - 1))
     logprob = np.zeros(R)
+    score = np.zeros(R)
     for t in range(n - 1):
         b = (-a[t] - z[:, :t] @ L[t, :t]) / L[t, t]
-        Fb = ndtr(b)
-        logprob += np.log(np.maximum(Fb, 1e-300))
-        z[:, t] = ndtri(np.clip(u[:, t] * Fb, 1e-300, 1 - 1e-16))
-    return float(np.exp(logprob).mean())
+        lF = log_ndtr(b)
+        logprob += lF
+        if return_slope:
+            score += np.exp(-0.5 * b * b - 0.5 * np.log(2.0 * np.pi) - lF) / L[t, t]
+        # the truncated draw Phi^-1(u Phi(b)) from its log: clipping
+        # u Phi(b) at 1e-300 pinned every draw behind a bound deeper
+        # than -37 at Phi^-1(1e-300), so later steps conditioned on the
+        # wrong point and the tail lost its slope (#270)
+        lu = np.log(np.maximum(u[:, t], np.finfo(float).tiny)) + lF
+        z[:, t] = ndtri_exp(np.minimum(lu, np.log1p(-1e-16)))
+    logP = float(logsumexp(logprob) - np.log(R))
+    if return_slope:
+        logS = float(logsumexp(logprob + np.log(np.maximum(score, 1e-300)))
+                     - np.log(R))
+        return logP, logS
+    return logP
+
+
+def _ghk_assemble(logs):
+    """Normalise per-runner log probabilities (and log slopes) from
+    _ghk_prob into (p, slopes, logp, dlogp) without leaving log space until
+    the end: logp is the normalised log probability, finite for a runner
+    whose p underflows, and dlogp = d log p_i / d mu_i (max-wins,
+    positive) likewise."""
+    lp = np.array([l[0] for l in logs])
+    shift = lp.max()
+    p = np.exp(lp - shift)
+    total = p.sum()
+    logp = lp - shift - np.log(total)
+    if len(logs[0]) == 1:
+        return p / total, None, logp, None
+    ls = np.array([l[1] for l in logs])
+    return p / total, np.exp(ls - shift) / total, logp, np.exp(ls - lp)
 
 
 @register("ghk")
 def ghk(mu, V, D, budget=1000, seed=9):
     """Per-alternative GHK / Genz separation-of-variables, pseudorandom."""
+    budget = as_draws(budget)
     n = len(mu)
-    Sigma = V @ V.T + np.diag(D)
-    p = np.array([
-        _ghk_prob(mu, Sigma, i, budget,
-                  np.random.default_rng(seed + i).random((int(budget), n - 1)))
+    p, _, _, _ = _ghk_assemble([
+        (_ghk_prob(mu, _contrast(i, V=V, D=D), i, budget,
+                   np.random.default_rng(seed + i).random((int(budget), n - 1))),)
         for i in range(n)])
-    return p / p.sum(), {"draws": int(budget)}
+    return p, {"draws": int(budget)}
 
 
 @register("qmc_ghk")
-def qmc_ghk(mu, V, D, budget=1024, seed=13):
-    """GHK with scrambled-Sobol uniforms (Genz-Bretz style)."""
+def qmc_ghk(mu, V, D, budget=1024, seed=13, return_slopes=False,
+            cov=None):
+    """GHK with scrambled-Sobol uniforms (Genz-Bretz style). The info dict
+    carries "logp", the normalised log probabilities, finite where p
+    underflows; with return_slopes=True also "slopes" (dp_i/dmu_i, this
+    max-wins convention, positive) and "dlogp" (d log p_i / dmu_i).
+
+    `cov` hands the covariance over DIRECTLY, in place of `V` and `D`.
+    A caller that already holds one had to factor it and let this
+    function rebuild it, and the round trip is not lossless: what
+    decides the race is the contrast variance, and reconstructing
+    `V @ V.T` from a matrix dominated by an unidentifiable common mode
+    loses exactly the small choice-relevant eigenvalue. `_ghk_prob`
+    forms `M @ Sigma @ M.T` from whatever it is handed, so handing it
+    the original matrix makes the route invariant to adding `a 11'`,
+    as the R port already was (#302)."""
+    budget = as_draws(budget)
     n = len(mu)
-    Sigma = V @ V.T + np.diag(D)
+    if cov is not None:
+        # The registry lets an explicit cov= past as_loadings/as_idio on
+        # the promise that this door validates the matrix itself. It
+        # checked only the shape, so an asymmetric C and its transpose
+        # priced two different races ([.265, .451, .284] against
+        # [.334, .309, .357]), a NaN matrix came back as all-NaN
+        # probabilities, and V/D handed alongside it were dropped
+        # without a word (#102). Same contract as every other
+        # covariance front door.
+        if V is not None or D is not None:
+            raise ValueError("cov= replaces V and D; pass one only")
+        from ..factor.core import _validate_covariance
+        Sigma = _validate_covariance(cov, name="cov=")
+        if Sigma.shape != (n, n):
+            raise ValueError(
+                f"cov must be {n}x{n} for {n} runners; got {Sigma.shape}")
+    else:
+        Sigma = None
+    Cs = [_contrast(i, Sigma=Sigma, V=V, D=D) for i in range(n)]
     u = qmc.Sobol(d=n - 1, scramble=True, seed=seed).random(int(budget))
-    p = np.array([_ghk_prob(mu, Sigma, i, budget, u) for i in range(n)])
-    return p / p.sum(), {"draws": int(budget)}
+    info = {"draws": int(budget)}
+    if return_slopes:
+        p, sl, logp, dlogp = _ghk_assemble(
+            [_ghk_prob(mu, Cs[i], i, budget, u, True) for i in range(n)])
+        info["slopes"] = sl
+        info["dlogp"] = dlogp
+    else:
+        p, _, logp, _ = _ghk_assemble(
+            [(_ghk_prob(mu, Cs[i], i, budget, u),) for i in range(n)])
+    info["logp"] = logp
+    return p, info
 
 
 def _tilt_grad(par, L, u):
@@ -157,18 +313,14 @@ def _tilt_grad(par, L, u):
 @register("tilting")
 def tilting(mu, V, D, budget=1000, seed=7):
     """Botev-style minimax exponential tilting, per alternative."""
+    budget = as_draws(budget)
     from scipy.optimize import root
     n = len(mu)
-    Sigma = V @ V.T + np.diag(D)
     p = np.zeros(n)
     for i in range(n):
         others = [j for j in range(n) if j != i]
-        M = np.zeros((n - 1, n))
-        M[np.arange(n - 1), others] = 1.0
-        M[:, i] -= 1.0
-        Sd = M @ Sigma @ M.T
         m = n - 1
-        L = np.linalg.cholesky(Sd + 1e-12 * np.eye(m))
+        L = _contrast_cholesky(_contrast(i, V=V, D=D))
         u = -(mu[np.array(others)] - mu[i])
         sol = root(_tilt_grad, np.zeros(2 * (m - 1)), args=(L, u),
                    method="hybr", options={"maxfev": 4000})
@@ -200,8 +352,9 @@ def stern(mu, V, D, budget=1024, seed=0):
     implementations evaluated one alternative at a time; the estimator's
     statistical behavior (R^{-1/2} in the remainder draws) is unchanged
     by the shared-field assembly used here."""
+    budget = as_draws(budget)
     mu = np.asarray(mu, dtype=float)
-    V = np.atleast_2d(np.asarray(V, dtype=float))
+    V = np.asarray(V, dtype=float)
     D = np.asarray(D, dtype=float)
     n = len(mu)
     rng = np.random.default_rng(seed)

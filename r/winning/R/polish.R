@@ -10,19 +10,43 @@
 #' densities, factored stably as [f_i prod_k S_k / S_i] x [f_j / S_j].
 #'
 #' @inheritParams race_probabilities
+#' @param window,delta the forward's lattice controls. Given (either one),
+#'   the Jacobian is taken on the lattice
+#'   \code{race_probabilities(..., window = , delta = )} integrates on,
+#'   the unset one at the forward's default ("bulk", 1e-12). Both NULL
+#'   (the default) keeps the span lattice this function has always used.
 #' @return n x n matrix
 #' @export
 race_jacobian <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
                           base = "normal", points = 501, structure = NULL,
-                          qa = 9, qf = 15) {
+                          qa = 9, qf = 15, window = NULL, delta = NULL) {
+  # the forward's lattice controls, validated as the forward validates
+  # them: without them a race priced on a chosen window or tail budget
+  # could only be differentiated on another lattice (#821, python's
+  # race_jacobian). NULL leaves the historical lattice untouched.
+  lattice_given <- !is.null(window) || !is.null(delta)
+  if (lattice_given) {
+    if (is.null(window)) window <- "bulk"
+    if (is.null(delta)) delta <- 1e-12
+    if (!(is.character(window) && length(window) == 1L && !is.na(window) &&
+          window %in% c("bulk", "span")))
+      stop(sprintf("window must be \"bulk\" or \"span\"; got %s",
+                   paste(deparse(window), collapse = " ")), call. = FALSE)
+    delta <- .as_delta(delta)
+  }
   if (!is.null(structure)) {
     cls <- class(structure)[1]
     if (cls == "Independent")
       return(race_jacobian(mu, V = NULL, D = structure$D, base = base,
-                           points = points))
+                           points = points, window = window, delta = delta))
     if (cls == "Factor")
       return(race_jacobian(mu, V = structure$V, D = structure$D,
-                           base = base, points = points))
+                           base = base, points = points, window = window,
+                           delta = delta))
+    # the hierarchical kernels keep their own lattice windows; refuse a
+    # window/delta as the forward does rather than drop it (#821, #89)
+    if (lattice_given && cls %in% c("Blocks", "Nested", "Tree"))
+      .refuse_hierarchical_controls(cls, "normal", window, delta)
     if (cls == "Blocks")
       return(block_race_jacobian(mu, structure$cluster, structure$loading,
                                  structure$D, points = points, qa = qa))
@@ -34,7 +58,8 @@ race_jacobian <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
     if (cls == "Tree")
       return(tree_race_jacobian(mu, structure$cluster, structure$loading,
                                 structure$D, structure$parent,
-                                structure$strength, points = points, qa = qa))
+                                structure$strength, points = points, qa = qa,
+                                leaves = structure$leaves))
     stop("race_jacobian: structure ", cls, " not yet supported")
   }
   st <- .race_setup(mu, V, D, F, W, base)
@@ -42,9 +67,15 @@ race_jacobian <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
   sd <- sqrt(st$D)
   Q <- nrow(st$F)
   M_all <- matrix(st$mu, Q, n, byrow = TRUE) + st$F %*% t(st$V)
-  x <- seq(min(M_all) - st$left * max(sd), max(M_all) + st$right * max(sd),
-           length.out = points)
-  dx <- x[2] - x[1]
+  if (lattice_given) {
+    # the SAME lattice race_probabilities integrates on (#821)
+    lat <- .race_lattice(st, M_all, sd, .as_points(points), window, delta)
+    x <- lat$x; dx <- lat$dx; points <- lat$points
+  } else {
+    x <- seq(min(M_all) - st$left * max(sd), max(M_all) + st$right * max(sd),
+             length.out = points)
+    dx <- x[2] - x[1]
+  }
   xm <- matrix(x, n, points, byrow = TRUE)
   J <- matrix(0, n, n)
   for (q in seq_len(Q)) {
@@ -74,7 +105,16 @@ race_jacobian <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
 concentration_matrix <- function(n, name_caps = NULL, groups = NULL) {
   rows <- list(); bs <- numeric(0)
   if (!is.null(name_caps)) {
-    caps <- rep_len(as.numeric(name_caps), n)
+    # rep_len recycles in silence whenever the short length divides n,
+    # so a length-2 name_caps at n = 4 capped names 3 and 4 with the
+    # caps meant for 1 and 2. Same defect as #285 in mvtnormfast, same
+    # rule: a scalar broadcasts, every other wrong length is refused.
+    caps <- as.numeric(name_caps)
+    if (length(caps) == 1L) caps <- rep(caps, n)
+    if (length(caps) != n)
+      stop(sprintf(paste("name_caps must be a scalar or one cap per name;",
+                         "got %d for n = %d"), length(caps), n),
+           call. = FALSE)
     for (i in seq_len(n)) {
       if (is.finite(caps[i])) {
         r <- numeric(n); r[i] <- 1
@@ -84,8 +124,30 @@ concentration_matrix <- function(n, name_caps = NULL, groups = NULL) {
     }
   }
   if (!is.null(groups)) {
-    for (g in groups) {
-      r <- numeric(n); r[g[[1]]] <- 1
+    for (gi in seq_along(groups)) {
+      g <- groups[[gi]]
+      # R subscripts make a malformed member a DIFFERENT constraint, not
+      # an error: -1 selects the complement (capping every name but the
+      # first), 0 selects nothing (a vacuous row the optimiser then
+      # "satisfies" with zero violation), 2.7 is truncated to 2 (#426).
+      # Python refuses members outside [0, n); this is the 1-based rule.
+      if (!is.list(g) || length(g) != 2L)
+        stop(sprintf("groups[[%d]] must be list(indices, cap)", gi),
+             call. = FALSE)
+      idx <- g[[1]]
+      if (!is.numeric(idx) || !length(idx) || anyNA(idx) ||
+          any(!is.finite(idx)) || any(idx != trunc(idx)) ||
+          any(idx < 1) || any(idx > n))
+        stop(sprintf(paste("groups[[%d]] members must be whole numbers in",
+                           "1..%d (1-based); got %s. A negative index would",
+                           "cap the complement and 0 nothing at all."),
+                     gi, n, paste(format(idx), collapse = ", ")),
+             call. = FALSE)
+      cap <- g[[2]]
+      if (!is.numeric(cap) || length(cap) != 1L || !is.finite(cap))
+        stop(sprintf("groups[[%d]] cap must be one finite number", gi),
+             call. = FALSE)
+      r <- numeric(n); r[idx] <- 1
       rows[[length(rows) + 1]] <- r
       bs <- c(bs, g[[2]])
     }
@@ -106,8 +168,15 @@ concentration_matrix <- function(n, name_caps = NULL, groups = NULL) {
 #' @inheritParams race_probabilities
 #' @param name_caps,groups see \code{\link{concentration_matrix}}
 #' @param A,b explicit constraint rows, A p <= b
-#' @param tol optimizer tolerance
-#' @param max_iter outer iterations
+#' @param tol optimizer tolerance: the SQP and Newton phases stop when the
+#'   largest ability step is below tol/10, the feasibility fallback runs
+#'   when the violation exceeds 1000*tol and stops below 10*tol, and the
+#'   BFGS subproblem uses reltol tol/1000 (defaults reproduce the previous
+#'   fixed thresholds at tol = 1e-9)
+#' @param max_iter outer-iteration budget of EACH phase (SQP, augmented
+#'   Lagrangian fallback, active-set Newton), as python passes maxiter to
+#'   each SLSQP attempt; 0 performs no optimisation. \code{info$nit} is
+#'   the total of outer iterations, \code{info$phase_iterations} the split
 #' @return list(p, mu, info)
 #' @export
 polish_race <- function(p0 = NULL, mu0 = NULL, V = NULL, D = NULL,
@@ -149,6 +218,21 @@ polish_race <- function(p0 = NULL, mu0 = NULL, V = NULL, D = NULL,
     if (is.null(p0)) stop("give p0 or mu0")
     mu0 <- invert(as.numeric(p0))
   }
+  # Both controls are live and validated (#364): tol used to be dead and
+  # max_iter bounded only the SQP loop, so max_iter = 0 still ran 20 x 200
+  # BFGS iterations and 12 Newton steps and reported BFGS evaluation
+  # counts as nit.
+  if (!is.numeric(tol) || length(tol) != 1L || !is.finite(tol) || tol <= 0)
+    stop("tol must be one finite positive number", call. = FALSE)
+  mi <- suppressWarnings(as.numeric(max_iter))
+  if (length(mi) != 1L || is.na(mi) || !is.finite(mi) || mi < 0 ||
+      mi != trunc(mi))
+    stop("max_iter must be a single finite non-negative whole number",
+         call. = FALSE)
+  max_iter <- as.integer(mi)
+  step_tol <- tol / 10
+  feas_trigger <- 1000 * tol
+  feas_tol <- 10 * tol
   mu0 <- as.numeric(mu0) - mean(mu0)
   n <- length(mu0)
   cm <- concentration_matrix(n, name_caps = name_caps, groups = groups)
@@ -158,7 +242,7 @@ polish_race <- function(p0 = NULL, mu0 = NULL, V = NULL, D = NULL,
     b0 <- c(b0, b)
   }
   if (!length(b0)) return(list(p = forward(mu0), mu = mu0,
-                               info = list(active = integer(0), nit = 0)))
+                               info = list(active = integer(0), nit = 0L)))
   # sequential quadratic programming from mu0, the same path the python
   # reference takes (SLSQP): each step projects the unconstrained move
   # onto the linearized feasible set. The projection manifold is
@@ -187,7 +271,7 @@ polish_race <- function(p0 = NULL, mu0 = NULL, V = NULL, D = NULL,
     q - as.numeric(t(B) %*% nu)
   }
   m <- mu0
-  nit <- 0
+  nit_sqp <- 0L; nit_al <- 0L; nit_newton <- 0L
   for (outer in seq_len(max_iter)) {
     s_ <- b0 - as.numeric(A0 %*% forward(m))   # want >= 0
     B <- A0 %*% jac(m)                          # constraint B dm <= s_
@@ -196,12 +280,12 @@ polish_race <- function(p0 = NULL, mu0 = NULL, V = NULL, D = NULL,
     if (sn > 0.3) dm <- dm * (0.3 / sn)         # trust clip
     m <- m + dm
     m <- m - mean(m)
-    nit <- nit + 1L
-    if (max(abs(dm)) < 1e-10) break
+    nit_sqp <- nit_sqp + 1L
+    if (max(abs(dm)) < step_tol) break
   }
   p <- forward(m)
   slack <- b0 - as.numeric(A0 %*% p)
-  if (-min(slack) > 1e-6) {
+  if (-min(slack) > feas_trigger && max_iter > 0L) {
     # the analytic Jacobian may be approximate (tree: cross-cluster Gram);
     # restore feasibility with exact finite-difference constraint
     # gradients -- the forward map is always exact
@@ -214,7 +298,7 @@ polish_race <- function(p0 = NULL, mu0 = NULL, V = NULL, D = NULL,
       Jn
     }
     lam <- numeric(length(b0)); rho <- 10
-    for (outer in seq_len(20)) {
+    for (outer in seq_len(min(20L, max_iter))) {
       obj <- function(mm) {
         mm <- mm - mean(mm)
         cvec <- b0 - as.numeric(A0 %*% forward(mm))
@@ -230,12 +314,13 @@ polish_race <- function(p0 = NULL, mu0 = NULL, V = NULL, D = NULL,
         g - mean(g)
       }
       res <- stats::optim(m, obj, grd, method = "BFGS",
-                          control = list(maxit = 200, reltol = 1e-12))
+                          control = list(maxit = 200,
+                                         reltol = max(tol / 1000, 1e-16)))
       m <- res$par - mean(res$par)
-      nit <- nit + res$counts[1]
+      nit_al <- nit_al + 1L
       cvec <- b0 - as.numeric(A0 %*% forward(m))
       lam <- pmax(0, lam - rho * cvec)
-      if (max(0, -min(cvec)) < 1e-8 && outer > 1) break
+      if (max(0, -min(cvec)) < feas_tol && outer > 1) break
       rho <- min(rho * 3, 1e6)
     }
     p <- forward(m)
@@ -247,7 +332,7 @@ polish_race <- function(p0 = NULL, mu0 = NULL, V = NULL, D = NULL,
   # point solves an equality-constrained projection; a few Newton steps
   # with exact finite-difference constraint gradients close the gap.
   act <- which(slack < 1e-3)
-  if (length(act)) {
+  if (length(act) && max_iter > 0L) {
     jac_fd2 <- function(mm, h = 1e-6) {
       Jn <- matrix(0, n, n)
       for (j in seq_len(n)) {
@@ -258,7 +343,8 @@ polish_race <- function(p0 = NULL, mu0 = NULL, V = NULL, D = NULL,
     }
     Aa <- A0[act, , drop = FALSE]; ba <- b0[act]
     m_ref <- m
-    for (it in seq_len(12)) {
+    for (it in seq_len(min(12L, max_iter))) {
+      nit_newton <- nit_newton + 1L
       ca <- ba - as.numeric(Aa %*% forward(m_ref))       # want 0
       G <- Aa %*% jac_fd2(m_ref)                          # d(Aa p)/d m
       # linearized KKT: min ||m + dm - mu0||^2 s.t. ca - G dm = 0
@@ -268,19 +354,25 @@ polish_race <- function(p0 = NULL, mu0 = NULL, V = NULL, D = NULL,
       dm <- (mu0 - m_ref) - as.numeric(t(G) %*% nu)
       m_new <- m_ref + dm
       m_new <- m_new - mean(m_new)
-      if (max(abs(m_new - m_ref)) < 1e-10) { m_ref <- m_new; break }
+      if (max(abs(m_new - m_ref)) < step_tol) { m_ref <- m_new; break }
       m_ref <- m_new
     }
     p_ref <- forward(m_ref)
     slack_ref <- b0 - as.numeric(A0 %*% p_ref)
     # accept only if it stays feasible and does not worsen the objective
-    if (-min(slack_ref) < 1e-7 &&
+    if (-min(slack_ref) < 100 * tol &&
         sum((m_ref - mu0)^2) <= sum((m - mu0)^2) + 1e-12) {
       m <- m_ref; p <- p_ref; slack <- slack_ref
     }
   }
+  viol <- max(0, -min(slack))
   list(p = p, mu = m,
-       info = list(active = which(slack < 1e-6), nit = as.integer(nit),
-                   max_violation = max(0, -min(slack)),
+       info = list(active = which(slack < 1e-6),
+                   nit = nit_sqp + nit_al + nit_newton,
+                   phase_iterations = c(sqp = nit_sqp,
+                                        augmented_lagrangian = nit_al,
+                                        newton = nit_newton),
+                   feasible = viol <= feas_trigger,
+                   max_violation = viol,
                    mu_distance = sqrt(sum((m - mu0)^2))))
 }

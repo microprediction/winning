@@ -145,15 +145,19 @@ q = removal_shares(mu, V=V, D=D)         # P(j wins | i removed), all pairs</cod
       Max-wins semantics for the probit literature live in
       <code>winning.probit</code> (<code>shares</code>,
       <code>calibrate_utilities</code>, supplied-covariance fitting); the
-      density-agnostic engine in <code>winning.thurstone</code>; the
+      retired density-agnostic research engine in <code>winning.research</code>; the
       paper-faithful kernels in <code>winning.factor</code>.
     </p>
 
     <h2 id="grammars">One race, five covariance grammars</h2>
-    <p>Every model in the package is the same Gaussian min-race
+    <p>Every grammar describes the same min-race
     $Y = \mu + \text{noise}$; the grammars are declarative descriptions of the
-    noise covariance that admit $O(N)$-per-lattice-point evaluation. Pass any of
-    them as <code>structure=</code> to the front-door verbs.</p>
+    noise covariance that admit $O(N)$-per-lattice-point evaluation. With the
+    normal base they are Gaussian covariance grammars; <code>Independent</code>
+    and <code>Factor</code> also accept any supported smooth base, while
+    <code>Blocks</code>, <code>Nested</code> and <code>Tree</code> are
+    Gaussian only. Pass any of them as <code>structure=</code> to the
+    front-door verbs.</p>
 <pre><code>from winning import (Independent, Factor, Blocks, Nested, Tree,
                      race_probabilities, polish_race)
 
@@ -192,6 +196,7 @@ polish_race(p0=w, structure=tree, name_caps=0.05)     # nearest race under caps<
     three fit- or optimizer-mediated ones to between 5e-4 and 5e-3.</p>
 <pre><code>pip install winning          # pure python (numpy/scipy)
 pip install winning[fast]    # + compiled kernels (abi3 wheels)
+pip install winning[certified]  # + winning.certified: Arb-ball enclosures (python-flint)
 remotes::install_github("microprediction/winning", subdir = "r/winning")</code></pre>
     <p>Random test covariances come from
     <a href="https://randomcov.microprediction.org/">randomcov</a>: fifteen
@@ -214,20 +219,20 @@ remotes::install_github("microprediction/winning", subdir = "r/winning")</code><
         Supersedes the earlier
         <a href="./assets/pdf/factor_probit_share_calibration.pdf">share-calibration
         draft</a>.</li>
-      <li><a href="./assets/pdf/exact_pom_factor_gaussian.pdf">Exact
-        posterior probability of optimality for factor-Gaussian
-        beliefs</a> (2026, draft). The probability that an alternative
+      <li><a href="./assets/pdf/exact_pom_factor_gaussian.pdf">Deterministic
+        probabilities for Thompson sampling and entropy search</a> (2026, draft). The probability that an alternative
         is truly best, declared intractable in reinforcement learning
         and approximated there from marginal means and variances alone,
-        is exact and linear-time whenever the posterior covariance is
-        factor-plus-diagonal &mdash; and two standard observation
-        processes, common random numbers and per-arm Gaussian
-        observations, keep it in that form at every update. Measured
-        consequences: stopping on the exact vector holds the nominal
-        error at between a third and two-thirds of the replicate spend
-        of the marginal-only rules, and sampling from the exact vector
-        reproduces Thompson sampling's regret to within replication
-        noise, as the occupancy identity requires. Experiments under
+        is a shared integral that quadrature evaluates in time linear in
+        the number of alternatives, at fixed factor rank and resolution,
+        whenever the posterior covariance is factor-plus-diagonal. Two
+        standard observation processes, common random numbers and
+        per-arm Gaussian observations, keep the posterior in that form
+        at every update. At a common nominal threshold, stopping on
+        this vector uses between a third and two-thirds of the
+        replicates of the marginal-only rules, and sampling from it
+        matches Thompson sampling's regret, as the occupancy identity
+        requires. Experiments under
         <code>research/rs_crn/</code>.</li>
       <li><a href="./assets/pdf/passk_posterior.pdf">A posterior predictive
         for pass@k</a> (2026, note). An independent evaluation of the
@@ -309,8 +314,9 @@ remotes::install_github("microprediction/winning", subdir = "r/winning")</code><
       <li><a href="https://github.com/microprediction/winning/blob/main/research/demos/siam2021/cavity_downdate_demo.py">cavity_downdate_demo.py</a>
         — the rank-one cavity twin: one inverse contains every leave-one-out inverse.</li>
       <li><a href="https://github.com/microprediction/winning/tree/main/js/factor">js/factor</a>
-        — the calibration core in the browser: dependency-free JavaScript at
-        machine-precision parity with the Python; it powers the circuit demo
+        — the calibration core in the browser: dependency-free JavaScript
+        checked against the Python (forward shares to ~1e-15, calibrated
+        abilities to 2e-6); it powers the circuit demo
         above.</li>
     </ul>
 
@@ -346,7 +352,7 @@ remotes::install_github("microprediction/winning", subdir = "r/winning")</code><
 
   <script type="module">
     import { winProbabilitiesFactor, skewNormalBase }
-      from "./assets/js/factor_race.mjs?v=3";
+      from "./assets/js/factor_race.mjs?v=4";
     window.addEventListener("error", (e) => {
       const n = document.getElementById("fit-note");
       if (n) n.textContent = "Demo error: " + e.message;

@@ -1,0 +1,20 @@
+== main 988e52cd01627ef10cf144b1d48e6d7091970546 start Wed Oct 14 08:02:50 EDT 2026 load { 14.79 11.96 10.98 }
+python exact: referee logLik -1215.86 +- 0.12 in 14.9s (boundary=False)
+julia exact: logLik(GH) -1215.68 in 19.4s, converged true
+julia ghk:   logLik(sim) -1201.93 in 250.1s, converged false
+python exact   referee logLik -1216.46 +- 0.20
+julia exact    referee logLik -1216.26 +- 0.27
+julia ghk      referee logLik -1211.07 +- 0.51
+python exact   sharpness_bound 2.88 smooth 2.90 truth (GH 151) -1216.30
+julia exact    sharpness_bound 2.88 smooth 2.90 truth (GH 151) -1216.30
+== main end Wed Oct 14 08:08:20 EDT 2026 load { 12.81 12.43 11.50 }
+== branch 988e52cd01627ef10cf144b1d48e6d7091970546 start Wed Oct 14 08:08:20 EDT 2026 load { 12.81 12.43 11.50 }
+python exact: referee logLik -1212.82 +- 0.10 in 9.9s (boundary=False)
+julia exact: logLik(GH) -1215.67 in 16.2s, converged true
+julia ghk:   logLik(sim) -1201.93 in 246.9s, converged false
+python exact   referee logLik -1212.82 +- 0.10
+julia exact    referee logLik -1216.24 +- 0.27
+julia ghk      referee logLik -1211.07 +- 0.51
+python exact   sharpness_bound 10.25 smooth 10.25 truth (GH 151) -1212.87
+julia exact    sharpness_bound 2.89 smooth 2.91 truth (GH 151) -1216.28
+== branch end Wed Oct 14 08:13:27 EDT 2026 load { 11.69 12.12 11.65 }

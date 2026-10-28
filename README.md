@@ -25,6 +25,11 @@ grammar on the way in.
 
     pip install winning        # core depends only on numpy and scipy
 
+`winning.certified` (optional) returns race win probabilities as Arb
+balls that provably contain the answer, for checking the fast engines;
+it needs `pip install winning[certified]` (python-flint) and is never
+imported by `import winning`.
+
 ## Quick start
 
 Independent race: shares from abilities, and back.
@@ -97,7 +102,9 @@ tau-scaled Gumbel kernel, so the same engine serves it. Inversion holds
 the temperature fixed; a single race pins down the abilities alone.
 
 Custom densities go in as formulas: any standardized survival and
-density pair, skewed or multimodal, is a `base=` callable. Empirical
+density pair, skewed or multimodal, is a `base=` callable; give it
+`cdf` (and `log_sf`) attributes and rare places such as last place and
+bottom-k keep full tail precision, as the named bases do. Empirical
 data go to `winning.classic`: histograms, integer scores, and dead
 heats with real mass are lattice atoms there, and its multiplicity
 calculus prices ties exactly. Formulas to `base=`, atoms to `classic`;
@@ -107,14 +114,37 @@ the module docstrings give the measured cost of crossing over.
 
 - `winning.factor`: the engine. The all-share forward pass, inversion,
   exact Jacobians and tie densities, covariance fitting
-  (`fit_covariance`), and constrained polish.
+  (`fit_covariance(C, k, blocks=...)`, where `blocks` is a count to
+  cluster or a known label per entrant; `fit_tree(C, parent)` onto a
+  known genealogy, priced as `race_probabilities(mu, structure=tree)`),
+  and constrained polish.
 
 - `winning.factor` also prices finishing positions: top-k membership at
-  any depth (`top_k_probabilities`, `rank_probabilities`), calibration
+  any depth and factor rank, under the same `V, D, F, W` the race takes
+  (`top_k_probabilities(mu, k, V, D, F=F, W=W)` with the four from
+  `fit_covariance` prices a shortlist from a dense covariance), and
+  `rank_probabilities`; calibration
   of those curves (`abilities_from_topk`), joint location and scale per
   runner from the win and place curves (`loc_scale_from_win_and_second`),
   ordered-prefix probabilities (`ordered_probabilities`), and the
   Plackett-Luce likelihood (`winning.factor.permutations`).
+
+- `winning.factor` keeps beliefs in the race grammar: exact factor-form
+  posteriors for common-random-number replicates (`crn_posterior`, and
+  `crn_posterior_replicates` when entrants ran on different replicates)
+  and for a shared-feature bandit (`feature_bandit_posterior`), each
+  returning `(m, d, W)` ready for `race_probabilities(-m, V=-W, D=d)`.
+  `crn_posterior_replicates` also takes, still exactly, a factor or
+  dense prior (`prior=(V0, d0, m0)`), per-cell noise (`D` as a matrix,
+  or `counts=` of runs averaged per cell), shared trial and seed shocks
+  (`groups=[(trial_id, U_t), (seed_id, U_s)]`) and a nuisance column
+  level (`common="free"`). `fit_factor_model_missing(Y, k)` estimates
+  the `V, D` those take from a trials x entrants score matrix with
+  missing cells (maximum likelihood by EM, with a convergence report).
+  `update_contrast` conditions a dense or factor belief on one linear
+  observation `a'theta ~ N(mean, var)`, such as a judgment of child
+  minus parent (exact; a factor belief stays exact at one extra
+  column per two-entrant contrast, or is refitted on request).
 
 - `winning.probit`: the same machine in the probit literature's
   max-wins, utilities-and-shares conventions.
@@ -181,8 +211,7 @@ wherever they exist.
 
 ## The papers
 
-Six manuscript projects live here, indexed with venue status in
-[papers/README.md](papers/README.md).
+The manuscripts live under [papers/](papers/README.md), one folder each.
 
 The correlated calibration is documented in *Scalable Share Calibration
 for Factor Multinomial Probit Models*
@@ -197,8 +226,8 @@ in under a minute. Every number comes from a committed, seeded script in
 
 [research/demos](research/demos) holds explanatory scripts: the shared
 survival field, the cavity downdate. [js/factor](js/factor) is a
-dependency-free JavaScript port at machine-precision parity with the
-Python, for browser demos. [r/winning](r/winning) is a pure-R package.
+dependency-free JavaScript port checked against the Python (forward
+shares to ~1e-15, calibrated abilities to 2e-6), for browser demos. [r/winning](r/winning) is a pure-R package.
 [rust/fastrace](rust/fastrace) holds the optional compiled kernels,
 built with `pip install maturin && maturin develop --release`, and
 `winning.methods` uses them automatically.
@@ -231,8 +260,14 @@ paths such as `winning.lattice_calibration` still work, pointing at the
 new home with a `DeprecationWarning`.
 
 The 2.0 renovation built a density-agnostic engine as a separate
-`thurstone` package. It now lives here as `winning.research`, the
-`thurstone` package imports from this one, and the renovation's
+`thurstone` package. It lives here as `winning.research`, the retired
+research engine: kept for the pipelines built on it, but for
+calibration use `calibrate_abilities`, which is materially faster and
+more accurate and uses the compiled kernels. `import winning.thurstone`
+now raises an `ImportError` with migration guidance, so the external
+`thurstone` shim (which imports through it) fails with the same
+message; its consumers should import `winning.research` directly.
+The renovation's
 migration notes are preserved in [planning/](planning) and
 [attic/](attic).
 

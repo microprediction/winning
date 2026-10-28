@@ -3,7 +3,7 @@ arena's standing problems: each win probability is an (N-1)-dimensional
 MVN orthant probability of differences, priced by pmvnorm(GenzBretz),
 N calls per share vector.
 
-    python -m winning.bench.mvtnorm_check
+    python -m winning.bench.mvtnorm_check [--out DIR]
 
 Writes bench_results/MVTNORM.md. Requires Rscript + mvtnorm.
 """
@@ -17,9 +17,9 @@ from pathlib import Path
 
 import numpy as np
 
+from . import results_dir
 from .runner import problem, GRID
 
-RESULTS = Path(__file__).resolve().parents[2] / "bench_results"
 
 RSCRIPT = """
 suppressMessages(library(mvtnorm))
@@ -47,7 +47,8 @@ write.csv(data.frame(p = p / sum(p)), args[2], row.names = FALSE)
 """
 
 
-def main():
+def main(out_dir=None):
+    RESULTS = results_dir(out_dir)
     lines = ["# mvtnorm (R) on the arena problems",
              "",
              "Each share vector = N calls to pmvnorm(GenzBretz), the",
@@ -93,4 +94,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--out", default=None, help="results directory (default ./bench_results)")
+    main(ap.parse_args().out)

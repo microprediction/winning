@@ -95,6 +95,9 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
+
+from ..shapes import as_variance
+
 from scipy.special import ndtr, ndtri
 
 from .nway import (update_winner, update_ranking, update_ranking_exact,
@@ -136,7 +139,8 @@ def order_augmented(m, v, order, beta2, rng, n_aug=60, burn=20):
     for order-only sports; whenever performance magnitudes are observed, feed
     ``scores`` instead -- the exact linear-Gaussian update.
     """
-    m = np.asarray(m, float); v = np.asarray(v, float); n = len(m); sb = np.sqrt(beta2)
+    m = np.asarray(m, float); n = len(m)
+    v = as_variance(v, n); sb = np.sqrt(beta2)
     pv = 1.0 / (1.0 / v + 1.0 / beta2)                    # var of a | pi (conjugate)
     a = m.copy(); pi = np.empty(n); pi[list(order)] = np.sort(-a)   # init respecting order
     sA = np.zeros(n); sA2 = np.zeros(n); cnt = 0
@@ -248,6 +252,13 @@ class AbilityTracker:
                  base: str = "normal", order_method: str = "exact",
                  n_aug: int = 60, burn: int = 20, seed: int = 0,
                  rho: float = 0.0, Qf: int = 7, nodes_log2: int = 10):
+        order_methods = ("exact", "moment", "augmented")
+        if not isinstance(order_method, str) or order_method not in order_methods:
+            expected = ", ".join(repr(method) for method in order_methods)
+            raise ValueError(
+                f"order_method must be one of {expected}; got {order_method!r}"
+            )
+
         self.drift = float(drift); self.drift_exp = float(drift_exp)
         self.init_var = float(init_var)
         self.beta2 = float(beta2); self.tau2 = float(tau2)
@@ -330,12 +341,40 @@ class AbilityTracker:
         array (position of entrant i) is the inverse permutation and is
         silently wrong at K >= 3; convert it with order_from_positions
         (winning.ratings.orders)."""
+        # A tracker carries state, so bad evidence does not merely give
+        # a bad answer for one contest -- it poisons the filter. One NaN
+        # score made every entity's mean and variance NaN, a later CLEAN
+        # contest did not recover them, and nothing said a word. Same
+        # for an infinite score and for a NaN price. The lengths are
+        # checked here too: they did raise, but as "operands could not
+        # be broadcast together", which names nothing the caller passed.
+        n_ids = len(ids)
+        for _name, _seq in (("scores", scores), ("prices", prices)):
+            if _seq is None:
+                continue
+            _a = np.asarray(_seq, dtype=float)
+            if _a.ndim != 1 or _a.shape[0] != n_ids:
+                raise ValueError(
+                    f"{_name} must have one entry per entrant; got shape "
+                    f"{_a.shape} for {n_ids} ids")
+            _bad = np.flatnonzero(~np.isfinite(_a))
+            if _bad.size:
+                raise ValueError(
+                    f"{_name}[{int(_bad[0])}] = {float(_a[_bad[0]])!r} is not "
+                    f"finite ({_bad.size} of {n_ids} are). A tracker folds "
+                    "evidence into state it keeps, so this would leave "
+                    "every entity's rating NaN and no later contest would "
+                    "recover it.")
         m, v = self._gather(ids, t)
         V, b2 = self._blocks(groups, len(m))
         if prices is not None:                                     # market observer
             # prices are inverted under the same (blocked or independent)
             # performance model the outcome is priced with
-            model = {} if V is None else {"V": V, "D": b2}
+            # performance model the outcome is priced with -- its beta2
+            # and base included, which were dropped when V was None (#94)
+            model = {"D": b2, "base": self.base}
+            if V is not None:
+                model["V"] = V
             m, v, lz = update_market(m, v, np.asarray(prices, float), tau2=self.tau2, **model)
             self.evidence += lz
         if scores is not None:                                     # results observer, magnitudes
@@ -353,14 +392,15 @@ class AbilityTracker:
                 from .history import update_margins_full
                 m, S, lz = update_margins_full(m, np.diag(v), scores=-np.asarray(scores, float),
                                                V=V, beta2=b2)
-                v = np.maximum(np.diag(S).copy(), 1e-6)
+                v = np.maximum(np.diag(S).copy(), 1e-6 * v)      # #660
             self.evidence += lz
         elif order is not None:                                    # order-only fallback
             # Ranks censor the magnitudes. 'exact' uses winning's exact win-node
             # ranking factor (matches the Gibbs reference); 'moment' is the fast
             # biased moment-match; 'augmented' is the slow Gibbs reference itself.
             # With magnitudes available, `scores` is the right path, not this.
-            order = list(order)
+            from ..outcomes import as_order
+            order = list(as_order(order, len(m)))              # #129
             if V is not None:
                 m, v, lz = update_order_correlated(m, v, order, V, beta2=b2, Qf=self.Qf,
                                                    base=self.base, nodes_log2=self.nodes_log2)

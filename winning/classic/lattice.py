@@ -2,15 +2,10 @@ from winning.classic.normaldist import normcdf, normpdf
 import numpy as np
 import math
 
-try:                                       # compiled kernels (rust/fastrace)
-    import fastrace as _fastrace
-    _RUST_OK = hasattr(_fastrace, "classic_state_prices")
-    _HAVE_RUST = _RUST_OK and __import__("os").environ.get(
-        "WINNING_PURE", "").strip() in ("", "0")
-except ImportError:
-    _fastrace = None
-    _RUST_OK = False
-    _HAVE_RUST = False
+from ..rustconfig import load_fastrace
+
+# compiled kernels (rust/fastrace); honours WINNING_PURE and use_rust()
+_fastrace, _RUST_OK, _HAVE_RUST = load_fastrace('classic_exact_state_prices')
 
 #########################################################################################
 #   Operations on univariate atomic distributions supported on evenly spaced points     #
@@ -35,7 +30,12 @@ def integer_shift(cdf, k):
     elif k == 0:
         return cdf
     else:
-        return np.append(np.zeros(k), cdf[:-k])
+        # Mass shifted past the top atom lumps on it, mirroring the
+        # negative branch (which lumps the bottom). Truncating left the
+        # CDF ending below its total, a sub-probability law (#373).
+        out = np.append(np.zeros(k), cdf[:-k])
+        out[-1] = cdf[-1]
+        return out
 
 
 def fractional_shift(cdf, x):
@@ -135,8 +135,14 @@ def middle_of_density(density, L:int, do_padding=False):
         padding = [ 0 for _ in range(n_extra) ]
         return padding + list(density) + padding
     else:
+        # Crop through the CDF: the mass below the window lands on its
+        # first atom, the mass above it is dropped. This line used to
+        # read cdf_to_pdf(density) -- a PDF differenced twice -- so the
+        # "crop" was a signed second difference with mass ~0 and every
+        # convolution that actually cropped raised "too much mass loss"
+        # (#404).
         n_extra = L0-L
-        cdf = cdf_to_pdf(density)
+        cdf = pdf_to_cdf(density)
         cdf_truncated = cdf[n_extra:-n_extra]
         pdf_truncated = cdf_to_pdf(cdf_truncated)
         return pdf_truncated
@@ -164,6 +170,18 @@ def convolve_two(density1, density2, L=None, do_padding=False):
     mu1 = mean_of_density(density1, unit=1)
     mu2 = mean_of_density(density2, unit=1)
     density = np.convolve(density1, density2)
+    # Mass outside the window is folded onto the first atom (lower tail)
+    # or dropped (upper tail), and the mean correction below then moves
+    # the bulk to compensate. The guard after it only saw the dropped
+    # upper tail, so a 30% lower tail pinned at the edge passed and the
+    # shift reversed a 37/63 race to 82/18 (#608). Count both tails.
+    n_extra = implied_L(density) - L
+    if n_extra > 0:
+        total = float(np.sum(density))
+        clipped = float(np.sum(density[:n_extra]) + np.sum(density[-n_extra:]))
+        if total > 0 and clipped > 0.1 * total:
+            raise ValueError('Convolution of two densities puts ' + format(clipped / total, '.3g')
+                             + ' of its mass outside the lattice window - increase L')
     middle = middle_of_density(density=density, L=L, do_padding=do_padding)
     mu = mean_of_density(middle, unit=1)
     mu_diff = mu-(mu1+mu2)
@@ -183,12 +201,28 @@ def convolve_many(densities, L=None, do_padding=True):
     use np.convolve
 
     """
+    densities = list(densities)
+    if not densities:
+        raise ValueError('convolve_many needs at least one density')
     for k,d in enumerate(densities):
         assert len(d) % 2 ==1,  'Expecting odd length density['+str(k)+']'
 
     mu_sum = sum( [ mean_of_density(density, unit=1) for density in densities ])
     if L is None:
         L = implied_L(densities[0])
+    if len(densities) == 1:
+        # The convolution of one law is that law. The loop below always
+        # ended with convolve_two(full_density, densities[-1]), which for
+        # a singleton is the density convolved WITH ITSELF: mass and mean
+        # survive, the variance doubles (#405). Only the requested
+        # crop/padding applies, and the mean is restored only if a crop
+        # actually moved it.
+        d0 = np.asarray(densities[0], dtype=float)
+        out = np.asarray(middle_of_density(d0, L=L, do_padding=do_padding), dtype=float)
+        if implied_L(d0) > L:
+            mu_diff = mean_of_density(out, unit=1) - mu_sum
+            out = fractional_shift_density(out, -mu_diff)
+        return out
     full_density = [ p for p in densities[0] ]
     for density in densities[1:-1]:
         full_density = convolve_two(density1=full_density, density2=density, L=L, do_padding=False)
@@ -210,6 +244,11 @@ def convolve_many(densities, L=None, do_padding=True):
 
 def skew_normal_density(L, unit, loc=0, scale=1.0, a=2.0):
     """ Skew normal as a lattice density """
+    # a lattice spacing and a scale are positive: a negative one was
+    # normalised away into a different law (#509)
+    for name, v in (('unit', unit), ('scale', scale)):
+        if not (np.isfinite(v) and v > 0):
+            raise ValueError('skew_normal_density: ' + name + ' must be a finite positive number; got ' + repr(v))
     lattice = symmetric_lattice(L=L, unit=unit)
     density = np.array([_unnormalized_skew_cdf(x, loc=loc, scale=scale, a=a) for x in lattice])
     density = density / np.sum(density)
@@ -273,9 +312,17 @@ def winner_of_many(densities, multiplicities=None):
     :param   densities:  [ np.array   ]
     :return: np.array
     """
+    if len(densities) == 0:
+        raise ValueError('winner_of_many needs at least one density')
     d = densities[0]
     multiplicities = multiplicities or [None for _ in densities]
     m = multiplicities[0]
+    if m is None:
+        # A lone entrant is its own winner with multiplicity exactly one.
+        # This stayed None when the fold below never ran, and the None
+        # reached the multiplicity arithmetic of state_prices_from_densities
+        # as a TypeError; R and Rust start the fold at ones (#406).
+        m = np.ones(len(d))
     for d2, m2 in zip(densities[1:], multiplicities[1:]):
         d, m = _winner_of_two_pdf(d, d2, multiplicityA=m, multiplicityB=m2)
     return d, m
@@ -395,18 +442,13 @@ def state_prices_from_densities(densities:[[float]], densityAll=None, multiplici
       :param densities: List of performance distributions
       :return: state prices
     """
-    if (densityAll is None) or (multiplicityAll is None):
-        densityAll, multiplicityAll = winner_of_many(densities, multiplicities=None)
-    cdfAll = pdf_to_cdf(densityAll)
-    prices = list()
-    for k, density in enumerate(densities):
-        cdfRest, multiplicityRest = get_the_rest(density=density, densityAll=None,
-                                                 multiplicityAll=multiplicityAll, cdf=None,
-                                                 cdfAll=cdfAll)
-        pdfRest = cdf_to_pdf(cdfRest)
-        multiplicity = np.array([1.0 for _ in density])
-        price_k = beats(densityA=density, multiplicityA=multiplicity, densityB=pdfRest, multiplicityB=multiplicityRest)
-        prices.append(price_k)
+    # Exact dead heats (see exact_state_prices_from_cdfs). densityAll and
+    # multiplicityAll are accepted for compatibility and no longer used:
+    # the minimum's density and mean multiplicity do not determine the
+    # prices (#418, #362).
+    if len(densities) == 0:
+        raise ValueError('a race needs at least one runner')
+    prices = exact_state_prices_from_cdfs([pdf_to_cdf(d) for d in densities])
     sum_p = sum(prices)
     return [pi / sum_p for pi in prices]
 
@@ -479,11 +521,14 @@ def densities_from_events(scores:[int], events:[[float]], L:int, unit:float):
     assert len(scores)==len(events)
     low_score = min(scores)
     adjusted_scores = [ s-low_score for s in scores ]
-    if True:
-        for k,adj_score in enumerate(adjusted_scores):
-            adapted_L = int(math.ceil(abs(adj_score/unit)))
-            events[k].append( density_from_samples(x=[adj_score],L=adapted_L, unit=unit) )
-    densities = [ convolve_many( densities=event, L=L ) for event in events ]
+    # Build each state's augmented list locally. This appended the score
+    # density into the caller's ``events[k]``, so reusing one event model
+    # stacked another score shift on every call (#607).
+    densities = []
+    for event, adj_score in zip(events, adjusted_scores):
+        adapted_L = int(math.ceil(abs(adj_score/unit)))
+        score_density = density_from_samples(x=[adj_score], L=adapted_L, unit=unit)
+        densities.append(convolve_many(densities=list(event) + [score_density], L=L))
     return densities
 
 
@@ -657,6 +702,7 @@ def state_prices_from_extended_offsets(density, offsets, max_depth=3, unit_ratio
                             the recusion calls that merely get rid of float('inf') or float('-inf')
     :return:
     """
+    density = as_classic_density(density)
     # First get rid of float('inf')
     n = len(offsets)
     if n==1:
@@ -715,8 +761,17 @@ def state_prices_from_extended_offsets(density, offsets, max_depth=3, unit_ratio
     # At this point in the algorithm we have a race that isn't completely degenerate
     # Let's center and then see if any horses are hanging off the lattice.
     centered_offsets = int_centered(offsets)
-    offset_lower_bound = -L + W
-    offset_upper_bound = L - W
+    # L - W keeps a support of width W inside the lattice. Once W reaches
+    # L that interval is empty or reversed -- the standard L=500,
+    # unit=0.01 normal has W = 1000 -- and every in-window field was
+    # sent to the dilating cluster path, 0.017 off where the exact
+    # primitive is 1.6e-6 (#725). That primitive piles mass that leaves
+    # the left edge at -L and drops it past +L, which preserves who wins
+    # up to edge dead heats, so for such a density only an offset past
+    # the representable range (_low_high's L - 2) hangs.
+    bound = L - W if W < L else L - 2
+    offset_lower_bound = -bound
+    offset_upper_bound = bound
     hanging_left  = [ i for i,o in enumerate(centered_offsets) if o<offset_lower_bound  ]
     hanging_right = [ i for i,o in enumerate(centered_offsets) if o>offset_upper_bound  ]
     hanging = bool(hanging_right or hanging_left)
@@ -746,18 +801,34 @@ def state_prices_from_extended_offsets(density, offsets, max_depth=3, unit_ratio
             return state_prices
 
 
+def _edge_centred(offsets, L):
+    """ Only differences between offsets matter. Each offset past
+    +/-(L-2) was clamped on its own, so translating a book across the
+    lattice edge erased its contrast: [-3, 3] priced [1, 0] and [17, 23]
+    [0.5, 0.5] at L=15 (#585). A book with an entry out of range is first
+    moved by the integer nearest its midpoint; an in-range book is
+    untouched, so its prices do not move. """
+    fin = [float(o) for o in offsets if math.isfinite(o)]
+    if not fin or (min(fin) >= -(L - 2) and max(fin) <= L - 2):
+        return offsets
+    c = math.floor((min(fin) + max(fin)) / 2 + 0.5)
+    return [o - c if math.isfinite(o) else o for o in offsets]
+
+
 def state_prices_from_offsets(density, offsets):
     """ Returns a list of state prices for a race where all horses have the same density
         up to a translation (the offsets)
     """
     # See the paper for a definition of state price
     # Be aware that this may fail if offsets provided are integers rather than float
+    density = as_classic_density(density)
+    offsets = as_classic_offsets(offsets)                  # (#438)
+    offsets = _edge_centred(offsets, implied_L(density))
     if _HAVE_RUST:
-        return list(_fastrace.classic_state_prices(
+        return list(_fastrace.classic_exact_state_prices(
             [float(d) for d in density], [float(o) for o in offsets]))
-    densities = densities_from_offsets(density, offsets)
-    densityAll, multiplicityAll = winner_of_many(densities)
-    return implicit_state_prices(density, densityAll=densityAll, multiplicityAll=multiplicityAll, offsets=offsets)
+    _, cdfs, _ = _exact_offset_cdfs(density, offsets)
+    return exact_state_prices_from_cdfs(cdfs)
 
 
 def implicit_state_prices(density, densityAll, multiplicityAll=None, cdf=None, cdfAll=None, offsets=None):
@@ -774,7 +845,21 @@ def implicit_state_prices(density, densityAll, multiplicityAll=None, cdf=None, c
         offsets = range(int(-L / 2), int(L / 2))
     implicit = list()
     for k in offsets:
-        if k == int(k):
+        # The integer fast path must obey the SAME clamp the field was
+        # built with. The field goes through _low_high, which pins an
+        # offset at or past L-2 to the boundary; this called
+        # integer_shift(cdf, k) with the raw k, whose own clamp is the
+        # much wider +/-(m-1). So a runner could sit in the field at
+        # offset L-2 and be PAID at 60, and the state prices stopped
+        # being exhaustive claims on one race -- they summed to 1.88,
+        # while an epsilon off the integer gave 1.0 because the
+        # non-integer path was clamped correctly all along (#292).
+        #
+        # Guarding the fast path by the interior condition is exactly
+        # equivalent where it applies: for an interior integer
+        # _low_high returns (k, 1), (k, 0), which is this shift with
+        # weight one.
+        if k == int(k) and -L + 2 < k < L - 2:
             offset_cdf = integer_shift(cdf, int(k))
             ip = expected_payoff(density=None, densityAll=densityAll, multiplicityAll=multiplicityAll, cdf=offset_cdf,
                                  cdfAll=cdfAll)
@@ -790,3 +875,257 @@ def implicit_state_prices(density, densityAll, multiplicityAll=None, cdf=None, c
             implicit.append(l_coef * np.sum(ip_left) + r_coef * np.sum(ip_right))
 
     return implicit
+
+
+#########################################################################################
+#   Exact dead-heat pricing (#418, #362, #348, #373)                                    #
+#########################################################################################
+#
+# A runner's state price is the expected share of a unit winner claim,
+# a dead heat split equally among the tied:
+#
+#     P_i = sum_t f_i(t) E[ 1{X_j >= t, all j != i} / (1 + M_t) ],
+#
+# M_t the number of OTHER runners exactly at t. Since 1/(1+M) is the
+# integral over [0,1] of u^M, and the runners are independent,
+#
+#     P_i = sum_t f_i(t) int_0^1 prod_{j != i} ( S_j(t) + u f_j(t) ) du,
+#
+# with S_j(t) = P(X_j > t). The integrand is a polynomial of degree n-1
+# in u, so Gauss-Legendre with n//2 + 1 nodes integrates it EXACTLY.
+#
+# The field is kept as G_q(t) = prod_j (S_j(t) + u_q f_j(t)) at those
+# nodes, and a runner's opponents are G_q / (S_i + u_q f_i). That
+# division is exact wherever it matters: where f_i(t) > 0 the divisor
+# is at least u_q f_i(t) > 0, and where f_i(t) = 0 the term pays
+# nothing. The engine it replaces kept only the minimum's CDF and the
+# conditional MEAN multiplicity, which loses information two ways:
+#
+#   * dividing the minimum's survival by a runner's survival is 0/0
+#     once that runner has surely finished, so an opponent's tail could
+#     not be recovered: a two-runner compact-support race priced
+#     [0.9167, 0.0500] instead of [0.95, 0.05] (#418);
+#   * 1/(1 + E[M]) is not E[1/(1 + M)]: twenty iid three-atom entrants
+#     were paid 0.04435 each, total 0.887 (#362).
+#
+# A fractional offset is the CDF mixture that _low_high defines, priced
+# AS THAT MIXTURE: the old engine averaged the payoffs of its two
+# integer components against a field that contained neither, and two
+# identical runners at 0.5 summed to 1.114 (#348).
+#
+# The lattice is padded by L-1 atoms on each side before shifting, which
+# is the largest shift _low_high can return, so a translated runner
+# never loses mass off an edge. The old shift dropped whatever moved
+# past the top: a singleton at +19 on a uniform 83-atom law was paid
+# 0.771 (#373).
+#
+# (Node count: see Q_START below -- exact rule for small fields, a
+# doubling check for big ones.)
+#
+# The inverse keeps the paper's fixed-point table: a candidate at each
+# sample offset is priced against G_q / (S_k + u_q f_k). For a field
+# member that is its exact price; for a candidate between members it is
+# the same cavity approximation the paper uses, bounded by one and
+# nonincreasing in t, which the exact cavity always is.
+
+
+# The smallest lattice the offset API can represent: _low_high pins
+# every offset to [-L+2, L-2], which for L <= 2 is the single point 0 --
+# every runner priced as a tie whatever its offset -- and the inverse's
+# default table range(-L//2, L//2) is empty at L = 1 (#339).
+MIN_CLASSIC_L = 3
+
+
+def as_classic_density(density, where='density'):
+    """The one boundary for a classic atom vector (#339).
+
+    Accepts a finite, nonnegative, odd-length (2L+1, L >= 3) vector of
+    atoms with positive total and returns it normalised to unit mass, so
+    raw histogram counts are the same law as their frequencies. Entries
+    down to -1e-12 of the total are cdf/pdf round-off and are clipped.
+    Anything else raises ValueError: mass 10 used to give prices of -61,
+    a negative atom a finite tie, and an even length a silently
+    truncated lattice.
+    """
+    d = np.asarray(density, dtype=float)
+    if d.ndim != 1 or d.size == 0:
+        raise ValueError(where + ' must be a nonempty 1-d vector of lattice atoms')
+    if d.size % 2 != 1:
+        raise ValueError(where + ' must have odd length 2L+1 on the symmetric lattice; got length '
+                         + str(d.size))
+    if (d.size - 1) // 2 < MIN_CLASSIC_L:
+        raise ValueError(where + ' has L = ' + str((d.size - 1) // 2) + '; the classic lattice needs L >= '
+                         + str(MIN_CLASSIC_L) + ' (length >= ' + str(2 * MIN_CLASSIC_L + 1)
+                         + ') to represent distinct offsets')
+    if not np.all(np.isfinite(d)):
+        raise ValueError(where + ' has a non-finite atom')
+    with np.errstate(over='ignore'):
+        total = float(d.sum())
+    if not np.isfinite(total):
+        # finite atoms whose total overflows are the same law: rescale by
+        # the largest first (only then, so ordinary input is bit-identical).
+        # The raw total was inf and every atom normalised to 0 (#339)
+        d = d / np.abs(d).max()
+        total = float(d.sum())
+    if not total > 0:
+        raise ValueError(where + ' has no positive mass')
+    if d.min() < -1e-12 * total:
+        raise ValueError(where + ' has a negative atom (' + repr(float(d.min())) + ')')
+    return np.maximum(d, 0.0) / total
+
+
+def as_classic_prices(prices, where='prices'):
+    """Target state prices: finite, nonnegative, positive total, normalised.
+
+    A categorical price vector carries only relative mass; the inverse
+    used to read p and c*p off its table as different absolute
+    ordinates, so a 10% overround moved relative abilities by 0.9 lattice
+    units and a 10x book came back as an all-tie race (#377).
+    """
+    p = np.asarray(prices, dtype=float)
+    if p.ndim != 1 or p.size == 0:
+        raise ValueError(where + ' must be a nonempty 1-d vector')
+    if not np.all(np.isfinite(p)):
+        raise ValueError(where + ' has a non-finite entry')
+    if p.min() < 0:
+        raise ValueError(where + ' has a negative entry (' + repr(float(p.min())) + ')')
+    with np.errstate(over='ignore'):
+        total = float(p.sum())
+    if not np.isfinite(total):
+        # [1e308, 9e307] normalised to [0, 0], a tie (#339)
+        p = p / p.max()
+        total = float(p.sum())
+    if not total > 0:
+        raise ValueError(where + ' has no positive mass')
+    return p / total
+
+
+def as_classic_offsets(offsets, where='offsets'):
+    """Finite runner offsets, as a 1-d float vector, BEFORE any dispatch.
+
+    The compiled kernel refuses NaN and +-inf; the pure path clamped an
+    infinite offset to the lattice boundary and returned a plausible book,
+    and NaN failed with an unrelated TypeError, so the accepted inputs
+    depended on the backend (#438). Deliberate infinite abilities belong
+    to state_prices_from_extended_offsets.
+    """
+    try:
+        o = np.asarray(offsets, dtype=float)
+    except (TypeError, ValueError):
+        raise ValueError(where + ' must be a 1-d vector of finite numbers; got '
+                         + repr(offsets)) from None
+    if o.ndim != 1 or o.size == 0:
+        raise ValueError(where + ' must be a nonempty 1-d vector')
+    bad = np.flatnonzero(~np.isfinite(o))
+    if bad.size:
+        i = int(bad[0])
+        raise ValueError(f'{where}[{i}] = {o[i]} is not finite')
+    return o
+
+
+def _gauss_legendre01(n_nodes):
+    """Gauss-Legendre nodes and weights on [0, 1]."""
+    x, w = np.polynomial.legendre.leggauss(int(n_nodes))
+    return 0.5 * (x + 1.0), 0.5 * w
+
+
+def _n_nodes(n_runners):
+    """Nodes that integrate a degree n-1 polynomial exactly."""
+    return int(n_runners) // 2 + 1
+
+
+# Exactness costs n//2 + 1 nodes, which makes a big field O(n^2 L): 3000
+# runners would need 1501 nodes. The integrand prod_j (S_j + u f_j) is
+# only of high degree where many runners carry an atom at once; on a
+# smooth lattice it is numerically low-degree and 4 nodes already agree
+# with 64 to 1e-17. So the forward map starts at Q_START nodes and
+# doubles (capped at the exact count) until two successive rules agree
+# on every price to EXACT_TOL, returning the larger rule; a field whose
+# exact rule has at most Q_START nodes uses it directly. The inverse's table
+# is a preconditioner -- the defect correction makes its fixed point the
+# exact forward map whatever the table -- so it uses at most TABLE_NODES.
+Q_START = 8
+TABLE_NODES = 16
+EXACT_TOL = 1e-14
+
+
+def _node_schedule(n_runners):
+    exact = _n_nodes(n_runners)
+    q, out = min(Q_START, exact), []
+    while True:
+        out.append(q)
+        if q >= exact:
+            return out
+        q = min(2 * q, exact)
+
+
+def _padded_base_cdf(density):
+    """CDF of `density` padded by L-1 zero atoms on each side."""
+    L = implied_L(density)
+    pad = max(L - 1, 0)
+    d = np.concatenate([np.zeros(pad), np.asarray(density, dtype=float), np.zeros(pad)])
+    return np.cumsum(d)
+
+
+def _exact_shifted_cdf(padded_cdf, offset, L):
+    """The (mixture) CDF _low_high assigns to `offset`, on the padded lattice."""
+    (l, lc), (u, uc) = _low_high(offset, L=L)
+    return lc * integer_shift(padded_cdf, l) + uc * integer_shift(padded_cdf, u)
+
+
+def _survival_and_pdf(cdf):
+    cdf = np.asarray(cdf, dtype=float)
+    f = np.diff(cdf, prepend=0.0)
+    S = np.maximum(1.0 - cdf, 0.0)
+    return S, f
+
+
+def _exact_field(cdfs, nodes):
+    """G[q, t] = prod_j (S_j(t) + u_q f_j(t))."""
+    G = np.ones((len(nodes), len(cdfs[0])))
+    for c in cdfs:
+        S, f = _survival_and_pdf(c)
+        G *= S[None, :] + nodes[:, None] * f[None, :]
+    return G
+
+
+def _exact_payoff(cdf, G, nodes, weights):
+    """Expected winner claim of a runner with CDF `cdf` against the field G,
+    the runner itself divided out (see the block comment above)."""
+    S, f = _survival_and_pdf(cdf)
+    den = S[None, :] + nodes[:, None] * f[None, :]
+    with np.errstate(divide='ignore', invalid='ignore'):
+        ratio = np.where(den > 0, G / np.where(den > 0, den, 1.0), 1.0)
+    ratio = np.minimum.accumulate(np.minimum(ratio, 1.0), axis=1)
+    return float(np.dot(weights, ratio @ f))
+
+
+def exact_state_prices_from_cdfs(cdfs):
+    """Exact state prices (dead heats split equally) of independent runners
+    given their CDFs on one common lattice."""
+    cdfs = [np.asarray(c, dtype=float) for c in cdfs]
+    if not cdfs:
+        raise ValueError('a race needs at least one runner')
+    prev = None
+    for q in _node_schedule(len(cdfs)):
+        nodes, weights = _gauss_legendre01(q)
+        G = _exact_field(cdfs, nodes)
+        p = np.array([_exact_payoff(c, G, nodes, weights) for c in cdfs])
+        if prev is not None and np.max(np.abs(p - prev)) <= EXACT_TOL:
+            break
+        prev = p
+    return [float(x) for x in p]
+
+
+def _exact_offset_cdfs(density, offsets):
+    L = implied_L(density)
+    base = _padded_base_cdf(density)
+    return base, [_exact_shifted_cdf(base, o, L) for o in offsets], L
+
+
+def _exact_implicit_prices(base, field_cdfs, offset_samples, L):
+    """The paper's interpolation table, priced against the exact field."""
+    nodes, weights = _gauss_legendre01(min(_n_nodes(len(field_cdfs)), TABLE_NODES))
+    G = _exact_field(field_cdfs, nodes)
+    return [_exact_payoff(_exact_shifted_cdf(base, k, L), G, nodes, weights)
+            for k in offset_samples]

@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ${{ matrix.os }}
@@ -19,8 +22,10 @@ jobs:
           - os: windows-latest
             python-version: "3.12"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install
@@ -32,14 +37,84 @@ jobs:
     # the shipped core must work with numpy and scipy alone
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
       - name: Install core only
         run: pip install -e . pytest
       - name: Core tests
         run: python -m pytest -q tests/test_races.py tests/test_probit.py tests_research
+
+  torch:
+    # winning.torch is an optional extra and its tests importorskip torch,
+    # so no other job ran them: #753 (prefix/top-k losses off by up to a
+    # whole probability) shipped with them never executed in CI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Install core and CPU torch
+        run: |
+          pip install -e ".[test]"
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Torch heads
+        run: python -m pytest -q tests/test_torch_heads.py
+
+  native:
+    # The compiled path, built from THIS checkout (#72). The matrix above
+    # installs `.[test]` without fastrace, so every compiled-path test was
+    # a skip there: tests/test_rust_parity.py and test_rust_dispatch_core.py
+    # importorskip it wholesale. Installing the published wheel would not
+    # help either -- it tests the last PyPI release, not edits under
+    # rust/fastrace in the PR. So: build the crate from source, prove the
+    # dispatch is live, and treat a skip in the compiled-path files as a
+    # failure. The pure path is the matrix above (no fastrace there).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@89b12181fb390509a0842a86cc55eeb8eb928c1d # stable (branch head on 2026-10-05)
+      - name: Install winning and build fastrace from the checkout
+        run: |
+          pip install maturin -e ".[test]"
+          pip install ./rust/fastrace
+      - name: The compiled path is live
+        run: |
+          python - <<'PY'
+          import importlib.metadata as md
+          import fastrace, winning
+          from winning import rustconfig
+          print("fastrace", md.version("fastrace"), "from", fastrace.__file__)
+          assert winning.rust_active(), "rust_active() is False with fastrace installed"
+          off = [m.__name__ for m in rustconfig._rust_modules() if not getattr(m, "_HAVE_RUST", False)]
+          assert not off, f"modules on the switch with the compiled path inactive: {off}"
+          PY
+      - name: Compiled-path suites, no skips allowed
+        run: |
+          python -m pytest -q -rs tests/test_rust_parity.py \
+            tests/test_rust_dispatch_core.py \
+            tests/test_rust_gauge_and_normalized_jvp.py \
+            tests/test_rust_switch_static.py tests/test_loading_shapes.py \
+            | tee native.txt
+          if grep -q "SKIPPED" native.txt; then
+            echo "::error::a compiled-path test skipped in the native job"; exit 1
+          fi
+      - name: Other suites that dispatch to the compiled kernels
+        run: |
+          python -m pytest -q tests/test_blocks.py tests/test_bases.py \
+            tests/test_permutations.py tests/test_topk.py \
+            tests/test_topk_inversion.py tests/test_shape_contract.py
 
   package:
     # What gets SHIPPED, not what is in the tree. setup.py lists packages
@@ -49,8 +124,10 @@ jobs:
     # installed copy from outside the repo.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
       - name: Build
@@ -80,15 +157,108 @@ jobs:
           /tmp/wheelenv/bin/pip install dist/*.whl
           cd /tmp && GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
             /tmp/wheelenv/bin/python "$GITHUB_WORKSPACE/.github/smoke.py"
+      - name: Benchmarks from the installed wheel write to cwd (#141)
+        # RESULTS used to be <site-packages>/bench_results; a comparator
+        # without trueskill failed at import, not with an install hint
+        run: |
+          mkdir -p /tmp/benchcwd && cd /tmp/benchcwd
+          /tmp/wheelenv/bin/python -c "import winning.bench.season_ranked, winning.bench.season_trueskill"
+          printf '%s\n' '{"problem": "p", "n": 2, "k": 1, "method": "m", "budget": null, "seconds": 0.1, "max_err": 1e-4, "max_log_err": 0.01, "info": {}}' > records.jsonl
+          /tmp/wheelenv/bin/python -m winning.bench.leaderboard --out /tmp/benchcwd
+          test -f /tmp/benchcwd/LEADERBOARD.md
+          site=$(/tmp/wheelenv/bin/python -c "import sysconfig; print(sysconfig.get_paths()['purelib'])")
+          test ! -e "$site/bench_results"
+          /tmp/wheelenv/bin/pip install "$(ls $GITHUB_WORKSPACE/dist/*.whl)[benchmarks]"
+          /tmp/wheelenv/bin/python -c "import trueskill"
+      - name: Every test shipped in the sdist can be collected (#141)
+        run: |
+          mkdir -p /tmp/sdist && tar xzf dist/*.tar.gz -C /tmp/sdist
+          cd /tmp/sdist/winning-*
+          if [ -d tests ]; then
+            /tmp/wheelenv/bin/pip install pytest
+            /tmp/wheelenv/bin/python -m pytest --collect-only -q tests
+          else
+            echo "sdist ships no tests (MANIFEST.in prunes them)"
+          fi
+
+  parity:
+    # The cross-language comparison has always existed and has never been
+    # gated: it was run by hand, which is why three divergences reached main
+    # before anyone noticed (#153, #171, #178). Two things are checked here.
+    #
+    # 1. The committed vectors still describe the python reference. If a
+    #    python change moves any scenario and the vectors were not
+    #    regenerated, the committed file is stale and the ports are being
+    #    compared against yesterday's answers -- which was true of eleven
+    #    scenarios when this job was written.
+    # 2. R and the browser reproduce those vectors within each scenario's
+    #    own tolerance. A scenario a port does not implement is a failure,
+    #    not a skip; both checkers already treat it that way.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "20"
+      - uses: r-lib/actions/setup-r@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2.14.0
+        with:
+          r-version: "release"
+      - name: Install
+        run: |
+          pip install -e ".[test]"
+          Rscript -e 'install.packages("jsonlite", repos="https://cloud.r-project.org")'
+      - name: Vectors still describe the python reference
+        # Not byte-equality: regenerating on another platform moves the
+        # iterative scenarios in the last digits (BLAS reduction order), as
+        # this job demonstrated on its first run. Each scenario is compared
+        # at the same tolerance the ports must meet.
+        run: WINNING_PURE=1 python parity/check_vectors.py
+      - name: R port
+        run: Rscript parity/check.R
+      - name: Browser port
+        run: node parity/check.mjs
+      - name: Browser API guards
+        # behavioural, not source markers: #186 shipped because the tests
+        # read the source and a shared allowlist let each API accept the
+        # other's options and ignore them
+        run: node parity/check_js_api.mjs
+      - name: Browser factor race vs scipy
+        # js/factor/test_parity.mjs checks the tabulated bases against
+        # scipy-generated vectors, and nothing ran it: it sat failing on
+        # main at 1.01e-5 against its own 2e-6 tolerance until #211, which
+        # is exactly how long an ungated suite stays broken (#140).
+        run: node js/factor/test_parity.mjs
+      - uses: julia-actions/setup-julia@da908477b5db94c10ffce8cfea9f2b3b9d5db687 # v3.0.3
+        with:
+          version: '1'
+      - name: Ports agree about what they REFUSE
+        # check_vectors/check.mjs/check.R/check.jl compare the ports'
+        # VALUES on well-formed inputs. Nothing compared their DECISIONS
+        # on malformed ones, and that is where they drifted: ten of
+        # thirty cases diverged, and a port that quietly recycles a
+        # short D agrees on every vector in those files while pricing a
+        # different race. The check skips any port whose toolchain is
+        # absent rather than passing vacuously -- except here, where all
+        # four are installed and an absence means the install broke.
+        run: python parity/check_divergence.py --require-all
 
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
       - name: Ruff
         run: |
           pip install ruff
-          ruff check winning/factor winning/probit winning/ratings/verify winning/ratings/simulate.py src
+          # `src` was the pre-renovation package; it is deleted, and
+          # attic/ is frozen by definition so it is not linted
+          ruff check winning/factor winning/probit winning/ratings/verify winning/ratings/simulate.py

@@ -33,7 +33,7 @@ import math
 from typing import Dict, List, Sequence
 
 import numpy as np
-from thurstone import Density, Race, UniformLattice
+from winning.research import Density, Race, UniformLattice
 
 from winning.ratingsystem import Rating, RatingSystem, validate_event
 from winning.thurstonerating import _conv_same, _gauss_kernel

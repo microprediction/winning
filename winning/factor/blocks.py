@@ -18,20 +18,33 @@ accelerates the block field pass transparently.
 """
 from __future__ import annotations
 
+import contextlib
+import contextvars
+
 import numpy as np
+
+from ..rustconfig import load_fastrace
+from ..shapes import as_idio, as_loadings
+
 from scipy.special import ndtr, roots_hermitenorm
 
 TINY = 1e-300
 
-try:
-    import fastrace as _fastrace
-    _RUST_OK = hasattr(_fastrace, "block_race")
-    _HAVE_RUST = _RUST_OK and __import__("os").environ.get(
-        "WINNING_PURE", "").strip() in ("", "0")
-except Exception:                                            # pragma: no cover
-    _fastrace = None
-    _RUST_OK = False
-    _HAVE_RUST = False
+# compiled kernels (rust/fastrace); honours WINNING_PURE and use_rust()
+_fastrace, _RUST_OK, _HAVE_RUST = load_fastrace('block_race')
+
+
+def _native_raw(fn, *args):
+    """A compiled block/tree kernel's RAW lattice mass. fastrace checks
+    that mass itself for direct callers (#777); the front door checks the
+    combined mass with _checked_mass instead (a nested race sums the
+    conditional block masses first, and an inverse's trial states run
+    under a looser _MASS_TOL), so the native check is switched off here.
+    An older fastrace without the check takes no mass_tol."""
+    try:
+        return fn(*args, mass_tol=np.inf)
+    except TypeError:
+        return fn(*args)
 
 
 def _warn_if_sharp(v, sd, qa, threshold=3.0):
@@ -84,7 +97,11 @@ def _window_nodes(mu, sd, amp, delta=1e-12, pad_sds=2.0):
     amp = np.broadcast_to(np.asarray(amp, float), mu.shape)
     m_lo = mu - amp
     m_hi = mu + amp
-    smax = max(float(sd.max()), 1e-12)
+    # the field's own scale (every caller passes positive sds): an
+    # absolute 1e-12 floor stopped the window shrinking with the model, so
+    # the same block race in units of 1e-14 lost 0.7% of its mass at 257
+    # points and raised (#100)
+    smax = float(sd.max())
 
     def F(x, m):
         return np.exp(np.log(np.maximum(ndtr((x - m) / sd), TINY)).sum())
@@ -138,10 +155,82 @@ def _cluster_nodes(r, qa, seed=0):
         return nodes, w / w.sum()
     from scipy.stats import qmc
     from scipy.special import ndtri
-    m = max(4, int(np.ceil(np.log2(qa ** r))))
-    u = qmc.Sobol(r, scramble=True, seed=seed).random_base2(min(m, 10))
+    m = _sobol_log2(r, qa)
+    u = qmc.Sobol(r, scramble=True, seed=seed).random_base2(m)
     nodes = ndtri(np.clip(u, 1e-9, 1 - 1e-9))
     return nodes, np.full(len(nodes), 1.0 / len(nodes))
+
+
+# log2 of the rank-3+ Sobol budget at the default qa, and its ceiling
+_SOBOL_M_DEFAULT = 10
+_SOBOL_M_MAX = 16
+_QA_DEFAULT = 9
+
+
+def _sobol_log2(r, qa):
+    """log2 of the scrambled-Sobol node count for a rank-r (r >= 3) effect.
+
+    This was min(ceil(log2(qa ** r)), 10): at rank 6 qa = 3 already gave
+    m = 10, so qa = 5, 9, 31 and 100 all ran the identical 1024-node rule
+    and a covariance-equivalent rotation V -> VQ moved a share by 3.6e-3
+    whatever refinement was asked for (#392). Now the default qa keeps the
+    old budget and a LARGER qa grows the rule as qa^r relative to it
+    (doubling qa adds r bits), up to 2^16 nodes; a request beyond the
+    ceiling warns with the budget actually used instead of being dropped.
+    """
+    qa = float(qa)
+    m = max(4, int(np.ceil(np.log2(qa ** r))))
+    if qa <= _QA_DEFAULT:
+        return min(m, _SOBOL_M_DEFAULT)
+    m = _SOBOL_M_DEFAULT + int(np.ceil(r * np.log2(qa / _QA_DEFAULT)))
+    if m > _SOBOL_M_MAX:
+        import warnings
+        warnings.warn(
+            f"qa={qa:g} at factor rank {r} asks for 2^{m} Sobol nodes; "
+            f"using the ceiling 2^{_SOBOL_M_MAX} = {2 ** _SOBOL_M_MAX}. "
+            "The quadrature error at this budget is not reduced further "
+            "by raising qa.", RuntimeWarning, stacklevel=4)
+        m = _SOBOL_M_MAX
+    return m
+
+
+# the rank-two product rule's orientation to a cluster's principal axes
+_ROT45 = np.sqrt(0.5) * np.array([[1.0, -1.0], [1.0, 1.0]])
+
+
+def _canonical_block_loadings(V, cluster):
+    """Rank-two block loadings in a basis fixed by each V_c V_c' alone.
+
+    Each cluster's effect is its own N(0, I) draw, so V_c -> V_c Q_c
+    (Q_c orthogonal) is the same race, but the product Gauss-Hermite
+    rule is not rotation invariant: a 45-degree rotation of one block
+    moved a share by 0.0052 at the default qa (#787). Per cluster the
+    columns become V_c U_c, U_c the eigenvectors of V_c'V_c, with
+    factor.core's sign rule (#745); null directions (norm <= 1e-12 of
+    the cluster's largest) are dropped and the clusters zero-padded to
+    the largest rank R, as the browser's canonicalBasis does. R = 1 is
+    then the rank-one Gauss-Hermite rule. At R = 2 the product grid is
+    laid at 45 degrees to the principal axes: on its own axes the
+    dominant direction sees only qa distinct node offsets and the
+    default error was ~3x that of an arbitrary basis; at 45 degrees it
+    was ~10x smaller than on the axes (docs/notes/cov-determinism.md).
+    The grid is symmetric under the sign flips and swaps the sign rule
+    leaves open. One 2 x 2 eigendecomposition per cluster."""
+    from .core import _canonical_factor_basis
+    _, inv = np.unique(cluster, return_inverse=True)
+    inv = inv.reshape(-1)
+    order = np.argsort(inv, kind="stable")
+    starts = np.flatnonzero(np.r_[True, np.diff(inv[order]) != 0])
+    parts = []
+    for ix in np.split(order, starts[1:]):
+        C = _canonical_factor_basis(V[ix])
+        norm = np.linalg.norm(C, axis=0)
+        parts.append((ix, C[:, (norm > 1e-12 * norm.max()) & (norm > 0)]))
+    R = max(C.shape[1] for _, C in parts)
+    out = np.zeros((V.shape[0], R))
+    for ix, C in parts:
+        out[ix, :C.shape[1]] = C
+    return out @ _ROT45 if R == 2 else out
 
 
 def _block_max_r(mu, sd, cluster, V, points, qa):
@@ -149,9 +238,7 @@ def _block_max_r(mu, sd, cluster, V, points, qa):
     cluster with its own independent r-dim effect. Conditional independence
     given the effect makes the field a per-cluster r-dim quadrature."""
     mu = np.asarray(mu, float); sd = np.asarray(sd, float)
-    V = np.atleast_2d(np.asarray(V, float))
-    if V.shape[0] != len(mu):
-        V = V.T
+    V = as_loadings(V, len(mu))
     r = V.shape[1]
     cluster = np.asarray(cluster)
     n = len(mu)
@@ -165,7 +252,7 @@ def _block_max_r(mu, sd, cluster, V, points, qa):
     if _HAVE_RUST and hasattr(_fastrace, "block_race_r"):
         lo_r, hi_r = _window_nodes(mu_o, sd_o, amp)
         try:
-            p_o = np.asarray(_fastrace.block_race_r(
+            p_o = np.asarray(_native_raw(_fastrace.block_race_r,
                 np.ascontiguousarray(mu_o), np.ascontiguousarray(sd_o),
                 np.ascontiguousarray(V_o), starts.astype(np.int64),
                 np.ascontiguousarray(nodes), np.ascontiguousarray(w), points,
@@ -180,15 +267,25 @@ def _block_max_r(mu, sd, cluster, V, points, qa):
     lo, hi = _window_nodes(mu_o, sd_o, amp)
     x = np.linspace(lo, hi, points); dx = x[1] - x[0]
     shift = V_o @ nodes.T                                   # (n, Q)
-    z = (x[None, None, :] - mu_o[:, None, None]
-         - shift[:, :, None]) / sd_o[:, None, None]
-    logF = np.log(np.maximum(ndtr(z), TINY))
-    pdf = np.exp(-0.5 * z * z) / (sd_o[:, None, None] * np.sqrt(2 * np.pi))
-    S = np.add.reduceat(logF, starts, axis=0)
-    G = np.einsum("q,cql->cl", w, np.exp(np.minimum(S, 0.0)))
+    # G and h are SUMS over the nodes, so they accumulate in node chunks:
+    # the (n, Q, L) cube of a 2^16-node rule would not fit in memory
+    n_c = len(starts)
+    G = np.zeros((n_c, points))
+    h = np.zeros((n, points))
+    chunk = max(1, int(4e6 // max(n * points, 1)))
+    for a in range(0, len(w), chunk):
+        sh = shift[:, a:a + chunk]
+        wc = w[a:a + chunk]
+        z = (x[None, None, :] - mu_o[:, None, None]
+             - sh[:, :, None]) / sd_o[:, None, None]
+        logF = np.log(np.maximum(ndtr(z), TINY))
+        pdf = np.exp(-0.5 * z * z) / (sd_o[:, None, None] * np.sqrt(2 * np.pi))
+        S = np.add.reduceat(logF, starts, axis=0)
+        G += np.einsum("q,cql->cl", wc, np.exp(np.minimum(S, 0.0)))
+        h += np.einsum("q,nql->nl", wc,
+                       pdf * np.exp(np.minimum(S[c_o] - logF, 0.0)))
     logG = np.log(np.maximum(G, TINY))
     rest = np.exp(np.minimum(logG.sum(axis=0)[None, :] - logG, 0.0))
-    h = np.einsum("q,nql->nl", w, pdf * np.exp(np.minimum(S[c_o] - logF, 0.0)))
     p_o = (h * rest[c_o]).sum(axis=1) * dx
     p = np.empty(n); p[order] = p_o
     return np.maximum(p, 0.0)
@@ -198,7 +295,25 @@ def _block_max(mu, sd, cluster, v, points, qa):
     """Max-wins kernel (numpy reference); public functions negate."""
     mu = np.asarray(mu, float); sd = np.asarray(sd, float)
     v = np.asarray(v, float); cluster = np.asarray(cluster)
+    if v.ndim == 0:
+        # a scalar is one common loading for every contestant, as
+        # as_loadings and the Jacobian read it; the reshape below raised
+        # for it, so forward, inverse and Blocks dispatch refused the
+        # spelling the Jacobian accepted (#684)
+        v = np.full(len(mu), float(v))
+    if v.ndim == 2 and v.shape[-1] == 0:
+        # rank zero is the independent race (Blocks with zero loadings,
+        # the containment the grammar documents); it fell into the
+        # rank-one reshape and raised a broadcast error (#508)
+        v = np.zeros(len(mu))
     _warn_if_sharp(v, sd, qa)
+    if v.ndim == 2 and v.shape[-1] > 1:
+        V = as_loadings(v, len(mu))
+        if V.shape[1] == 2:
+            # rank two: the rule sees each cluster's V_c V_c' only (#787)
+            v = _canonical_block_loadings(V, cluster)
+            if v.shape[1] == 0:
+                v = np.zeros(len(mu))
     if v.ndim == 2 and v.shape[-1] > 1:
         return _block_max_r(mu, sd, cluster, v, points, qa)
     v = v.reshape(len(mu))
@@ -212,7 +327,7 @@ def _block_max(mu, sd, cluster, v, points, qa):
     if _HAVE_RUST:
         lo_r, hi_r = _window_nodes(mu_o, sd_o, amp)
         try:
-            p_o = np.asarray(_fastrace.block_race(
+            p_o = np.asarray(_native_raw(_fastrace.block_race,
                 np.ascontiguousarray(mu_o), np.ascontiguousarray(sd_o),
                 np.ascontiguousarray(v_o), starts.astype(np.int64),
                 np.ascontiguousarray(an), np.ascontiguousarray(aw), points,
@@ -241,12 +356,18 @@ def _block_max(mu, sd, cluster, v, points, qa):
     return np.maximum(p, 0.0)
 
 
-def _scalar_loading(loading, kind):
+def _scalar_loading(loading, kind, n=None):
     """Tree races take SCALAR (rank-one) leaf-cluster loadings; the paper's
     tree grammar is written that way and only the block grammar prices
     rank r. Refuse a matrix rather than mis-broadcast (python crashed
-    cryptically; the R port silently priced the flattened matrix)."""
+    cryptically; the R port silently priced the flattened matrix).
+
+    Given n, a 0-d loading is one common loading for every runner, as
+    shapes.as_loadings spells it; the tree kernels indexed it by runner
+    order and raised IndexError (#780)."""
     L = np.asarray(loading, float)
+    if L.ndim == 0 and n is not None:
+        return np.full(n, float(L))
     if L.ndim == 2 and L.shape[1] == 1:
         return L.ravel()
     if L.ndim > 1:
@@ -257,11 +378,31 @@ def _scalar_loading(loading, kind):
     return L
 
 
-def _checked_mass(raw, kind, mass_tol=5e-3):
+# The mass tolerance in force. An inverse's INTERNAL trial states (warm
+# start, line-search trials) are priced under a looser one: their shares
+# only steer the solve, and the 0.5% check rejected a self-generated
+# target at its own warm start before the first update (#656). The state
+# an inverse returns is always re-priced under the strict default.
+_MASS_TOL = contextvars.ContextVar("winning_block_mass_tol", default=5e-3)
+_TRIAL_MASS_TOL = 0.05
+
+
+@contextlib.contextmanager
+def _trial_mass_tolerance():
+    token = _MASS_TOL.set(max(_MASS_TOL.get(), _TRIAL_MASS_TOL))
+    try:
+        yield
+    finally:
+        _MASS_TOL.reset(token)
+
+
+def _checked_mass(raw, kind, mass_tol=None):
     """Raw lattice mass is a diagnostic, not a nuisance: a material
     defect means the window missed the winner's region, and normalizing
     it away returns confident wrong shares (the fourteenth review's
     0.68/0.32 against a forced 0.50/0.50). Raise instead."""
+    if mass_tol is None:
+        mass_tol = _MASS_TOL.get()
     t = float(raw.sum())
     # NaN compares false against any tolerance, so test finiteness
     # explicitly or a NaN mass sails through the check
@@ -275,6 +416,33 @@ def _checked_mass(raw, kind, mass_tol=5e-3):
     return raw / t
 
 
+def _home(mu, D):
+    """mu as floats, moved next to the origin when a common offset dwarfs
+    the field (races._translated_home). The lattices here are built in
+    the caller's units, so at an offset of 1e13 they collapsed to the
+    float spacing and the block, nested and tree races raised a mass
+    defect (zero mass at 1e15) while their Jacobians came back zero
+    (#477). Ordinary inputs are returned unchanged."""
+    from .races import _translated_home
+    mu = np.asarray(mu, float)
+    with np.errstate(invalid="ignore"):
+        return _translated_home(mu, np.asarray(D, float))
+
+
+def _one_cluster_gauge(cluster, loading, n):
+    """The loading itself, unless every contestant is in ONE cluster: its
+    shock then reaches everyone, and only loading differences are
+    identified. A common 40 in [40] * 5 widened the lattice until the
+    race raised a 2.5% mass defect, moved the Jacobian and broke the
+    inverse (#471). Such a loading is gauge-centred as the factor paths
+    centre theirs (core._gauge_center); any other is returned as given."""
+    lab = np.asarray(cluster)
+    if lab.size != n or n < 2 or not (lab == lab.flat[0]).all():
+        return loading
+    from .core import _gauge_center
+    return _gauge_center(as_loadings(loading, n))
+
+
 def block_race_probabilities(mu, cluster, loading, D, points=257, qa=9):
     """P(i wins | min-wins) under one private factor per cluster.
 
@@ -282,7 +450,10 @@ def block_race_probabilities(mu, cluster, loading, D, points=257, qa=9):
     D[i] its idiosyncratic VARIANCE (as everywhere in winning.factor).
     The unnormalized lattice mass is checked before normalization and a
     material defect raises rather than being normalized away."""
-    raw = _block_max(-np.asarray(mu, float), np.sqrt(np.asarray(D, float)),
+    mu = _home(mu, D)
+    loading = _one_cluster_gauge(cluster, loading, len(mu))
+    # one door for D: a scalar is the same variance for everyone (#84)
+    raw = _block_max(-mu, np.sqrt(as_idio(D, len(mu), positive=True)),
                      cluster, loading, points, qa)
     return _checked_mass(raw, "block race")
 
@@ -308,29 +479,55 @@ def nested_race_probabilities(mu, cluster, loading, D, coupling=None,
     # per-node mass defect inside a plausible-looking average
     # (fourteenth review)
     p = np.zeros(len(mu))
-    muv = np.asarray(mu, float)
-    sdv = np.sqrt(np.asarray(D, float))
+    muv = _home(mu, D)
+    sdv = np.sqrt(as_idio(D, len(muv), positive=True))
     for q in range(len(fn)):
-        p += fw[q] * _block_max(-(muv + gamma * (g @ fn[q])), sdv,
-                                cluster, loading, points, qa)
+        p += fw[q] * _block_max(-(muv + _coupled_shift(g, gamma, fn[q])),
+                                sdv, cluster, loading, points, qa)
     return _checked_mass(p, "nested race")
 
 
+def _coupled_shift(g, gamma, node):
+    """gamma (g @ node), the global factor's shift. Only gamma g is
+    identified: coupling c g with gamma / c is the same race, but at
+    c = 1e308 the raw g @ node overflowed before gamma was applied and
+    the lattice mass came back NaN (#722). That spelling is kept
+    wherever it is finite; otherwise gamma is absorbed into g first."""
+    with np.errstate(over="ignore", invalid="ignore"):
+        s = g @ node
+    if np.all(np.isfinite(s)):
+        return gamma * s
+    return (gamma * g) @ node
+
+
 def block_race_jacobian(mu, cluster, loading, D, points=257, qa=9):
-    _lv = np.asarray(loading, float)
-    if _lv.ndim == 2 and _lv.shape[-1] > 1 and _lv.shape[0] > 1:
+    """Exact d p / d mu (min-wins), one pass. Rows sum to zero.
+
+    A rank-one cluster loading is valid as a length-n vector OR as an
+    (n, 1) matrix -- `as_loadings` is the one place that rule is decided,
+    and `block_race_probabilities` accepts both. This function used to
+    call `np.asarray` and keep whatever shape it was handed, so the
+    matrix spelling reached the kernel as (n, 1) and died in an unrelated
+    `np.take` with "input operand has more dimensions than allowed by the
+    axis"; every inverse and polishing path that calls the Jacobian
+    inherited the crash (#145).
+    """
+    mu = _home(mu, D)
+    n = len(mu)
+    V = as_loadings(loading, n)          # (n, rank), one ROW per entity
+    V = _one_cluster_gauge(cluster, V, n)
+    if V.shape[1] == 0:                  # rank zero: no shared effect (#508)
+        V = np.zeros((n, 1))
+    if V.shape[1] > 1:
         raise NotImplementedError(
             "block_race_jacobian supports rank-one cluster loadings only; "
             "the rank-r block Jacobian is not implemented (the FORWARD "
             "rank-r kernel is). Use finite differences of "
             "block_race_probabilities, or the factor grammar if the "
             "loadings are global.")
-    """Exact d p / d mu (min-wins), one pass. Rows sum to zero."""
-    mu = np.asarray(mu, float)
     m = -mu
-    sd = np.sqrt(np.asarray(D, float))
-    v = np.asarray(loading, float); cluster = np.asarray(cluster)
-    n = len(mu)
+    sd = np.sqrt(as_idio(D, len(mu), positive=True))
+    v = V[:, 0]; cluster = np.asarray(cluster)
     _, inv = np.unique(cluster, return_inverse=True)
     order = np.argsort(inv, kind="stable")
     mu_o, sd_o, v_o, c_o = m[order], sd[order], v[order], inv[order]
@@ -380,23 +577,44 @@ def abilities_from_block_race(p, cluster, loading, D, points=257, qa=9,
     Sub-resolution targets are BOUNDS, not measurements: they are floored at
     max(1e-14, min-positive/1000) and the returned abilities for those
     entries are upper bounds on quality (lower bounds on mu)."""
-    p_t = np.asarray(p, float); p_t = p_t / p_t.sum()
+    from ..shapes import rescaled_target
+    p_t = rescaled_target(np.asarray(p, float))  # scale-safe (#463)
     n = len(p_t)
     floor = max(1e-14, p_t[p_t > 0].min() * 1e-3)
     p_t = np.maximum(p_t, floor); p_t = p_t / p_t.sum()
     lt = np.log(p_t)
     ones = np.ones((n, n)) / n
+    loading = _one_cluster_gauge(cluster, loading, n)
     forward = lambda m: block_race_probabilities(m, cluster, loading, D,
                                                  points=points, qa=qa)
-    # adaptive fixed point into Newton's basin
-    mu = -(lt - lt.mean())
+    # The field's own scale. The warm start, the fixed-point step and the
+    # Newton trust radius were absolute (unit-variance) numbers, so the
+    # same race written with loading -> c loading, D -> c^2 D was solved
+    # at c = 1 and missed by 0.40 of a share at c = 1e-3 and 0.21 at
+    # c = 1e3 (#100). Everything below is in units of `scale`.
+    from .structures import _loading_var
+    scale = float(np.sqrt(np.median(
+        as_idio(D, n, positive=True) + _loading_var(loading, n))))
+    # adaptive fixed point into Newton's basin; trial states under the
+    # trial mass tolerance, the returned state re-priced strictly (#656)
+    with _trial_mass_tolerance():
+        mu, cur, it = _block_inverse_solve(lt, forward, cluster, loading, D,
+                                           points, qa, scale, ones, tol,
+                                           max_iter)
+    pv = forward(mu); pv = np.maximum(pv, TINY); pv = pv / pv.sum()
+    return mu - mu.mean(), float(np.abs(np.log(pv) - lt).max()), it
+
+
+def _block_inverse_solve(lt, forward, cluster, loading, D, points, qa,
+                         scale, ones, tol, max_iter):
+    mu = -(lt - lt.mean()) * scale
     eta = 1.0
     lp = np.log(np.maximum(forward(mu), TINY))
     err = np.abs(lp - lt).max()
     for _ in range(200):
         if err < 0.2:
             break
-        mu_n = mu - eta * (lt - lp); mu_n -= mu_n.mean()
+        mu_n = mu - eta * (lt - lp) * scale; mu_n -= mu_n.mean()
         lp_n = np.log(np.maximum(forward(mu_n), TINY))
         e_n = np.abs(lp_n - lt).max()
         if e_n < err:
@@ -411,13 +629,14 @@ def abilities_from_block_race(p, cluster, loading, D, points=257, qa=9,
         r = np.log(pv) - lt
         cur = np.abs(r).max()
         if cur < tol:
-            return mu - mu.mean(), float(cur), it
+            return mu, float(cur), it
         J = block_race_jacobian(mu, cluster, loading, D, points=points, qa=qa)
-        Jl = J / pv[:, None]
+        Jl = J / pv[:, None] * scale         # dimensionless
         step, *_ = np.linalg.lstsq(Jl + ones, -r, rcond=1e-12)
         nn = np.linalg.norm(step)
         if nn > 5.0:
             step *= 5.0 / nn
+        step = step * scale
         for _ in range(8):
             mu_n = mu + step; mu_n -= mu_n.mean()
             p_n = np.maximum(forward(mu_n), TINY); p_n = p_n / p_n.sum()
@@ -425,27 +644,165 @@ def abilities_from_block_race(p, cluster, loading, D, points=257, qa=9,
                 mu = mu_n
                 break
             step *= 0.5
-    pv = np.maximum(forward(mu), TINY); pv = pv / pv.sum()
-    return mu - mu.mean(), float(np.abs(np.log(pv) - lt).max()), max_iter
+    return mu, np.inf, max_iter
+
+
+def _without_common_shock(parent, strength, n_clusters):
+    """Strengths with every COMMON ancestor's set to zero.
+
+    A node above every cluster adds the same shock to every contestant,
+    which cancels from every performance difference: the race is exactly
+    invariant to it. Kept, it still widened the lattice window by its
+    quadrature amplitude, so a root strength of 50 on a race identical to
+    the root-zero one raised a 3.7% mass defect at 257 points (#489), and
+    it entered the inverse's surrogate variance. Zeroing it prices the
+    same race; trees without a common shock are untouched."""
+    lam = np.array(strength, dtype=float)
+    parent = np.asarray(parent, int)
+    hits = np.zeros(len(parent), int)
+    for c in range(n_clusters):
+        u = c
+        while parent[u] >= 0:
+            u = parent[u]
+            hits[u] += 1
+    common = hits == n_clusters
+    if np.any(lam[common] != 0.0):
+        lam[common] = 0.0
+    return lam
+
+
+def _as_parent(parent):
+    """Tree parent pointers as int64: a 1-D array of whole numbers. A
+    plain int cast truncated [2.7, 2, -1] to [2, 2, -1] and priced that
+    topology, where the browser refuses it (#328)."""
+    p = np.asarray(parent)
+    if p.ndim != 1:
+        raise ValueError(f"parent must be a 1-D array; got shape {p.shape}")
+    if p.dtype.kind not in "iu":
+        if (p.dtype.kind not in "f" or not np.isfinite(p).all()
+                or (p != np.floor(p)).any()):
+            bad = [x for x in p.tolist()
+                   if not (isinstance(x, (int, float)) and np.isfinite(x)
+                           and x == int(x))]
+            raise ValueError(
+                "parent must hold whole node indices (-1 for the root); got "
+                f"{bad[0] if bad else p.dtype!r}")
+    return p.astype(np.int64)
+
+
+def _validate_tree(parent, strength, n_clusters):
+    """A tree is a tree: one root, every parent an existing node, no
+    cycles, the cluster nodes are leaves. The kernels walk parent
+    pointers with `while parent[u] >= 0`, so a cycle -- [1, 0], or a
+    self-parent -- spun forever (#328). Linear time, before any walk."""
+    parent = np.asarray(parent)
+    nT = len(parent)
+    if np.ndim(strength) != 1 or len(strength) != nT:
+        raise ValueError(
+            f"strength must have one entry per tree node; got "
+            f"{np.shape(strength)} for {nT} nodes")
+    if not np.all(np.isfinite(strength)):
+        raise ValueError("strength has a non-finite entry")
+    bad = np.flatnonzero((parent < -1) | (parent >= nT))
+    if bad.size:
+        raise ValueError(
+            f"parent[{int(bad[0])}] = {int(parent[bad[0]])} is not -1 or a "
+            f"node index in [0, {nT})")
+    selfp = np.flatnonzero(parent == np.arange(nT))
+    if selfp.size:
+        t = int(selfp[0])
+        raise ValueError(f"parent contains a cycle: {t} -> {t}")
+    roots = np.flatnonzero(parent < 0)
+    if len(roots) != 1:
+        raise ValueError(
+            f"a tree has exactly one root (parent -1); got {len(roots)}")
+    state = np.zeros(nT, np.int8)                 # 0 unseen, 1 on path, 2 done
+    for t in range(nT):
+        path = []
+        u = t
+        while u >= 0 and state[u] == 0:
+            state[u] = 1
+            path.append(u)
+            u = int(parent[u])
+        if u >= 0 and state[u] == 1:
+            k = path.index(u)
+            cyc = " -> ".join(str(x) for x in path[k:] + [u])
+            raise ValueError(f"parent contains a cycle: {cyc}")
+        for v in path:
+            state[v] = 2
+    if n_clusters > nT:
+        raise ValueError(f"{n_clusters} clusters but only {nT} tree nodes")
+    kids_of_leaves = np.flatnonzero((parent >= 0) & (parent < n_clusters))
+    if kids_of_leaves.size:
+        t = int(kids_of_leaves[0])
+        raise ValueError(
+            f"node {t} has parent {int(parent[t])}, a cluster node; the "
+            f"first {n_clusters} nodes are the clusters and must be leaves")
+
+
+def _tree_leaf_index(cluster, leaves=None):
+    """Each runner's LEAF NODE index in a tree, from its cluster label.
+
+    leaves=None (the default) gives leaf node j to the j-th label in
+    sorted order, so canonical labels 0..nC-1 ARE the leaf nodes. Other
+    spellings are still a bijection onto the leaves, but which label lands
+    on which leaf follows their sort order: renaming [0, 0, 1, 2] to
+    [30, 30, 10, 20] moves the clusters to leaves 2, 0, 1, a different
+    tree when the leaves sit at unequal depths (#372). Pass
+    leaves=[label of leaf 0, label of leaf 1, ...] to state the map
+    explicitly; then any spelling prices the same tree. Every leaf label
+    must be carried by at least one runner, and every runner's label must
+    be a leaf."""
+    cluster = np.asarray(cluster)
+    if leaves is None:
+        return np.unique(cluster, return_inverse=True)[1].reshape(-1)
+    leaves = list(np.asarray(leaves).reshape(-1).tolist())
+    pos = {}
+    for j, lab in enumerate(leaves):
+        if lab in pos:
+            raise ValueError(f"leaves names label {lab!r} twice (#372)")
+        pos[lab] = j
+    out = np.empty(len(cluster), dtype=np.int64)
+    for i, lab in enumerate(cluster.reshape(-1).tolist()):
+        if lab not in pos:
+            raise ValueError(
+                f"runner {i} has cluster label {lab!r}, which leaves= does "
+                "not map to a leaf node (#372)")
+        out[i] = pos[lab]
+    missing = sorted(set(range(len(leaves))) - set(out.tolist()))
+    if missing:
+        raise ValueError(
+            f"leaf {missing[0]} (label {leaves[missing[0]]!r}) carries no "
+            "runner: every leaf node must hold a cluster (#372)")
+    return out
 
 
 def tree_race_probabilities(mu, cluster, loading, D, parent, strength,
-                            points=257, qa=9):
+                            points=257, qa=9, leaves=None):
     """P(i wins | min-wins) under a hierarchy of uniform shared effects.
 
     Leaf clusters keep per-member loadings; each internal node t (indices
     continuing past the leaf clusters) applies strength[t] uniformly to every
     leaf beneath it; parent[t] gives the tree (root's parent = -1). Two
     message passes on the lattice; see research/pqrace/SCHUR.md for the
-    validation history (MC to noise floor, common-root invariance 3e-7)."""
-    mu = np.asarray(mu, float)
+    validation history (MC to noise floor, common-root invariance 3e-7).
+
+    The label-to-leaf map is `leaves` (see _tree_leaf_index): by default
+    the sorted order of the labels, so use labels 0..nC-1 or pass
+    leaves= explicitly when the leaves sit at unequal depths (#372)."""
+    if leaves is not None:
+        cluster = _tree_leaf_index(cluster, leaves)
+    mu = _home(mu, D)
     m = -mu
-    sd = np.sqrt(np.asarray(D, float))
-    v = _scalar_loading(loading, "tree races"); cluster = np.asarray(cluster)
-    parent = np.asarray(parent, int); lam = np.asarray(strength, float)
+    sd = np.sqrt(as_idio(D, len(mu), positive=True))
+    v = _scalar_loading(loading, "tree races", len(mu))
+    cluster = np.asarray(cluster)
+    parent = _as_parent(parent); lam = np.asarray(strength, float)
     n = len(m); nT = len(parent)
     _, inv = np.unique(cluster, return_inverse=True)
     nC = inv.max() + 1
+    _validate_tree(parent, lam, nC)                  # #328
+    lam = _without_common_shock(parent, lam, nC)     # #489
     order = np.argsort(inv, kind="stable")
     mu_o, sd_o, v_o, c_o = m[order], sd[order], v[order], inv[order]
     starts = np.flatnonzero(np.r_[True, np.diff(c_o) != 0])
@@ -467,7 +824,7 @@ def tree_race_probabilities(mu, cluster, loading, D, parent, strength,
     amp = (np.abs(v_o) + depth_shift[c_o]) * float(np.max(np.abs(an)))
     lo, hi = _window_nodes(mu_o, sd_o, amp)
     if _HAVE_RUST and hasattr(_fastrace, "tree_race"):
-        p_o = np.asarray(_fastrace.tree_race(
+        p_o = np.asarray(_native_raw(_fastrace.tree_race,
             np.ascontiguousarray(mu_o), np.ascontiguousarray(sd_o),
             np.ascontiguousarray(v_o), starts.astype(np.int64),
             parent.astype(np.int64), np.ascontiguousarray(lam),
@@ -521,7 +878,7 @@ def tree_race_probabilities(mu, cluster, loading, D, parent, strength,
 
 
 def tree_race_jacobian(mu, cluster, loading, D, parent, strength,
-                       points=257, qa=9):
+                       points=257, qa=9, leaves=None):
     """d p / d mu for the tree race (min-wins), one pass.
 
     Same-cluster term EXACT under the downward message R_c; cross-cluster
@@ -529,15 +886,48 @@ def tree_race_jacobian(mu, cluster, loading, D, parent, strength,
     no ancestor effects (then it reduces to block_race_jacobian), an
     approximation otherwise. Good enough for Newton and for polish
     constraint gradients: the residual/feasibility is always measured on
-    the exact forward map. Promoted from research/pqrace (SCHUR.md)."""
-    mu = np.asarray(mu, float)
+    the exact forward map. Promoted from research/pqrace (SCHUR.md).
+
+    When ANY ancestor effect is present the Gram product is not used:
+    it factorises the two-leaf-removed cavity as R_i R_j / G_root, which
+    is false once leaves share a random ancestor -- the smallest case, two
+    leaves under one common root, has a forward invariant to the root
+    strength (the shock cancels) and an exact slope
+    phi(dmu / s) / s, s^2 = 1.85, while the Gram term moved from 0.2467
+    to 0.1792 at root strength 0.8 and was not refined away by points
+    (#350). There the matrix is the central difference of the exact
+    forward instead -- the derivative of the map actually returned, at
+    2n forward passes. `leaves` as in tree_race_probabilities (#372)."""
+    if leaves is not None:
+        cluster = _tree_leaf_index(cluster, leaves)
+    mu = _home(mu, D)
     m = -mu
-    sd = np.sqrt(np.asarray(D, float))
-    v = _scalar_loading(loading, "tree races"); cluster = np.asarray(cluster)
-    parent = np.asarray(parent, int); lam = np.asarray(strength, float)
+    sd = np.sqrt(as_idio(D, len(mu), positive=True))
+    v = _scalar_loading(loading, "tree races", len(mu))
+    cluster = np.asarray(cluster)
+    parent = _as_parent(parent); lam = np.asarray(strength, float)
     n = len(m); nT = len(parent)
     _, inv = np.unique(cluster, return_inverse=True)
     nC = inv.max() + 1
+    _validate_tree(parent, lam, nC)                  # #328
+    # a common shock cancels: with it gone, two leaves under a bare root
+    # take the exact one-pass path below (#489)
+    lam = _without_common_shock(parent, lam, nC)
+    strength = lam
+    if np.any(lam[nC:] != 0.0):
+        tot = sd ** 2 + v ** 2
+        h = 1e-5 * float(np.sqrt(np.median(tot)))
+        J = np.empty((n, n))
+        for j in range(n):
+            e = np.zeros(n); e[j] = h
+            J[:, j] = (tree_race_probabilities(mu + e, cluster, loading, D,
+                                               parent, strength,
+                                               points=points, qa=qa)
+                       - tree_race_probabilities(mu - e, cluster, loading,
+                                                 D, parent, strength,
+                                                 points=points, qa=qa)
+                       ) / (2.0 * h)
+        return J
     order = np.argsort(inv, kind="stable")
     mu_o, sd_o, v_o, c_o = m[order], sd[order], v[order], inv[order]
     starts = np.flatnonzero(np.r_[True, np.diff(c_o) != 0])
@@ -630,7 +1020,7 @@ def nested_race_jacobian(mu, cluster, loading, D, coupling=None, gamma=1.0,
     if coupling is None or gamma == 0.0:
         return block_race_jacobian(mu, cluster, loading, D, points=points, qa=qa)
     fn, fw = roots_hermitenorm(qf); fw = fw / fw.sum()
-    mu = np.asarray(mu, float)
+    mu = _home(mu, D)
     g = np.atleast_2d(np.asarray(coupling, float))
     if g.shape[0] != len(mu):
         g = g.T
@@ -641,6 +1031,8 @@ def nested_race_jacobian(mu, cluster, loading, D, coupling=None, gamma=1.0,
     n = len(mu)
     J = np.zeros((n, n))
     for q in range(len(nodes)):
-        J += w[q] * block_race_jacobian(mu + gamma * (g @ nodes[q]), cluster,
-                                        loading, D, points=points, qa=qa)
+        J += w[q] * block_race_jacobian(mu + _coupled_shift(g, gamma,
+                                                            nodes[q]),
+                                        cluster, loading, D, points=points,
+                                        qa=qa)
     return J

@@ -13,28 +13,44 @@ Run:  WINNING_PURE=1 python parity/gen_vectors.py
 from __future__ import annotations
 
 import json
+import warnings
 import os
+import sys
 
 import numpy as np
 
-from winning.factor.races import race_probabilities, abilities_from_race
-from winning.factor.blocks import (block_race_probabilities,
+# Pin THIS checkout's winning. Run as a script, sys.path[0] is parity/,
+# so `import winning` found whatever was installed -- an editable install
+# from another worktree -- and the checker certified, or the generator
+# overwrote, vectors.json with another revision's numbers (#460).
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if sys.path[:1] != [_ROOT]:
+    sys.path.insert(0, _ROOT)
+_pre = getattr(sys.modules.get('winning'), '__file__', None)
+if _pre and not os.path.abspath(_pre).startswith(_ROOT + os.sep):
+    raise ImportError('parity/gen_vectors.py: winning was already imported from '
+                      + _pre + ', not this checkout ' + _ROOT)
+
+from winning.factor.races import race_probabilities, abilities_from_race  # noqa: E402
+from winning.factor.blocks import (block_race_probabilities,  # noqa: E402
                                    nested_race_probabilities,
                                    tree_race_probabilities,
                                    block_race_jacobian,
                                    nested_race_jacobian,
                                    tree_race_jacobian,
                                    abilities_from_block_race)
-from winning.factor.structures import Tree
-from winning.factor.polish import race_jacobian, polish_race
-from winning.factor.topk import (top_k_probabilities, top_k_jacobians,
+from winning.factor.structures import Tree  # noqa: E402
+from winning.factor.polish import race_jacobian, polish_race  # noqa: E402
+from winning.factor.core import hermite_nodes  # noqa: E402
+from winning.factor.topk import (bottom_k_probabilities,  # noqa: E402
+                                 top_k_probabilities, top_k_jacobians,
                                  abilities_from_topk,
                                  loc_scale_from_topk_pair,
                                  loc_scale_from_win_and_second,
                                  abilities_from_rank_marginal,
                                  rank_probabilities)
-from winning.lattice import skew_normal_density, state_prices_from_offsets
-from winning.lattice_calibration import dividend_implied_ability
+from winning.lattice import skew_normal_density, state_prices_from_offsets  # noqa: E402
+from winning.lattice_calibration import dividend_implied_ability  # noqa: E402
 
 TOL_DEFAULT = 1e-10
 
@@ -71,7 +87,13 @@ def make_inputs(seed=2026):
     # drawn AFTER every earlier draw so the seeded stream prefix -- and
     # with it every pre-topk scenario value -- is unchanged
     sd_true = np.round(np.exp(rng.uniform(-0.25, 0.25, size=n)), 12)
+    _rng = np.random.default_rng(3)
+    _V = _rng.normal(size=(8, 3))
+    _d = 0.05 + _rng.random(8)
+    _S = _V @ _V.T + np.diag(_d)
+    _s = np.sqrt(np.diag(_S))
     return {
+        "degraded_cov": (_S / np.outer(_s, _s)).tolist(),
         "sd_true": sd_true.tolist(),
         "n": n, "mu": mu.tolist(), "V1": V1.tolist(), "V2": V2.tolist(),
         "D": D.tolist(), "cluster": cluster, "loading": loading.tolist(),
@@ -80,7 +102,30 @@ def make_inputs(seed=2026):
         "dividends": [2.0, 3.5, 6.0, 12.0, 20.0, 41.0],
         "linkage_Z": _linkage_Z(n),
         "classic_L": 500, "classic_unit": 0.01, "classic_a": 1.5,
+        # the inverse-retry fixtures (#779, #781): fields whose single
+        # damped solve stalls, so every port must take the retry path
+        "retry779_mu": [0.016, -0.356, 0.552, -0.212],
+        "retry779_D": [1.444 ** 2, 0.799 ** 2, 0.818 ** 2, 1.163 ** 2],
+        "retry779_mu0": [-0.002, -0.308, 0.574, -0.242],
+        "retry781_mu": [-0.6669408707331521, -0.04607137189844819,
+                        -0.9239086741190706, 1.2201504898506477,
+                        -0.7018494832934388, 1.1186199101934622],
+        "retry781_sd": [2.601365880665001, 1.5539670145121982,
+                        1.122141854005653, 0.4148305666148936,
+                        0.43663998310753704, 0.3415875902805172],
     }
+
+
+def _degraded_cov(n, rank, seed):
+    """A correlation the grammar fit degenerates on: exactly rank + diagonal,
+    which the pipeline reproduces by going to full rank with D on its floor
+    (the #118 fixture)."""
+    rng = np.random.default_rng(seed)
+    V = rng.normal(size=(n, rank))
+    d = 0.05 + rng.random(n)
+    S = V @ V.T + np.diag(d)
+    s = np.sqrt(np.diag(S))
+    return S / np.outer(s, s)
 
 
 def build(inputs):
@@ -98,8 +143,23 @@ def build(inputs):
 
     out = {}
 
-    def sc(name, value, tol=TOL_DEFAULT):
-        out[name] = {"value": np.asarray(value).tolist(), "tol": tol}
+    def sc(name, value, tol=TOL_DEFAULT, ports=None):
+        """ports=None means every port must reproduce this scenario. A list
+        names the ports that implement it; the others print a declared skip
+        rather than a failure, so partial coverage is visible instead of
+        being expressed by leaving the scenario out altogether."""
+        arr = np.asarray(value, dtype=float)
+        if not np.isfinite(arr).all():
+            raise ValueError(f"scenario {name!r} has non-finite values; a "
+                             "parity fixture must be a number")
+        out[name] = {"value": arr.tolist(), "tol": tol}
+        if ports is not None:
+            unknown = sorted(set(ports) - {"R", "js"})
+            if unknown or not ports:
+                raise ValueError(
+                    f"scenario {name!r}: ports={ports!r} names no checker "
+                    "that would run it (valid: 'R', 'js')")
+            out[name]["ports"] = list(ports)
 
     sc("independent_normal", race_probabilities(mu, D=D, points=257))
     sc("factor1_normal", race_probabilities(mu, V=V1, D=D, points=257))
@@ -172,6 +232,12 @@ def build(inputs):
     sc("loc_scale_mu", mu_ls, 1e-6)
     sc("loc_scale_sd", sd_ls, 1e-6)
     sc("rank_marginals", rank_probabilities(mu, D=D, points=257))
+    # with loadings: the browser used to swallow V here and return the
+    # INDEPENDENT rank matrix, plausible and doubly stochastic and for the
+    # wrong model (#199). R does not take V in this verb yet (#202), so
+    # this one is declared for the browser until it does.
+    sc("rank_marginals_factor",
+       rank_probabilities(mu, D=D, V=V1, points=257), ports=["R", "js"])
     R = rank_probabilities(mu, D=D, points=257)
     mu_ws, sd_ws = loc_scale_from_win_and_second(R[:, 0], R[:, 1],
                                                  points=257)
@@ -187,6 +253,49 @@ def build(inputs):
     Jm_f, Js_f = top_k_jacobians(mu, 2, D=D, V=V1, points=257)
     sc("topk2_jacobian_mu_factor", Jm_f, 1e-9)
     sc("topk2_jacobian_sigma_factor", Js_f, 1e-9)
+    # exported by all three engines and covered by none of the above until
+    # the surface audit found them (tests/test_port_surface.py)
+    # The cov= route: both python and R answer a DEGRADED grammar fit with
+    # GHK rather than pricing the fit, and the browser has no GHK and
+    # rejects the key, so this one is declared R-only. Halton against
+    # scrambled Sobol is the tolerance here.
+    cov_deg = np.asarray(inputs["degraded_cov"], dtype=float)
+    mu8 = np.linspace(-0.6, 0.6, 8)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        sc("cov_degraded_route", race_probabilities(mu8, cov=cov_deg),
+           2e-4, ports=["R"])
+        sc("cov_degraded_inverse", abilities_from_race(
+            race_probabilities(mu8, cov=cov_deg), cov=cov_deg), 2e-3,
+           ports=["R"])
+    # the inverse under a non-normal base: the forward had gumbel cover
+    # from the start, the inverse never did (found by the surface audit)
+    sc("invert_gumbel", abilities_from_race(
+        pt, D=np.full(len(mu), np.pi ** 2 / 6.0), base="gumbel",
+        points=1001), 1e-6)
+    sc("bottomk2_normal", bottom_k_probabilities(mu, 2, D=D, points=257))
+    sc("bottomk2_factor", bottom_k_probabilities(mu, 2, V=V1, D=D, points=257))
+    # the inverse retry (#779, #781): each solve fails from its first
+    # start, so these pin the shared retry and its deterministic starts.
+    # Targets are embedded, as for loc_scale_win, so every port inverts
+    # identical floats.
+    t779 = rank_probabilities(inputs["retry779_mu"], D=inputs["retry779_D"],
+                              base="logistic", points=513)[:, 1]
+    sc("retry779_target", t779)
+    sc("retry779_mu", abilities_from_rank_marginal(
+        t779, 2, mu0=inputs["retry779_mu0"], D=inputs["retry779_D"],
+        base="logistic", points=513, n_iter=200), 1e-6)
+    D781 = np.asarray(inputs["retry781_sd"]) ** 2
+    q781a = top_k_probabilities(inputs["retry781_mu"], 1, D=D781)
+    q781b = top_k_probabilities(inputs["retry781_mu"], 2, D=D781)
+    sc("retry781_win", q781a)
+    sc("retry781_top2", q781b)
+    mu781, sd781 = loc_scale_from_topk_pair(q781a, 1, q781b, 2)
+    sc("retry781_mu", mu781, 1e-6)
+    sc("retry781_sd", sd781, 1e-6)
+    Fh, Wh = hermite_nodes(2, Q=9)
+    sc("hermite2_nodes", Fh, 1e-12)
+    sc("hermite2_weights", Wh, 1e-12)
     return out
 
 

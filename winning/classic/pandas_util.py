@@ -45,7 +45,10 @@ if using_pandas:
         """
 
         def center(x):
-            mx = sum(x) / len(x)
+            # a scratched runner's +inf ability (#589) stays +inf and does
+            # not poison the mean of the rest
+            fin = [xi for xi in x if xi != float('inf')]
+            mx = sum(fin) / len(fin) if fin else 0.0
             return [xi - mx for xi in x]
 
         df = df.copy()

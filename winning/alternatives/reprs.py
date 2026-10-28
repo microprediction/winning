@@ -1,6 +1,15 @@
 """Reduced-rank rectangle representations of single-winner events."""
 import numpy as np
 
+from ..shapes import as_idio, as_loadings
+
+from ..rustconfig import load_fastrace
+
+# compiled kernels (rust/fastrace); honours WINNING_PURE and use_rust()
+_fastrace, _RUST_OK, _HAVE_RUST = load_fastrace('per_winner_reduced_rank')
+
+
+
 
 def reduced_rank_representation(mu, V, D, i):
     """Winner i's probability as a reduced-rank Gaussian rectangle.
@@ -18,10 +27,8 @@ def reduced_rank_representation(mu, V, D, i):
     (n-1,), so that P(i wins) = P(N(0, B B' + diag(D_minus)) <= upper).
     """
     mu = np.asarray(mu, dtype=float)
-    V = np.asarray(V, dtype=float)
-    if V.ndim == 1:
-        V = V.reshape(-1, 1)
-    D = np.asarray(D, dtype=float)
+    V = as_loadings(V, len(np.asarray(mu)))
+    D = as_idio(D, len(mu))                  # a scalar is everyone's (#84)
     mask = np.arange(len(mu)) != i
     B = np.column_stack([V[mask] - V[i], -np.sqrt(D[i])
                          * np.ones(mask.sum())])
@@ -38,17 +45,14 @@ def per_winner_reduced_rank_shares(mu, V, D, n_samples=512, seed=11):
     exists so that comparison can be rerun same-toolchain."""
     from scipy.stats import norm, qmc
     mu = np.asarray(mu, dtype=float)
-    V = np.asarray(V, dtype=float)
-    if V.ndim == 1:
-        V = V.reshape(-1, 1)
-    D = np.asarray(D, dtype=float)
+    V = as_loadings(V, len(np.asarray(mu)))
+    D = as_idio(D, len(mu))                  # a scalar is everyone's (#84)
     n, k = V.shape
     Z = norm.ppf(qmc.Sobol(d=k + 1, scramble=True,
                            seed=seed).random(n_samples))
-    try:
-        import fastrace
-        p = fastrace.per_winner_reduced_rank(mu, V, D, Z)
-    except (ImportError, AttributeError):
+    if _HAVE_RUST:                       # honours WINNING_PURE and use_rust()
+        p = _fastrace.per_winner_reduced_rank(mu, V, D, Z)
+    else:
         sd = np.sqrt(D)
         p = np.empty(n)
         for i in range(n):

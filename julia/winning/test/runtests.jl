@@ -32,3 +32,621 @@ end
     @test fails == 0
     @test "independent_normal" ∉ skipped
 end
+
+# --- caller-supplied factor nodes carry the loadings' rank ------------
+#
+# _race_setup took the caller's F and W verbatim. An F with the wrong
+# number of ROWS was accepted and priced a different quadrature outright
+# -- [0.646, 0.123, 0.231, 0.0005] where the right answer is
+# [0.382, 0.301, 0.137, 0.181] -- and an extra weight was silently
+# ignored. The two spellings that did fail failed with a
+# DimensionMismatch or a BoundsError from somewhere inside, naming
+# nothing the caller passed. This is #290, which was filed against the
+# browser; julia had its own copy.
+@testset "factor nodes and weights are checked at the door" begin
+    mu = [-0.6, -0.2, 0.15, 0.7]
+    V = [1.2 -0.7; -0.4 1.1; 0.6 0.9; -1.0 -0.5]
+    D = [0.5, 0.8, 0.6, 0.9]
+    F = [-1.0 -1.0; -1.0 1.0; 1.0 -1.0; 1.0 1.0]
+    W = fill(0.25, 4)
+
+    p0 = race_probabilities(mu; V = V, D = D, F = F, W = W)
+    @test isapprox(sum(p0), 1.0; atol = 1e-12)
+
+    # W and c*W are the same factor law
+    for c in (1e-6, 0.1, 10.0, 1e6)
+        @test maximum(abs.(race_probabilities(mu; V = V, D = D, F = F,
+                                              W = W .* c) .- p0)) < 1e-15
+    end
+    # and so is an unnormalised spelling of it
+    @test maximum(abs.(race_probabilities(mu; V = V, D = D, F = F,
+                                          W = ones(4)) .- p0)) < 1e-15
+
+    @test_throws ArgumentError race_probabilities(mu; V = V, D = D,
+                                                  F = F[:, 1:1], W = W)
+    @test_throws ArgumentError race_probabilities(mu; V = V, D = D,
+                                                  F = F[1:2, :], W = W)
+    @test_throws ArgumentError race_probabilities(mu; V = V, D = D,
+                                                  F = F, W = W[1:2])
+    @test_throws ArgumentError race_probabilities(mu; V = V, D = D,
+                                                  F = F, W = vcat(W, 0.9))
+    @test_throws ArgumentError race_probabilities(mu; V = V, D = D,
+                                                  F = F, W = [0.5, -0.5, 0.5, 0.5])
+    @test_throws ArgumentError race_probabilities(mu; V = V, D = D,
+                                                  F = F, W = zeros(4))
+    @test_throws ArgumentError race_probabilities(mu; V = V, D = D,
+                                                  F = zeros(0, 2), W = Float64[])
+
+    # the internally built nodes are untouched
+    @test isapprox(sum(race_probabilities(mu; V = V, D = D)), 1.0; atol = 1e-12)
+end
+
+# --- julia must refuse what the other ports refuse --------------------
+#
+# Found by parity/check_divergence.py, which runs the same malformed
+# inputs through python, R, julia and the browser and fails when they
+# disagree. julia returned NaN for a zero idiosyncratic variance where
+# the other three refuse, and refused the scalar V that as_loadings
+# documents and python and the browser accept.
+@testset "the refusals match the other ports" begin
+    mu = [0.0, 0.3, -0.2, 0.5]
+    want = race_probabilities(mu; D = ones(4))
+
+    # a scalar D is the same variance for everyone
+    @test race_probabilities(mu; D = 1.0) ≈ want
+
+    # a zero variance is a contestant the lattice cannot represent
+    @test_throws ArgumentError race_probabilities(mu; D = [1.0, 0.0, 1.0, 1.0])
+    @test_throws ArgumentError race_probabilities(mu; D = [1.0, 1.0])
+    @test_throws ArgumentError race_probabilities(mu; D = [1.0, -1.0, 1.0, 1.0])
+    @test_throws ArgumentError race_probabilities(mu; D = [1.0, NaN, 1.0, 1.0])
+
+    # a SCALAR V is the same loading for everyone, and a common loading
+    # is gauge-fixed away, so it prices the plain race
+    @test race_probabilities(mu; V = 0.4, D = ones(4)) ≈ want
+    @test_throws ArgumentError race_probabilities(mu; V = [0.5, 0.3], D = ones(4))
+
+    # and an ordinary rank-one loading still moves the answer
+    @test !isapprox(race_probabilities(mu; V = [0.5, 0.3, -0.2, 0.1],
+                                       D = ones(4)), want)
+end
+
+@testset "node-rule counts" begin
+    mu = [0.0, 0.3, -0.2, 0.5]
+    # k = 0 is the EMPTY PRODUCT: one node of weight 1, no columns. julia
+    # already fell through to it; python returned the rank-1 rule and R
+    # raised, so pin it here before it drifts back
+    h0 = hermite_nodes(0, 5)
+    @test size(h0.F) == (1, 0)
+    @test h0.W ≈ [1.0]
+    @test size(hermite_nodes(1, 5).F) == (5, 1)
+    # and it prices the independent race through the factor path
+    @test race_probabilities(mu; V = zeros(4, 0), D = ones(4)) ≈
+          race_probabilities(mu; D = ones(4))
+    @test_throws ArgumentError hermite_nodes(-1, 5)
+    @test_throws ArgumentError hermite_nodes(1, 0)
+    @test_throws ArgumentError hermite_nodes(1, -3)
+end
+
+@testset "zero-rank loadings reach top-k" begin
+    # _topk_factor_nodes special-cased rank 1 and sent every other rank
+    # through the rank-2 tensor, so an (n, 0) matrix was integrated over
+    # a factor space it does not have (#309)
+    mu = [0.0, 0.3, -0.2, 0.5]
+    D = ones(4)
+    @test top_k_probabilities(mu, 2; V = zeros(4, 0), D = D) ≈
+          top_k_probabilities(mu, 2; D = D)
+    # and a rank-one loading still moves it
+    moved = top_k_probabilities(mu, 2; V = reshape([0.9, -0.4, 0.2, -0.7], 4, 1),
+                                D = D)
+    @test maximum(abs.(moved .- top_k_probabilities(mu, 2; D = D))) > 0.005
+end
+
+@testset "factor-core batch (#100 #370 #444 #110)" begin
+    # #100: the inverse is unit-equivariant (was log residual 51.6 here)
+    p = [0.60, 0.25, 0.15]
+    D = [0.005, 0.010, 0.020]
+    mu = abilities_from_race(p; D = D)
+    q = race_probabilities(mu; D = D)
+    @test maximum(abs.(log.(q) .- log.(p))) < 1e-7
+    mu100 = abilities_from_race(p; D = D .* 100^2)
+    @test maximum(abs.(mu100 ./ 100 .- mu)) < 1e-6
+    # #370: the top-k window is scale-free
+    m = [-.5, .2, .8, -.1]; s = [.7, 1.1, .9, 1.3]
+    @test maximum(abs.(top_k_probabilities(1e-18 .* m, 2; D = (1e-18 .* s) .^ 2) .-
+                       top_k_probabilities(m, 2; D = s .^ 2))) < 1e-9
+    # #444: a lattice needs two points
+    @test_throws ArgumentError race_probabilities(m; D = ones(4), points = 1)
+    @test_throws ArgumentError race_probabilities(m; D = ones(4), points = 0)
+    # #110: non-finite targets are refused
+    @test_throws ErrorException abilities_from_race([0.5, NaN, 0.5])
+    # #317: fractional ranks are refused by name; #378: the middle rank
+    @test_throws ArgumentError abilities_from_rank_marginal([.4, .3, .2, .1], 1.5)
+    P = rank_probabilities([-1, -.4, .05, .45, .9]; D = ones(5), points = 257)
+    @test_throws ArgumentError abilities_from_rank_marginal(P[:, 3], 3; D = ones(5),
+                                                            points = 257)
+end
+
+@testset "an overflowing target sum is rescued (#326)" begin
+    # finite entries whose SUM overflows describe the same law as their
+    # ratios; python rescales by the max first (#300) and so does julia
+    a = abilities_from_race([4e307, 2e307, 1e307, 1e307])
+    b = abilities_from_race([4.0, 2.0, 1.0, 1.0])
+    @test all(isfinite, a)
+    @test a ≈ b
+    @test maximum(abs.(abilities_from_race(fill(1e308, 4)))) < 1e-8
+end
+
+@testset "rank marginals of a factor-correlated race (#202)" begin
+    # rank_probabilities had no V/qa: the correlated call was a keyword
+    # error while top_k_probabilities priced the same model
+    mu = [-0.4, -0.1, 0.2, 0.5]
+    D = fill(0.2, 4)
+    V = reshape([-2.0, -0.5, 0.5, 2.0], 4, 1)
+    R = rank_probabilities(mu; V = V, D = D, qa = 15)
+    q1 = top_k_probabilities(mu, 1; V = V, D = D, qa = 15)
+    q2 = top_k_probabilities(mu, 2; V = V, D = D, qa = 15)
+    @test maximum(abs.(R[:, 1] .- q1)) < 1e-6
+    @test maximum(abs.(vec(sum(R[:, 1:2], dims = 2)) .- q2)) < 1e-6
+    # the Python reference on the same fixture
+    @test maximum(abs.(R[:, 1] .- [0.53003131, 0.08960483, 0.049621,
+                                   0.33074286])) < 1e-6
+    @test abs(R[4, 1] - rank_probabilities(mu; D = D)[4, 1]) > 0.2
+    V2 = hcat(V, [0.3, -0.2, 0.4, -0.5])
+    R2 = rank_probabilities(mu; V = V2, D = D, qa = 9)
+    @test maximum(abs.(R2[:, 1] .- top_k_probabilities(mu, 1; V = V2, D = D,
+                                                       qa = 9))) < 1e-6
+    @test rank_probabilities(mu; V = zeros(4, 0), D = D) ≈
+          rank_probabilities(mu; D = D)
+end
+
+@testset "Halton bases past the old 12-prime table (#402)" begin
+    @test winning._first_primes(13) ==
+          [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41]
+    for r in (12, 13, 20)
+        hw = winning.halton_normal_nodes(r, 64)
+        @test size(hw.F) == (64, r) && all(isfinite, hw.F)
+    end
+    n = 14
+    mu = collect(range(-0.3, 0.3; length = n))
+    V = 0.15 .* [i == j ? 1.0 : 0.0 for i in 1:n, j in 1:(n - 1)]
+    p = race_probabilities(mu; V = V, D = ones(n), points = 257)
+    # Python (Sobol) on the same fixture
+    ref = [0.11508239, 0.10653908, 0.09851713, 0.09099268, 0.08394499,
+           0.07735006, 0.07118896, 0.06543323, 0.06007212, 0.05507979,
+           0.05043980, 0.04613063, 0.04213669, 0.03709245]
+    @test length(p) == n && abs(sum(p) - 1) < 1e-8
+    @test maximum(abs.(p .- ref)) < 2e-3
+end
+
+@testset "weights that overflow only in their sum (#415)" begin
+    mu = [0.0, 0.4, 1.0]
+    V = reshape([0.7, 0.0, -0.4], 3, 1)
+    F = reshape([-1.0, 1.0], 2, 1)
+    p1 = race_probabilities(mu; V = V, D = ones(3), F = F, W = [1.0, 1.0],
+                            points = 257)
+    pb = race_probabilities(mu; V = V, D = ones(3), F = F,
+                            W = [1e308, 1e308], points = 257)
+    @test all(isfinite, pb)
+    @test maximum(abs.(pb .- p1)) < 1e-15
+    @test maximum(abs.(p1 .- [0.51529828, 0.30546137, 0.17924036])) < 1e-6
+    @test_throws ArgumentError race_probabilities(mu; V = V, D = ones(3),
+                                                  F = F, W = [0.0, 0.0])
+end
+
+@testset "adaptive node schedule matches GH_RULE (#528)" begin
+    # the 8-runner stress field at centred sharpness 21.07, ceil(8s) = 169:
+    # julia kept Gauss-Hermite to Q = 201 and moved the leaders by 42bp
+    mu = [-1.2778325156570909, -1.0099930645736255, -0.2838848030639649,
+          -0.22632464605522293, -0.11596618882209474, -0.10779858154488295,
+          0.20904942336288942, 1.0204595606925912]
+    v = [-0.8571701970944656, 3.3310423958253588, 0.2338294924083979,
+         -0.34458791516111925, -0.27324453897087425, -0.6600034669284740,
+         -1.0471076720246453, -0.3827580980541786]
+    V = reshape(v, :, 1)
+    D = fill(0.05, 8)
+    p = race_probabilities(mu; V = V, D = D, points = 257)
+    Q = 169
+    Fmid = reshape(winning.qnorm.(((1:Q) .- 0.5) ./ Q), :, 1)
+    pmid = race_probabilities(mu; V = V, D = D, F = Fmid, W = fill(1.0 / Q, Q),
+                              points = 257)
+    @test maximum(abs.(p .- pmid)) < 1e-14          # the midpoint family
+    mc = [0.5254543333, 0.4744646667]               # 3M-path reference
+    @test maximum(abs.(p[1:2] .- mc)) < 3e-4        # GH-169 was 4.2e-3 off
+    # rank 2 between the old 3.0 and the reference 3.75 cutover stays
+    # Gauss-Hermite at the capped order
+    mu3 = [0.0, 0.2, -0.1]
+    V2 = [1.0 0.5; -0.6 0.4; -0.4 -0.9]
+    Vc = V2 .- sum(V2, dims = 1) ./ 3
+    s = sqrt(2) * maximum(sqrt.(vec(sum(Vc .^ 2, dims = 2))))
+    D2 = fill((s / 3.4)^2, 3)                        # sharpness 3.4
+    q = Int(min(max(ceil(8 * 3.4), 15), 41))
+    h = hermite_nodes(2, q)
+    @test race_probabilities(mu3; V = V2, D = D2, points = 257) ≈
+          race_probabilities(mu3; V = V2, D = D2, F = h.F, W = h.W,
+                             points = 257) atol = 1e-14
+end
+
+@testset "scalar D through every top-k/rank entry point (#485)" begin
+    mu = [0.0, 0.3, -0.2, 0.5]
+    Jv = top_k_jacobians(mu, 2; D = ones(4), points = 257)
+    Js = top_k_jacobians(mu, 2; D = 1.0, points = 257)
+    @test Js.Jmu == Jv.Jmu && Js.Jsigma == Jv.Jsigma
+    V = reshape([0.4, -0.2, 0.1, -0.3], 4, 1)
+    @test top_k_jacobians(mu, 2; D = 1.0, V = V, points = 257).Jmu ==
+          top_k_jacobians(mu, 2; D = ones(4), V = V, points = 257).Jmu
+    @test top_k_probabilities(mu, 2; D = 2.0, points = 257) ==
+          top_k_probabilities(mu, 2; D = fill(2.0, 4), points = 257)
+    @test rank_probabilities(mu; D = 1.0, points = 257) ==
+          rank_probabilities(mu; D = ones(4), points = 257)
+    q1 = top_k_probabilities(mu, 1; points = 257)
+    q2 = top_k_probabilities(mu, 2; points = 257)
+    a = loc_scale_from_topk_pair(q1, 1, q2, 2; D0 = 1.0, points = 257)
+    b = loc_scale_from_topk_pair(q1, 1, q2, 2; D0 = ones(4), points = 257)
+    @test a.mu == b.mu && a.sd == b.sd
+    for bad in ([1.0, 1.0], [1.0, 1.0, 0.0, 1.0], [1.0, -1.0, 1.0, 1.0],
+                [1.0, NaN, 1.0, 1.0], [1.0, Inf, 1.0, 1.0], 0.0)
+        @test_throws ArgumentError top_k_jacobians(mu, 2; D = bad, points = 257)
+        @test_throws ArgumentError top_k_probabilities(mu, 2; D = bad,
+                                                       points = 257)
+        @test_throws ArgumentError loc_scale_from_topk_pair(q1, 1, q2, 2;
+                                                            D0 = bad,
+                                                            points = 257)
+    end
+end
+
+@testset "exact loc/scale warm start returns in the gauge (#595)" begin
+    mu = [-3.0, -1.0, 1.0, 3.0]
+    sd = [2.0, 3.0, 4.0, 5.0]
+    D = sd .^ 2
+    q1 = top_k_probabilities(mu, 1; D = D, points = 1025)
+    q2 = top_k_probabilities(mu, 2; D = D, points = 1025)
+    fit = loc_scale_from_topk_pair(q1, 1, q2, 2; D0 = D, mu0 = mu,
+                                   points = 1025, return_info = true)
+    @test fit.converged
+    @test abs(sum(fit.mu)) < 1e-12
+    @test abs(sum(log.(fit.sd))) < 1e-12
+    c = exp(sum(log.(sd)) / 4)
+    @test fit.mu ≈ mu ./ c atol = 1e-12
+    @test fit.sd ≈ sd ./ c atol = 1e-12
+    @test fit.sd ≈ [0.604275079471354, 0.906412619207030,
+                    1.208550158942707, 1.510687698678384] atol = 1e-12
+    p2 = q2 .- q1
+    w = loc_scale_from_win_and_second(q1, p2; D0 = D, mu0 = mu,
+                                      points = 1025, return_info = true)
+    @test abs(sum(w.mu)) < 1e-12 && abs(sum(log.(w.sd))) < 1e-12
+end
+
+@testset "top-k default node rule is the race's (#340)" begin
+    # a fixed 15-node Gauss-Hermite default missed the race by 10.7
+    # points; the first 1024 nodes of a longer midpoint grid by 50
+    V = reshape([-3.0, -1, 1, 3], 4, 1)
+    r = race_probabilities([-0.15, 0.05, 0.10, 0.0]; V = V, D = fill(0.01, 4), points = 1025)
+    t = top_k_probabilities([-0.15, 0.05, 0.10, 0.0], 1; V = V, D = fill(0.01, 4), points = 1025)
+    @test maximum(abs.(r .- t)) < 1e-9
+    for d in (1e-3, 1e-4)
+        mu = [-0.015, 0.005, 0.010, 0.0]
+        r = race_probabilities(mu; V = V, D = fill(d, 4), points = 257)
+        t = top_k_probabilities(mu, 1; V = V, D = fill(d, 4), points = 257)
+        @test maximum(abs.(r .- t)) < 1e-9
+    end
+end
+
+@testset "bulk-window delta is validated (#445)" begin
+    for d in (-1, 0, 0.5, 1, NaN, Inf, true)
+        @test_throws ArgumentError race_probabilities([-1.0, 0, 1]; D = [1.0, 1, 1], delta = d)
+    end
+    @test all(isfinite, race_probabilities([-1.0, 0, 1]; D = [1.0, 1, 1], delta = 1e-3))
+end
+
+@testset "top-k target_floor holds after renormalisation (#592)" begin
+    for c in (1e-3, 1.0, 1e3)
+        m = abilities_from_topk([.7, .3, 0] .* c, 1; D = [1.0, 1, 1], target_floor = .2)
+        @test isapprox(top_k_probabilities(m, 1; D = [1.0, 1, 1]), [.56, .24, .2]; atol = 1e-6)
+    end
+    @test_throws ErrorException abilities_from_topk([.5, .5, 0], 1; D = [1.0, 1, 1], target_floor = .4)
+end
+
+@testset "a common loading column vanishes at any scale (#471)" begin
+    n = 9; mu = ((0:8) .- 4) .* 0.1; D = ones(n)
+    ind = race_probabilities(mu; D = D)
+    for c in (1e20, 1e308)
+        @test isapprox(race_probabilities(mu; V = fill(c, n, 1), D = D,
+                       F = reshape([-1.0, 1], 2, 1), W = [.5, .5]), ind; atol = 1e-14)
+    end
+end
+@testset "top-k inverse: dominant pair converges (#408)" begin
+    for (n, eps) in ((3, 6e-4), (10, 1e-4), (30, 1e-4))
+        p = [0.6, 0.4, fill(eps, n - 2)...]
+        p ./= sum(p)
+        D = fill(3.2^2, n)
+        out = abilities_from_topk(p, 1; D = D, points = 500,
+                                  return_info = true)
+        @test out.converged
+        @test out.max_logit_residual < 1e-8
+        q = top_k_probabilities(out.mu, 1; D = D, points = 500)
+        @test maximum(abs.(q .- p)) < 1e-6
+    end
+end
+
+@testset "top-k inverse is equivariant to units (#100)" begin
+    mu0 = [-1.2, -0.35, 0.15, 0.55, 0.85]
+    D0 = [0.7, 1.1, 0.8, 0.9, 1.2]
+    q = top_k_probabilities(mu0, 2; D = D0)
+    ref = abilities_from_topk(q, 2; D = D0)
+    for c in (1e-6, 1e-2, 1e3, 1e6)
+        out = abilities_from_topk(q, 2; D = c^2 .* D0, return_info = true)
+        @test out.converged
+        @test maximum(abs.(out.mu ./ c .- ref)) < 1e-7
+        @test maximum(abs.(top_k_probabilities(out.mu, 2; D = c^2 .* D0) .- q)) < 1e-8
+    end
+end
+
+@testset "ridge stall on an impossible board is not convergence (#353)" begin
+    q1 = [0.8, 0.1, 0.1]
+    q2 = [0.2, 0.9, 0.9]
+    for ridge in (0.0, 1e-4)
+        r = loc_scale_from_topk_pair(q1, 1, q2, 2; points = 1025,
+                                     ridge = ridge, return_info = true)
+        @test !r.converged
+        @test !r.fit_converged
+        @test !r.nested
+        @test r.max_logit_residual > 1
+    end
+    # a feasible board under a ridge keeps a residual by design and is a
+    # stationary, nested fit
+    mu = [-0.8, -0.2, 0.1, 0.4, 0.5]
+    sd = [0.8, 1.0, 1.1, 0.9, 1.2]
+    a = top_k_probabilities(mu, 1; D = sd .^ 2)
+    b = top_k_probabilities(mu, 3; D = sd .^ 2)
+    r = loc_scale_from_topk_pair(a, 1, b, 3; ridge = 0.0025,
+                                 return_info = true)
+    @test r.converged && r.stationary && r.nested && !r.fit_converged
+end
+
+@testset "bottom-k keeps a rare last place (#365)" begin
+    exact = 7.726967753938469e-24
+    for points in (513, 2049, 8193)
+        b = bottom_k_probabilities([-12.0, 0.0, 0.0], 1; D = ones(3),
+                                   points = points)
+        @test abs(b[1] - exact) < 1e-9 * exact
+        @test abs(sum(b) - 1) < 1e-12
+    end
+    mu = [-1.2, -0.35, 0.15, 0.55, 0.85]
+    D = [0.7, 1.1, 0.8, 0.9, 1.2]
+    @test bottom_k_probabilities(mu, 2; D = D, points = 257) ≈
+          1 .- top_k_probabilities(mu, 3; D = D, points = 257) atol = 1e-10
+end
+
+@testset "relative targets survive finite-scale extremes (#461, #483)" begin
+    q = [0.8, 0.6, 0.4, 0.2]
+    a1 = abilities_from_topk(q, 2; D = ones(4))
+    r1 = abilities_from_rank_marginal(q, 1)
+    R = rank_probabilities([-0.5, -0.1, 0.2, 0.4]; D = ones(4))
+    w, s = R[:, 1], R[:, 2]
+    ls1 = loc_scale_from_win_and_second(w, s)[1]
+    for c in (4e-309, 1e308)
+        @test maximum(abs.(abilities_from_topk(c .* q, 2; D = ones(4)) .- a1)) < 1e-9
+        @test maximum(abs.(abilities_from_rank_marginal(c .* q, 1) .- r1)) < 1e-9
+        @test maximum(abs.(loc_scale_from_win_and_second(
+            w ./ maximum(w) .* c, s ./ maximum(s) .* c)[1] .- ls1)) < 1e-9
+    end
+end
+
+@testset "a common translation of the abilities moves nothing (#477)" begin
+    # the shifted contrasts are exact, so every price must be too; at
+    # 2^52 the lattice collapsed: race NaN, top-k/rank refused mass 0
+    mu = [-3.0, -1.0, 1.0, 3.0]
+    D = [1.0, 1.5, 0.7, 1.0]
+    for e in (30, 45, 50, 52)
+        s = mu .+ 2.0^e
+        @test maximum(abs.(race_probabilities(s; D = D) .-
+                           race_probabilities(mu; D = D))) < 1e-12
+        @test maximum(abs.(top_k_probabilities(s, 2; D = D) .-
+                           top_k_probabilities(mu, 2; D = D))) < 1e-12
+        @test maximum(abs.(bottom_k_probabilities(s, 2; D = D) .-
+                           bottom_k_probabilities(mu, 2; D = D))) < 1e-12
+        @test maximum(abs.(rank_probabilities(s; D = D) .-
+                           rank_probabilities(mu; D = D))) < 1e-12
+        a, b = top_k_jacobians(s, 2; D = D), top_k_jacobians(mu, 2; D = D)
+        @test maximum(abs.(a.Jmu .- b.Jmu)) < 1e-12
+        @test maximum(abs.(a.Jsigma .- b.Jsigma)) < 1e-12
+    end
+    # a field near the origin is left exactly where it is
+    @test winning._translated_home(mu, D) === mu
+end
+
+@testset "a two-runner normal race is its exact contrast (#86)" begin
+    # the lattice priced a 20-sd pair tail at 0.0105x its exact 1.04e-45
+    exact = Dict(9 => 9.830802207714438e-11, 14 => 2.091912803889677e-23,
+                 20 => 1.0442437918812723e-45)
+    for (g, e) in exact
+        p = race_probabilities([0.0, g]; D = [1.0, 1.0])
+        @test abs(p[2] / e - 1) < 1e-12
+        @test race_probabilities([g, 0.0]; D = [1.0, 1.0]) == reverse(p)
+    end
+    # a finite loading contrast whose square overflows
+    p = race_probabilities([0.0, 1e155]; V = reshape([1e155, -1e155], 2, 1),
+                           D = [1.0, 1.0])
+    @test abs(p[1] - winning.ndtr(0.5)) < 1e-15 && abs(sum(p) - 1) < 1e-15
+    # slopes: dp_i/dmu_i = -phi(u)/sd_d for both runners
+    r = race_probabilities([0.2, 0.0]; D = [1.0, 1.0], return_slopes = true)
+    @test r.slopes ≈ fill(-winning.npdf(-0.2 / sqrt(2)) / sqrt(2), 2) rtol = 1e-14
+end
+
+@testset "Gumbel last places keep their exact Plackett-Luce values (#710)" begin
+    # 1 - S rounded the lower-tail CDF to zero (gap 35: 3e-248 times the
+    # truth) and the one-direction deconvolution fabricated mass (gap 20:
+    # 1.9e5 times it). Independent standardized min-Gumbels are
+    # Plackett-Luce with weights exp(-c mu).
+    c = pi / sqrt(6)
+    for gap in (20.0, 30.0, 35.0), points in (513, 8193)
+        mu = [-gap, 0.0, 0.0]
+        w0 = exp(c * gap)
+        exact = 2 / ((w0 + 2) * (w0 + 1))
+        b = bottom_k_probabilities(mu, 1; base = "gumbel", points = points)
+        R = rank_probabilities(mu; base = "gumbel", points = points)
+        @test abs(b[1] / exact - 1) < 1e-10
+        @test abs(R[1, 3] / exact - 1) < 1e-10
+        # cumulative rank = top-k
+        t2 = top_k_probabilities(mu, 2; base = "gumbel", points = points)
+        @test maximum(abs.(vec(sum(R[:, 1:2], dims = 2)) .- t2)) < 1e-10
+    end
+    # the deconvolution residue on a four-runner field (R's value)
+    @test abs(rank_probabilities([-12.0, -4, 4, 12]; base = "gumbel")[1, 4] /
+              1.101321e-26 - 1) < 1e-5
+end
+
+@testset "normal tails: direct survival and the bounded deconvolution" begin
+    # S was 1 - ndtr(z), which cancels past ~8.3 sd, and the normal
+    # top-k kept the one-direction cavity deconvolution, whose residue
+    # was integrated as a rare place: rank [-12, -4, 4, 12][1, 4] came
+    # back 5.5e-72 for R's and python's 4.19e-68 (#96, #511). R's values.
+    R = rank_probabilities([-12.0, -4, 4, 12])
+    @test abs(R[1, 4] / 4.1937661044827e-68 - 1) < 1e-9
+    @test abs(R[1, 3] / 2.918333444485356e-30 - 1) < 1e-9
+    @test abs(bottom_k_probabilities([-30.0, 0, 0], 1)[1] /
+              4.684196986668059e-134 - 1) < 1e-9
+    @test abs(rank_probabilities([-9.0, -2, 2, 10])[1, 4] /
+              2.232140669201e-42 - 1) < 1e-9
+    # a floored survival takes the exact log tail (#502): 1.1055e-307
+    @test abs(top_k_probabilities([0.0, 53, 106], 1)[2] /
+              1.105453832131805e-307 - 1) < 1e-9
+    # cumulative ranks are the top-k memberships
+    mu = [-9.0, -2, 2, 10]
+    t2 = top_k_probabilities(mu, 2)
+    @test maximum(abs.(vec(sum(rank_probabilities(mu)[:, 1:2], dims = 2)) .- t2)) < 1e-12
+end
+
+@testset "a pair whose contrast norm overflows keeps its price (#86)" begin
+    # rank two at 7e307: |dV| = 2e308 overflowed, a = Inf, NaN, and the
+    # 1e-150 fallback priced [1, 0] for Phi(1/sqrt 2)
+    p = race_probabilities([0, 1.4e308]; V = [7e307 7e307; -7e307 -7e307],
+                           D = [1.0, 1.0])
+    @test p ≈ [0.7602499389065233, 0.2397500610934767] rtol = 1e-14
+end
+
+@testset "normal top-k agrees with the python reference, body and tails" begin
+    # python's winning.factor.topk at its defaults (points = 513). Ordinary
+    # fields agreed at roundoff before the normal-tail change and still do;
+    # the deep tails were up to 100% off (5.5e-72 for 4.19e-68) and now
+    # agree to ~1e-15 relative.
+    rel(a, b) = all(isapprox.(a, b; rtol = 1e-12, atol = 1e-300))
+    mu = [-0.8, -0.3, 0.0, 0.4, 0.9]; D = [1, 0.8, 1.2, 0.9, 1.1]
+    @test maximum(abs.(top_k_probabilities(mu, 2; D = D) .- [0.7247269978325018,
+        0.5250621468291852, 0.3971781344740703, 0.2291962121579545,
+        0.12383650870628866])) < 1e-13
+    @test maximum(abs.(bottom_k_probabilities(mu, 2; D = D) .- [0.12221732751073217,
+        0.23164451456686283, 0.37322553607084713, 0.5428543363014259,
+        0.730058285550132])) < 1e-13
+    @test maximum(abs.(vec(permutedims(rank_probabilities(mu; D = D))) .- [
+        0.4718964877549066, 0.25283051007759677, 0.15305567465676656,
+        0.08592819685811753, 0.036289130652612425, 0.23035975818625226,
+        0.29470238864293286, 0.24329333860395205, 0.15888827522903712,
+        0.07275623933782557, 0.18037454718247573, 0.21680358731950164,
+        0.22959632947121497, 0.21201316680751828, 0.16121236921928944,
+        0.0777598924204548, 0.1514363197378233, 0.22794945154094154,
+        0.2958506175891685, 0.24700371871161186, 0.03960931457056499,
+        0.08422719445421413, 0.1461052061193419, 0.24731974416754565,
+        0.48273854068833333])) < 1e-13
+    @test maximum(abs.(vec(permutedims(top_k_jacobians(mu, 2; D = D).Jmu)) .- [
+        -0.28370854189618927, 0.0915159838458802, 0.0801207137510371,
+        0.07022959021813523, 0.04184225408113675, 0.0915159838458802,
+        -0.35816097764456933, 0.11744314127890959, 0.0944273277509499,
+        0.05477452476882964, 0.0801207137510371, 0.11744314127890959,
+        -0.3068569091200174, 0.06930234757979348, 0.03999070651027727,
+        0.07022959021813523, 0.09442732775094989, 0.06930234757979348,
+        -0.26648021109539327, 0.0325209455465147, 0.04184225408113675,
+        0.05477452476882964, 0.03999070651027727, 0.0325209455465147,
+        -0.16912843090675836])) < 1e-13
+    @test rel(rank_probabilities([-12.0, -4, 4, 12])[1, :], [0.9999999922913712,
+        7.708628950140002e-09, 2.9183334444853435e-30, 4.193766104482667e-68])
+    @test rel(bottom_k_probabilities([-30.0, 0, 0], 1),
+              [4.684196986668009e-134, 0.5, 0.5])
+    @test rel(top_k_probabilities([0.0, 6, 12, 18], 2), [0.9999999999999999,
+        0.9999889547515006, 1.1045248499297242e-05, 5.663215672290815e-18])
+    @test rel(rank_probabilities([-9.0, -2, 2, 10])[1, :], [0.9999996284508106,
+        3.7154918892918544e-07, 4.602222067048645e-16, 2.232140669201572e-42])
+    @test rel(vec(permutedims(top_k_jacobians([-6.0, 0, 6], 1).Jmu)), [
+        -3.481326298671565e-05, 3.4813262986682934e-05, 3.271626549061531e-17,
+        3.4813262986682934e-05, -3.4813262986686424e-05, 3.4898487251887385e-18,
+        3.271626549061531e-17, 3.4898487251887385e-18, -3.620611421580405e-17])
+end
+
+@testset "an ordinary pair keeps its closed form (#86)" begin
+    @test race_probabilities([-0.3, 0.4]; V = reshape([0.5, -0.2], 2, 1),
+                             D = [1.0, 0.7]) ≈
+          [0.68189917673080014, 0.31810082326919986] rtol = 1e-14
+end
+
+@testset "a failed inverse is retried from fixed starts (#779, #781)" begin
+    # #779: exact-second logistic target, warm start within 0.048 of truth
+    mu7 = [0.016, -0.356, 0.552, -0.212]
+    D7 = [1.444, 0.799, 0.818, 1.163] .^ 2
+    t7 = rank_probabilities(mu7; D = D7, base = "logistic")[:, 2]
+    f = abilities_from_rank_marginal(t7, 2; mu0 = [-0.002, -0.308, 0.574, -0.242],
+                                     D = D7, base = "logistic", n_iter = 200,
+                                     return_info = true)
+    @test f.converged && f.max_log_residual < 1e-8
+    # julia's exact-rank inverse fits the raw lattice column, not the
+    # mass-normalised public map (python's #267 change is not ported), so
+    # the public repricing carries that lattice-mass gap, not the solve's
+    @test maximum(abs.(rank_probabilities(f.mu; D = D7, base = "logistic")[:, 2]
+                       .- t7)) < 1e-6
+    @test maximum(abs.(f.mu .- (mu7 .- sum(mu7) / 4))) < 1e-4
+    # #781: exact normal win/top-2 board from the default cold start
+    mu = [-0.6669408707331521, -0.04607137189844819, -0.9239086741190706,
+          1.2201504898506477, -0.7018494832934388, 1.1186199101934622]
+    sd = [2.601365880665001, 1.5539670145121982, 1.122141854005653,
+          0.4148305666148936, 0.43663998310753704, 0.3415875902805172]
+    q1 = top_k_probabilities(mu, 1; D = sd .^ 2)
+    q2 = top_k_probabilities(mu, 2; D = sd .^ 2)
+    for fit in (loc_scale_from_topk_pair(q1, 1, q2, 2; return_info = true),
+                loc_scale_from_win_and_second(q1, q2 .- q1; return_info = true))
+        @test fit.converged
+        @test max(maximum(abs.(top_k_probabilities(fit.mu, 1; D = fit.sd .^ 2) .- q1)),
+                  maximum(abs.(top_k_probabilities(fit.mu, 2; D = fit.sd .^ 2) .- q2))) < 1e-8
+    end
+    w = loc_scale_from_topk_pair(q1, 1, q2, 2; D0 = sd .^ 2, return_info = true)
+    @test w.converged && w.iterations <= 3
+    z = loc_scale_from_topk_pair([0.8, 0.1, 0.1], 1, [0.2, 0.9, 0.9], 2;
+                                 return_info = true)
+    @test !z.converged
+end
+
+@testset "the rank-one Hermite/midpoint handover is a band (#783)" begin
+    # sd0 = 1 sits at the old ceil(8 sharp) > 80 switch, where a 1e-7
+    # change in sd moved a top-2 membership by 31bp; outside the band the
+    # rule is the one it always was
+    a = 10 / sqrt(2)
+    V = reshape([-a, a / 3, a / 3, a / 3], :, 1)
+    mu = [-0.7, -0.1, 0.2, 0.8]
+    p(sd0) = top_k_probabilities(mu, 2; V = V, D = [sd0^2, 1, 1, 1],
+                                 points = 513)[1]
+    @test abs(p(1 - 1e-7) - p(1.0)) < 1e-7
+    @test abs(p(1 + 1e-7) - p(1.0)) < 1e-7
+    @test maximum(abs.(diff([p(10 / s) for s in 9.0:0.05:10.0]))) < 5e-4
+    nw(sd0) = length(winning._race_setup(mu, V, [sd0^2, 1, 1, 1], nothing,
+                                         nothing, "normal")[5])
+    @test nw(10 / 10.6) == 85          # midpoint, untouched
+    @test nw(10 / 8.9) == 33 + 34 + 72 # handed back to GH(72) (#850)
+    @test nw(10 / 9.5) == 72 + 81      # both, inside the band
+end
+
+@testset "the rank-one Gauss-Hermite order is continuous (#850)" begin
+    # GH prices alternate with the parity of the order, so ceil(8 sharp)
+    # jumped by up to 59bp on this field at every 1/8 of sharpness
+    a = 10 / sqrt(2)
+    V = reshape([-a, a / 3, a / 3, a / 3], :, 1)
+    mu = [-0.7, -0.1, 0.2, 0.8]
+    p(sd0) = top_k_probabilities(mu, 2; V = V, D = [sd0^2, 1, 1, 1],
+                                 points = 513)[1]
+    for s in (4.0, 6.0, 71 / 8)
+        @test abs(p(10 / s * (1 + 1e-9)) - p(10 / s * (1 - 1e-9))) < 1e-7
+    end
+    nw(sharp) = length(winning._rank1_hermite_rule(sharp)[2])
+    @test nw(2.0) == 16                # an old order, exactly
+    @test nw(5.0) == 24 + 25           # the parity pair
+    @test nw(8.0) == 33 + 34           # held at the cap
+    @test winning._rank1_hermite_rule(9.0)[2] == winning.hermite_nodes(1, 72).W
+end

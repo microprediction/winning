@@ -1,0 +1,77 @@
+# CodeRabbit review settings. The free OSS tier allows about one review
+# an hour, so keep it on the code: papers, data and experiment logs are
+# excluded, and the docstring-coverage check (80% default) is off.
+language: en-US
+reviews:
+  profile: chill
+  poem: false
+  high_level_summary: true
+  auto_review:
+    enabled: true
+    drafts: false
+  pre_merge_checks:
+    docstrings:
+      mode: "off"
+  path_filters:
+    - "!papers/**"
+    - "!planning/**"
+    - "!attic/**"
+    - "!data/**"
+    - "!bench_results/**"
+    - "!docs/assets/pdf/**"
+    - "!research/**/data/**"
+    - "!research/**/runs/**"
+    - "!**/*.jsonl"
+    - "!**/*.csv"
+    - "!**/*.npy"
+    - "!**/*.npz"
+    - "!**/*.mat"
+    - "!**/*.soc"
+    - "!**/*.soi"
+    - "!**/*.toc"
+    - "!**/*.xls"
+    - "!**/*.zip"
+    - "!**/*.pdf"
+    - "!**/*.png"
+    - "!parity/vectors.json"
+    - "!julia/**/test/vectors.json"
+  path_instructions:
+    - path: "winning/**/*.py"
+      instructions: >-
+        The Python package is the reference implementation. R (r/winning),
+        JS (js/, docs/js/winning), Julia (julia/) and Rust (rust/) ports
+        mirror it and parity/ checks them. Flag any behaviour change here
+        that the ports do not also make.
+    - path: "r/**"
+      instructions: >-
+        R ports of the Python package; behaviour must match winning/ and
+        parity/check.R. Flag divergence from the Python implementation.
+    - path: "docs/js/winning/**"
+      instructions: >-
+        Browser JS port of the Python package; behaviour must match the
+        Python reference in winning/ and parity/check.mjs and
+        parity/check_js_api.mjs. Compare every change with the Python
+        implementation and flag divergence.
+    - path: "js/**"
+      instructions: >-
+        Standalone JS ports of the Python package; behaviour must match the
+        Python reference in winning/ and its parity harness
+        (js/factor/test_parity.mjs against vectors generated from Python).
+        Compare every change with the Python
+        implementation and flag divergence.
+    - path: "julia/**"
+      instructions: >-
+        Julia ports of the Python package; behaviour must match the Python
+        reference in winning/ and parity/check.jl. Compare every change with
+        the Python implementation and flag divergence.
+    - path: "rust/**"
+      instructions: >-
+        Rust kernels (fastrace) behind the Python package; behaviour must
+        match the pure-NumPy reference in winning/ and
+        tests/test_rust_parity.py. Compare every change with the Python
+        implementation and flag divergence.
+    - path: "research/**/*.py"
+      instructions: >-
+        Experiment scripts. Focus on correctness of the statistics and on
+        raw results being written to append-only logs that cannot be lost;
+        style matters less.

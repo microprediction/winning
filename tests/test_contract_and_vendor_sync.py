@@ -16,6 +16,18 @@ def test_fastmvn_vendored_copy_is_identical():
                     "diverged -- sync deliberately and update both tests")
 
 
+def test_fastmvn_vendors_the_shape_contract_too():
+    """core.py says `from .shapes import as_idio, as_loadings`, which
+    resolves to winning.shapes in one tree and fastmvn.shapes in the
+    other. That is what keeps core.py byte-identical across the two --
+    but only while both shapes.py agree, so pin that as well."""
+    root = Path(__file__).resolve().parents[1]
+    a = (root / "winning" / "shapes.py").read_text()
+    b = (root / "python" / "fastmvn" / "src" / "fastmvn" / "shapes.py").read_text()
+    assert a == b, ("python/fastmvn vendors winning/shapes.py; the loading "
+                    "shape contract has diverged between the two packages")
+
+
 def test_rprobitfast_engine_is_prefix_of_mlogitfast():
     # Conscious divergence (2026-08-28, CRAN prep): engine.R used to be a
     # FULL copy of mlogit_fast.R, but that shipped a dead, unexported
@@ -32,3 +44,15 @@ def test_rprobitfast_engine_is_prefix_of_mlogitfast():
         "r/rprobitfast/R/engine.R must be an exact prefix of "
         "r/mlogitfast/R/mlogit_fast.R (shared engine internals); "
         "they have diverged -- sync deliberately and update this test")
+
+
+def test_r_sobol_generator_is_identical_across_packages():
+    # r/mvtnormfast, r/mlogitfast and r/rprobitfast each ship R/sobol.R
+    # (each package is self-contained on CRAN); one generator, three
+    # copies, so pin them together (#143, #388)
+    root = Path(__file__).resolve().parents[1]
+    copies = [(root / "r" / p / "R" / "sobol.R").read_text()
+              for p in ("mvtnormfast", "mlogitfast", "rprobitfast")]
+    assert len(copies[0]) > 2000
+    assert copies[0] == copies[1] == copies[2], (
+        "r/*/R/sobol.R copies have diverged -- sync deliberately")

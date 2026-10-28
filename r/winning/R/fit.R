@@ -32,14 +32,41 @@
   d
 }
 
-.factor_model_projected <- function(C, k, n_outer = 60L) {
+# ||P (C - V V' - diag D) P||_F^2, the identified objective
+.projected_sq <- function(C, V, D) {
+  n <- nrow(C)
+  P <- diag(n) - 1 / n
+  sum((P %*% (C - V %*% t(V) - diag(D, n)) %*% P)^2)
+}
+
+# Exact argmin_{d >= 0} d'Gd/2 - c'd for G = P o P = a I + b 11'
+# (a = 1 - 2/n, b = 1/n^2), by water-filling: port of python's
+# _nnls_centered_gram.
+.nnls_centered_gram <- function(c0, n, n_pass = 100L) {
+  a <- 1 - 2 / n
+  b <- 1 / (n * n)
+  s <- max(sum(c0), 0) / (a + b * n)
+  if (n <= 2L) return(rep(max(s, 0) / n, n))
+  for (it in seq_len(n_pass)) {
+    mask <- c0 > b * s
+    s_new <- sum(c0[mask]) / (a + b * sum(mask))
+    if (abs(s_new - s) <= 1e-15 * max(1, abs(s))) { s <- s_new; break }
+    s <- s_new
+  }
+  pmax((c0 - b * s) / a, 0)
+}
+
+.factor_model_projected <- function(C, k, n_outer = 60L, D0 = NULL) {
   n <- nrow(C)
   P <- diag(n) - 1 / n
   B <- qr.Q(qr(P))[, seq_len(n - 1), drop = FALSE]
   S <- t(B) %*% C %*% B
-  D <- rep(0.5 * mean(diag(C)), n)
+  # D0 exists for multistart: the alternation is nonconvex, and its
+  # default start can stall at a nonglobal stationary point (#427)
+  D <- if (is.null(D0)) rep(0.5 * mean(diag(C)), n) else as.numeric(D0)
   G <- P * P
   W <- matrix(0, n - 1, k)
+  best <- list(W = W, D = D, obj = Inf)
   for (it in seq_len(n_outer)) {
     R <- S - t(B * D) %*% B
     e <- eigen(R, symmetric = TRUE)
@@ -48,10 +75,55 @@
     A <- S - W %*% t(W)
     c0 <- rowSums((B %*% A) * B)
     D_new <- .nnls_active_set(G, c0)
+    # descent enforced, as python: a sweep that does not improve the
+    # objective is discarded and the alternation stops at the best iterate
+    obj <- .projected_sq(C, B %*% W, D_new)
+    if (obj > best$obj * (1 + 1e-12)) { W <- best$W; D <- best$D; break }
+    best <- list(W = W, D = D_new, obj = obj)
     if (max(abs(D_new - D)) < 1e-12) { D <- D_new; break }
     D <- D_new
   }
-  list(V = B %*% W, D = pmax(D, 1e-8))
+  # RELATIVE floor, as python's factor_model_projected: an absolute 1e-8
+  # inflates a tiny variance (C = 1e-12 I) by orders of magnitude
+  dc <- diag(C)
+  floor <- 1e-8 * pmax(dc, 1e-6 * max(mean(dc), 1e-300))
+  list(V = B %*% W, D = pmax(D, floor))
+}
+
+# Warn when the rank cuts through a degenerate eigenvalue of the
+# centred covariance (port of python's _warn_if_rank_splits_a_tie). Any
+# k directions from a tied group fit equally well and imply DIFFERENT
+# races: six equal blocks at k = 3 moved a pair price 3.6 points under a
+# relabelling, with no warning in this port (#383). The 5% filter is
+# python's: every centred spectrum ends in a tied bulk.
+.warn_if_rank_splits_a_tie <- function(C, k, tol = 1e-6) {
+  n <- nrow(C)
+  if (k >= n - 1L || k < 1L) return(invisible(NULL))
+  P <- diag(n) - 1 / n
+  lam <- eigen(P %*% C %*% P, symmetric = TRUE, only.values = TRUE)$values
+  probe <- min(2L * k + 4L, n - 1L)
+  lam <- lam[seq_len(probe)]
+  if (length(lam) <= k || lam[1] <= 0) return(invisible(NULL))
+  scale <- lam[1]
+  if (lam[k] - lam[k + 1L] > tol * scale) return(invisible(NULL))
+  if (lam[k] < 0.05 * scale) return(invisible(NULL))
+  lo <- k                       # 1-based index of the first tied value
+  while (lo > 1L && lam[lo - 1L] - lam[lo] <= tol * scale) lo <- lo - 1L
+  hi <- k + 1L
+  while (hi + 1L <= length(lam) && lam[hi] - lam[hi + 1L] <= tol * scale)
+    hi <- hi + 1L
+  tied <- hi - lo + 1L
+  warning(sprintf(paste0(
+    "rank %d splits a tied eigenvalue of the centered covariance: ",
+    "eigenvalues %d to %d are equal to within %g relative%s, so the fit ",
+    "picks an arbitrary %d of %d equally optimal directions. Every choice ",
+    "gives the same residual and a DIFFERENT race. This is not ",
+    "approximation error and no optimizer fixes it; pass k=%d or more to ",
+    "take the whole tied group."),
+    k, lo, hi, tol,
+    if (hi >= probe) " (and the tie may extend past the probe)" else "",
+    k - lo + 1L, tied, hi), call. = FALSE)
+  invisible(NULL)
 }
 
 #' Fit a dense covariance to the race grammar
@@ -73,10 +145,91 @@
 fit_covariance <- function(C, k = 3L, m = 5L, blocks = NULL,
                            nodes = 2048L) {
   C <- as.matrix(C)
+  # The same contract python states, in the same order and with the
+  # same messages. R had NONE of it: a negative variance was clamped to
+  # the floor, NA and Inf propagated into the fit, and a non-square
+  # matrix was read by nrow() alone. That last one is why this block
+  # sits ABOVE the n == 1 return rather than below it -- a 1 x 2 matrix
+  # has nrow 1, so the one-runner branch would otherwise answer for it
+  # from C[1, 1] and drop the second column (#277).
+  if (nrow(C) != ncol(C))
+    stop(sprintf("cov= must be square; got %d x %d", nrow(C), ncol(C)))
   n <- nrow(C)
+  if (!all(is.finite(C))) stop("cov= contains NaN or inf")
+  asym <- max(abs(C - t(C)))
+  if (asym > 1e-8 * max(max(abs(C)), 1e-300))
+    stop(sprintf(paste("cov= is not symmetric (max asymmetry %.2e); pass",
+                       "(C + t(C))/2 if the asymmetry is numerical noise"),
+                 asym))
+  # halve BEFORE adding, or C + t(C) overflows to Inf for finite
+  # entries near the double ceiling (#279)
+  C <- 0.5 * C + 0.5 * t(C)
+  # positive semidefiniteness in CORRELATION units (#666, as python
+  # core._validate_covariance): a tolerance of 1e-8 times the mean raw
+  # variance let an unrelated variance of 1e12 hide a pair with
+  # correlation 2, and the absolute 1e-300 floor passed [[0, c], [c, 0]]
+  # at c = 1e-309. No negative variance; a zero variance has a zero row;
+  # the standardised positive-variance block has min eigenvalue >= -1e-8.
+  psd_msg <- paste("cov= is not positive semidefinite; this is not a",
+                   "covariance matrix. Project to the PSD cone first if",
+                   "it came from noisy estimation.")
+  d <- diag(C)
+  if (any(d < 0))
+    stop(sprintf("%s (variance [%d] = %.2e < 0)", psd_msg,
+                 which(d < 0)[1], d[which(d < 0)[1]]), call. = FALSE)
+  pos <- d > 0
+  if (!all(pos)) {
+    for (i in which(!pos))
+      if (any(C[i, -i] != 0))
+        stop(sprintf("%s (variance [%d] is zero but its row is not)",
+                     psd_msg, i), call. = FALSE)
+  }
+  if (any(pos)) {
+    sd_ <- sqrt(d[pos])
+    R <- C[pos, pos, drop = FALSE] / outer(sd_, sd_)
+    lam_min <- min(eigen(R, symmetric = TRUE, only.values = TRUE)$values)
+    if (lam_min < -1e-8)
+      stop(sprintf("%s (min eigenvalue of the correlation matrix %.2e)",
+                   psd_msg, lam_min), call. = FALSE)
+  }
+  if (n == 1L) {
+    # A one-runner field has no covariance STRUCTURE: nothing for a
+    # factor to correlate, the whole variance idiosyncratic, and the
+    # race is 1 whatever it is. .factor_model_projected is asked for
+    # min(k, n - 1) = 0 factors and hands back a 0 x 0 matrix, which
+    # then fails to multiply; python divided by zero at the same point
+    # (#273). Report it as what it is: an exact fit of rank zero.
+    return(list(V = matrix(0, 1L, 1L), D = pmax(C[1L, 1L], 1e-12),
+                F = matrix(0, 1L, 1L), W = 1,
+                rank = 0L, n = 1L, bound = 0, clamp = 0,
+                residual = 0, contrast_residual = 0, degraded = FALSE))
+  }
+  # a common shift cancels from every contrast: fit the representative
+  # without it, so C and C + a 11' are fitted identically (#465, python
+  # core._without_common_shift)
+  C <- .without_common_shift(C)
   s <- sqrt(pmax(diag(C), 1e-12))
   corr <- C / outer(s, s)
-  fit <- .factor_model_projected(C, min(k, n - 1L))
+  kk <- min(k, n - 1L)
+  fit <- .factor_model_projected(C, kk)
+  .warn_if_rank_splits_a_tie(C, kk)          # #383, python parity
+  # Multistart rescue, ported from python's fit_covariance: the default
+  # start stalled on an EXACT rank-2-plus-diagonal 12x12 matrix at
+  # projected objective 1.04 (contrast residual 0.159, a pair probability
+  # 1.79 points off) where a diagonal-heavy start reaches 1e-14 (#427).
+  # Tried only when the default objective is materially above zero.
+  Pc <- diag(n) - 1 / n
+  scale2 <- sum((Pc %*% C %*% Pc)^2)
+  obj0 <- .projected_sq(C, fit$V, fit$D)
+  if (obj0 > 1e-12 * max(scale2, 1e-300)) {
+    lam_top <- sum(sort(eigen(C, symmetric = TRUE, only.values = TRUE)$values,
+                        decreasing = TRUE)[seq_len(kk)]) / n
+    for (D_start in list(0.9 * diag(C), pmax(diag(C) - lam_top, 1e-3))) {
+      f2 <- .factor_model_projected(C, kk, D0 = D_start)
+      o2 <- .projected_sq(C, f2$V, f2$D)
+      if (o2 < obj0) { fit <- f2; obj0 <- o2 }
+    }
+  }
   V <- fit$V
   if (is.null(blocks)) blocks <- max(2L, min(n %/% 5L, 20L))
   P <- diag(n) - 1 / n
@@ -113,9 +266,41 @@ fit_covariance <- function(C, k = 3L, m = 5L, blocks = NULL,
   keep <- colSums(Vall ^ 2) > 1e-10 * sum(diag(C)) / n
   if (!any(keep)) keep[1] <- TRUE
   Vall <- Vall[, keep, drop = FALSE]
+  # The floor is RELATIVE to each runner's own variance, as python's
+  # _close. The absolute 1e-3 * mean(diag(C)) floor destroyed near-singular
+  # contrasts: on diag(1e-8, 1e-8, 1) Var(X1 - X2) >= D1 + D2 >= 6.7e-4
+  # against the true 2e-8, a near-certain head-to-head priced as a coin
+  # flip (#407). And it is the LOWER-BOUNDED least squares (d = floor + x,
+  # x >= 0), not an unconstrained solve clipped afterwards, which is not
+  # the constrained minimiser because P o P couples the coordinates. The
+  # degradation test still keys on the floor close_fit uses (#189).
+  #
+  # The MULTIPLIER stays this port's 1e-3, not python's 1e-6. What #407
+  # needs is the per-runner scale and the bounded solve; on the #407
+  # fixture the floor is then 1e-11 against D = 1e-8, untouched. Python's
+  # 1e-6 adds nothing a caller can use -- a runner whose idiosyncratic
+  # share is under 0.1% of its own variance is the near-Dirac regime, out
+  # of scope -- and it costs: a degenerate full-rank fit (k + m + blocks
+  # >= n) puts D on the floor, so 1e-6 makes every conditional race
+  # 32x sharper than 1e-3 did (sharpness 1166 vs 37), the refinement asks
+  # for 40,000 lattice points against the 8193 cap, one forward costs 11x
+  # (3.95 s vs 0.35 s at n = 8) and its slopes are under-resolved noise,
+  # so an inverse on such a fit ran 60 sweeps for 4 minutes without
+  # converging where it had taken 4 s.
+  d_clamp <- 1e-3 * pmax(diag(C), 1e-6 * mean(diag(C)))
   close_fit <- function(Vc) {
     rhs <- diag(P %*% (C - Vc %*% t(Vc)) %*% P)
-    Dc <- pmax(solve(P * P, rhs), 1e-3 * mean(diag(C)))
+    # P o P = a I + b 11' with a = 1 - 2/n, b = 1/n^2. At n = 2, a = 0
+    # and the matrix is rank one (#181): one contrast, the total is
+    # spread evenly.
+    a <- 1 - 2 / n
+    b <- 1 / (n * n)
+    if (n <= 2L) {
+      Dc <- pmax(rep(max(sum(rhs), 0) / (a + n * b) / n, n), d_clamp)
+    } else {
+      Dc <- d_clamp + .nnls_centered_gram(rhs - (a * d_clamp +
+                                                   b * sum(d_clamp)), n)
+    }
     Rm <- P %*% (C - Vc %*% t(Vc) - diag(Dc)) %*% P
     list(D = Dc, res = max(abs(Rm)))
   }
@@ -123,12 +308,66 @@ fit_covariance <- function(C, k = 3L, m = 5L, blocks = NULL,
   # second arm: pure eigen fit at the same total rank (greedy
   # factor+blocks allocation is the wrong shape for globally smooth
   # covariance); smaller choice-relevant residual wins, pipeline on ties
-  rank <- ncol(Vall)
+  # clamp to n: the greedy allocation (k global + m eigendirections +
+  # one per block) can ask for more columns than there are eigenvectors
+  # -- k=3, m=5 and 2 blocks is 10 at n=8 -- and the python reference's
+  # _top_eigen truncates silently where seq_len() here ran off the end
+  # of eC$vectors ("subscript out of bounds", an n=8 exact-rank-3
+  # correlation, the #118 fixture)
+  rank <- min(ncol(Vall), n)
   eC <- eigen(C, symmetric = TRUE)
   Veig <- eC$vectors[, seq_len(rank), drop = FALSE] *
     rep(sqrt(pmax(eC$values[seq_len(rank)], 0)), each = n)
   a2 <- close_fit(Veig)
   if (a2$res < a1$res) { Vall <- Veig; D <- a2$D } else D <- a1$D
   hw <- .halton_normal_nodes(ncol(Vall), nodes)
-  list(V = Vall, D = D, F = hw$F, W = hw$W)
+  # The two failure classes the python reference keys on, reported so a
+  # caller can see them: the fit degenerates to full rank or drives D onto
+  # its floor (the conditional race is then a near-step the factor nodes
+  # cannot resolve, and the residual checks are silent about it), or it
+  # reproduces cov badly. Python routes either case to GHK; this package
+  # has no GHK, so it prices the fit and says so -- see the warning in
+  # race_probabilities(). A gap that does not announce itself is the one
+  # failure mode that looks like an answer.
+  bound <- sum(D <= 2 * d_clamp)
+  # the pairwise-contrast residual python also keys on: a near-singular
+  # difference variance the fit did not hold makes head-to-head
+  # probabilities badly wrong while the global residual stays small
+  Sig <- Vall %*% t(Vall) + diag(D)
+  cv_fit <- outer(diag(Sig), diag(Sig), "+") - 2 * Sig
+  cv_true <- outer(diag(C), diag(C), "+") - 2 * C
+  scale_cv <- pmax(cv_true, 1e-12 * mean(diag(C)))
+  contrast_res <- max(abs(cv_fit - cv_true) / scale_cv)
+  residual <- min(a1$res, a2$res)
+  list(V = Vall, D = D, F = hw$F, W = hw$W,
+       rank = ncol(Vall), n = n,
+       bound = bound,
+       clamp = d_clamp,
+       residual = residual,
+       contrast_residual = contrast_res,
+       degraded = (bound > 0 || ncol(Vall) >= n ||
+                   contrast_res > 0.05 ||
+                   residual > 0.05 * mean(diag(C))))
+}
+
+
+# A race-equivalent representative of C with its removable common shift
+# taken out (#465). When every off-diagonal is positive, m = min C_ij is
+# removed elementwise (exact near the shift); if that over-removes, the
+# largest removable part t = -min_{1'x=1} x'(C - m)x is restored from one
+# KKT solve. A field with any non-positive covariance is unchanged.
+.without_common_shift <- function(C) {
+  n <- nrow(C)
+  if (n < 2L) return(C)
+  m <- min(C[row(C) != col(C)])
+  if (!(m > 0)) return(C)
+  B <- C - m
+  K <- rbind(cbind(B, 1), c(rep(1, n), 0))
+  rhs <- c(rep(0, n), 1)
+  sol <- tryCatch(solve(K, rhs),
+                  error = function(e) qr.solve(K, rhs, tol = 1e-12))
+  x <- sol[seq_len(n)]
+  v <- sum(x * (B %*% x))
+  if (is.finite(v) && v < 0) B <- B - v
+  B
 }

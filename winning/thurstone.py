@@ -1,20 +1,29 @@
-"""Deprecation shim: the density-agnostic research engine lives in
-winning.research.
+"""Tombstone: ``winning.thurstone`` was removed. Importing it raises an
+ImportError that says where the code went and what to use instead.
 
-This module IS winning.research (module aliasing, so submodule imports
-and module state work unchanged); new imports should say so. The name
-change is honest labeling: this is research-grade machinery, distinct
-from the separate thurstone package it was once vendored from.
+It used to alias ``winning.research``, the retired research engine, and
+the external ``thurstone`` package imported through it. A bare
+``ModuleNotFoundError: No module named 'winning.thurstone'`` tells a
+user nothing; this tells them the two things they need.
 """
-import sys as _sys
-import warnings as _warnings
 
-import winning.research as _real
-
-_warnings.warn(
-    "winning.thurstone moved to winning.research; this alias remains "
-    "for compatibility",
-    DeprecationWarning,
-    stacklevel=2,
+raise ImportError(
+    "winning.thurstone was removed.\n"
+    "\n"
+    "  The research engine it aliased is winning.research:\n"
+    "      from thurstone import X            ->  from winning.research import X\n"
+    "      from thurstone.inference import Y  ->  from winning.research.inference import Y\n"
+    "\n"
+    "  For calibration under the normal race, prefer the front door, which "
+    "is ~38x faster, round-trips to 1e-9 rather than 1e-5, and uses the "
+    "compiled kernels:\n"
+    "      winning.calibrate_abilities(p, V=, D=)\n"
+    "  It is the NORMAL race by default; pass base= for the other built-in "
+    "races (gumbel, logistic, laplace, skew-normal, ...). A custom "
+    "research Density has no front-door equivalent: keep "
+    "winning.research.AbilityCalibrator for it, as it calibrates a "
+    "different model.\n"
+    "\n"
+    "  If this came from `import thurstone`, that package is retired: "
+    "change its imports as above and drop the dependency."
 )
-_sys.modules[__name__] = _real

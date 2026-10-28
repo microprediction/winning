@@ -25,7 +25,7 @@ available); inversion for blocks via abilities_from_block_race.
 
 winning.probit speaks the factor-probit literature's language (max-wins
 utilities, shares, supplied covariances). winning.factor holds the
-paper-faithful kernels; winning.research (formerly winning.thurstone) the density-agnostic engine;
+paper-faithful kernels; winning.research the density-agnostic research engine (slow; prefer the front door);
 winning.classic the original SIAM lattice ability transform, whose
 primitive is the OPPOSITE of the front door's: there the atom vector on
 the lattice IS the distribution (empirical data, real dead heats,
@@ -56,13 +56,18 @@ from .factor.structures import (  # noqa: F401
     Tree,
 )
 from .factor.polish import polish_race, race_jacobian  # noqa: F401
+from .factor.posteriors import (crn_posterior,  # noqa: F401
+                                crn_posterior_replicates,
+                                feature_bandit_posterior,
+                                update_contrast)
+from .factor.missing import fit_factor_model_missing  # noqa: F401
 from .factor.topk import (top_k_probabilities,  # noqa: F401
                           bottom_k_probabilities,
                           rank_probabilities)
 from . import probit  # noqa: F401
 from .rustconfig import use_rust, rust_active  # noqa: F401
 
-__version__ = "1.5.0"
+__version__ = "1.6.0"
 from .factor.permutations import ordered_probabilities, plackett_luce_prefix_logprob  # noqa: F401
 
 # Deprecated aliases (Plackett--Luce is the preferred name).

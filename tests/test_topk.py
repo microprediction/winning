@@ -90,9 +90,11 @@ def test_refusals_and_slot_check():
 
     with pytest.raises(ValueError):
         top_k_probabilities(np.zeros(5), 5, D=np.ones(5))
-    with pytest.raises(NotImplementedError, match="rank"):
-        top_k_probabilities(np.zeros(6), 2, V=np.ones((6, 3)),
-                            D=np.ones(6))
+    # rank three is priced now (#623); an all-common loading matrix is
+    # pure gauge, so it is the symmetric independent field
+    q3 = top_k_probabilities(np.zeros(6), 2, V=np.ones((6, 3)),
+                             D=np.ones(6))
+    assert np.allclose(q3, 2.0 / 6.0, atol=1e-9)
     with pytest.raises(RuntimeError, match="slots"):
         _checked_topk(np.full(6, 0.1), 3, "test race")
 

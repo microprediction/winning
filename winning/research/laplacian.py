@@ -160,7 +160,7 @@ def laplacian_weights(densities: Sequence[Density]) -> np.ndarray:
         loo_rest = _leave_one_out_products(S[rest])  # (n-1, M): prod over rest minus one
         W[i, rest] = (F[rest] * loo_rest) @ F[i]
     W /= densities[0].lattice.unit
-    return 0.5 * (W + W.T)  # symmetric up to roundoff; enforce exactly
+    return 0.5 * W + 0.5 * W.T  # symmetric up to roundoff; enforce exactly (#279)
 
 
 def laplacian_dense(densities: Sequence[Density]) -> np.ndarray:

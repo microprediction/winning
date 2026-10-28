@@ -23,10 +23,11 @@ from __future__ import annotations
 import numpy as np
 
 from .races import (race_probabilities, abilities_from_race, _setup,
-                    forward_grid)
+                    forward_grid, kink_lattice)
 
 
-def _raw_and_derivative(mu, V, D, F, W, fn, sd, x, dx, rows=None):
+def _raw_and_derivative(mu, V, D, F, W, fn, sd, x, dx, rows=None,
+                        kink_split=False):
     """Unnormalized lattice masses a_i and their exact derivative on THIS
     grid: A[i, j] = d a_i / d mu_j.
 
@@ -59,8 +60,16 @@ def _raw_and_derivative(mu, V, D, F, W, fn, sd, x, dx, rows=None):
     a = np.zeros(n)
     A = np.zeros((len(idx), n))
     dT = np.zeros(n)
+    # kink_split (opt-in): a kinked base integrates on its split lattice,
+    # exactly as the forward map does (races.kink_lattice); dx becomes
+    # weights. Off, this is main's uniform rectangle sum, bit for bit.
+    kinks = getattr(fn, "kinks", ()) if kink_split else ()
     for q in range(len(F)):
-        z = (x[None, :] - M_all[q][:, None]) / sd[:, None]
+        if kinks:
+            xq, w = kink_lattice(x, M_all[q], sd, kinks)
+        else:
+            xq = x
+        z = (xq[None, :] - M_all[q][:, None]) / sd[:, None]
         S, f, fp = fn(z)
         f = f / sd[:, None]
         logS = np.log(np.maximum(S, 1e-300))
@@ -71,19 +80,27 @@ def _raw_and_derivative(mu, V, D, F, W, fn, sd, x, dx, rows=None):
         haz = np.exp(np.clip(logf - logS, -745.0, 40.0))
         R = np.exp(np.clip(L[None, :] - logS, -745.0, 40.0))
         own = -(fp / (sd ** 2)[:, None] * R)                   # d f_i/d mu_i
+        Gt = g.sum(axis=0)
+        if kinks:
+            a += W[q] * (g @ w)
+            A += W[q] * ((g[idx] * w) @ haz.T)
+            # own coordinate, differentiated rather than imposed
+            A[np.arange(len(idx)), idx] += W[q] * (
+                own[idx] @ w - (g[idx] * haz[idx]) @ w)
+            dT += W[q] * (((Gt[None, :] - g) * haz) @ w + own @ w)
+            continue
         a += W[q] * g.sum(axis=1) * dx
         A += W[q] * (g[idx] @ haz.T) * dx
         # own coordinate, differentiated rather than imposed by zero rows
         A[np.arange(len(idx)), idx] += W[q] * dx * (
             own[idx].sum(axis=1) - (g[idx] * haz[idx]).sum(axis=1))
-        Gt = g.sum(axis=0)
         dT += W[q] * dx * (((Gt[None, :] - g) * haz).sum(axis=1)
                            + own.sum(axis=1))
     return a, A, dT
 
 
 def race_jacobian(mu, V=None, D=None, F=None, W=None, base="normal",
-                  points=501, window="bulk", delta=1e-12):
+                  points=501, window="bulk", delta=1e-12, kink_split=False):
     """Fixed-grid-exact J[i, j] = d p_i / d mu_j, one field pass.
 
     Exact for the normalized rectangle sum CONDITIONAL ON THE SELECTED
@@ -105,29 +122,22 @@ def race_jacobian(mu, V=None, D=None, F=None, W=None, base="normal",
 
     Raising mu_j (slower j, min-wins) raises every other p_i:
     off-diagonals are positive.
+
+    kink_split: opt-in, default False. True differentiates the split
+    lattice race_probabilities(..., kink_split=True) integrates on for a
+    kinked base (laplace, exponential power with beta < 2); see there.
+    False, or a smooth base, is the uniform lattice unchanged.
     """
-    mu, V, D, F, W, fn, left, right = _setup(mu, V, D, F, W, base)
-    sd = np.sqrt(D)
-    M_all = mu[None, :] + F @ V.T
-    x, points = forward_grid(M_all, sd, V, fn, left, right, points,
-                             window=window, delta=delta)
-    dx = x[1] - x[0]
-    a, A, dT = _raw_and_derivative(mu, V, D, F, W, fn, sd, x, dx)
-    T = float(a.sum())
-    p = a / T
-    return (A - np.outer(p, dT)) / T
-
-
-def race_jacobian_row(mu, y, V=None, D=None, F=None, W=None, base="normal",
-                      points=257, window="bulk", delta=1e-12):
-    """One row of the race Jacobian: d p_y / d mu_j for all j, one field
-    pass (the estimation score needs only the observed alternative's row,
-    not the full matrix).
-
-    Same construction as race_jacobian restricted to i = y, including
-    the shared lattice and the quotient rule, so the score it feeds is
-    the fixed-grid-exact gradient of the objective the forward map
-    defines (grid motion omitted; see race_jacobian)."""
+    if (isinstance(base, str) and base == "normal" and np.size(mu) == 2):
+        # the forward prices a normal pair in closed form (one Gaussian
+        # contrast), so its Jacobian is the closed form's: the lattice
+        # quotient rule differentiated a map the forward does not use and
+        # gave J[0, 0] = +1.5e-16 against -1.5e-32 at a 12-sd gap (#86)
+        p, sl = race_probabilities(mu, V=V, D=D, F=F, W=W, base=base,
+                                   points=points, window=window,
+                                   delta=delta, return_slopes=True)
+        d = float(-sl[0])
+        return np.array([[-d, d], [d, -d]])
     mu, V, D, F, W, fn, left, right = _setup(mu, V, D, F, W, base)
     sd = np.sqrt(D)
     M_all = mu[None, :] + F @ V.T
@@ -135,7 +145,32 @@ def race_jacobian_row(mu, y, V=None, D=None, F=None, W=None, base="normal",
                              window=window, delta=delta)
     dx = x[1] - x[0]
     a, A, dT = _raw_and_derivative(mu, V, D, F, W, fn, sd, x, dx,
-                                   rows=[int(y)])
+                                   kink_split=kink_split)
+    T = float(a.sum())
+    p = a / T
+    return (A - np.outer(p, dT)) / T
+
+
+def race_jacobian_row(mu, y, V=None, D=None, F=None, W=None, base="normal",
+                      points=257, window="bulk", delta=1e-12,
+                      kink_split=False):
+    """One row of the race Jacobian: d p_y / d mu_j for all j, one field
+    pass (the estimation score needs only the observed alternative's row,
+    not the full matrix).
+
+    Same construction as race_jacobian restricted to i = y, including
+    the shared lattice and the quotient rule, so the score it feeds is
+    the fixed-grid-exact gradient of the objective the forward map
+    defines (grid motion omitted; see race_jacobian). kink_split as in
+    race_jacobian."""
+    mu, V, D, F, W, fn, left, right = _setup(mu, V, D, F, W, base)
+    sd = np.sqrt(D)
+    M_all = mu[None, :] + F @ V.T
+    x, points = forward_grid(M_all, sd, V, fn, left, right, points,
+                             window=window, delta=delta)
+    dx = x[1] - x[0]
+    a, A, dT = _raw_and_derivative(mu, V, D, F, W, fn, sd, x, dx,
+                                   rows=[int(y)], kink_split=kink_split)
     T = float(a.sum())
     p_y = float(a[int(y)]) / T
     return (A[0] - p_y * dT) / T
@@ -157,7 +192,39 @@ def concentration_matrix(n, name_caps=None, groups=None):
                 rows.append(r); bs.append(float(caps[i]))
     if groups is not None:
         for idx, cap in groups:
-            r = np.zeros(n); r[np.asarray(idx, int)] = 1.0
+            # validate BEFORE the integer cast: np.asarray(idx, int) turned
+            # 1.9 into 1 and True into 1, so a typo constrained a different
+            # name and polish_race certified that portfolio as feasible
+            # (#671). The browser and R ports already refuse these.
+            raw = np.asarray(idx)
+            if raw.ndim > 1:
+                raise ValueError(
+                    f"group members must be a flat list of indices; got "
+                    f"shape {raw.shape}")
+            raw = raw.ravel()
+            if raw.size and (raw.dtype == bool
+                             or not np.issubdtype(raw.dtype, np.number)
+                             or np.iscomplexobj(raw)
+                             or not np.isfinite(raw).all()
+                             or (raw != np.floor(raw)).any()):
+                raise ValueError(
+                    f"group members must be whole-number contestant "
+                    f"indices in [0, {n}); got {idx!r}")
+            members = raw.astype(int)
+            # numpy read a negative index as counting from the END, so a
+            # typo silently capped the LAST name instead; the browser,
+            # which stores a negative index as a non-element property,
+            # silently dropped the member instead. Neither is documented
+            # and neither is what a group of names means, so both ports
+            # refuse it now rather than meaning two different things
+            # (#247).
+            bad = members[(members < 0) | (members >= n)]
+            if bad.size:
+                raise IndexError(
+                    f"group index {int(bad[0])} is not in [0, {n}); a "
+                    "negative index would count from the end, which is "
+                    "not what a group membership means")
+            r = np.zeros(n); r[members] = 1.0
             rows.append(r); bs.append(float(cap))
     if not rows:
         return np.zeros((0, n)), np.zeros(0)
@@ -188,11 +255,29 @@ def polish_race(p0=None, mu0=None, V=None, D=None, F=None, W=None,
                                       points=points)
         invert = lambda p: abilities_from_race(np.asarray(p, float), V=V,
                                                D=D, F=F, W=W, base=base,
-                                               points=points)
+                                               points=points,
+                                               return_info=True)
+    # A p0 call is only as good as its inversion: a failed one is not the
+    # caller's race, and certifying the polish of it converged was a false
+    # certificate (#805). Its verdict is carried to info["converged"].
+    inv_converged = True
     if mu0 is None:
         if p0 is None:
             raise ValueError("give p0 or mu0")
-        mu0 = invert(np.asarray(p0, float))
+        if structure is not None:
+            mu0 = invert(np.asarray(p0, float))
+        else:
+            mu0, inv = invert(np.asarray(p0, float))
+            inv_converged = inv["converged"]
+            if not inv_converged:
+                import warnings
+                warnings.warn(
+                    f"polish_race: abilities_from_race did not converge on "
+                    f"p0: max |log residual| {inv['max_log_residual']:.2e} "
+                    f"after {inv['iterations']} iterations; the polished "
+                    "race starts from a race that is not p0, so "
+                    "info['converged'] is False. Raise points= or pass mu0.",
+                    RuntimeWarning, stacklevel=2)
     mu0 = np.asarray(mu0, float) - np.mean(mu0)
     n = len(mu0)
     A0, b0 = concentration_matrix(n, name_caps=name_caps, groups=groups)
@@ -200,7 +285,11 @@ def polish_race(p0=None, mu0=None, V=None, D=None, F=None, W=None,
         A0 = np.vstack([A0, np.atleast_2d(A)])
         b0 = np.concatenate([b0, np.atleast_1d(b)])
     if len(b0) == 0:
-        return forward(mu0), mu0, {"active": [], "nit": 0}
+        return forward(mu0), mu0, {"active": [], "nit": 0,
+                                   "max_violation": 0.0, "mu_distance": 0.0,
+                                   "converged": inv_converged,
+                                   "feasible": True,
+                                   "status": 0, "message": "unconstrained"}
 
     def p_of(m):
         return forward(m)
@@ -211,7 +300,29 @@ def polish_race(p0=None, mu0=None, V=None, D=None, F=None, W=None,
     def cons_j(m):
         return -A0 @ jac(m)
 
-    res = minimize(lambda m: 0.5 * np.sum((m - mu0) ** 2), mu0,
+    start = mu0
+    if (b0 - A0 @ p_of(mu0)).min() < 0.0:
+        # Restore feasibility BEFORE asking SLSQP for the nearest point.
+        # From a saturated race the constraint gradient A J(mu) vanishes
+        # (p = [1, 6e-16] has J ~ 1e-15), so the line search failed with
+        # "Positive directional derivative" from the start, the fallback
+        # failed the same way, and the ORIGINAL violating race came back
+        # with no warning (#104). Shrinking toward the uniform race,
+        # mu -> t mu0, moves every share toward 1/n; the largest feasible
+        # t on that ray is found by bisection and is a start where the
+        # gradients are alive (for a capped pair it is already the answer).
+        def feasible(t):
+            return (b0 - A0 @ p_of(t * mu0)).min() >= 0.0
+        if feasible(0.0):
+            lo_t, hi_t = 0.0, 1.0
+            for _ in range(40):
+                mid = 0.5 * (lo_t + hi_t)
+                if feasible(mid):
+                    lo_t = mid
+                else:
+                    hi_t = mid
+            start = lo_t * mu0
+    res = minimize(lambda m: 0.5 * np.sum((m - mu0) ** 2), start,
                    jac=lambda m: m - mu0, method="SLSQP",
                    constraints=[
                        NonlinearConstraint(cons_f, 0.0, np.inf, jac=cons_j),
@@ -241,9 +352,23 @@ def polish_race(p0=None, mu0=None, V=None, D=None, F=None, W=None,
         mu = res.x - res.x.mean()
         p = p_of(mu)
         slack = b0 - A0 @ p
+    max_violation = float(max(-slack.min(), 0.0))
+    feasible_out = max_violation <= 1e-6
+    if not feasible_out:
+        # never return a violating race as an ordinary result (#104)
+        import warnings
+        warnings.warn(
+            f"polish_race did not reach a feasible race: max constraint "
+            f"violation {max_violation:.3g} (optimizer: {res.message}). "
+            "The constraints may be infeasible (e.g. caps summing below "
+            "one); check info['converged'].", RuntimeWarning, stacklevel=2)
     return p, mu, {"active": list(np.flatnonzero(slack < 1e-6)),
-                   "nit": int(res.nit), "max_violation": float(-min(slack.min(), 0.0)),
-                   "mu_distance": float(np.linalg.norm(mu - mu0))}
+                   "nit": int(res.nit), "max_violation": max_violation,
+                   "mu_distance": float(np.linalg.norm(mu - mu0)),
+                   "converged": bool(feasible_out and res.success
+                                     and inv_converged),
+                   "feasible": bool(feasible_out),
+                   "status": int(res.status), "message": str(res.message)}
 
 
 def _structure_engines(structure, points):
@@ -275,7 +400,7 @@ def _structure_engines(structure, points):
                         m, c, L, D, coupling=g, gamma=ga, points=points))))
     if isinstance(structure, Tree):
         from .blocks import tree_race_probabilities, tree_race_jacobian
-        c, L, D, pa, lam = (structure.cluster, structure.loading,
+        c, L, D, pa, lam = (structure.leaf_index, structure.loading,
                             structure.D, structure.parent, structure.strength)
         fwd = lambda m: tree_race_probabilities(m, c, L, D, pa, lam,
                                                 points=points)

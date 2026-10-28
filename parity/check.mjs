@@ -8,9 +8,9 @@ import { dirname, join } from "path";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const eng = p => import(join(here, "..", "docs", "js", "winning", p));
-const [races, blocks, structures, classic, polish, topk] = await Promise.all([
+const [races, blocks, structures, classic, polish, topk, core] = await Promise.all([
   eng("races.mjs"), eng("blocks.mjs"), eng("structures.mjs"),
-  eng("classic.mjs"), eng("polish.mjs"), eng("topk.mjs"),
+  eng("classic.mjs"), eng("polish.mjs"), eng("topk.mjs"), eng("core.mjs"),
 ]);
 
 const vec = JSON.parse(readFileSync(join(here, "vectors.json"), "utf8"));
@@ -102,6 +102,30 @@ const runs = {
   invert_second: () => topk.abilitiesFromRankMarginal(
     vec.scenarios.rank_marginals.value.map(r => r[1]), 2,
     { mu0: vec.scenarios.invert_topk2.value, D, points: 257 }),
+  rank_marginals_factor: () =>
+    topk.rankProbabilities(mu, { D, V: V1, points: 257 }),
+  // the inverse retry (#779, #781): both solves fail from their first start
+  retry779_target: () => topk.rankProbabilities(inp.retry779_mu,
+    { D: inp.retry779_D, base: "logistic", points: 513 }).map(r => r[1]),
+  retry779_mu: () => topk.abilitiesFromRankMarginal(
+    vec.scenarios.retry779_target.value, 2, { mu0: inp.retry779_mu0,
+      D: inp.retry779_D, base: "logistic", points: 513, nIter: 200 }),
+  retry781_win: () => topk.topKProbabilities(inp.retry781_mu, 1,
+    { D: inp.retry781_sd.map(s => s * s) }),
+  retry781_top2: () => topk.topKProbabilities(inp.retry781_mu, 2,
+    { D: inp.retry781_sd.map(s => s * s) }),
+  retry781_mu: () => topk.locScaleFromTopkPair(
+    vec.scenarios.retry781_win.value, 1,
+    vec.scenarios.retry781_top2.value, 2).mu,
+  retry781_sd: () => topk.locScaleFromTopkPair(
+    vec.scenarios.retry781_win.value, 1,
+    vec.scenarios.retry781_top2.value, 2).sd,
+  invert_gumbel: () => races.abilitiesFromRace(pt, {
+    D: mu.map(() => Math.PI ** 2 / 6), base: "gumbel", points: 1001 }),
+  bottomk2_normal: () => topk.bottomKProbabilities(mu, 2, { D, points: 257 }),
+  bottomk2_factor: () => topk.bottomKProbabilities(mu, 2, { V: V1, D, points: 257 }),
+  hermite2_nodes: () => core.hermiteNodes(2, 9).F,
+  hermite2_weights: () => core.hermiteNodes(2, 9).W,
   topk2_jacobian_mu_factor: () =>
     topk.topKJacobians(mu, 2, { D, V: V1, points: 257 }).Jmu,
   topk2_jacobian_sigma_factor: () =>
@@ -110,6 +134,12 @@ const runs = {
 
 let fails = 0;
 for (const [name, sc] of Object.entries(vec.scenarios)) {
+  // a scenario may declare which ports implement it; the others say so
+  // rather than failing, which is how partial coverage stays visible
+  if (sc.ports && !sc.ports.includes("js")) {
+    console.log(`skip  ${name.padEnd(22)} declared for: ${sc.ports.join(", ")}`);
+    continue;
+  }
   const ref = [].concat(...[].concat(sc.value));   // flatten to 1-d
   let got;
   const t0 = Date.now();
@@ -120,8 +150,11 @@ for (const [name, sc] of Object.entries(vec.scenarios)) {
     fails++;
     continue;
   }
-  let d = 0;
+  // a longer (or shorter) result is a mismatch, not a matching prefix
+  // (#490: a trailing extra output used to pass)
+  let d = got.length === ref.length ? 0 : Infinity;
   for (let i = 0; i < ref.length; i++) d = Math.max(d, Math.abs(got[i] - ref[i]));
+  if (Number.isNaN(d)) d = Infinity;
   const ok = d <= sc.tol;
   console.log(`${ok ? "ok  " : "FAIL"}  ${name.padEnd(22)} max|diff| ${d.toExponential(3)}  (tol ${sc.tol})  ${((Date.now() - t0) / 1000).toFixed(1)}s`);
   if (!ok) fails++;

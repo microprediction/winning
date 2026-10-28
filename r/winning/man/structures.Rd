@@ -15,7 +15,7 @@ Blocks(cluster, loading, D)
 
 Nested(cluster, loading, D, coupling, gamma = 1)
 
-Tree(cluster, loading, D, parent, strength)
+Tree(cluster, loading, D, parent, strength, leaves = NULL)
 }
 \arguments{
 \item{D}{idiosyncratic variances (always the VARIANCE)}
@@ -26,14 +26,19 @@ Tree(cluster, loading, D, parent, strength)
 \item{gamma}{coupling strength in [0, 1]}
 \item{parent}{1-based parent index per node (root: 0 or NA)}
 \item{strength}{per-node uniform shared-effect strength}
+
+\item{leaves}{optional Tree leaf labels in leaf-node order; NULL uses the
+sorted cluster labels (#372)}
 }
 \value{A structure object for the structure= argument of
 \code{\link{race_probabilities}}, \code{\link{abilities_from_race}},
 \code{\link{race_jacobian}} and \code{\link{polish_race}}.}
 \description{
-Every model in this package is the SAME Gaussian min-race, Y = mu +
-noise; these constructors are declarative descriptions of the noise
-covariance admitting O(N)-per-lattice-point evaluation:
+Every grammar describes the SAME min-race, Y = mu + noise; these
+constructors are declarative descriptions of the noise covariance
+admitting O(N)-per-lattice-point evaluation. With the normal base they
+are Gaussian covariance grammars; Independent and Factor also accept any
+supported smooth base, while Blocks, Nested and Tree are Gaussian only:
 Sigma = diag(D); V V' + diag(D); block-diagonal rank-1 + diag; blocks
 plus a global factor dialed by gamma; a hierarchy of uniform shared
 effects. Independent = Blocks with zero loadings; Blocks = Tree of

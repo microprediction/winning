@@ -40,3 +40,19 @@ test_that("calibration round trip recovers shares", {
   back <- win_probabilities_factor(a, V, D)
   expect_lt(max(abs(back - target)), 1e-5)
 })
+
+test_that("factor inverse slopes are those of the normalised share (#371)", {
+  mu <- c(.771, .170, -.474, -.467)
+  D <- c(1.426, .379, .415, .363)
+  V <- matrix(c(-1.946, .471, -2.087, 3.562), ncol = 1)
+  nodes <- list(
+    F = matrix(c(-2.02018287045609, -.958572464613819, 0,
+                 .958572464613819, 2.02018287045609), ncol = 1),
+    W = c(.0112574113277207, .222075922005613, .533333333333333,
+          .222075922005613, .0112574113277207))
+  p <- win_probabilities_factor(mu, V, D, nodes, points = 21)
+  fit <- abilities_from_probabilities_factor(p, V, D, nodes, n_iter = 50,
+                                             tol = 1e-8, points = 21)
+  q <- win_probabilities_factor(fit, V, D, nodes, points = 21)
+  expect_lt(max(abs(q - p)), 1e-7)       # was 0.21
+})

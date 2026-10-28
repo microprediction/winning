@@ -1,0 +1,31 @@
+Traceback (most recent call last):
+  File "<frozen runpy>", line 203, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/Users/petercotton/github/winning-bench-oct13/winning/bench/runner.py", line 104, in <module>
+    main(a.quick, a.out)
+    ~~~~^^^^^^^^^^^^^^^^
+  File "/Users/petercotton/github/winning-bench-oct13/winning/bench/runner.py", line 94, in main
+    fh.write(json.dumps(rec) + "\n")
+             ~~~~~~~~~~^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.6/Frameworks/Python.framework/Versions/3.14/lib/python3.14/json/__init__.py", line 235, in dumps
+    return _default_encoder.encode(obj)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.6/Frameworks/Python.framework/Versions/3.14/lib/python3.14/json/encoder.py", line 202, in encode
+    chunks = self.iterencode(o, _one_shot=True)
+  File "/opt/homebrew/Cellar/python@3.14/3.14.6/Frameworks/Python.framework/Versions/3.14/lib/python3.14/json/encoder.py", line 263, in iterencode
+    return _iterencode(o, 0)
+  File "/opt/homebrew/Cellar/python@3.14/3.14.6/Frameworks/Python.framework/Versions/3.14/lib/python3.14/json/encoder.py", line 182, in default
+    raise TypeError(f'Object of type {o.__class__.__name__} '
+                    f'is not JSON serializable')
+TypeError: Object of type ndarray is not JSON serializable
+when serializing dict item 'logp'
+when serializing dict item 'info'
+   n50k2      lattice budget=    None:    0.03s err 8.3e-04
+   n50k2    direct_mc budget=  100000:    0.04s err 9.1e-04
+   n50k2    direct_mc budget= 1000000:    0.39s err 7.6e-04
+   n50k2 sobol_direct budget=   16384:    0.02s err 1.9e-03
+   n50k2 sobol_direct budget=  131072:    0.09s err 1.2e-03
+   n50k2  factor_rqmc budget=    4096:    0.10s err 1.1e-03
+   n50k2  factor_rqmc budget=   16384:    0.40s err 1.0e-03
+   n50k2          ghk budget=    1000:    0.13s err 8.5e-03
+wrote /Users/petercotton/github/winning-bench-oct13/bench_results/arena/2026-10-13/LEADERBOARD.md

@@ -17,10 +17,7 @@ from scipy.stats import spearmanr
 
 from ..ratings import pairwise_update_winner, update_winner
 
-try:
-    import trueskill
-except ImportError:                        # pragma: no cover
-    trueskill = None
+from . import require_trueskill
 
 
 def main(P=200, field=20, races=1500, beta2=1.0, seed=7):
@@ -28,6 +25,7 @@ def main(P=200, field=20, races=1500, beta2=1.0, seed=7):
     truth = rng.normal(0, 1.0, P)
     m_ex = np.zeros(P); v_ex = np.full(P, 1.0)
     m_pw = np.zeros(P); v_pw = np.full(P, 1.0)
+    trueskill = require_trueskill()
     env = trueskill.TrueSkill(mu=0.0, sigma=1.0, beta=np.sqrt(beta2),
                               tau=0.0, draw_probability=0.0)
     ts_ratings = [env.create_rating() for _ in range(P)]

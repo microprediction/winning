@@ -1,0 +1,329 @@
+# Tests for r/winning's dividend and price conversions.
+# winning/research/pricing.py::StatePricer is the specification.
+
+# --- dividends that are not ordinary positive numbers (#242) ----------
+#
+# Only a MISSING quote -- NA or NaN -- becomes nan_value. This divided by
+# the dividend unconditionally, so a dividend of 0 gave Inf and then NaN
+# after normalising, and a NEGATIVE dividend came back as a negative
+# "probability". The expected values are python's
+# StatePricer.prices_from_dividends, which the browser now matches too.
+
+test_that("a worthless dividend prices at zero, not NaN or negative", {
+  want <- c(2 / 3, 1 / 3, 0)
+  for (d in list(c(2, 4, Inf), c(2, 4, 0), c(2, 4, -5), c(2, 4, -Inf))) {
+    p <- prices_from_dividends(d)
+    expect_true(all(is.finite(p)), info = paste(d, collapse = ","))
+    expect_true(all(p >= 0), info = paste(d, collapse = ","))
+    expect_lt(max(abs(p - want)), 1e-12)
+  }
+})
+
+test_that("an all-infinite book is zeros, not 0/0", {
+  p <- prices_from_dividends(c(Inf, Inf))
+  expect_identical(as.numeric(p), c(0, 0))
+})
+
+test_that("a missing quote still takes nan_value", {
+  p <- prices_from_dividends(c(2, 4, NA))
+  expect_lt(abs(p[3] - 1 / 2000 / (1 / 2 + 1 / 4 + 1 / 2000)), 1e-12)
+  expect_lt(abs(sum(p) - 1), 1e-12)
+})
+
+test_that("ordinary books are unchanged", {
+  p <- prices_from_dividends(c(2, 4, 8, 8))
+  expect_lt(max(abs(p - c(0.5, 0.25, 0.125, 0.125) / 1.0)), 1e-12)
+})
+
+# --- state prices stay exhaustive at boundary offsets (#292) ----------
+#
+# state_prices_from_offsets builds the field with shifted_cdf, which
+# goes through low_high and PINS any offset at or past L-2 to the
+# boundary. implicit_state_prices took a fast path for exact integers
+# and called integer_shift(base_cdf, k) with the RAW k, whose own clamp
+# is the much wider +/-(m-1). So a runner could sit in the field at
+# offset L-2 and be PAID at 60, and the prices summed to 1.8835 -- while
+# an epsilon off the integer gave 0.99999, because the non-integer path
+# was clamped correctly all along.
+
+test_that("state prices sum to one at and past the boundary", {
+  d <- skew_normal_density(50, 0.1)
+  ordinary <- 1  # exhaustive; 0.99998675 was the old engine's loss (#418, #362)
+  for (a in c(48, 48.5, 49, 49.000001, 50, 60, 60.1, 100, 1000)) {
+    expect_lt(abs(sum(state_prices_from_offsets(d, c(a, -a))) - ordinary),
+              5e-9)
+  }
+})
+
+test_that("an integer offset is continuous in its neighbourhood", {
+  d <- skew_normal_density(50, 0.1)
+  eps <- 1e-6
+  for (k in c(49, 60, -49, -60)) {
+    at <- sum(state_prices_from_offsets(d, c(k, -k)))
+    lo <- sum(state_prices_from_offsets(d, c(k - eps, -(k - eps))))
+    hi <- sum(state_prices_from_offsets(d, c(k + eps, -(k + eps))))
+    expect_lt(abs(at - lo), 5e-9)
+    expect_lt(abs(at - hi), 5e-9)
+  }
+})
+
+test_that("past the clamp every offset is the same distribution", {
+  d <- skew_normal_density(50, 0.1)
+  a <- state_prices_from_offsets(d, c(60, -60))
+  b <- state_prices_from_offsets(d, c(80, -80))
+  expect_lt(max(abs(a - b)), 1e-15)
+})
+
+test_that("interior integers are untouched", {
+  d <- skew_normal_density(50, 0.1)
+  for (k in c(0, 1, 5, 20, 40, 47, -40)) {
+    p <- state_prices_from_offsets(d, c(k, -k, k / 3))
+    expect_lt(abs(sum(p) - 1), 1e-3)   # the lattice's own error, measured
+    expect_true(all(p >= 0))
+  }
+})
+
+# --- exact dead heats (#418, #362, #348, #373, #369) -------------------
+#
+# The expected values are closed forms or brute-force enumeration of
+# every joint atom outcome with a tied minimum split equally; python's
+# tests/test_classic_exact_dead_heats.py checks the same fixtures.
+
+three_atom <- function() { d <- rep(0, 17); d[8:10] <- c(.2, .3, .5); d }
+
+test_that("a compact-support pair is priced exactly (#418)", {
+  expect_lt(max(abs(state_prices_from_offsets(three_atom(), c(-1, 1)) -
+                      c(0.95, 0.05))), 1e-14)
+  expect_lt(max(abs(state_prices_from_offsets(three_atom(), c(-2, 2)) -
+                      c(1, 0))), 1e-14)
+})
+
+test_that("random multiway ties split the claim exactly (#362)", {
+  d <- c(0, 0, 0, 0, .25, .5, .25, 0, 0, 0, 0)
+  expect_lt(max(abs(state_prices_from_offsets(d, rep(0, 20)) - 0.05)), 1e-14)
+  want <- c(0.0918114072, 0.5380292620, 0.0029137021, 0.0918114072,
+            0.0918114072, 0.0918114072, 0, 0.0918114072)
+  expect_lt(max(abs(state_prices_from_offsets(d, c(0, -1, 1, 0, 0, 0, 2, 0)) -
+                      want)), 1e-10)
+})
+
+test_that("fractional offsets are priced as their mixture (#348)", {
+  x <- 0:82 - 41
+  d <- exp(-0.5 * x^2); d <- d / sum(d)
+  expect_lt(max(abs(state_prices_from_offsets(d, c(0.5, 0.5)) - 0.5)), 1e-15)
+  expect_lt(abs(sum(state_prices_from_offsets(d, c(-2.5, 0.5, 3.5))) - 1), 1e-13)
+})
+
+test_that("a translated runner keeps its mass (#373)", {
+  d <- rep(1 / 83, 83)
+  for (k in c(0, 10, 19, 39, -19, 19.5)) {
+    expect_lt(abs(state_prices_from_offsets(d, k) - 1), 1e-14)
+    expect_lt(max(abs(state_prices_from_offsets(d, c(k, k)) - 0.5)), 1e-14)
+  }
+  ref <- state_prices_from_offsets(d, c(-5, 0, 3, 0.5))
+  expect_lt(max(abs(state_prices_from_offsets(d, c(-5, 0, 3, 0.5) + 30) - ref)),
+            1e-13)
+})
+
+test_that("the inverse converges to the exact forward map", {
+  target <- state_prices_from_offsets(three_atom(), c(-1.5, 0, 0.7, 2))
+  a <- solve_for_implied_offsets(target, three_atom(), n_iter = 10,
+                                 implied_offsets_guess = rep(0, 4))
+  expect_lt(max(abs(state_prices_from_offsets(three_atom(), a) - target)), 1e-6)
+})
+
+test_that("the default guess has one offset per price (#369)", {
+  d <- skew_normal_density(15, 0.2, a = 1.5)
+  target <- state_prices_from_offsets(d, c(6, -2))
+  expect_equal(solve_for_implied_offsets(target, d),
+               solve_for_implied_offsets(target, d,
+                                         implied_offsets_guess = c(0, 0)))
+  expect_error(solve_for_implied_offsets(target, d,
+                                         implied_offsets_guess = 0:4),
+               "one starting offset per price")
+})
+
+# --- the classic input contract (#339, #377) ----------------------------
+
+test_that("raw counts are the same law as frequencies (#339)", {
+  d <- skew_normal_density(50, 0.1)
+  p <- state_prices_from_offsets(d, c(-3, 0.5, 2))
+  expect_lt(max(abs(state_prices_from_offsets(10 * d, c(-3, 0.5, 2)) - p)), 1e-15)
+})
+
+test_that("a non-distribution is refused by forward and inverse (#339)", {
+  bad <- list(c(rep(0, 7)), c(0.2, -0.1, 0.9, 0, 0, 0, 0), rep(0.25, 8),
+              c(0.1, NaN, 0.9, 0, 0, 0, 0), c(0.1, Inf, 0.9, 0, 0, 0, 0),
+              c(0.25, 0.5, 0.25), numeric(0))
+  for (b in bad) {
+    expect_error(state_prices_from_offsets(b, c(0, 0)))
+    expect_error(solve_for_implied_offsets(c(0.7, 0.3), b))
+  }
+  expect_error(state_prices_from_offsets(c(0.25, 0.5, 0.25), c(0, 0)), "L >= 3")
+})
+
+test_that("the smallest lattice round-trips", {
+  d <- c(0, 0, 0.25, 0.5, 0.25, 0, 0)
+  target <- state_prices_from_offsets(d, c(0, 0))
+  a <- solve_for_implied_offsets(target, d, implied_offsets_guess = c(0, 0))
+  expect_true(all(is.finite(a)))
+  expect_lt(max(abs(state_prices_from_offsets(d, a) - target)), 1e-12)
+})
+
+test_that("the inverse is invariant to target scale (#377)", {
+  d <- skew_normal_density(500, 0.01, a = 1.5)
+  p <- c(0.4, 0.3, 0.2, 0.1)
+  a1 <- solve_for_implied_offsets(p, d, implied_offsets_guess = rep(0, 4))
+  for (cc in c(1.1, 2, 10)) {
+    ac <- solve_for_implied_offsets(cc * p, d, implied_offsets_guess = rep(0, 4))
+    expect_lt(max(abs((ac - mean(ac)) - (a1 - mean(a1)))), 1e-12)
+  }
+  expect_error(solve_for_implied_offsets(c(0.5, -0.1, 0.6), d), "negative")
+  expect_error(solve_for_implied_offsets(c(0, 0), d), "no positive mass")
+  expect_error(solve_for_implied_offsets(c(0.5, NaN), d), "non-finite")
+})
+
+test_that("a distant runner does not collapse the viable field (#393)", {
+  d <- skew_normal_density(L = 21, unit = 1, a = 0)
+  # python ability_implied_state_prices on the same inputs (regenerated
+  # for the exact dead-heat engine, #418/#362; were 0.7508963573448679,
+  # 0.24910123733471592 under the mean-multiplicity engine)
+  ref <- c(0.7508984430516686, 0.24910155694833133, 0)
+  expect_equal(ability_implied_state_prices(c(0, 1, 500), d), ref,
+               tolerance = 1e-9)
+  expect_equal(ability_implied_state_prices(c(0, 1, Inf), d), ref,
+               tolerance = 1e-9)
+  expect_equal(ability_implied_state_prices(c(0, -Inf, -Inf), d),
+               c(0, 0.5, 0.5))
+  expect_equal(ability_implied_state_prices(c(0, 1, 30, 31, 33), d),
+               c(ref[1:2], 0, 0, 0), tolerance = 1e-9)
+  d2 <- skew_normal_density(L = 50, unit = 0.1, a = 1)
+  # python on the same inputs. W = 100 > L here, so since #725 this is the
+  # exact primitive, not the dilating cluster path (was 0.5632313848738231,
+  # 0.2595696474144002, 0.17255456544459888, 0.004644402180415685,
+  # 8.676225604073229e-11; the continuous skew-normal race is 0.56786,
+  # 0.27008, 0.16054, 0.0015209, 3.57e-13)
+  expect_equal(ability_implied_state_prices(c(-0.5, 0, 0.3, 2.1, 6), d2,
+                                            unit = 0.1),
+               c(0.5672982284762254, 0.27027574567228596, 0.16087563506704702,
+                 0.001550390784063666, 3.7779460993255496e-13),
+               tolerance = 1e-8)
+  expect_true(is.infinite(ability_implied_dividends(c(0, 1, 500), d)[3]))
+})
+
+# --- a scratched entrant stays scratched end to end (#589) -------------
+#
+# prices_from_dividends maps a zero, negative or infinite dividend to 0;
+# the finite lattice inverse then returned an ordinary offset that
+# repriced the scratched runner at 4.5% (16% at L=3). It is now ability
+# Inf (never wins) and the rest are the reduced race.
+
+test_that("a scratched entrant is Inf and the rest are the reduced race", {
+  for (Lu in list(c(3, 1.0), c(15, 0.2))) {
+    d <- skew_normal_density(Lu[1], Lu[2], a = 0)
+    live <- dividend_implied_ability(c(2, 4), d)
+    for (s in c(Inf, 0, -1)) {
+      a <- dividend_implied_ability(c(2, 4, s), d)
+      expect_identical(a[3], Inf)
+      expect_lt(max(abs(a[1:2] - live)), 1e-12)
+      expect_identical(ability_implied_state_prices(a, d)[3], 0)
+    }
+  }
+})
+
+# --- the default table covers what the forward represents (#498) ------
+
+test_that("a 97/3 book round-trips at defaults", {
+  d <- skew_normal_density(15, 0.1, a = 0)
+  t <- state_prices_from_offsets(d, c(-10, 10))
+  mu <- expect_silent(solve_for_implied_offsets(t, d))
+  expect_lt(max(abs(state_prices_from_offsets(d, mu) - t)), 1e-4)   # was 0.091
+})
+
+test_that("the adaptive default table equals the full table", {
+  d <- skew_normal_density(15, 0.1, a = 0)
+  p <- c(0.5, 0.3, 0.15, 0.05)
+  expect_identical(solve_for_implied_offsets(p, d),
+                   solve_for_implied_offsets(p, d, offset_samples = 13:-13))
+})
+
+test_that("an unrepresentable target warns", {
+  d <- skew_normal_density(3, 1.0, a = 0)
+  expect_warning(solve_for_implied_offsets(c(0.5, 0.5, 0), d), "did not reach the target")
+})
+
+test_that("a zero or negative iteration budget is refused (#543)", {
+  d <- skew_normal_density(50, 0.1)
+  for (n in list(0, -1, 2.5, NA_real_))
+    expect_error(solve_for_implied_offsets(c(0.6, 0.3, 0.1), d, n_iter = n), "n_iter")
+})
+
+test_that("skew_normal_density refuses a nonpositive unit or scale (#509)", {
+  expect_error(skew_normal_density(50, 0), "finite positive")
+  expect_error(skew_normal_density(50, -0.1), "finite positive")
+  expect_error(skew_normal_density(50, 0.1, scale = -1), "finite positive")
+  expect_error(skew_normal_density(50, 0.1, scale = 0), "finite positive")
+})
+
+test_that("the calibration unit is a finite positive spacing (#649)", {
+  d <- skew_normal_density(50, 0.1, a = 0)
+  for (u in list(0, -0.1, NaN, Inf, -Inf, NA_real_, "0.1", c(0.1, 0.2))) {
+    expect_error(dividend_implied_ability(c(2, 4), d, unit = u), "finite positive")
+    expect_error(ability_implied_state_prices(c(0, 1), d, unit = u), "finite positive")
+    expect_error(ability_implied_dividends(c(0, 1), d, unit = u), "finite positive")
+  }
+  a <- dividend_implied_ability(c(2, 4), d, unit = 0.1)
+  expect_lt(max(abs(a - c(-0.2646016516, 0.3455146431))), 1e-8)
+})
+
+test_that("a scratched runner's dividend is Inf and round-trips to zero (#665)", {
+  d <- skew_normal_density(50, 0.1, a = 0)
+  divs <- ability_implied_dividends(c(0, 1, Inf), d)
+  expect_equal(divs[3], Inf)
+  expect_equal(prices_from_dividends(divs)[3], 0)
+})
+
+test_that("a common translation across the lattice edge keeps the contrast (#585)", {
+  d <- skew_normal_density(15, 0.5, a = 0)
+  base <- state_prices_from_offsets(d, c(-3, 3, 1))
+  for (s in c(11, 20, -20, 40, -55))
+    expect_lt(max(abs(state_prices_from_offsets(d, c(-3, 3, 1) + s) - base)), 1e-12)
+  expect_gt(base[1], 0.9)
+})
+
+test_that("an offset of exactly +-(L - 2) is priced exactly, not clustered (#773)", {
+  d <- c(0, 0, 1/3, 1/3, 1/3, 0, 0)      # L = 3, support {-1, 0, 1}
+  for (off in list(c(0, 1), c(0, -1), c(1, 0), c(-1, 0))) {
+    direct <- state_prices_from_offsets(d, off)
+    for (md in 0:3)                        # was 0.634 (and [1, 0] at depth 0)
+      expect_lt(max(abs(ability_implied_state_prices(off, d, max_depth = md) - direct)), 1e-15)
+  }
+  expect_lt(max(abs(state_prices_from_offsets(d, c(0, 1)) - c(7/9, 2/9))), 1e-15)
+  # L = 5, support {-2..2}: a runner at exactly -3 stays on the lattice
+  d5 <- c(0, 0, 0, rep(0.2, 5), 0, 0, 0)
+  off <- c(-1, 0, 1, 1, -1, 0, -3, 0)
+  expect_lt(max(abs(ability_implied_state_prices(off, d5) - state_prices_from_offsets(d5, off))), 1e-15)
+  # neighbours, pinned from origin/main 7af3ed1c: just inside was already
+  # exact and just past the endpoint still hangs and clusters
+  expect_lt(max(abs(ability_implied_state_prices(c(0, 1 - 1e-9), d) -
+                    c(0.7777777775000001, 0.22222222250000007))), 1e-15)
+  expect_lt(max(abs(ability_implied_state_prices(c(0, 1 + 1e-9), d) -
+                    c(0.633744856100823, 0.36625514389917707))), 1e-15)
+})
+
+test_that("max_depth is a whole number >= 0 (#775)", {
+  dens <- rep(1/31, 31)
+  ab <- c(0, 10, 20, 30)
+  for (bad in list(-1, 1.5, TRUE, FALSE, NaN, Inf, -Inf, NA, NA_integer_, c(1, 2), "2", NULL))
+    expect_error(ability_implied_state_prices(ab, dens, max_depth = bad),
+                 "max_depth must be a whole number >= 0")
+  # valid budgets are unchanged (python's values on the same field)
+  expect_equal(ability_implied_state_prices(ab, dens, max_depth = 0L), c(1, 0, 0, 0))
+  expect_lt(max(abs(ability_implied_state_prices(ab, dens, max_depth = 1L) -
+                    c(0.73784245296, 0.223982995514, 0.03767320938, 0.000501342146))), 1e-11)
+  for (md in list(2L, 2))
+    expect_lt(max(abs(ability_implied_state_prices(ab, dens, max_depth = md) -
+                      c(0.73784245296, 0.193474399289, 0.059003267863, 0.009679879888))), 1e-11)
+  expect_identical(ability_implied_state_prices(ab, dens),
+                   ability_implied_state_prices(ab, dens, max_depth = 3L))
+})

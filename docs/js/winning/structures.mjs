@@ -1,98 +1,338 @@
 // One race, five covariance grammars -- port of winning/factor/structures.py.
+const MIN_NORMAL = 2.2250738585072014e-308;     // numpy finfo(float).tiny
 import { raceProbabilities, abilitiesFromRace, _setDispatch } from "./races.mjs";
 import { blockRaceProbabilities, nestedRaceProbabilities, treeRaceProbabilities,
-         abilitiesFromBlockRace } from "./blocks.mjs";
-import { mean } from "./core.mjs";
+         abilitiesFromBlockRace, validateTree, withoutCommonShock,
+         treeCluster, withTrialMassTolerance, pairFactor } from "./blocks.mjs";
+import { mean, asIterations, asTolerance, asFiniteVector, isVector, rescaledTarget,
+         asLoadings, asIdio, gaugeCenter } from "./core.mjs";
 
 export const Independent = D => ({ kind: "Independent", D });
 export const Factor = (V, D) => ({ kind: "Factor", V, D });
 export const Blocks = (cluster, loading, D) => ({ kind: "Blocks", cluster, loading, D });
 export const Nested = (cluster, loading, D, coupling, gamma = 1.0) =>
   ({ kind: "Nested", cluster, loading, D, coupling, gamma });
-export const Tree = (cluster, loading, D, parent, strength) =>
-  ({ kind: "Tree", cluster, loading, D, parent, strength });
+// leaves[j] = the label of leaf node j; null keeps the sorted-label order
+// (labels 0..nC-1 are the leaf nodes) -- see blocks.treeLeafIndex (#372)
+export const Tree = (cluster, loading, D, parent, strength, leaves = null) =>
+  ({ kind: "Tree", cluster, loading, D, parent, strength, leaves });
 
 /* the tree race whose implied correlation IS the cophenetic matrix of a
-   scipy-style linkage; negative cophenetic correlation floored at zero */
+   scipy-style linkage; negative cophenetic correlation floored at zero.
+   A non-monotonic linkage (an inversion) is refused, as in python. */
+/* A scipy-style linkage checked at the constructor's own boundary
+   (python structures._as_linkage): row k merges two DISTINCT clusters that
+   already exist and are still active, at a finite non-negative height.
+   A self-reference built a cyclic parent (#328), ids were rounded, and a
+   negative height was squared into the tree of its absolute value (#459). */
+function checkLinkage(Z) {
+  if (!isVector(Z))
+    throw new Error("treeFromLinkage: a linkage must be an array of (n-1) rows");
+  const n = Z.length + 1;
+  const used = new Array(2 * n - 1).fill(false);
+  for (let k = 0; k < Z.length; k++) {
+    const row = Z[k];
+    if (!isVector(row) || row.length < 3)
+      throw new Error(`treeFromLinkage: linkage row ${k} must be [a, b, height, count]`);
+    const h = row[2];
+    if (typeof h !== "number" || !Number.isFinite(h) || h < 0)
+      throw new Error(`treeFromLinkage: linkage row ${k} merges at height ${h}: merge heights are finite non-negative distances (#459)`);
+    for (const c of [row[0], row[1]]) {
+      if (typeof c !== "number" || !Number.isInteger(c))
+        throw new Error(`treeFromLinkage: linkage row ${k} names cluster ${c}: cluster ids are whole numbers (#328)`);
+      if (c < 0 || c >= n + k)
+        throw new Error(`treeFromLinkage: linkage row ${k} uses cluster ${c} before it is formed: row ${k} may merge only ids below ${n + k} (#328)`);
+      if (used[c])
+        throw new Error(`treeFromLinkage: linkage row ${k} reuses cluster ${c}, already merged by an earlier row (#328)`);
+    }
+    if (row[0] === row[1])
+      throw new Error(`treeFromLinkage: linkage row ${k} merges cluster ${row[0]} with itself (#328)`);
+    used[row[0]] = used[row[1]] = true;
+  }
+}
+
 export function treeFromLinkage(Z) {
+  checkLinkage(Z);
   const n = Z.length + 1;
   const nT = 2 * n - 1;
   const parent = new Array(nT).fill(-1);
-  const rho = new Array(nT).fill(0);
+  // d[t] = 1 - rho_t = 2 h^2, kept directly: 1 - (1 - 2 h^2) cancels to a
+  // few ulps for near-duplicate leaves (python Tree.from_linkage, #430)
+  const d = new Array(nT).fill(1);
   for (let k = 0; k < Z.length; k++) {
-    const a = Math.round(Z[k][0]), b = Math.round(Z[k][1]), h = Z[k][2];
+    const a = Z[k][0], b = Z[k][1], h = Z[k][2];
     const t = n + k;
     parent[a] = t; parent[b] = t;
-    rho[t] = Math.max(1 - 2 * h * h, 0);
+    d[t] = Math.min(2 * h * h, 1);
   }
   const strength = new Array(nT).fill(0);
+  // the nonnegative increments are a PREMISE, checked as in python's
+  // Tree.from_linkage: centroid and median linkage invert, and clipping
+  // the negative increment returns a covariance that is not the
+  // cophenetic one promised -- here D = [1, 1, 0.5] for a unit-variance
+  // model (#133)
+  const bad = [];
   for (let t = n; t < nT; t++) {
     const pa = parent[t];
-    strength[t] = Math.sqrt(Math.max(rho[t] - (pa >= 0 ? rho[pa] : 0), 0));
+    const lam2 = (pa >= 0 ? d[pa] : 1) - d[t];      // rho_t - rho_pa
+    if (lam2 < -1e-9) bad.push([t, lam2]);
+    strength[t] = Math.sqrt(Math.max(lam2, 0));
+  }
+  if (bad.length) {
+    const [t0, d0] = bad.reduce((w, x) => (x[1] < w[1] ? x : w));
+    throw new Error(
+      `this linkage is not monotonic: node ${t0} merges ` +
+      `${Number((-d0).toPrecision(3))} BELOW its parent, and ${bad.length} ` +
+      "node(s) do. A tree race is a nested variance decomposition, so an " +
+      "inversion has no representation in it -- clipping the negative " +
+      "increment would return a different covariance from the cophenetic " +
+      "one this promises. Use a monotonic method (average, complete, " +
+      "ward), or build the Tree with explicit parent/strength.");
   }
   const D = [];
-  for (let i = 0; i < n; i++) D.push(Math.max(1 - rho[parent[i]], 1e-10));
+  for (let i = 0; i < n; i++) {
+    // A leaf with no parent only happens for the one-leaf tree, which an
+    // EMPTY linkage is the valid scipy-style spelling of. javascript has
+    // no negative indexing, so rho[-1] was undefined and D came out
+    // [NaN]; pricing that tree then failed instead of returning the
+    // certain probability [1] (#241). Python gets the same answer by
+    // accident -- numpy wraps rho[-1] to the single zero entry -- and the
+    // guard on the line above this loop was already written correctly.
+    const pa = parent[i];
+    // EXACTLY 2 h^2: the old absolute floor Math.max(., 1e-10) changed
+    // every near-duplicate branch (h = 1e-6 priced 0.556 where the
+    // cophenetic model gives Phi(1) = 0.841), #430
+    D.push(pa >= 0 ? d[pa] : 1);
+  }
+  const zero = D.findIndex((v) => !(v > 0));
+  if (zero >= 0)
+    throw new Error(
+      `leaf ${zero} merges at height 0: coincident leaves have zero ` +
+      "idiosyncratic variance, which a tree race cannot price. Merge the " +
+      "duplicates, or perturb them deliberately.");
   return Tree([...Array(n).keys()], new Array(n).fill(0), D, parent, strength);
 }
 
-export function invertGeneric(p, forward, tol = 1e-9, maxIter = 400) {
-  let pv = p.slice();
-  const s = pv.reduce((a, b) => a + b, 0);
-  pv = pv.map(v => v / s);
-  const lt = pv.map(v => Math.log(Math.max(v, 1e-300)));
+/* scale: the field's contrast scale. A dimensionless start and an
+   absolute step made the same Nested/Tree race miss by 0.40 of a share
+   at c = 1e-3 (#100). */
+export function invertGeneric(p, forward, tol = 1e-9, maxIter = 400, scale = 1) {
+  return invertGenericInfo(p, forward, tol, maxIter, scale).mu;
+}
+
+/* The same iteration, with what it achieved. A target here is already
+   validated and normalised by the caller (abilitiesFromRace owns the
+   contract, #387), so the old 1e-300 clamp no longer turns a zero share
+   into a finite "inverse"; it stays only as protection for the logs of
+   the FORWARD's own output. */
+function invertGenericInfo(p, forward, tol = 1e-9, maxIter = 400, scale = 1) {
+  asIterations(maxIter, "invertGeneric", "maxIter");
+  asTolerance(tol, "invertGeneric");
+  let pv = asFiniteVector(p, "target", "probability");
+  if (pv.some(v => v <= 0))
+    throw new Error(
+      "all target probabilities must be positive: a zero share has no " +
+      "finite inverse. Pass targetFloor to abilitiesFromRace to floor " +
+      "small entries deliberately.");
+  pv = rescaledTarget(pv);                 // overflow-safe (#463)
+  const lt = pv.map(v => Math.log(v));
   const lm = mean(lt);
-  let mu = lt.map(v => -(v - lm));
-  let eta = 1.0;
-  let lp = forward(mu).map(v => Math.log(Math.max(v, 1e-300)));
-  let err = Math.max(...lp.map((v, i) => Math.abs(v - lt[i])));
-  for (let it = 0; it < maxIter && err >= tol; it++) {
-    let muN = mu.map((m, i) => m - eta * (lt[i] - lp[i]));
-    const mm = mean(muN);
-    muN = muN.map(v => v - mm);
-    const lpN = forward(muN).map(v => Math.log(Math.max(v, 1e-300)));
-    const e = Math.max(...lpN.map((v, i) => Math.abs(v - lt[i])));
-    if (e < err) { mu = muN; lp = lpN; err = e; eta = Math.min(eta * 1.2, 1.5); }
-    else { eta *= 0.5; if (eta < 1e-4) break; }
+  // trial states under the hierarchical kernels' looser trial mass
+  // tolerance; the returned state is re-priced strictly (#656)
+  let { mu, iters } = withTrialMassTolerance(() => {
+    let mu = lt.map(v => -(v - lm) * scale);
+    let eta = 1.0;
+    let lp = forward(mu).map(v => Math.log(Math.max(v, 1e-300)));
+    let err = Math.max(...lp.map((v, i) => Math.abs(v - lt[i])));
+    let iters = 0;
+    for (let it = 0; it < maxIter && err >= tol; it++) {
+      iters = it + 1;
+      let muN = mu.map((m, i) => m - eta * (lt[i] - lp[i]) * scale);
+      const mm = mean(muN);
+      muN = muN.map(v => v - mm);
+      const lpN = forward(muN).map(v => Math.log(Math.max(v, 1e-300)));
+      const e = Math.max(...lpN.map((v, i) => Math.abs(v - lt[i])));
+      if (e < err) { mu = muN; lp = lpN; err = e; eta = Math.min(eta * 1.2, 1.5); }
+      else { eta *= 0.5; if (eta < 1e-4) break; }
+    }
+    return { mu, iters };
+  });
+  const lp = forward(mu).map(v => Math.log(Math.max(v, 1e-300)));
+  const err = Math.max(...lp.map((v, i) => Math.abs(v - lt[i])));
+  return { mu, converged: err < tol, maxLogResidual: err, iterations: iters };
+}
+
+/* the hierarchical kernels are Gaussian hard races on their own lattice
+   windows: base/window/delta were dropped silently (#89) */
+function refuseHierarchical(kind, opts) {
+  const { base = "normal", window: win = "bulk", delta = 1e-12 } = opts;
+  const bad = [];
+  if (base !== "normal") bad.push("base");
+  if (win !== "bulk") bad.push("window");
+  if (delta !== 1e-12) bad.push("delta");
+  if (bad.length)
+    throw new Error(`${kind} races do not support ${bad.join(", ")}: the ` +
+      "block/nested/tree kernels are Gaussian hard races on their own " +
+      "lattice windows. Use structure Factor (or V/D).");
+}
+
+function structureScale(s) {
+  if (!isVector(s.cluster))
+    throw new Error(`${s.kind}: cluster must have one label per contestant`);
+  const n = s.cluster.length;
+  // canonical shapes, as the forwards read them: raw indexing made a
+  // scalar D, a scalar or (1, n) loading and a scalar coupling NaN (#597)
+  const L = asLoadings(s.loading, n, "loading");
+  const Dv = asIdio(s.D, n, "D");
+  // only an ACTIVE coupling is read: gamma === 0 is the Blocks race in the
+  // forward, which never looks at the coupling, so a stale wrong-length
+  // one priced fine and then failed the inverse (#644, as python)
+  const G = s.kind === "Nested" && s.coupling != null && (s.gamma ?? 1) !== 0
+    ? gaugeCenter(asLoadings(s.coupling, n, "coupling")) : null;  // common part cancels (#698)
+  const tot = [];
+  for (let i = 0; i < n; i++) {
+    let v = Dv[i] + L[i].reduce((a, b) => a + b * b, 0);
+    if (G) {
+      const ga = s.gamma ?? 1;
+      let cv = ga ** 2 * G[i].reduce((a, b) => a + b * b, 0);
+      // only gamma g is identified: coupling 1e307 g with gamma 1e-307
+      // squared each factor alone, 0 * inf (#722, as python)
+      if (!(Number.isFinite(cv) && ga ** 2 >= MIN_NORMAL && ga ** 2 < Infinity))
+        cv = G[i].reduce((a, b) => a + (ga * b) ** 2, 0);
+      v += cv;
+    }
+    tot.push(v);
   }
-  return mu;
+  if (s.kind === "Tree") {
+    // the walk below follows parent pointers: validate first, as the
+    // kernels do, or a cyclic tree spins here before they can refuse it
+    validateTree(s.parent, s.strength, new Set(s.cluster).size, "Tree");
+    // add each leaf cluster's ancestor variance (labels mapped to leaf
+    // nodes as the kernel maps them, explicit leaves included, #372)
+    const leaf = treeCluster(s);
+    const nC = new Set(leaf).size;
+    // a common ancestor's shock cancels: not part of the surrogate (#489)
+    const lam = withoutCommonShock(s.parent, s.strength, nC);
+    for (let i = 0; i < n; i++) {
+      let u = leaf[i], a = 0;
+      while (s.parent[u] >= 0) { u = s.parent[u]; a += lam[u] ** 2; }
+      tot[i] += a;
+    }
+  }
+  tot.sort((a, b) => a - b);
+  const h = Math.floor(n / 2);
+  return Math.sqrt(n % 2 ? tot[h] : 0.5 * (tot[h - 1] + tot[h]));
 }
 
 function dp(mu, s, opts) {
-  const { base = "normal", points = 257, qa = 9, qf = 15, returnSlopes = false } = opts;
+  const { base = "normal", points = 257, qa = 9, qf = 15, returnSlopes = false,
+          window: win = "bulk", delta = 1e-12 } = opts;
+  // window and delta are forwarded: they used to be validated and then
+  // dropped, so a structured window: "span" priced the bulk window (#89)
   if (s.kind === "Independent")
-    return raceProbabilities(mu, { D: s.D, base, points, returnSlopes });
+    return raceProbabilities(mu, { D: s.D, base, points, returnSlopes, window: win, delta });
   if (s.kind === "Factor")
-    return raceProbabilities(mu, { V: s.V, D: s.D, base, points, returnSlopes });
+    return raceProbabilities(mu, { V: s.V, D: s.D, base, points, returnSlopes, window: win, delta });
+  refuseHierarchical(s.kind, opts);
   if (returnSlopes) throw new Error("returnSlopes: Independent/Factor only");
+  if (isVector(mu) && mu.length === 2) {
+    // a two-runner Gaussian race is one contrast under every grammar: as
+    // its factor equivalent it takes the closed form (python's dispatch);
+    // the hierarchical lattices put a 20-sd pair at 0.107x (#86)
+    const f = pairFactor(mu, s);
+    return raceProbabilities(mu, { V: f.V, D: f.D, points });
+  }
   if (s.kind === "Blocks")
     return blockRaceProbabilities(mu, s.cluster, s.loading, s.D, { points, qa });
   if (s.kind === "Nested")
     return nestedRaceProbabilities(mu, s.cluster, s.loading, s.D,
                                    { coupling: s.coupling, gamma: s.gamma, points, qa, qf });
   if (s.kind === "Tree")
-    return treeRaceProbabilities(mu, s.cluster, s.loading, s.D, s.parent, s.strength,
+    return treeRaceProbabilities(mu, treeCluster(s), s.loading, s.D, s.parent, s.strength,
                                  { points, qa });
   throw new Error("unknown structure " + s.kind);
 }
+/* Structured inversion. Returns {mu, converged, maxLogResidual,
+   iterations} for every grammar, so abilitiesFromRace reports one info
+   shape whichever grammar it was given (#387). The target arrives
+   validated, floored and normalised. */
 function da(p, s, opts) {
-  const { points = 257, qa = 9, qf = 15 } = opts;
-  if (s.kind === "Independent") return abilitiesFromRace(p, { D: s.D, points });
-  if (s.kind === "Factor") return abilitiesFromRace(p, { V: s.V, D: s.D, points });
-  if (s.kind === "Blocks")
-    return abilitiesFromBlockRace(p, s.cluster, s.loading, s.D, { points, qa }).mu;
+  // base reaches the V/D race, and the hierarchical kernels refuse the
+  // controls they would otherwise silently ignore (#89)
+  // nIter is the caller's when given: a hierarchical solve defaults to 400
+  // sweeps, but an explicit budget is honoured and reported (#89)
+  const { points = 257, qa = 9, qf = 15, nIter, tol = 1e-8, base = "normal" } = opts;
+  if (s.kind === "Independent" || s.kind === "Factor") {
+    const r = abilitiesFromRace(p, { V: s.kind === "Factor" ? s.V : null,
+                                     D: s.D, points, base, nIter: nIter ?? 60, tol, returnInfo: true });
+    return r;
+  }
+  refuseHierarchical(s.kind, opts);
+  if (s.kind === "Blocks") {
+    const r = abilitiesFromBlockRace(p, s.cluster, s.loading, s.D,
+                                     { points, qa, tol, maxIter: nIter ?? 25 });
+    return { mu: r.mu, converged: r.residual < tol, maxLogResidual: r.residual,
+             iterations: r.iterations };
+  }
   if (s.kind === "Nested")
-    return invertGeneric(p, m => nestedRaceProbabilities(m, s.cluster, s.loading, s.D,
-      { coupling: s.coupling, gamma: s.gamma, points, qa, qf }));
+    return invertGenericInfo(p, m => nestedRaceProbabilities(m, s.cluster, s.loading, s.D,
+      { coupling: s.coupling, gamma: s.gamma, points, qa, qf }), tol, nIter ?? 400, structureScale(s));
   if (s.kind === "Tree")
-    return invertGeneric(p, m => treeRaceProbabilities(m, s.cluster, s.loading, s.D,
-      s.parent, s.strength, { points, qa }));
+    return invertGenericInfo(p, m => treeRaceProbabilities(m, treeCluster(s), s.loading, s.D,
+      s.parent, s.strength, { points, qa }), tol, nIter ?? 400, structureScale(s));
   throw new Error("unknown structure " + s.kind);
 }
 _setDispatch(dp, da);
 
 /* average-linkage agglomerative clustering on a distance matrix,
    returning a scipy-style linkage Z (for treeFromLinkage and demos) */
+/* A distance matrix: nonempty, square, finite, symmetric to a relative
+   1e-8 per pair, zero diagonal, non-negative. averageLinkage copied the UPPER
+   triangle only, so a matrix and its transpose built different trees
+   and moved a tree-race share by 9.7 points, where scipy's squareform
+   refuses both (#361). Tolerance-level asymmetry is averaged away. */
+export function asDistanceMatrix(dist, where = "averageLinkage") {
+  if (!isVector(dist) || dist.length === 0)
+    throw new Error(`${where}: dist must be a nonempty square matrix`);
+  const n = dist.length;
+  const M = Array.from(dist, (row, i) => {
+    if (!isVector(row) || row.length !== n)
+      throw new Error(`${where}: dist must be square; row ${i} has ` +
+                      `${isVector(row) ? row.length : "no"} entries for ${n} rows`);
+    return Array.from(row, v => {
+      if (typeof v !== "number" || !Number.isFinite(v))
+        throw new Error(`${where}: dist has a non-finite entry (${v}) in row ${i}`);
+      return v;
+    });
+  });
+  // LOCAL tolerances: one 1e-8 * max|dist| for every check let a single
+  // 1e12 distance accept dist = -1, a 1 vs 100 asymmetry and a diagonal
+  // of 1 elsewhere in the matrix, and averageLinkage then built a merge
+  // treeFromLinkage refused (#721). Symmetry is relative to the pair
+  // itself; the diagonal and the sign are relative to each row's
+  // smallest positive distance (0 when it has none: exact).
+  const rowScale = M.map((r, i) => {
+    let m = Infinity;
+    for (let j = 0; j < n; j++) if (j !== i && r[j] > 0) m = Math.min(m, r[j]);
+    return m === Infinity ? 0 : m;
+  });
+  for (let i = 0; i < n; i++) {
+    if (Math.abs(M[i][i]) > 1e-8 * rowScale[i])
+      throw new Error(`${where}: dist[${i}][${i}] = ${M[i][i]}; a distance matrix has a zero diagonal`);
+    for (let j = 0; j < n; j++) {
+      if (Math.abs(M[i][j] - M[j][i]) > 1e-8 * Math.max(Math.abs(M[i][j]), Math.abs(M[j][i])))
+        throw new Error(
+          `${where}: distance matrix must be symmetric: dist[${i}][${j}] = ` +
+          `${M[i][j]} but dist[${j}][${i}] = ${M[j][i]}`);
+      if (M[i][j] < -1e-8 * Math.min(rowScale[i], rowScale[j]))
+        throw new Error(`${where}: dist[${i}][${j}] = ${M[i][j]} is a negative distance`);
+    }
+  }
+  return M.map((r, i) => r.map((v, j) => (i === j ? 0 : Math.max(0.5 * v + 0.5 * M[j][i], 0))));
+}
+
 export function averageLinkage(dist) {
+  dist = asDistanceMatrix(dist);
   const n = dist.length;
   let active = [...Array(n).keys()].map(i => ({ id: i, members: [i] }));
   const D = new Map();
@@ -114,36 +354,90 @@ export function averageLinkage(dist) {
     const rest = active.filter((_, k) => k !== bi && k !== bj);
     for (const c of rest) {
       const da = D.get(key(a.id, c.id)), db = D.get(key(b.id, c.id));
-      D.set(key(merged.id, c.id),
-        (da * a.members.length + db * b.members.length)
-          / (a.members.length + b.members.length));
+      // convex weights first: na*da + nb*db overflowed finite distances
+      // near 9e307 into an Infinity merge height (#695)
+      const na = a.members.length, nb = b.members.length;
+      D.set(key(merged.id, c.id), (na / (na + nb)) * da + (nb / (na + nb)) * db);
     }
     active = rest.concat([merged]);
   }
   return Z;
 }
 
-/* cut a linkage into k clusters (fcluster maxclust equivalent) */
+/* cut a linkage into at most k clusters: scipy fcluster(Z, k,
+   criterion="maxclust").
+
+   This removed the k-1 last linkage ROWS, which is not a distance cut
+   when merge heights tie: two equal-height merges were split by row
+   order, making three clusters where scipy -- for which a tied level is
+   indivisible -- returns two, and a block race moved 3.3 points (#346).
+   maxclust takes the smallest threshold t (over "below every merge" and
+   the merge heights) at which no more than k clusters remain, merging
+   every node whose subtree maximum height is <= t.
+
+   A non-monotonic linkage (a merge BELOW one of its children, as
+   centroid and median linkage produce) is refused, as treeFromLinkage
+   refuses it (#133) and R's cutree does. scipy accepts it, but its
+   maxclust then binary-searches merge heights in ROW order, which is
+   unsorted for an inversion, so its partition is an artifact of that
+   search: on [[0,1,3,2],[2,3,1,2],[4,5,2,4]] it returns one cluster for
+   k = 3 and this function, which claimed parity, returned three -- a
+   20-point move in a block race (#667). There is no parity to claim on
+   such input. Ties (equal heights) are monotone and still accepted. */
 export function cutLinkage(Z, n, k) {
-  const parent = new Array(2 * n - 1).fill(-1);
+  if (!Number.isInteger(n) || n < 1)
+    throw new Error(`cutLinkage: n must be a positive integer; got ${n}`);
+  if (!Number.isInteger(k) || k < 1)
+    throw new Error(`cutLinkage: k must be a positive integer number of clusters; got ${k}`);
+  if (!isVector(Z) || Z.length !== n - 1)
+    throw new Error(`cutLinkage: a linkage of ${n} leaves has ${n - 1} rows; got ${isVector(Z) ? Z.length : typeof Z}`);
+  const nT = 2 * n - 1;
+  const parent = new Array(nT).fill(-1);
+  const maxd = new Array(nT).fill(-Infinity);
   for (let m = 0; m < Z.length; m++) {
-    parent[Z[m][0]] = n + m;
-    parent[Z[m][1]] = n + m;
+    const a = Math.round(Z[m][0]), b = Math.round(Z[m][1]), h = Number(Z[m][2]);
+    if (!(a >= 0 && a < n + m && b >= 0 && b < n + m) || !Number.isFinite(h))
+      throw new Error(`cutLinkage: row ${m} of the linkage is malformed`);
+    // each cluster is merged exactly once, and never with itself: a
+    // self-merge left the tree disconnected and k = 1 returned two
+    // clusters (#603), as scipy's is_valid_linkage refuses
+    if (a === b || parent[a] !== -1 || parent[b] !== -1)
+      throw new Error(`cutLinkage: row ${m} uses the same cluster more than once`);
+    parent[a] = n + m;
+    parent[b] = n + m;
+    const below = Math.max(maxd[a], maxd[b]);
+    // relative slack for round-off in a computed linkage, as
+    // treeFromLinkage's 1e-9
+    if (h < below - 1e-12 * Math.max(1, Math.abs(below)))
+      throw new Error(
+        `cutLinkage: this linkage is not monotonic: row ${m} merges at height ${h}, ` +
+        `below its child's ${below}. maxclust has no well-defined cut of an inversion ` +
+        "(scipy's result depends on row order). Use a monotonic method (average, " +
+        "complete, ward) or pass cluster labels directly.");
+    maxd[n + m] = Math.max(h, below);
   }
-  // remove the k-1 highest merges
-  const cutIds = new Set();
-  for (let m = Z.length - 1; m >= Z.length - (k - 1) && m >= 0; m--) cutIds.add(n + m);
-  const labels = new Array(n);
-  const rootOf = i => {
-    let u = i;
-    while (parent[u] >= 0 && !cutIds.has(parent[u])) u = parent[u];
-    return u;
+  const clustersAt = t => {
+    // a leaf belongs to its highest ancestor whose subtree max <= t
+    const root = new Array(n);
+    for (let i = 0; i < n; i++) {
+      let u = i;
+      while (parent[u] >= 0 && maxd[parent[u]] <= t) u = parent[u];
+      root[i] = u;
+    }
+    return root;
   };
+  const thresholds = [-Infinity, ...[...new Set(maxd.slice(n))].sort((x, y) => x - y)];
+  let root = null;
+  for (const t of thresholds) {
+    const r = clustersAt(t);
+    if (new Set(r).size <= k) { root = r; break; }
+  }
+  if (root === null) root = clustersAt(Infinity);
+  const labels = new Array(n);
   const map = new Map();
   for (let i = 0; i < n; i++) {
-    const r = rootOf(i);
-    if (!map.has(r)) map.set(r, map.size);
-    labels[i] = map.get(r);
+    if (!map.has(root[i])) map.set(root[i], map.size);
+    labels[i] = map.get(root[i]);
   }
   return labels;
 }

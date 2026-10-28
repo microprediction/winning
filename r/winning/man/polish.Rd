@@ -10,7 +10,8 @@ polish_race(p0 = NULL, mu0 = NULL, V = NULL, D = NULL, F = NULL,
   structure = NULL)
 
 race_jacobian(mu, V = NULL, D = NULL, F = NULL, W = NULL,
-  base = "normal", points = 501, structure = NULL, qa = 9, qf = 15)
+  base = "normal", points = 501, structure = NULL, qa = 9, qf = 15,
+  window = NULL, delta = NULL)
 
 concentration_matrix(n, name_caps = NULL, groups = NULL)
 }
@@ -21,10 +22,15 @@ concentration_matrix(n, name_caps = NULL, groups = NULL)
 \item{V, D, F, W, base, points, qa, qf}{as in
 \code{\link{race_probabilities}}}
 \item{name_caps}{scalar or per-name weight caps (NA skipped)}
-\item{groups}{list of list(indices, cap) group caps}
+\item{groups}{list of list(indices, cap) group caps; indices are whole numbers in 1..n and cap one finite number}
 \item{A, b}{explicit constraint rows, A p <= b}
-\item{tol}{optimizer tolerance}
-\item{max_iter}{outer iterations}
+\item{tol}{optimizer tolerance: SQP/Newton step threshold tol/10, feasibility fallback above 1000*tol, stopping below 10*tol}
+\item{max_iter}{outer-iteration budget of each phase (SQP, augmented-Lagrangian fallback, active-set Newton); 0 performs no optimisation. info$nit totals them and info$phase_iterations splits them}
+\item{window, delta}{the forward's lattice controls for
+\code{race_jacobian}: given (either one), the Jacobian is taken on the
+lattice \code{race_probabilities(..., window = , delta = )} integrates on,
+the unset one at the forward's default ("bulk", 1e-12). Both NULL (the
+default) keeps the span lattice race_jacobian has always used.}
 \item{structure}{covariance grammar (Tree not yet supported here)}
 \item{n}{number of contestants}
 }

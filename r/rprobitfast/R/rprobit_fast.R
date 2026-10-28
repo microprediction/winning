@@ -17,28 +17,69 @@
 #'   column names.
 #' @param r factor rank (r = 2 spans the full identified covariance at
 #'   four alternatives).
-rprobit_fast <- function(df, covariates, r = 2L, Qf = 7L, Qz = 7L,
+.check_choice_sets <- function(ids, alt, J) {
+  # The reshape downstream is POSITIONAL --
+  #   mu <- matrix(X %*% beta, nrow = Tn, ncol = J, byrow = TRUE)
+  # -- so row order alone decides which alternative a row is priced as.
+  # A count check cannot see that: an observation that duplicates one
+  # alternative and omits another still has J rows, so `nrow(df) == Tn *
+  # J` passed and the duplicate row was priced as the missing
+  # alternative, returning an ordinary-looking fit (#230). The contract
+  # is one row per (observation, alternative), and that is a table, not
+  # a total.
+  tab <- table(ids, alt)
+  bad <- which(tab != 1L, arr.ind = TRUE)
+  if (nrow(bad) == 0L) return(invisible(NULL))
+  ids_lab <- rownames(tab); alt_lab <- colnames(tab)
+  first <- bad[order(bad[, 1], bad[, 2]), , drop = FALSE][1, ]
+  count <- tab[first[1], first[2]]
+  stop(sprintf(paste("each observation must contain each of the %d",
+                     "alternatives exactly once; observation '%s' has %d",
+                     "row(s) for alternative '%s' (%d observation-alternative",
+                     "cell(s) are wrong)"),
+               J, ids_lab[first[1]], count, alt_lab[first[2]], nrow(bad)),
+       call. = FALSE)
+}
+
+rprobit_fast <- function(df, covariates, r = NULL, Qf = 7L, Qz = NULL,
                          maxit = 400L) {
   t0 <- Sys.time()
-  alt <- as.integer(as.factor(df$alt))
+  maxit <- .check_count(maxit, "maxit")
+  # droplevels: a filtered panel keeps its unused factor levels, and as
+  # integer codes those levels left gaps that were read as phantom
+  # observations or alternatives (#464). Code the OBSERVED labels only.
+  alt_f <- droplevels(as.factor(df$alt))
+  alt <- as.integer(alt_f)
   J <- max(alt)
-  ids <- as.integer(as.factor(df$id))
+  .check_two_alternatives(J)
+  id_f <- droplevels(as.factor(df$id))
+  ids <- as.integer(id_f)
   ord <- order(ids, alt)
   df <- df[ord, , drop = FALSE]
   alt <- alt[ord]; ids <- ids[ord]
   Tn <- length(unique(ids))
   stopifnot(nrow(df) == Tn * J)
-  chosen <- which(as.logical(df$chosen))
-  choice <- alt[chosen]
+  .check_choice_sets(ids, alt, J)
+  # exactly one chosen row per observation, keyed by id (#324, #435)
+  choice <- .choices_by_id(ids, alt, df$chosen, levels(id_f))
+  r <- .check_rank(r, J)
   Xcov <- as.matrix(df[, covariates, drop = FALSE])
   Xint <- matrix(0, nrow(Xcov), J - 1L)
   for (j in 2:J) Xint[alt == j, j - 1L] <- 1
   X <- cbind(Xint, Xcov)
-  colnames(X) <- c(paste0("asc_", 2:J), covariates)
+  # named by the caller's alternative labels, as mlogit_fast does: the
+  # internal codes made asc_2 mean rail-vs-bus in one fit and
+  # bus-vs-walk after a relevel, under the same name (#643). Integer
+  # alternatives 1..J keep their old names.
+  colnames(X) <- c(paste0("asc_", levels(alt_f)[2:J]), covariates)
+  .check_identified(X, Tn, J)
+  unchosen <- .never_chosen(choice, J, levels(alt_f))
   nb <- ncol(X)
   nw <- sum(vapply(seq_len(r), function(cl) J - cl, 0L))
+  if (is.null(Qz)) Qz <- .default_qz(J)
   nodes <- .nodes3(Qf, Qz, r)
-  nodes_sharp <- .halton_nodes3(r, 10L)
+  # built only if the sharpness rule ever selects it (#388)
+  nodes_sharp <- .lazy_sharp_nodes(r, 10L)
   memo <- new.env()
   fn <- function(th) {
     if (!is.null(memo$th) && identical(th, memo$th)) return(memo$out$value)
@@ -55,6 +96,9 @@ rprobit_fast <- function(df, covariates, r = 2L, Qf = 7L, Qz = 7L,
   theta0 <- c(rep(0, nb), rep(0.1, nw))
   fit <- optim(theta0, fn, gr, method = "BFGS",
                control = list(maxit = maxit, reltol = 1e-8))
+  sep <- .separation_direction(X, choice, J)
+  if (!is.null(sep) && !length(unchosen)) .warn_separated(sep)
+  P <- .raw_probabilities(fit$par, X, J, r, nodes, nodes_sharp)
   secs <- as.numeric(difftime(Sys.time(), t0, units = "secs"))
   beta <- fit$par[seq_len(nb)]
   names(beta) <- colnames(X)
@@ -62,14 +106,30 @@ rprobit_fast <- function(df, covariates, r = 2L, Qf = 7L, Qz = 7L,
   k <- nb + 1L
   V <- matrix(0, J, r)
   ki <- 1L
-  for (col in seq_len(r)) for (row in (col + 1L):J) {
+  # seq_len, not `(col + 1L):J`: at J = 2 and the default r = 2L the
+  # col = 2 pass evaluates 3:2, which in R is the two-element vector
+  # c(3, 2) rather than empty, so the first assignment is V[3, 2] on a
+  # 2x2 matrix and every binary-choice fit died out of bounds (#183).
+  # nw counts only one free loading there, so wfree[2] was out of range
+  # too. seq_len(J - col) is empty exactly when it should be.
+  for (col in seq_len(r)) for (row in col + seq_len(J - col)) {
     V[row, col] <- fit$par[nb + ki]; ki <- ki + 1L
   }
+  lab <- .loading_labels(fit$par[-seq_len(nb)], J, r, levels(alt_f))
   structure(list(coefficients = beta,
-                 covariance_par = fit$par[-seq_len(nb)],
-                 boundary = max(sqrt(rowSums(V^2))) > 50,
+                 covariance_par = lab$par,
+                 loadings = lab$V,
+                 alternatives = levels(alt_f),
+                 boundary = max(sqrt(rowSums(V^2))) > 50 ||
+                   length(unchosen) > 0L || !is.null(sep),
                  logLik = -fit$value, time = secs,
-                 convergence = fit$convergence, J = J, r = r),
+                 convergence = if (length(unchosen) || !is.null(sep)) 2L
+                               else fit$convergence,
+                 separation = sep,
+                 # raw per-choice masses are fitted; their row sums miss
+                 # one by at most this much (#376)
+                 mass_defect = max(abs(1 - rowSums(P))),
+                 J = J, r = r),
             class = "rprobit_fast")
 }
 

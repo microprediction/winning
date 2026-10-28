@@ -19,7 +19,7 @@
 # GMRF type via a package extension.
 module GMRFExtremes
 
-using LinearAlgebra: SymTridiagonal
+using LinearAlgebra: SymTridiagonal, mul!
 using SparseArrays: SparseMatrixCSC, findnz
 
 export GaussMarkovChain, chain_from_precision, max_cdf, expected_max,
@@ -101,25 +101,60 @@ npdf(z) = exp(-0.5 * z * z) / sqrt(2 * pi)
 
 """A Gauss-Markov chain X_1..X_n:
 X_1 ~ N(mu[1], sd0^2), X_{t+1} | X_t ~ N(mu[t+1] + phi[t] (X_t - mu[t]),
-s[t]^2). `phi` and `s` have length n-1."""
+s[t]^2). `phi` and `s` have length n-1.
+
+The constructor enforces that shape. It used to be a bare field struct,
+so surplus `phi`/`s` entries were accepted and silently ignored by every
+query (they all loop over `length(mu)`), and short ones failed later with
+a raw BoundsError (#347). Means and coefficients must be finite and the
+standard deviations finite and nonnegative."""
 struct GaussMarkovChain
     mu::Vector{Float64}
     sd0::Float64
     phi::Vector{Float64}
     s::Vector{Float64}
+    function GaussMarkovChain(mu::AbstractVector{<:Real}, sd0::Real,
+                              phi::AbstractVector{<:Real},
+                              s::AbstractVector{<:Real})
+        n = length(mu)
+        n >= 1 || throw(ArgumentError("a chain needs at least one node"))
+        (length(phi) == n - 1 && length(s) == n - 1) || throw(
+            DimensionMismatch(string(
+                "phi and s must have length n - 1 = ", n - 1, " for ", n,
+                " means; got length(phi) = ", length(phi),
+                ", length(s) = ", length(s))))
+        all(isfinite, mu) || throw(ArgumentError("mu must be finite"))
+        all(isfinite, phi) || throw(ArgumentError("phi must be finite"))
+        (isfinite(sd0) && sd0 >= 0) ||
+            throw(ArgumentError("sd0 must be finite and nonnegative"))
+        all(v -> isfinite(v) && v >= 0, s) ||
+            throw(ArgumentError("s must be finite and nonnegative"))
+        return new(Float64.(collect(mu)), Float64(sd0),
+                   Float64.(collect(phi)), Float64.(collect(s)))
+    end
 end
 
 Base.length(c::GaussMarkovChain) = length(c.mu)
 
-"""Marginal standard deviations, by the variance recursion."""
+"""Marginal standard deviations, by the recursion sd[t+1] =
+hypot(phi[t] sd[t], s[t]).
+
+It used to square first, v[t+1] = phi^2 v[t] + s^2, so a finite chain
+whose product phi * sd is ordinary could square its factors out of range:
+sd0 = 1e-200 under phi = 1e200 gave Inf * 0 = NaN for a true sd of
+sqrt(2), and every query failed (#663). A marginal sd that is genuinely
+past the floating-point range is refused rather than gridded."""
 function marginal_sd(c::GaussMarkovChain)
     n = length(c)
-    v = zeros(n)
-    v[1] = c.sd0^2
+    sd = zeros(n)
+    sd[1] = c.sd0
     for t in 1:(n - 1)
-        v[t + 1] = c.phi[t]^2 * v[t] + c.s[t]^2
+        sd[t + 1] = hypot(c.phi[t] * sd[t], c.s[t])
     end
-    return sqrt.(v)
+    all(isfinite, sd) || throw(ArgumentError(string(
+        "a marginal standard deviation of the chain overflows Float64 ",
+        "(the product of the transition coefficients is out of range)")))
+    return sd
 end
 
 """Read the Gauss-Markov chain off a TRIDIAGONAL precision matrix.
@@ -133,22 +168,45 @@ wider bandwidth is a different (lifted) algorithm, and general
 sparsity belongs to sampling methods (see Bolin-Lindgren excursions);
 neither is approximated silently. A `SymTridiagonal` is accepted
 directly and costs O(n) time and memory; a dense or sparse matrix is
-checked for bandwidth (its upper triangle is used) and then routed the
-same way, so a GMRF's sparse precision is never densified."""
+checked for bandwidth, finiteness and symmetry (to `tol`) and then
+routed the same way, so a GMRF's sparse precision is never densified."""
 function chain_from_precision(mu::AbstractVector, Q::AbstractMatrix;
                               tol = 0.0)
     n = length(mu)
     size(Q) == (n, n) || error("Q must be n x n")
+    # tol suppresses numerical residue; it must not be able to switch the
+    # refusal off. tol = Inf passed every bandwidth and symmetry check and
+    # the off-band entries were dropped: a distance-two coupling priced
+    # 0.125 for a true 0.1049 (#562). NaN and negative values had
+    # accidental comparison semantics.
+    (tol isa Real && isfinite(tol) && tol >= 0) || throw(ArgumentError(
+        "tol must be a finite, nonnegative number; got " * string(tol)))
+    tol = Float64(tol)
     # strict tridiagonality check
     if Q isa SparseMatrixCSC
         I_, J_, V_ = findnz(Q)
         for (i, j, v) in zip(I_, J_, V_)
+            isfinite(v) || error("precision has a non-finite entry")
             abs(i - j) > 1 && abs(v) > tol && error(_refusal_msg())
         end
     else
         for i in 1:n, j in 1:n
+            isfinite(Q[i, j]) || error("precision has a non-finite entry")
             abs(i - j) > 1 && abs(Q[i, j]) > tol && error(_refusal_msg())
         end
+    end
+    # A precision is symmetric. Only the upper off-diagonal is read below,
+    # so an asymmetric matrix used to be replaced in silence by the
+    # symmetric completion of its upper triangle: a lower-only
+    # off-diagonal priced as a diagonal Q, and [2 -1; -0.1 2] as
+    # [2 -1; -1 2] (#356). `tol` is the absolute tolerance, plus a few
+    # ulps of the entries so a numerically assembled Q still passes.
+    for i in 1:(n - 1)
+        a, b = Float64(Q[i, i + 1]), Float64(Q[i + 1, i])
+        abs(a - b) <= tol + 8 * eps(max(abs(a), abs(b))) || error(string(
+            "precision is not symmetric: Q[", i, ",", i + 1, "] = ", a,
+            " but Q[", i + 1, ",", i, "] = ", b, ". Refusing rather than ",
+            "reading only the upper triangle"))
     end
     dv = [Float64(Q[i, i]) for i in 1:n]
     ev = [Float64(Q[i, i + 1]) for i in 1:(n - 1)]
@@ -199,110 +257,501 @@ _refusal_msg() = string(
 
 # ---- lattice -------------------------------------------------------
 
-function _grid(c::GaussMarkovChain, points::Int; pad = 8.0)
-    msd = marginal_sd(c)
-    lo = minimum(c.mu .- pad .* max.(msd, 1e-12))
-    hi = maximum(c.mu .+ pad .* max.(msd, 1e-12))
-    x = collect(range(lo, hi, length = points))
-    return x, x[2] - x[1]
+"""Largest lattice a chain of length `n` may use when a threshold
+widens the grid.
+
+The work is O(n L^2) transition entries, so the point count is scaled
+down with the chain length, with a floor of 400. Memory is NOT O(n L^2):
+the passes stream one L x L transition at a time (they used to keep all
+n - 1 of them, 1.28 GB at n = 1000 under a promised 160 MB, #533), and
+`_LATTICE_DOUBLES` bounds that one matrix.
+"""
+_max_points(n::Int) = n <= 1 ? 2_000_001 :
+    max(400, floor(Int, sqrt(2.0e7 / (n - 1))))
+
+"""Memory budget, in doubles, for one dense L x L lattice matrix
+(about 160 MB): `points` above `isqrt(_LATTICE_DOUBLES)` = 4472 on a
+chain with transitions is refused before anything is allocated."""
+const _LATTICE_DOUBLES = 20_000_000
+
+function _check_lattice(L::Int, n::Int)
+    n >= 2 || return nothing             # no transition matrix at all
+    L * L <= _LATTICE_DOUBLES || throw(ArgumentError(string(
+        "a ", L, "-point lattice needs ", L, " x ", L, " transition ",
+        "matrices (", round(8 * L^2 / 1e6; digits = 1), " MB each), over ",
+        "the ", 8 * _LATTICE_DOUBLES ÷ 1_000_000, " MB budget; use at most ",
+        isqrt(_LATTICE_DOUBLES), " points")))
+    return nothing
 end
 
-"""Precompute the n-1 transition matrices T[t][i, j] =
-P(X_{t+1} = x_i | X_t = x_j) dx on the grid: O(n L^2) memory, and
-every restricted pass thereafter is BLAS slices."""
-function _transitions(c::GaussMarkovChain, x::Vector{Float64},
-                      dx::Float64)
-    n = length(c)
-    L = length(x)
-    T = Vector{Matrix{Float64}}(undef, n - 1)
-    for t in 1:(n - 1)
-        M = Matrix{Float64}(undef, L, L)
-        for (j, xm) in enumerate(x)
-            m = c.mu[t + 1] + c.phi[t] * (xm - c.mu[t])
-            invs = 1.0 / c.s[t]
-            @inbounds for i in 1:L
-                M[i, j] = npdf((x[i] - m) * invs) * invs * dx
-            end
+"""A lattice point budget must be a whole number of at least 2: one
+point has no spacing (#550)."""
+function _check_points(points)
+    (points isa Integer && points >= 2) || throw(ArgumentError(
+        "points must be an integer >= 2 (a lattice needs a spacing); " *
+        "got " * string(points)))
+    return Int(points)
+end
+
+"""Thresholds are ordered boundaries: NaN is not one. It was dropped
+from grid sizing and then made every cell's occupancy NaN, so a one-node
+chain returned a zero-mass law (max_cdf and its complement both 0,
+first_passage summing to 0) and longer chains returned NaN (#513).
+Infinite thresholds are the exact limits and are kept."""
+function _check_threshold(u)
+    if u isa Real
+        isnan(u) && throw(ArgumentError(
+            "threshold u is NaN; a threshold must be a number or +-Inf"))
+    else
+        for (i, v) in enumerate(u)
+            (v isa Real && !isnan(v)) || throw(ArgumentError(
+                "threshold u[" * string(i) * "] = " * string(v) *
+                " is not a number; a threshold must be real or +-Inf"))
         end
-        T[t] = M
     end
-    return T
+    return nothing
 end
 
+"""
+    _grid(c, points; pad = 8.0)
+
+One lattice shared by every node, in the chain's own coordinates: the
+union of mu[t] +- pad sd[t]. Only `argmax_marginals` uses it (its
+thresholds are the cells themselves, so every node must share them), and
+it calls it on the chain re-centred at mu[1] so the cells are not
+spaced below the floating-point resolution of a large common mean
+(#657). The restricted passes use `_lattice`, one grid per node.
+
+The sds are floored relative to the largest (an absolute 1e-12 floor
+broke scale equivariance, #363); the floor only matters for a node with
+no randomness at all.
+"""
+function _grid(c::GaussMarkovChain, points; pad = 8.0)
+    points = _check_points(points)
+    msd = marginal_sd(c)
+    big = maximum(msd)
+    floor_ = big > 0 ? 1e-12 * big : 1e-12
+    sds = max.(msd, floor_)
+    lo = minimum(c.mu .- pad .* sds)
+    hi = maximum(c.mu .+ pad .* sds)
+    _check_lattice(points, length(c))
+    x = collect(range(lo, hi, length = points))
+    dx = x[2] - x[1]
+    (isfinite(dx) && dx > 0) || throw(ArgumentError(string(
+        "the lattice spacing collapsed (dx = ", dx, ") over [", lo, ", ",
+        hi, "]; the chain's means are too far apart for its scale")))
+    return x, dx
+end
+
+"""Per-node lattices: node t's cells are `lo[t] + (i - 1) dz[t]`,
+i = 1..L, as OFFSETS from mu[t]."""
+struct _Lattice
+    lo::Vector{Float64}
+    dz::Vector{Float64}
+    L::Int
+end
+
+@inline function _cells!(z::Vector{Float64}, lat::_Lattice, t::Int)
+    @inbounds for i in 1:lat.L
+        z[i] = lat.lo[t] + (i - 1) * lat.dz[t]
+    end
+    return z
+end
+
+"""How many marginal sds from a node's mean a threshold may lie and still
+widen that node's lattice. Beyond about 38.5 sd the normal tail
+underflows, so the node is wholly below (or above) the threshold and its
+lattice need not reach it."""
+const _REACH = 40.0
+
+"""
+    _lattice(c, points, R; pad = 8.0, extend = true, align = false)
+
+The restricted passes' lattice: ONE GRID PER NODE, each spanning its own
+mean +- pad marginal sds, held as offsets from that mean. `R[t, k]` is
+threshold k's offset from node t's mean, `u_k - mu[t]`.
+
+It used to be one grid for the whole chain, spaced by the widest node, so
+a narrow node earlier in the chain sat in one or two cells whose
+uniform-spread correction was wrong for it: a chain and its exact
+reversal gave 0.231 and 0.130 against an orthant probability of 0.1297
+(#640). And it was laid in absolute coordinates, so a common mean of
+2^50 left adjacent cells equal and every answer zero (#657); offsets
+from each node's own mean make the passes exactly translation-invariant.
+
+A threshold within `_REACH` sds of a node widens that node's grid to
+cover it with `pad` sds to spare, so a tail answer keeps its relative
+accuracy (#197) at either end (#417). The spacing is kept, so the point
+count grows with the widest such node, up to `_max_points` (never below
+the caller's `points`). The warning is reserved for a cap that coarsens
+the requested spacing more than twofold: it used to fire for any
+threshold above the highest mean once the chain passed 126 nodes (#685).
+
+`align = true` (one threshold) slides each node's grid by under half a
+cell so the threshold is a cell EDGE, which makes the restriction exact
+on the lattice (#244).
+"""
+function _lattice(c::GaussMarkovChain, points, R::AbstractMatrix;
+                  pad = 8.0, extend = true, align = false)
+    points = _check_points(points)
+    n = length(c)
+    msd = marginal_sd(c)
+    big = maximum(msd)
+    zfloor = big > 0 ? 1e-12 * big : 1e-12   # a node with no randomness
+    w = [pad * (sd > 0 ? sd : zfloor) for sd in msd]
+    lo = -w
+    hi = copy(w)
+    if extend
+        for k in axes(R, 2), t in 1:n
+            r = R[t, k]
+            (isfinite(r) && abs(r) <= (_REACH / pad) * w[t]) || continue
+            lo[t] = min(lo[t], r - w[t])
+            hi[t] = max(hi[t], r + w[t])
+        end
+    end
+    grow = maximum((hi .- lo) ./ (2 .* w))
+    L = points
+    if grow > 1
+        want = ceil(Int, (points - 1) * grow) + 1
+        cap = max(points, _max_points(n))
+        if want - 1 > 2 * (cap - 1)
+            @warn string("threshold(s) far outside the chain's range: ",
+                         "covering them needs ", want, " points, but the ",
+                         "lattice is capped at ", cap, ", so the spacing is ",
+                         round((want - 1) / (cap - 1); sigdigits = 3),
+                         " times coarser than requested")
+        end
+        L = min(want, cap)
+    end
+    _check_lattice(L, n)
+    dz = (hi .- lo) ./ (L - 1)
+    if align && size(R, 2) == 1
+        for t in 1:n
+            f = (R[t, 1] - (lo[t] - dz[t] / 2)) / dz[t]
+            (isfinite(f) && abs(f) < 1e12) || continue
+            lo[t] += (f - round(f)) * dz[t]        # |shift| <= dz/2
+        end
+    end
+    return _Lattice(lo, dz, L)
+end
+
+"""Threshold offsets R[t, k] = us[k] - mu[t]."""
+_offsets(c::GaussMarkovChain, us) =
+    [Float64(u) - c.mu[t] for t in 1:length(c), u in us]
+
+"""The chain in units of 2^e, the binary order of its largest marginal
+sd, and that exponent. The lattice is laid in these units.
+
+A finite marginal sd of 1e308 used to overflow `pad * sd` to Inf, so
+every cell was NaN and `max_cdf` returned 0 for a law that is exactly a
+standard normal; at 1e300 the kernel variance `(s - a)(s + a)` overflowed
+and `argmax_marginals` failed (#363). Scaling by a power of two is exact
+and every lattice quantity is homogeneous in the scale, so an answer is
+bit-for-bit the one the unscaled arithmetic gives wherever that does not
+overflow. Only the passes' inputs are kept (sd0, phi, s); the means enter
+through the offsets, which callers scale by `ldexp(_, -e)`."""
+function _unit_scaled(c::GaussMarkovChain)
+    big = maximum(marginal_sd(c))
+    e = big > 0 ? exponent(big) : 0
+    cs = GaussMarkovChain(zeros(length(c)), ldexp(c.sd0, -e), c.phi,
+                          ldexp.(c.s, -e))
+    return cs, e
+end
+
+"""Offsets `_offsets(c, us)` and the chain, both in units of 2^e."""
+function _scaled_problem(c::GaussMarkovChain, us)
+    cs, e = _unit_scaled(c)
+    return cs, ldexp.(_offsets(c, us), -e), e
+end
+
+"""Mass of N(m, sd^2) on [a, b), tail-stable.
+
+The difference is taken in whichever tail the interval sits, as
+`ndtr(-za) - ndtr(-zb)` above the mean, so it does not saturate where
+`ndtr` reaches exactly one (about 8.3 sd); the midpoint density is the
+last resort only where even that underflows (#197). `sd == 0` is the
+point mass at m."""
+@inline function _interval_mass(a::Float64, b::Float64, m::Float64,
+                                sd::Float64)
+    b > a || return 0.0
+    if sd <= 0.0
+        return (m >= a && m < b) ? 1.0 : 0.0
+    end
+    za = (a - m) / sd
+    zb = (b - m) / sd
+    mass = za >= 0.0 ? ndtr(-za) - ndtr(-zb) : ndtr(zb) - ndtr(za)
+    mass > 0.0 && return mass
+    isfinite(za) && isfinite(zb) || return 0.0
+    return npdf(0.5 * (za + zb)) * (zb - za)
+end
+
+"""The transition matrix M[i, j] = P(X_{t+1} in target cell i |
+X_t = source cell j), written into `M`. Both grids are offsets from
+their node's mean, `zs` (spacing `dzs`) for X_t and `zd` (spacing `dzd`)
+for X_{t+1}, so the conditional mean is just `ph * zs[j]`. The passes
+build one at a time and stream it, so memory is O(L^2) whatever the
+chain length (#533).
+
+Each entry is a cell PROBABILITY, a CDF difference, never density x
+spacing. `npdf(z) * dx / s` is a Riemann sample and only a probability
+where the density is flat across the cell: with innovation variance 1e-4
+on a lattice spaced by the marginal sd each column summed to about 80
+and `max_cdf` returned 79.988 (#244).
+
+The lattice carries each cell's mass at its centre, which drops the
+within-cell spread of the SOURCE, (ph dzs)^2/12 after the map, while
+binning the target is exact. So the kernel variance is deflated by that
+(it used to be dx^2/12 whatever phi was, which is right only for a
+random walk). Where that leaves nothing -- a kernel narrower than the
+lattice -- the conditional mean is split linearly between the two cells
+around it rather than snapped into one, which keeps a sub-cell drift
+instead of discarding it at every step."""
+function _transition!(M::Matrix{Float64}, ph::Float64, s::Float64,
+                      zs::AbstractVector{Float64}, dzs::Float64,
+                      zd::AbstractVector{Float64}, dzd::Float64)
+    L = length(zd)
+    h = 0.5 * dzd
+    fill!(M, 0.0)
+    a = abs(ph) * dzs / sqrt(12.0)
+    sdv = s > a ? sqrt((s - a) * (s + a)) : 0.0
+    for (j, zj) in enumerate(zs)
+        m = ph * zj
+        if sdv > 0.0
+            @inbounds for i in 1:L
+                M[i, j] = _interval_mass(zd[i] - h, zd[i] + h, m, sdv)
+            end
+        else
+            q = (m - zd[1]) / dzd + 1.0          # fractional cell index
+            isfinite(q) || continue
+            i0 = floor(Int, clamp(q, -1.0, L + 1.0))
+            f = q - i0
+            1 <= i0 <= L && (M[i0, j] += 1.0 - f)
+            1 <= i0 + 1 <= L && (M[i0 + 1, j] += f)
+        end
+    end
+    return M
+end
+
+"""Transition t on one lattice `x` shared by every node (the argmax
+pass's), in the chain's coordinates."""
+_transition!(M::Matrix{Float64}, c::GaussMarkovChain, x::Vector{Float64},
+             dx::Float64, t::Int) =
+    _transition!(M, c.phi[t], c.s[t], x .- c.mu[t], dx, x .- c.mu[t + 1], dx)
+
+"""All n-1 transition matrices on a shared lattice (O(n L^2) memory;
+tests and research only -- the queries stream `_transition!`)."""
+_transitions(c::GaussMarkovChain, x::Vector{Float64}, dx::Float64) =
+    [_transition!(zeros(length(x), length(x)), c, x, dx, t)
+     for t in 1:(length(c) - 1)]
+
+"""Exact cell probabilities of X_1 on a shared lattice. No variance
+deflation: there is no source cell whose spread was dropped, and
+deflating made a sub-cell `sd0` a point mass that a cell-edge threshold
+then discarded whole (`max_cdf` 5.5e-15 for a true 0.25, #244)."""
 _initial_density(c, x, dx) =
-    [npdf((xi - c.mu[1]) / c.sd0) / c.sd0 * dx for xi in x]
+    [_interval_mass(xi - dx / 2, xi + dx / 2, c.mu[1], c.sd0) for xi in x]
+
+"""Fractional occupancy of node t's cells below each threshold: cell i
+holds [z_i - dz/2, z_i + dz/2), and a hard cutoff costs O(dz) where the
+sub-cell fraction gives O(dz^2). On an aligned lattice it is 0 or 1 up
+to rounding: snap it."""
+function _keep!(keep::Matrix{Float64}, z::Vector{Float64}, dz::Float64,
+                R::AbstractMatrix, t::Int)
+    h = dz / 2
+    @inbounds for k in axes(R, 2), i in eachindex(z)
+        f = clamp((R[t, k] - (z[i] - h)) / dz, 0.0, 1.0)
+        abs(f - round(f)) < 1e-9 && (f = round(f))
+        keep[i, k] = f
+    end
+    return keep
+end
 
 # ---- max CDF and first passage (one restricted forward pass) -------
 
-"""P(max_t X_t <= u). `u` may be a number or a vector."""
+"""P(max_t X_t <= u). `u` may be a number or a vector.
+
+A vector shares one pass; each node's lattice covers every threshold in
+it, so the batch agrees with the scalar calls to quadrature accuracy
+(#417)."""
 function max_cdf(c::GaussMarkovChain, u::Real; points = 400)
-    x, dx = _grid(c, points)
-    T = _transitions(c, x, dx)
-    return _restricted_masses(c, T, x, dx, float(u))[end]
+    _check_threshold(u)
+    c, R, _ = _scaled_problem(c, (u,))
+    lat = _lattice(c, points, R; align = true)
+    return _restricted_masses(c, lat, R)[1][end, 1]
 end
 
 function max_cdf(c::GaussMarkovChain, us::AbstractVector; points = 400)
-    x, dx = _grid(c, points)
-    T = _transitions(c, x, dx)
-    return [_restricted_masses(c, T, x, dx, float(u))[end] for u in us]
+    _check_threshold(us)
+    isempty(us) && return Float64[]
+    c, R, _ = _scaled_problem(c, us)
+    lat = _lattice(c, points, R)
+    masses, _ = _restricted_masses(c, lat, R)
+    return masses[end, :]
 end
 
-function _restricted_masses(c, T, x, dx, u)
+"""Restricted masses, and the mass that EXCEEDS the threshold at each
+step, on the per-node lattice `lat` with threshold offsets `R` (n x K).
+
+`masses[t, k]` is P(X_1..X_t all <= u_k). The exceedance used to be taken
+as `1 - masses[n]`, and in the tail that is a subtraction of two numbers
+that agree to every bit: at 10 sd it returned -8.9e-16, a negative
+probability, and `first_passage` differenced the same quantities and
+produced a negative passage mass.
+
+`escaped[t, k]` is the mass removed at step t, summed over the cells
+ABOVE u_k rather than subtracted from one. Those are small positive
+numbers, so the answer has full relative accuracy however far out the
+threshold is.
+
+Step 1 is restricted EXACTLY, by splitting X_1's cell masses at u, so a
+sub-cell `sd0` is not assumed uniform across its cell. Later steps keep
+the fractional occupancy of the boundary cell, which is exact (0 or 1)
+when the lattice is aligned to u.
+
+All thresholds share one forward pass, with column k of the state
+restricted at u_k; each transition is built once and streamed, so memory
+is O(L^2 + L K), not the O(n L^2) of keeping every transition (#533).
+Returns (n x K) matrices."""
+function _restricted_masses(c::GaussMarkovChain, lat::_Lattice,
+                            R::AbstractMatrix)
     n = length(c)
-    # fractional occupancy of the boundary cell: v[i] is mass in
-    # [x_i - dx/2, x_i + dx/2), and a hard cutoff at u costs O(dx);
-    # keeping the sub-cell fraction restores O(dx^2)
-    keep = clamp.((u .- (x .- dx / 2)) ./ dx, 0.0, 1.0)
-    v = _initial_density(c, x, dx) .* keep
-    masses = zeros(n)
-    masses[1] = sum(v)
-    for t in 1:(n - 1)
-        v = keep .* (T[t] * v)
-        masses[t + 1] = sum(v)
+    L = lat.L
+    K = size(R, 2)
+    masses = zeros(n, K)
+    escaped = zeros(n, K)
+    z = _cells!(Vector{Float64}(undef, L), lat, 1)
+    h = lat.dz[1] / 2
+    s1 = c.sd0
+    V = [_interval_mass(z[i] - h, min(z[i] + h, R[1, k]), 0.0, s1)
+         for i in 1:L, k in 1:K]
+    for k in 1:K
+        escaped[1, k] = sum(_interval_mass(max(zi - h, R[1, k]), zi + h,
+                                           0.0, s1) for zi in z)
+        masses[1, k] = sum(@view V[:, k])
     end
-    return masses
+    n >= 2 || return masses, escaped
+    zn = similar(z)
+    M = Matrix{Float64}(undef, L, L)
+    W = Matrix{Float64}(undef, L, K)
+    keep = Matrix{Float64}(undef, L, K)
+    for t in 1:(n - 1)
+        _cells!(zn, lat, t + 1)
+        _transition!(M, c.phi[t], c.s[t], z, lat.dz[t], zn, lat.dz[t + 1])
+        mul!(W, M, V)
+        _keep!(keep, zn, lat.dz[t + 1], R, t + 1)
+        for k in 1:K
+            e = 0.0
+            m = 0.0
+            @inbounds for i in 1:L
+                wi = W[i, k]
+                vi = keep[i, k] * wi
+                e += wi - vi
+                V[i, k] = vi
+                m += vi
+            end
+            escaped[t + 1, k] = e
+            masses[t + 1, k] = m
+        end
+        z, zn = zn, z
+    end
+    return masses, escaped
 end
 
 """P(max <= u) complement: P(any X_t > u) -- the excursion
 probability of Bolin-Lindgren, exact on the chain."""
-excursion_probability(c::GaussMarkovChain, u; points = 400) =
-    1 .- max_cdf(c, u; points = points)
+function excursion_probability(c::GaussMarkovChain, u::Real; points = 400)
+    _check_threshold(u)
+    c, R, _ = _scaled_problem(c, (u,))
+    lat = _lattice(c, points, R; align = true)
+    _masses, escaped = _restricted_masses(c, lat, R)
+    return sum(escaped)          # small positive terms, not 1 - (1 - eps)
+end
+
+function excursion_probability(c::GaussMarkovChain, us::AbstractVector;
+                               points = 400)
+    _check_threshold(us)                 # every entry before any work
+    return [excursion_probability(c, u; points = points) for u in us]
+end
 
 """Distribution of the FIRST index exceeding u: a vector p with
 p[t] = P(first passage at t), plus P(never) as the final entry."""
 function first_passage(c::GaussMarkovChain, u::Real; points = 400)
-    x, dx = _grid(c, points)
-    T = _transitions(c, x, dx)
-    masses = _restricted_masses(c, T, x, dx, float(u))
+    _check_threshold(u)
+    c, R, _ = _scaled_problem(c, (u,))
+    lat = _lattice(c, points, R; align = true)
+    masses, escaped = _restricted_masses(c, lat, R)
     n = length(c)
     p = zeros(n + 1)
-    prev = 1.0
+    # the mass removed AT step t is the first-passage mass at t, taken
+    # directly rather than as a difference of two near-one numbers
     for t in 1:n
-        p[t] = prev - masses[t]
-        prev = masses[t]
+        p[t] = escaped[t, 1]
     end
-    p[n + 1] = masses[n]
+    p[n + 1] = masses[n, 1]
     return p
 end
 
 """E[max_t X_t], by integrating the max survival function on a
-threshold grid spanning the chain's range."""
+threshold grid spanning the chain's range. The thresholds are offsets
+from mu[1], which is added back at the end, so a large common mean does
+not swallow the threshold spacing (#657)."""
 function expected_max(c::GaussMarkovChain; points = 400, nu = 200)
-    msd = marginal_sd(c)
-    lo = minimum(c.mu) - 8.0 * maximum(msd)
-    hi = maximum(c.mu) + 8.0 * maximum(msd)
+    # the trapezoid needs two thresholds; nu = 0 or 1 read us[2] (#550)
+    (nu isa Integer && nu >= 2) || throw(ArgumentError(
+        "nu must be an integer >= 2 (the threshold trapezoid needs two " *
+        "points); got " * string(nu)))
+    # thresholds and offsets in units of 2^e, mapped back at the end (#363)
+    cs, e = _unit_scaled(c)
+    msd = marginal_sd(cs)
+    a = c.mu[1]
+    d = ldexp.(c.mu .- a, -e)
+    lo = minimum(d) - 8.0 * maximum(msd)
+    hi = maximum(d) + 8.0 * maximum(msd)
     us = collect(range(lo, hi, length = nu))
     du = us[2] - us[1]
-    x, dx = _grid(c, points)
-    T = _transitions(c, x, dx)
-    F = [_restricted_masses(c, T, x, dx, u)[end] for u in us]
+    R = [us[k] - d[t] for t in 1:length(c), k in 1:nu]
+    lat = _lattice(cs, points, R; extend = false)
+    F = _restricted_masses(cs, lat, R)[1][end, :]
     # trapezoid in the threshold: the left-rectangle rule biased
     # E[max] by O(du) (measured +0.053 at nu = 200 against MC)
     surv = 1.0 .- F
-    return lo + (sum(surv) - surv[1] / 2 - surv[end] / 2) * du
+    return a + ldexp(lo + (sum(surv) - surv[1] / 2 - surv[end] / 2) * du, e)
 end
 
 # ---- argmax marginals (per-threshold forward and backward) ---------
+
+"""Probability the argmax pass may misassign between adjacent nodes.
+
+When X_t and X_{t+1} land in the same lattice cell the pass cannot tell
+which is larger and splits the cell half and half. That is right when
+their difference D is symmetric about zero on the scale of a cell and
+wrong otherwise: with D = 0.001 + 0.001 Z on a 0.054 lattice, every
+draw ties, the split returns [0.5, 0.5], and the truth is
+[Phi(-1), Phi(1)] = [0.159, 0.841] (#432). The bias of the split is
+|P(0 < D < dx) - P(-dx < D < 0)| / 2 for D ~ N(mu[t+1] - mu[t],
+(phi - 1)^2 var_t + s_t^2), the marginal law of the adjacent
+difference. Returns the worst (bias, t). It is a conservative heuristic
+(measured on two-node chains the realised error is about a sixth of it)
+and covers adjacent pairs only: nonadjacent pairs are separated by at
+least one further innovation."""
+function _tie_bias(c::GaussMarkovChain, dx::Float64)
+    n = length(c)
+    n <= 1 && return 0.0, 0
+    msd = marginal_sd(c)
+    worst, at = 0.0, 0
+    for t in 1:(n - 1)
+        md = c.mu[t + 1] - c.mu[t]
+        sdd = hypot((c.phi[t] - 1) * msd[t], c.s[t])     # no squaring (#663)
+        up = _interval_mass(0.0, dx, md, sdd)
+        dn = _interval_mass(-dx, 0.0, md, sdd)
+        b = abs(up - dn) / 2
+        b > worst && ((worst, at) = (b, t))
+    end
+    return worst, at
+end
+
+"""Default refusal threshold for `argmax_marginals`' tie bias."""
+const ARGMAX_RESOLUTION_TOL = 1e-2
 
 """P(X_t is the maximum), for every t: the layer the Kalman smoother
 does not have. For each grid threshold u_k, a forward pass restricted
@@ -310,37 +759,72 @@ strictly below u_k reaches X_t = u_k (alpha), and a backward
 conditional pass keeps the future below u_k (beta); summing
 alpha_t(k) beta_t(k) over k integrates out the value of the maximum.
 BLAS slices of precomputed transitions; ties are measure-zero in the
-continuum and unresolved on the grid beyond its resolution."""
-function argmax_marginals(c::GaussMarkovChain; points = 300)
+continuum and unresolved on the grid beyond its resolution.
+
+The lattice is laid on the chain re-centred at mu[1]: the answer is a
+probability, so the common location drops out, and a mean of 2^50 no
+longer collapses adjacent cells into one (#657)."""
+function argmax_marginals(c::GaussMarkovChain; points = 300,
+                          resolution_tol = ARGMAX_RESOLUTION_TOL)
     n = length(c)
+    _, e = _unit_scaled(c)                # in units of 2^e (#363)
+    c = GaussMarkovChain(ldexp.(c.mu .- c.mu[1], -e), ldexp(c.sd0, -e),
+                         c.phi, ldexp.(c.s, -e))
     x, dx = _grid(c, points)
-    T = _transitions(c, x, dx)
+    err, t = _tie_bias(c, dx)
+    err <= resolution_tol || error(string(
+        "the lattice cannot resolve the order of X_", t, " and X_", t + 1,
+        ": their difference has a sub-cell spread or drift relative to ",
+        "the spacing dx = ", dx, ", so the half-cell tie rule would ",
+        "misassign up to ", round(err; sigdigits = 3), " of probability ",
+        "(tolerance ", resolution_tol, "). Raise points=, or treat the ",
+        "pair analytically; refusing rather than returning a 50/50 ",
+        "split (#432)"))
+    L = length(x)
     p0 = _initial_density(c, x, dx)
     P = zeros(n)
-    for k in 2:points
-        lo = 1:k
-        # "strictly below u_k" keeps cells 1..k-1 plus HALF of the
-        # boundary cell k (values in [x_k - dx/2, x_k)): the same
-        # fractional-occupancy correction as the restricted passes
-        w = ones(k)
-        w[k] = 0.5
-        # backward: betas[t] = P(X_{t+1}..X_n < u_k | X_t = u_k)
-        betas = zeros(n)
-        betas[n] = 1.0
-        b = ones(k)
-        for t in (n - 1):-1:1
-            full = (@view T[t][lo, :])' * (w .* b)   # b_t on the grid
-            betas[t] = full[k]
-            b = full[lo]
+    # Every threshold u_k = x_k (k = 2..L) at once: column k of the
+    # state holds the pass restricted below u_k, so its rows above k are
+    # zero (upper-triangular). "Strictly below u_k" keeps cells 1..k-1
+    # plus HALF of the boundary cell k (values in [x_k - dx/2, x_k)):
+    # the same fractional-occupancy correction as the restricted passes.
+    # Each transition is built when needed and streamed -- once for the
+    # backward pass, once for the forward -- instead of keeping all n-1
+    # (O(n L^2) memory, #533); only the n x L betas are kept.
+    Wt = [i < k ? 1.0 : i == k ? 0.5 : 0.0 for i in 1:L, k in 1:L]
+    Wt[:, 1] .= 0.0                      # u_1 is not a threshold
+    mask = [i <= k ? 1.0 : 0.0 for i in 1:L, k in 1:L]
+    M = Matrix{Float64}(undef, L, L)
+    A = Matrix{Float64}(undef, L, L)
+    B = similar(A)
+    # backward: betas[t, k] = P(X_{t+1}..X_n < u_k | X_t = u_k)
+    betas = zeros(n, L)
+    betas[n, :] .= 1.0
+    S = copy(mask)                       # b for every k, zero above k
+    for t in (n - 1):-1:1
+        _transition!(M, c, x, dx, t)
+        A .= Wt .* S
+        mul!(B, M', A)                   # b_t on the grid, per column
+        for k in 1:L
+            betas[t, k] = B[k, k]
         end
-        # forward: alpha_t = P(X_1..X_{t-1} < u_k, X_t = u_k)
-        v = p0[lo]
-        P[1] += p0[k] * betas[1]
-        for t in 1:(n - 1)
-            q = (@view T[t][lo, lo]) * (w .* v)
-            P[t + 1] += q[k] * betas[t + 1]
-            v = q
+        S .= B .* mask
+    end
+    # forward: alpha_t = P(X_1..X_{t-1} < u_k, X_t = u_k)
+    S .= p0 .* mask
+    for k in 2:L
+        P[1] += p0[k] * betas[1, k]
+    end
+    for t in 1:(n - 1)
+        _transition!(M, c, x, dx, t)
+        A .= Wt .* S
+        mul!(B, M, A)
+        S .= B .* mask
+        acc = 0.0
+        for k in 2:L
+            acc += S[k, k] * betas[t + 1, k]
         end
+        P[t + 1] += acc
     end
     total = sum(P)
     (isfinite(total) && abs(total - 1) <= 0.05) ||

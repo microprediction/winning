@@ -11,7 +11,8 @@ top_k_probabilities(mu, k, V = NULL, D = NULL, base = "normal",
 bottom_k_probabilities(mu, k, V = NULL, D = NULL, base = "normal",
   points = 513, qa = 15)
 
-rank_probabilities(mu, D = NULL, base = "normal", points = 513)
+rank_probabilities(mu, D = NULL, base = "normal", points = 513,
+                   V = NULL, qa = 15)
 
 top_k_jacobians(mu, k, D = NULL, base = "normal", points = 513,
   V = NULL, qa = 15)

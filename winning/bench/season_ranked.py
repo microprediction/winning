@@ -17,8 +17,7 @@ import numpy as np
 from scipy.stats import spearmanr
 
 from ..ratings import update_ranking_exact
-
-import trueskill
+from . import require_trueskill
 
 
 def _rmse(m, truth):
@@ -32,6 +31,7 @@ def season(noise_sd, P=200, field=20, races=1500, seed=7, label=""):
     m_ex = np.zeros(P)
     v_ex = np.full(P, 1.0)
     beta_ts = float(np.sqrt(np.mean(noise_sd ** 2)))
+    trueskill = require_trueskill()
     env = trueskill.TrueSkill(mu=0.0, sigma=1.0, beta=beta_ts,
                               tau=0.0, draw_probability=0.0)
     ts = [env.create_rating() for _ in range(P)]

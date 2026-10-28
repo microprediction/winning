@@ -1,0 +1,6 @@
+python exact: referee logLik -1215.86 +- 0.12 in 14.6s (boundary=False)
+julia exact: logLik(GH) -1215.68 in 19.5s, converged true
+julia ghk:   logLik(sim) -1201.93 in 247.2s, converged false
+python exact   referee logLik -1216.46 +- 0.20
+julia exact    referee logLik -1216.26 +- 0.27
+julia ghk      referee logLik -1211.07 +- 0.51

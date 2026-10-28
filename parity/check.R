@@ -35,6 +35,15 @@ pt <- inp$p_target
 density <- skew_normal_density(L = inp$classic_L, unit = inp$classic_unit,
                                a = inp$classic_a)
 
+.parity_degraded_cov <- function(n, rank) {
+  # must match parity/gen_vectors.py::_degraded_cov, which uses numpy's
+  # default_rng(3); the matrix itself is carried in the inputs instead of
+  # being regenerated, so this reads it from the vectors file
+  C <- as.matrix(vec$inputs$degraded_cov)
+  stopifnot(nrow(C) == n)
+  C
+}
+
 runs <- list(
   independent_normal = function() race_probabilities(mu, D = D, points = 257),
   factor1_normal = function() race_probabilities(mu, V = V1, D = D, points = 257),
@@ -125,15 +134,60 @@ runs <- list(
     abilities_from_rank_marginal(
       as.matrix(vec$scenarios$rank_marginals$value)[, 2], 2,
       mu0 = vec$scenarios$invert_topk2$value, D = D, points = 257),
+  # the inverse retry (#779, #781): both solves fail from their first start
+  retry779_target = function()
+    rank_probabilities(inp$retry779_mu, D = inp$retry779_D,
+                       base = "logistic", points = 513)[, 2],
+  retry779_mu = function()
+    abilities_from_rank_marginal(vec$scenarios$retry779_target$value, 2,
+                                 mu0 = inp$retry779_mu0, D = inp$retry779_D,
+                                 base = "logistic", points = 513,
+                                 n_iter = 200),
+  retry781_win = function()
+    top_k_probabilities(inp$retry781_mu, 1, D = inp$retry781_sd^2),
+  retry781_top2 = function()
+    top_k_probabilities(inp$retry781_mu, 2, D = inp$retry781_sd^2),
+  retry781_mu = function()
+    loc_scale_from_topk_pair(vec$scenarios$retry781_win$value, 1,
+                             vec$scenarios$retry781_top2$value, 2)$mu,
+  retry781_sd = function()
+    loc_scale_from_topk_pair(vec$scenarios$retry781_win$value, 1,
+                             vec$scenarios$retry781_top2$value, 2)$sd,
+  cov_degraded_route = function() {
+    C <- .parity_degraded_cov(8, 3)
+    race_probabilities(seq(-0.6, 0.6, length.out = 8), cov = C)
+  },
+  cov_degraded_inverse = function() {
+    C <- .parity_degraded_cov(8, 3)
+    p0 <- race_probabilities(seq(-0.6, 0.6, length.out = 8), cov = C)
+    abilities_from_race(p0, cov = C)
+  },
+  invert_gumbel = function()
+    abilities_from_race(pt, D = rep(pi^2 / 6, length(mu)), base = "gumbel",
+                        points = 1001),
+  bottomk2_normal = function() bottom_k_probabilities(mu, 2, D = D, points = 257),
+  bottomk2_factor = function()
+    bottom_k_probabilities(mu, 2, V = V1, D = D, points = 257),
+  hermite2_nodes = function() hermite_nodes(2, order = 9)$F,
+  hermite2_weights = function() hermite_nodes(2, order = 9)$W,
   topk2_jacobian_mu_factor = function()
     top_k_jacobians(mu, 2, D = D, V = V1, points = 257)$Jmu,
   topk2_jacobian_sigma_factor = function()
-    top_k_jacobians(mu, 2, D = D, V = V1, points = 257)$Jsigma
+    top_k_jacobians(mu, 2, D = D, V = V1, points = 257)$Jsigma,
+  rank_marginals_factor = function()
+    rank_probabilities(mu, D = D, V = V1, points = 257)
 )
 
 fails <- 0
 for (name in names(vec$scenarios)) {
   sc <- vec$scenarios[[name]]
+  # a scenario may declare which ports implement it; the others say so
+  # rather than failing, which is how partial coverage stays visible
+  if (!is.null(sc$ports) && !("R" %in% unlist(sc$ports))) {
+    cat(sprintf("skip  %-22s declared for: %s\n", name,
+                paste(unlist(sc$ports), collapse = ", ")))
+    next
+  }
   ref <- unlist(sc$value)
   got <- tryCatch(unlist(runs[[name]]()), error = function(e) e)
   if (inherits(got, "error")) {
@@ -141,7 +195,8 @@ for (name in names(vec$scenarios)) {
     fails <- fails + 1
     next
   }
-  d <- max(abs(got - ref))
+  # R recycles the shorter vector: a length mismatch must fail (#490)
+  d <- if (length(got) != length(ref)) Inf else max(abs(got - ref))
   ok <- d <= sc$tol
   cat(sprintf("%s  %-22s max|diff| %.3e  (tol %.0e)\n",
               if (ok) "ok  " else "FAIL", name, d, sc$tol))

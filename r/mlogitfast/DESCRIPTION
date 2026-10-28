@@ -11,5 +11,5 @@ Description: Deterministic maximum likelihood for the multinomial probit
     differenced-Cholesky parameterization with the same degrees of freedom.
 License: MIT + file LICENSE
 Imports: stats
-Suggests: mlogit, dfidx, testthat
+Suggests: testthat
 Encoding: UTF-8

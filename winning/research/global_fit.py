@@ -5,7 +5,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 
-from .inference import AbilityCalibrator
+from .inference import AbilityCalibrator, _validated_scales
 
 
 def _interp_price_and_slope_1d(cal: AbilityCalibrator, mu: float) -> Tuple[float, float]:
@@ -92,9 +92,19 @@ class GlobalAbilityCalibrator:
         scales: Optional[Sequence[float]] = None,
     ) -> None:
         prices_arr = np.asarray(prices, dtype=float)
-        scales_arr = None if scales is None else np.asarray(scales, dtype=float)
-        if (calibrator.lookup_curve_1d_prices is None) and (not calibrator.lookup_curves_2d_prices):
-            calibrator.solve_from_prices(prices_arr)
+        if scales is None:
+            scales_arr = None
+            if (calibrator.lookup_curve_1d_prices is None) and (
+                not calibrator.lookup_curves_2d_prices
+            ):
+                calibrator.solve_from_prices(prices_arr)
+        else:
+            scales_arr = _validated_scales(scales, len(prices_arr))
+            # fit() reads the 2-D curves at this race's scales; build them if absent,
+            # against the field at the current parameters as rebuild_all_curves does (#841).
+            if any(float(s) not in calibrator.lookup_curves_2d_prices for s in scales_arr):
+                mu = [float(self.theta.get(hid, 0.0)) for hid in horse_ids]
+                calibrator.rebuild_curves_from_field_2d(mu, scales_arr)
         self.races.append(
             RaceSpec(
                 calibrator=calibrator,

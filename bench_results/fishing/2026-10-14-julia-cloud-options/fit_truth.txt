@@ -1,0 +1,6 @@
+h10.theta sharpness 2.89 truth(GH151) -1216.28
+h12.theta sharpness 2.89 truth(GH151) -1216.26
+h13.theta sharpness 507226.15 truth(GH151) -1213.70
+rs0.theta sharpness 294.52 truth(GH151) -1211.62
+rs1.theta sharpness 4.26 truth(GH151) -1214.93
+rs2.theta sharpness 20.40 truth(GH151) -1210.14

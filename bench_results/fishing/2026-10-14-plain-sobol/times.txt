@@ -1,0 +1,12 @@
+1 main python exact: referee logLik -1215.86 +- 0.12 in 14.6s (boundary=False)
+1 main julia exact -1215.68 in 15.6s
+1 branch python exact: referee logLik -1212.82 +- 0.10 in 9.7s (boundary=False)
+1 branch julia exact -1215.67 in 12.1s
+2 main python exact: referee logLik -1215.86 +- 0.12 in 14.6s (boundary=False)
+2 main julia exact -1215.68 in 15.5s
+2 branch python exact: referee logLik -1212.82 +- 0.10 in 9.6s (boundary=False)
+2 branch julia exact -1215.67 in 12.1s
+3 main python exact: referee logLik -1215.86 +- 0.12 in 14.6s (boundary=False)
+3 main julia exact -1215.68 in 15.5s
+3 branch python exact: referee logLik -1212.82 +- 0.10 in 9.6s (boundary=False)
+3 branch julia exact -1215.67 in 12.1s

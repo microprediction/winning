@@ -83,4 +83,612 @@ check("calibrated abilities vs truth", muHat, mu, 5e-6);
   }
 }
 
+/* --- W and c*W are the same law (#281) ------------------------------
+   The forward normalises its accumulated shares, so `p` was already
+   invariant. It returns the own-slopes UNNORMALISED, and the inverse
+   divides those by the normalised probabilities, so the Newton
+   derivative carried the factor c and ONLY the inverse moved: a
+   self-generated target repriced 0.16 away after fifty iterations at
+   c = 0.1. Checked here across twelve orders of magnitude, because a
+   rescaling is a spelling of the same law and a custom quadrature or
+   importance rule need not arrive normalised. */
+{
+  const Vi = [[0.8], [-0.3], [0.1], [0.5]];
+  const Di = [0.7, 1.1, 0.8, 1.2];
+  const Fi = [[-1], [1]];
+  const Wi = [0.5, 0.5];
+  const mu0 = [-0.6, -0.1, 0.2, 0.5];
+  const target = winProbabilitiesFactor(mu0, Vi, Di, Fi, Wi, { points: 1001 }).p;
+
+  let worstFwd = 0, worstInv = 0;
+  for (const c of [1e-6, 1e-3, 0.1, 1, 10, 1e3, 1e6]) {
+    const Wc = Wi.map((w) => c * w);
+    const fwd = winProbabilitiesFactor(mu0, Vi, Di, Fi, Wc, { points: 1001 }).p;
+    worstFwd = Math.max(worstFwd, ...fwd.map((x, i) => Math.abs(x - target[i])));
+    const mu2 = abilitiesFromProbabilitiesFactor(target, Vi, Di, Fi, Wc,
+                                                 { points: 501, nIter: 50 });
+    const rep = winProbabilitiesFactor(mu2, Vi, Di, Fi, Wi, { points: 1001 }).p;
+    worstInv = Math.max(worstInv, ...rep.map((x, i) => Math.abs(x - target[i])));
+  }
+  check("forward is invariant to W -> cW", [worstFwd], [0], 1e-12);
+  // the inverse's own convergence floor is ~2.5e-7; what must not
+  // happen is that rescaling MOVES it, and at c = 0.1 it was 0.16
+  check("inverse reprices to target at every W scale", [worstInv], [0], 1e-6);
+
+  // and the contract refuses what it cannot normalise, instead of
+  // returning a normalised, plausible, wrong answer
+  const refuses = (W, why) => {
+    let threw = false;
+    try { winProbabilitiesFactor(mu0, Vi, Di, Fi, W, { points: 257 }); }
+    catch (e) { threw = true; }
+    check(`refuses ${why}`, [threw ? 1 : 0], [1], 0.5);
+  };
+  refuses([0.5, -0.5], "a negative weight");
+  refuses([0, 0], "an all-zero W");
+  refuses([0.5, NaN], "a non-finite weight");
+  refuses([0.5, 0.3, 0.2], "a W of the wrong length");
+}
+
+/* factor-core batch: overflow-safe weights (#263), zero-mass nodes
+   (#416), lattice size (#444), non-finite targets (#110) and the
+   inverse's loading gauge (#70). */
+{
+  const mu0 = [-1, -0.2, 0.3, 0.9];
+  const Dg = [1, 1, 1, 1];
+  const F5 = [[-2.02018287045609], [-0.958572464613819], [0],
+              [0.958572464613819], [2.02018287045609]];
+  const W5 = [0.0112574113277207, 0.222075922005613, 0.533333333333333,
+              0.222075922005613, 0.0112574113277207];
+  let worst = 0;
+  for (const a of [0, 100]) {
+    const V = mu0.map(() => [a]);
+    const p = winProbabilitiesFactor(mu0, V, Dg, F5, W5, { points: 1001 }).p;
+    const mu = abilitiesFromProbabilitiesFactor(p, V, Dg, F5, W5,
+      { points: 1001, nIter: 50, tol: 1e-8 });
+    worst = Math.max(worst, ...mu.map((v, i) => Math.abs(v - mu0[i])));
+  }
+  check("inverse is invariant to a common loading shift (#70)", [worst], [0], 1e-6);
+
+  const Vs = [[0], [1], [-0.5]], Ds = [1, 1, 1], Fs = [[-1], [1]];
+  const a = winProbabilitiesFactor([0, 0.3, 1], Vs, Ds, Fs, [1e307, 1e307]).p;
+  const b = winProbabilitiesFactor([0, 0.3, 1], Vs, Ds, Fs, [1e308, 1e308]).p;
+  check("weights normalise without overflow (#263)", b, a, 1e-12);
+
+  const mz = [0.1, 0.2, 0.4], Vz = [[2], [0], [-2]], Dz = [1e-6, 1e-6, 1e-6];
+  const centre = winProbabilitiesFactor(mz, Vz, Dz, [[0]], [1], { points: 501 }).p;
+  const padded = winProbabilitiesFactor(mz, Vz, Dz, [[-100], [0], [100]], [0, 1, 0],
+                                        { points: 501 }).p;
+  check("zero-weight nodes are no-ops (#416)", padded, centre, 1e-12);
+
+  const throws = (fn) => { try { fn(); return 0; } catch (e) { return 1; } };
+  for (const pts of [0, 1, 2.5, NaN]) {
+    check(`refuses points=${pts} (#444)`,
+      [throws(() => winProbabilitiesFactor([-0.5, 0, 0.5], [[-0.2], [0], [0.2]], [1, 1, 1],
+                                           Fs, [0.5, 0.5], { points: pts }))], [1], 0.5);
+  }
+  for (const bad of [[NaN, 0.5, 0.5], [Infinity, 1, 1]]) {
+    check(`inverse refuses ${bad} (#110)`,
+      [throws(() => abilitiesFromProbabilitiesFactor(bad, Vs, Ds, Fs, [0.5, 0.5]))], [1], 0.5);
+  }
+}
+
+
+// --- the boundary and the inverse (#198 #210 #254 #290 #330 #331 #349
+// #358 #371 #391 #428 #443)
+{
+  const refuses = (name, fn) => {
+    let ok = false;
+    try { fn(); } catch (e) { ok = true; }
+    check(name, [ok ? 0 : 1], [0], 0.5);
+  };
+  const mx = (a, b) => Math.max(...a.map((x, i) => Math.abs(x - b[i])));
+  const Z3 = [[], [], []];
+  // #254: D is a scalar or exactly one positive variance per runner
+  refuses("refuses an extra D entry (#254)", () =>
+    winProbabilitiesFactor([-0.4, 0, 0.4], [[0], [0], [0]], [1, 1, 1, 1e4], [[0]], [1]));
+  for (const D of [[1, 1], [1, -1, 1], [1, 0, 1], [1, NaN, 1]])
+    refuses(`refuses D=${JSON.stringify(D)} (#254)`, () =>
+      winProbabilitiesFactor([-0.4, 0, 0.4], [[0], [0], [0]], D, [[0]], [1]));
+  check("a scalar D broadcasts (#254)",
+        winProbabilitiesFactor([-0.4, 0, 0.4], [[0], [0], [0]], 1, [[0]], [1]).p,
+        winProbabilitiesFactor([-0.4, 0, 0.4], [[0], [0], [0]], [1, 1, 1], [[0]], [1]).p, 1e-15);
+  // #290: F carries exactly the loadings' rank
+  const V2 = [[1.2, -0.7], [-0.4, 1.1], [0.6, 0.9], [-1.0, -0.5]];
+  refuses("refuses a short F (#290)", () =>
+    winProbabilitiesFactor([-0.6, -0.2, 0.15, 0.7], V2, [0.5, 0.8, 0.6, 0.9], [[-1], [-1], [1], [1]], [0.25, 0.25, 0.25, 0.25]));
+  refuses("refuses a ragged F (#290)", () =>
+    winProbabilitiesFactor([-0.6, -0.2, 0.15, 0.7], V2, [0.5, 0.8, 0.6, 0.9], [[-1], [-1, 100], [1, -100], [1, 100]], [0.25, 0.25, 0.25, 0.25]));
+  refuses("the inverse refuses a short F (#290)", () =>
+    abilitiesFromProbabilitiesFactor([0.4, 0.3, 0.2, 0.1], V2, [0.5, 0.8, 0.6, 0.9], [[-1], [-1], [1], [1]], [0.25, 0.25, 0.25, 0.25]));
+  // #428: the budget is a finite positive integer
+  for (const nIter of [0, -1, 0.5, NaN, Infinity, "50", true])
+    refuses(`refuses nIter=${JSON.stringify(nIter)} (#428)`, () =>
+      abilitiesFromProbabilitiesFactor([0.6, 0.3999, 0.0001], Z3, [1, 1, 1], [[]], [1], { nIter }));
+  // #198: a pair is one equation, solved against the forward
+  for (const t of [[0.8, 0.2], [0.999, 0.001], [0.5, 0.5]]) {
+    const o = abilitiesFromProbabilitiesFactor(t, [[0], [0]], [1, 1], [[0]], [1], { returnInfo: true, tol: 1e-10 });
+    check(`pair round trip at ${t[0]} (#198)`, winProbabilitiesFactor(o.mu, [[0], [0]], [1, 1], [[0]], [1]).p, t, 1e-8);
+  }
+  {
+    const Vp = [[0], [1]], Fp = [[-1], [1]], Wp = [0.5, 0.5], Dp = [0.05, 0.05];
+    const t = winProbabilitiesFactor([-0.4, 0.4], Vp, Dp, Fp, Wp).p;
+    const o = abilitiesFromProbabilitiesFactor(t, Vp, Dp, Fp, Wp, { returnInfo: true, tol: 1e-10 });
+    check("pair round trip under a two-point factor law (#198)", winProbabilitiesFactor(o.mu, Vp, Dp, Fp, Wp).p, t, 1e-8);
+  }
+  // #358: two contenders and a longshot converge, and say so
+  {
+    const t = [0.6, 0.3999, 0.0001];
+    // tol 1e-9: the reprice check below asks for 1e-7, tighter than the
+    // default 1e-6 log-residual contract guarantees
+    const o = abilitiesFromProbabilitiesFactor(t, Z3, [1, 1, 1], [[]], [1], { returnInfo: true, tol: 1e-9 });
+    check("near-pair target converges (#358)", [o.converged ? 0 : 1], [0], 0.5);
+    check("near-pair target reprices (#358)", winProbabilitiesFactor(o.mu, Z3, [1, 1, 1], [[]], [1], { points: 4001 }).p, t, 1e-7);
+  }
+  // #443: V -> aV, F -> F/a is the same race, and the same inverse
+  {
+    const mu0 = [-1.2, -0.1, 0.4, 0.9], V0 = [[-1], [-0.2], [0.4], [0.8]], Dq = [0.3, 0.8, 0.5, 1.1];
+    const F0 = [[-1], [1]], Wq = [0.5, 0.5];
+    const t = winProbabilitiesFactor(mu0, V0, Dq, F0, Wq, { points: 1001 }).p;
+    for (const a of [1e-4, 100, 1e4]) {
+      const Va = V0.map(([x]) => [a * x]), Fa = F0.map(([x]) => [x / a]);
+      const m = abilitiesFromProbabilitiesFactor(t, Va, Dq, Fa, Wq, { points: 501, nIter: 50, tol: 1e-8 });
+      check(`reciprocal V/F scale ${a} reprices (#443)`, winProbabilitiesFactor(m, Va, Dq, Fa, Wq, { points: 4001 }).p, t, 1e-7);
+    }
+  }
+  // #371: the derivative of the NORMALISED share, at a coarse lattice
+  {
+    const mu = [0.771, 0.170, -0.474, -0.467], Dq = [1.426, 0.379, 0.415, 0.363];
+    const Vq = [[-1.946], [0.471], [-2.087], [3.562]];
+    const Fq = [[-2.02018287045609], [-0.958572464613819], [0], [0.958572464613819], [2.02018287045609]];
+    const Wq = [0.0112574113277207, 0.222075922005613, 0.533333333333333, 0.222075922005613, 0.0112574113277207];
+    const t = winProbabilitiesFactor(mu, Vq, Dq, Fq, Wq, { points: 21 });
+    const m = abilitiesFromProbabilitiesFactor(t.p, Vq, Dq, Fq, Wq, { points: 21, nIter: 50, tol: 1e-8 });
+    check("coarse-lattice self round trip (#371)", winProbabilitiesFactor(m, Vq, Dq, Fq, Wq, { points: 21 }).p, t.p, 1e-7);
+    const h = 1e-6, o = winProbabilitiesFactor(mu, Vq, Dq, Fq, Wq, { points: 21, ownLogSlope: true });
+    const fd = mu.map((_, i) => {
+      const a = mu.slice(), b = mu.slice(); a[i] += h; b[i] -= h;
+      return (Math.log(winProbabilitiesFactor(a, Vq, Dq, Fq, Wq, { points: 21 }).p[i])
+              - Math.log(winProbabilitiesFactor(b, Vq, Dq, Fq, Wq, { points: 21 }).p[i])) / (2 * h);
+    });
+    check("ownLogSlope is the derivative of log p (#371)", o.ownLogSlope, fd, 2e-3);
+  }
+  // #331: own slopes of a sharp skew-normal are non-positive, and invert
+  {
+    const mu0 = [-0.8, -0.2, 0.3, 0.9], Z4 = [[], [], [], []], D4 = [1, 1, 1, 1];
+    const base = skewNormalBase(400);
+    const t = winProbabilitiesFactor(mu0, Z4, D4, [[]], [1], { base, points: 1001 });
+    check("skew(400) own slopes are non-positive (#331)", [Math.max(0, ...t.slope)], [0], 1e-12);
+    const m = abilitiesFromProbabilitiesFactor(t.p, Z4, D4, [[]], [1], { base, points: 1001, tol: 1e-8 });
+    check("skew(400) round trip (#331)", winProbabilitiesFactor(m, Z4, D4, [[]], [1], { base, points: 1001 }).p, t.p, 1e-7);
+    refuses("skewNormalBase refuses a non-finite alpha (#331)", () => skewNormalBase(NaN));
+  }
+  // #349 / #330: an irrelevant distant runner leaves a tie density and a
+  // removal row alone
+  {
+    const w = winProbabilitiesFactor([0, 0.1, 100], [[0], [0], [0]], [0.01, 0.01, 1], [[0]], [1],
+                                     { pairwise: true, points: 501 }).w[0][1];
+    const exact = Math.exp(-0.5 * 0.01 / 0.02) / Math.sqrt(2 * Math.PI * 0.02);
+    check("a distant runner does not dilute a tie density (#349)", [w], [exact], 1e-9);
+    const direct = winProbabilitiesFactor([0, 1], [[], []], [1, 1], [[]], [1], { points: 501 }).p;
+    const del = winProbabilitiesFactor([-2000, 0, 1], Z3, [1, 1, 1], [[]], [1], { points: 501, deletions: true });
+    check("removing a far favourite is the direct pair (#330)", del.deletions[0].slice(1), direct, 1e-9);
+    const mu4 = [-225.6, 0, 0.1, 0.2], V4 = [[0], [0], [0], [0]], D4 = [0.01, 0.01, 0.01, 0.01];
+    const d4 = winProbabilitiesFactor(mu4, V4, D4, [[0]], [1], { points: 501, deletions: true }).deletions[0].slice(1);
+    check("an aliased removal row is resolved (#330)", d4,
+          winProbabilitiesFactor(mu4.slice(1), V4.slice(1), D4.slice(1), [[0]], [1], { points: 501 }).p, 1e-9);
+  }
+  // #391: the home page's reachable 301-point t4 field
+  {
+    const h = [-4.1445471861258945, -2.802485861287542, -1.6365190424351082, -0.5390798113513752,
+               0.5390798113513752, 1.6365190424351082, 2.802485861287542, 4.1445471861258945];
+    const w = [1.126145383753679e-4, 9.635220120788263e-3, 0.117239907661759, 0.3730122576790774,
+               0.3730122576790774, 0.117239907661759, 9.635220120788263e-3, 1.126145383753679e-4];
+    const Fh = [], Wh = [];
+    for (const a of h) for (const b of h) Fh.push([a, b]);
+    for (const a of w) for (const b of w) Wh.push(a * b);
+    const mu = [-1, -0.4, 0, 0.3, 0.9, 1.4], L1 = [0.7, -0.7, 0.7, -0.7, 0.7, -0.7], L2 = [0.7, 0.7, -0.7, -0.7, 0, 0];
+    const Vh = mu.map((_, i) => [L1[i], L2[i]]), Dh = mu.map((_, i) => Math.max(1 - L1[i] ** 2 - L2[i] ** 2, 0.02));
+    check("the home page's 301-point t4 field is resolved (#391)",
+          winProbabilitiesFactor(mu, Vh, Dh, Fh, Wh, { base: "t4", points: 301 }).p,
+          winProbabilitiesFactor(mu, Vh, Dh, Fh, Wh, { base: "t4", points: 4001 }).p, 2e-6);
+  }
+}
+
+/* #399: the skew-normal standardization used sqrt(1 + alpha^2), which
+   overflows past |alpha| ~ 1.34e154, so a finite saturated shape jumped
+   to an unstandardized law (leader's share 0.665 -> 0.982). Above the
+   threshold the law must be the same as just below it. */
+{
+  const mu = [-0.6, 0.2, 1.1, 1.7];
+  const D = [0.25, 1, 2.25, 4];
+  const Vs = [[], [], [], []], Fs = [[]], Ws = [1];
+  const at = (a) => winProbabilitiesFactor(mu, Vs, D, Fs, Ws,
+    { base: skewNormalBase(a), points: 16001 }).p;
+  const below = at(1e154);
+  for (const a of [2e154, 1e200, 1e300])
+    check(`skew-normal shape ${a} is the saturated law`, at(a), below, 1e-12);
+  const negBelow = at(-1e154);
+  check("skew-normal shape -2e154 is the saturated law", at(-2e154), negBelow, 1e-12);
+  let threw = false;
+  try { skewNormalBase(Infinity); } catch (e) { threw = true; }
+  check("skewNormalBase refuses an infinite shape", [threw ? 1 : 0], [1], 0.5);
+}
+
+/* --- finite weights whose SUM overflows are the same law (#415) -------
+   The normaliser divided by the raw total, so [1e308, 1e308] became
+   W / Infinity = [0, 0] and every probability NaN. */
+{
+  const mu = [0, 0.4, 1], V = [[0.7], [0], [-0.4]], D = [1, 1, 1];
+  const F = [[-1], [1]];
+  const p1 = winProbabilitiesFactor(mu, V, D, F, [1, 1], { points: 257 }).p;
+  const pb = winProbabilitiesFactor(mu, V, D, F, [1e308, 1e308], { points: 257 }).p;
+  check("W = [1e308, 1e308] prices like [1, 1]", pb, p1, 1e-15);
+  check("and matches the python reference", p1,
+        [0.51529828, 0.30546137, 0.17924036], 1e-6);
+  const ab = abilitiesFromProbabilitiesFactor(p1, V, D, F, [1e308, 1e308],
+                                             { points: 257, nIter: 50 });
+  const a1 = abilitiesFromProbabilitiesFactor(p1, V, D, F, [1, 1],
+                                             { points: 257, nIter: 50 });
+  check("the inverse shares the normaliser", ab, a1, 1e-12);
+}
+
+/* --- the options boundary: typed weights, an omitted base only, and no
+   unknown keys (#527, #552, #559) ----------------------------------- */
+{
+  const refuses = (name, fn) => {
+    let threw = false;
+    try { fn(); } catch (e) { threw = true; }
+    check(name, [threw ? 1 : 0], [1], 0.5);
+  };
+  const mu = [-0.4, 0.1, 0.5], V = [[-0.8], [0.2], [0.7]], D = [0.7, 0.8, 0.9];
+  const F = [[-1], [1]];
+  for (const W of [["0.5", "0.5"], [true, false], [null, 1]])
+    refuses(`weights ${JSON.stringify(W)} are refused, not coerced (#527)`,
+            () => winProbabilitiesFactor(mu, V, D, F, W));
+  const Z = [[], [], []];
+  for (const base of ["", false, 0, null]) {
+    refuses(`base ${JSON.stringify(base)} is refused, not read as normal (#552)`,
+            () => winProbabilitiesFactor([-2, 0, 1], Z, [1, 1, 1], [[]], [1], { base }));
+    refuses(`inverse base ${JSON.stringify(base)} is refused (#552)`,
+            () => abilitiesFromProbabilitiesFactor([0.5, 0.3, 0.2], Z, [1, 1, 1], [[]], [1], { base }));
+  }
+  check("an omitted base is still normal (#552)",
+        winProbabilitiesFactor([-2, 0, 1], Z, [1, 1, 1], [[]], [1]).p,
+        winProbabilitiesFactor([-2, 0, 1], Z, [1, 1, 1], [[]], [1], { base: "normal" }).p, 1e-300);
+  refuses("forward refuses {bsae} (#559)",
+          () => winProbabilitiesFactor([-2, 0, 1], Z, [1, 1, 1], [[]], [1], { bsae: "gumbel" }));
+  refuses("inverse refuses {bsae} (#559)",
+          () => abilitiesFromProbabilitiesFactor([0.5, 0.3, 0.2], Z, [1, 1, 1], [[]], [1], { bsae: "gumbel" }));
+  refuses("forward refuses an inverse-only key (#559)",
+          () => winProbabilitiesFactor([-2, 0, 1], Z, [1, 1, 1], [[]], [1], { nIter: 5 }));
+}
+
+/* --- a relative target whose SUM overflows is the same law (#475) ---- */
+{
+  const V = [[0], [0], [0], [0]], D = [1, 1, 1, 1];
+  const q = [0.8, 0.6, 0.4, 0.2];
+  const a1 = abilitiesFromProbabilitiesFactor(q, V, D, [[0]], [1]);
+  const ab = abilitiesFromProbabilitiesFactor(q.map((x) => x * 1e308), V, D, [[0]], [1]);
+  check("target * 1e308 calibrates like the target (#475)", ab, a1, 1e-12);
+  const pair = abilitiesFromProbabilitiesFactor([1e308, 1e308], [[0], [0]], [1, 1], [[0]], [1]);
+  check("a 1e308 pair is the even race, not +-Infinity (#475)", pair, [0, 0], 1e-12);
+}
+
+/* --- removal rows past the lattice cap, removal pairs, huge skew
+   shapes and the pair inverse's minority side (#455 #411 #399 #412) --- */
+{
+  const keep = console.warn;
+  console.warn = () => {};
+  try {
+    const mu = [-50, 0.01515020819626168, 0.01296182990586568];
+    const D = [10, 0.0009309393203102079, 0.004283991517502709].map((s) => s * s);
+    const del = winProbabilitiesFactor(mu, [[], [], []], D, [[]], [1], { deletions: true });
+    // exact (python removal_shares and the direct survivor race): 0.30883
+    check("a capped removal row is refined, not certified (#455)",
+          del.deletions[0], [0, 0.30882742, 0.69117258], 1e-4);
+    const pairDel = winProbabilitiesFactor([0, 1000], [[], []], [1, 1], [[]], [1],
+                                           { base: skewNormalBase(400), deletions: true });
+    check("removing one of two runners leaves the other certain (#411)",
+          pairDel.deletions, [[0, 1], [1, 0]], 1e-300);
+    // a grid capped by the BASE's feature width while the removal spacing
+    // is already met: the refinement loop ran zero times and refused on
+    // its Infinity sentinel (#697). Each row must be its direct N-1 race.
+    for (const shape of [650, 1000]) {
+      const sb = skewNormalBase(shape);
+      let rows = null, err = "";
+      try {
+        rows = winProbabilitiesFactor([-1, 0, 1], [[], [], []], [1, 1, 1], [[]], [1],
+                                      { base: sb, deletions: true }).deletions;
+      } catch (e) { err = e.message; }
+      check(`capped skew-normal(${shape}) deletion rows are returned (#697)`,
+            [rows ? 0 : 1], [0], 0.5);
+      if (!rows) { console.log("   " + err); continue; }
+      const got = [], want = [];
+      for (let k = 0; k < 3; k++) {
+        const keep = [-1, 0, 1].filter((_, j) => j !== k);
+        const direct = winProbabilitiesFactor(keep, [[], []], [1, 1], [[]], [1], { base: sb }).p;
+        got.push(...rows[k].filter((_, j) => j !== k));
+        want.push(...direct);
+      }
+      check(`capped skew-normal(${shape}) deletion rows match the direct races (#697)`,
+            got, want, 1e-8);
+    }
+    // tabulated survival swept from the right: T - prefix erased every
+    // right tail below ~1e-16 (#501). References: scipy skewnorm logsf and
+    // direct quadrature of the standardized contrast.
+    {
+      const b10 = skewNormalBase(10);
+      check("skewNormalBase(10) log survival at z = 12, 13 (#501)",
+            [b10.eval(12, 1).ls / -35.05615946185115, b10.eval(13, 1).ls / -40.23045782445612],
+            [1, 1], 1e-4);
+      for (const points of [501, 2001]) {
+        const p = winProbabilitiesFactor([0, 15], [[], []], [1, 1], [[]], [1], { base: b10, points }).p;
+        check(`skewNormalBase(10) gap-15 longshot at ${points} points (#501)`,
+              [p[1] / 9.715184941659753e-21], [1], 1e-3);
+      }
+      const ps = winProbabilitiesFactor([0, 15], [[], []], [1, 1], [[]], [1], { base: "skew" }).p;
+      check(`"skew" gap-15 longshot (#501)`, [ps[1] / 8.291832902966727e-22], [1], 1e-3);
+    }
+    const lim = winProbabilitiesFactor([-1, 0, 1], [[], [], []], [1, 1, 1], [[]], [1],
+                                       { base: skewNormalBase(1e100) }).p;
+    for (const a of [Number.MAX_VALUE, 1e300]) {
+      const b = skewNormalBase(a);
+      check(`skewNormalBase(${a}) density is finite (#399)`,
+            [-5, 5].map((z) => Number.isFinite(b.pdf(z)) ? 0 : 1), [0, 0], 0.5);
+      check(`skewNormalBase(${a}) prices as the 1e100 limit (#399)`,
+            winProbabilitiesFactor([-1, 0, 1], [[], [], []], [1, 1, 1], [[]], [1], { base: b }).p, lim, 1e-12);
+    }
+    check("logndtr at +-Infinity is exact (#399)", [logndtr(Infinity), Math.exp(logndtr(-Infinity))], [0, 0], 1e-300);
+  } finally { console.warn = keep; }
+  for (const t of [1e-16, 1e-20]) {
+    const a = abilitiesFromProbabilitiesFactor([1, t], [[0], [0]], [1, 1], [[0]], [1]);
+    const b = abilitiesFromProbabilitiesFactor([t, 1], [[0], [0]], [1, 1], [[0]], [1]);
+    check(`pair [1, ${t}] mirrors [${t}, 1] (#412)`, a, [-b[0], -b[1]], 1e-12);
+  }
+  const V = [[0], [1]], D = [0.05, 0.05], F = [[-1], [1]], W = [0.5, 0.5];
+  const fit = abilitiesFromProbabilitiesFactor([1, 0.001], V, D, F, W, { returnInfo: true });
+  const rp = winProbabilitiesFactor(fit.mu, V, D, F, W).p;
+  check("non-Gaussian pair with a near-certain favourite converges (#412)",
+        [fit.converged ? 0 : 1, Math.log(rp[1] / (0.001 / 1.001))], [0, 0], 1e-5);
+}
+
+/* --- an exactly common loading column is inert at any scale (#471) --- */
+{
+  const n = 9, mu = Array.from({ length: n }, (_, i) => (i - 4) * 0.1), D = Array(n).fill(1);
+  const F = [[-1], [1]], W = [0.5, 0.5];
+  const ind = winProbabilitiesFactor(mu, Array.from({ length: n }, () => [0]), D, F, W, { points: 257 }).p;
+  for (const c of [1e20, 1e100, 1e308]) {
+    const V = Array.from({ length: n }, () => [c]);
+    check(`common [${c}] column prices the independent race (#471)`,
+          winProbabilitiesFactor(mu, V, D, F, W, { points: 257 }).p, ind, 1e-15);
+  }
+}
+
+/* --- a rounded-one favourite alone does not certify a multiway fit (#588) --- */
+{
+  const V = [[], [], []], D = [1, 1, 1], F = [[]], W = [1], o = { points: 1001 };
+  const p = winProbabilitiesFactor([-12, 0, 12], V, D, F, W, o).p;
+  const fit = abilitiesFromProbabilitiesFactor(p, V, D, F, W, { ...o, nIter: 600, tol: 1e-8, returnInfo: true });
+  const q = winProbabilitiesFactor(fit.mu, V, D, F, W, o).p;
+  // converged must mean every positive share reprices; otherwise say so
+  const ok = !fit.converged || p.every((v, i) => Math.abs(Math.log(Math.max(q[i], 1e-300) / v)) < 1e-6);
+  check("[1, 1e-17, 3e-65] target: converged only if it reprices (#588)", [ok ? 0 : 1], [0], 0.5);
+  // both tails are below the solver's PFLOOR: not certifiable, and it says so
+  check("[1, 1e-17, 3e-65] target reports non-convergence (#588)", [fit.converged ? 1 : 0], [0], 0.5);
+  // a representable tail (1.1e-5) beside an unrepresentable one (5.7e-18)
+  // must converge and match the contrast, as python: scoring the 5.7e-18
+  // share against PFLOOR made it an irreducible failure (#588)
+  const p6 = winProbabilitiesFactor([-6, 0, 6], V, D, F, W, o).p;
+  const f6 = abilitiesFromProbabilitiesFactor(p6, V, D, F, W, { ...o, returnInfo: true });
+  const q6 = winProbabilitiesFactor(f6.mu, V, D, F, W, o).p;
+  check("self-generated [1, 1.1e-5, 5.7e-18] converges and reprices its contrast (#588)",
+        [f6.converged ? 0 : 1, Math.log(q6[1] / p6[1]), f6.mu[1] - f6.mu[0]], [0, 0, 6], 1e-5);
+}
+
+/* --- a pair scores its minority, not the multi-runner tail mask (#727) --- */
+{
+  const V = [[0], [1]], D = [0.05, 0.05], F = [[-1], [1]], W = [0.5, 0.5];
+  for (const t of [1e-6, 1e-8]) {
+    for (const target of [[t, 1], [1, t]]) {
+      const fit = abilitiesFromProbabilitiesFactor(target, V, D, F, W, { returnInfo: true });
+      const q = winProbabilitiesFactor(fit.mu, V, D, F, W).p;
+      const s = target[0] + target[1];
+      const err = Math.max(...q.map((v, i) => Math.abs(Math.log(v / (target[i] / s)))));
+      check(`pair [${target}] under a two-point law certifies only if it reprices (#727)`,
+            [fit.converged ? 0 : 1, err, fit.residual - err], [0, 0, 0], 1e-6);
+    }
+  }
+}
+
+/* --- a common ability offset reaches no lattice (#477, as python) --- */
+{
+  const base = [-1, 0, 1], D = [1, 1, 1], V = [[0.5], [0.2], [-0.3]], F = [[-1], [1]], W = [0.5, 0.5];
+  const p0 = winProbabilitiesFactor(base, V, D, F, W, { deletions: true, ownLogSlope: true });
+  for (const c of [1e12, 1e15, 2 ** 52]) {
+    const r = winProbabilitiesFactor(base.map((x) => x + c), V, D, F, W, { deletions: true, ownLogSlope: true });
+    check(`factor forward at common offset ${c} is the unshifted race (#477)`,
+          [...r.p, ...r.ownLogSlope, ...r.deletions.flat()], [...p0.p, ...p0.ownLogSlope, ...p0.deletions.flat()], 1e-15);
+  }
+}
+
+/* --- round 7: ordinary inputs near the fixes are unchanged (pinned from
+   origin/main 9b29ddef), and the fixed cases match python (#733) --- */
+{
+  const V = [[0], [1]], D = [0.05, 0.05], F = [[-1], [1]], W = [0.5, 0.5];
+  check("pair inverse 0.3/0.7 under the two-point law unchanged (#727)",
+        abilitiesFromProbabilitiesFactor([0.3, 0.7], V, D, F, W), [0.4599423060309007, -0.4599423060309007], 1e-15);
+  check("pair inverse 1e-3 minority unchanged (#727)",
+        abilitiesFromProbabilitiesFactor([1e-3, 1], V, D, F, W), [0.9551271779506695, -0.9551271779506695], 1e-15);
+  check("multiway inverse with identified tails unchanged (#588)",
+        abilitiesFromProbabilitiesFactor([0.6, 0.3, 0.09, 0.009, 0.001], [[], [], [], [], []], [1, 1, 1, 1, 1], [[]], [1]),
+        [-1.6156188787232308, -1.0306115347579299, -0.20225967790553134, 0.9886327009788445, 1.859857390407848], 1e-15);
+  check("factor forward at an ordinary offset 1000 unchanged (#477)",
+        winProbabilitiesFactor([999, 1000, 1001], [[0.5], [0.2], [-0.3]], [1, 1, 1], [[-1], [1]], [0.5, 0.5]).p,
+        [0.7101770877961181, 0.2188244364442892, 0.07099847575959269], 1e-15);
+  // python abilities_from_probabilities_factor / win_probabilities_factor
+  check("pair [1e-6, 1] matches python's _pair_solve (#727)",
+        abilitiesFromProbabilitiesFactor([1e-6, 1], V, D, F, W), [1.229123604182169, -1.229123604182169], 1e-9);
+  check("pair [1e-8, 1] matches python's _pair_solve (#727)",
+        abilitiesFromProbabilitiesFactor([1e-8, 1], V, D, F, W), [1.3681798918259662, -1.3681798918259662], 1e-9);
+  const p6 = winProbabilitiesFactor([-6, 0, 6], [[], [], []], [1, 1, 1], [[]], [1], { points: 1001 }).p;
+  check("[1, 1.1e-5, 5.7e-18] inverse matches python (#588)",
+        abilitiesFromProbabilitiesFactor(p6, [[], [], []], [1, 1, 1], [[]], [1], { points: 1001 }),
+        [-9.697146356239006, -3.697146532125112, 13.394292888364118], 1e-9);
+  check("factor forward at offset 1e15 matches python (#477)",
+        winProbabilitiesFactor([1e15 - 1, 1e15, 1e15 + 1], [[0.5], [0.2], [-0.3]], [1, 1, 1], [[-1], [1]], [0.5, 0.5]).p,
+        [0.7101770877961151, 0.21882443644429006, 0.07099847575959484], 1e-14);
+}
+
+/* --- deletion rows at their own resolution, as python's removal_shares
+   (#785): the sd_min/8 target applies whether or not the forward lattice
+   was capped --- */
+{
+  const rt2 = Math.SQRT2;
+  const laplaceBase = (spans) => ({ spans,
+    eval(z, sd) {
+      const fz = Math.exp(-rt2 * Math.abs(z)) / Math.SQRT2;
+      const ls = z >= 0 ? Math.log(0.5) - rt2 * z : Math.log1p(-0.5 * Math.exp(rt2 * z));
+      return { ls, fx: fz / sd, ds: z === 0 ? 0 : Math.sign(z) * rt2 * fz / (sd * sd) };
+    } });
+  // the issue's fixture: 933 uncapped forward points against a removal
+  // target of 3729 returned P(0 wins | 2 removed) = 0.42149, 70 bp high
+  const lap = laplaceBase([22, 22]);
+  const mu = [1.86, 1.82, -1.39], D = [0.2, 0.125, 1.25].map((s) => s * s);
+  const oracle = 0.4145220394678141;   // split-at-the-cusps integral
+  let row = null;
+  try { row = winProbabilitiesFactor(mu, [[], [], []], D, [[]], [1], { base: lap, deletions: true }).deletions[2]; }
+  catch (e) { console.log("   " + e.message); }
+  check("uncapped Laplace deletion row within 1e-3 of the exact integral (#785)",
+        [row ? row[0] : NaN], [oracle], 1e-3);
+  // python removal_shares(mu, D=D, base="laplace") with these spans' lattice
+  check("uncapped Laplace deletion row is python's removal_shares (#785)",
+        [row ? row[0] : NaN], [0.4150322120976259], 1e-12);
+  const fine = winProbabilitiesFactor(mu, [[], [], []], D, [[]], [1],
+                                      { base: lap, deletions: true, points: 32001 }).deletions[2];
+  check("the same row at 32001 points converges to the exact integral (#785)",
+        [fine[0]], [oracle], 2e-6);
+
+  // a battery of ordinary fields against python's removal_shares
+  // (gen_test_vectors_removal.py): normal, gumbel and laplace; 3 to 12
+  // runners; sd ratios 1 to 20; with and without a factor
+  const R = JSON.parse(readFileSync(new URL("./test_vectors_removal.json", import.meta.url)));
+  const lap18 = laplaceBase([18, 18]);   // python's laplace spans
+  let worst = 0, refused = 0, compared = 0;
+  for (const c of R.cases) {
+    if (!c.deletions) continue;          // python's own 1e-3 mass guard refused
+    const V = c.V[0].length ? c.V : c.V.map(() => []);
+    try {
+      const got = winProbabilitiesFactor(c.mu, V, c.D, c.F, c.W,
+        { base: c.base === "laplace" ? lap18 : c.base, deletions: true }).deletions;
+      for (let i = 0; i < got.length; i++) for (let j = 0; j < got.length; j++)
+        worst = Math.max(worst, Math.abs(got[i][j] - c.deletions[i][j]));
+      compared++;
+    } catch (e) { refused++; }
+  }
+  check(`deletion rows match python removal_shares on ${compared} ordinary fields (#785)`,
+        [worst], [0], 1e-12);
+  check("no ordinary battery field is refused (#785)", [refused], [0], 0.5);
+
+  // ordinary fields whose forward lattice already meets the removal
+  // target are bitwise unchanged (pinned from origin/main 7af3ed1c)
+  check("ordinary factor deletion row unchanged (#785)",
+        winProbabilitiesFactor([0, 0.5, 1, 1.5], [[0.3], [-0.1], [0.2], [0]], [1, 1.2, 0.8, 1],
+                               [[-1], [1]], [0.5, 0.5], { deletions: true }).deletions[1],
+        [0.7016501657854247, 0, 0.19281299926124565, 0.10553683495332968], 1e-300);
+  check("ordinary gumbel deletion row unchanged (#785)",
+        winProbabilitiesFactor([0, 0.4, 0.9], [[], [], []], [1, 1, 1], [[]], [1],
+                               { base: "gumbel", deletions: true }).deletions[0],
+        [0, 0.6550416000142272, 0.3449583999857729], 1e-300);
+}
+
+// #832: the pair seed's ndtri refinement overflowed exp(x^2/2) below
+// p ~ 1e-309 and returned Inf/Inf = NaN, so a valid subnormal pair target
+// threw "mu[0] = NaN". Finite, mirror-equivariant, and the Gaussian
+// contrast is scipy's ndtri (the forward's 1e-300 floor leaves it
+// uncertified, which is a separate matter).
+{
+  const oracle = [[1e-315, 18.983650175533683], [1e-320, 19.134562671516324],
+                  [Number.MIN_VALUE, 19.233702808572172]];
+  for (const [t, half] of oracle) {
+    let a, b;
+    try {
+      a = abilitiesFromProbabilitiesFactor([t, 1], [[0], [0]], [0.5, 0.5], [[0]], [1], { returnInfo: true }).mu;
+      b = abilitiesFromProbabilitiesFactor([1, t], [[0], [0]], [0.5, 0.5], [[0]], [1], { returnInfo: true }).mu;
+    } catch (e) { a = [NaN, NaN]; b = [NaN, NaN]; console.log("   " + e.message); }
+    check(`subnormal pair target ${t} is the ndtri contrast (#832)`, a, [half, -half], 1e-7);
+    check(`subnormal pair target ${t} is mirror-equivariant (#832)`, b, [-a[0], -a[1]], 1e-300);
+  }
+  // nearby ordinary deep tail unchanged (pinned from origin/main 3fa326ee;
+  // 1e-12, not bitwise: libm differs across platforms)
+  check("pair target 1e-300 unchanged (#832)",
+        abilitiesFromProbabilitiesFactor([1e-300, 1], [[0], [0]], [0.5, 0.5], [[0]], [1]),
+        [18.5235481496806, -18.5235481496806], 1e-12);
+}
+
+// #838: the pair branch returned before mu0 was read, so an exact start
+// was ignored (residual 0.034 at nIter 1) and a malformed one accepted
+{
+  const V = [[-1], [1]], D = [0.05, 0.2], F = [[-3], [0], [2]], W = [0.2, 0.3, 0.5];
+  const p = winProbabilitiesFactor([-0.5, 0.5], V, D, F, W, { points: 4001 }).p;
+  const o = { points: 4001, nIter: 1, tol: 1e-10, returnInfo: true };
+  let fit = { mu: [NaN, NaN], converged: false };
+  try { fit = abilitiesFromProbabilitiesFactor(p, V, D, F, W, { ...o, mu0: [-0.5, 0.5] }); } catch (e) { console.log("   " + e.message); }
+  check("exact pair mu0 certifies at nIter 1 (#838)", [...fit.mu, fit.converged ? 0 : 1], [-0.5, 0.5, 0], 1e-12);
+  const sh = abilitiesFromProbabilitiesFactor(p, V, D, F, W, { ...o, mu0: [9.5, 10.5] });
+  check("shifted exact pair mu0 returns the centred pair (#838)", sh.mu, [-0.5, 0.5], 1e-12);
+  let raised = 0;
+  for (const bad of [[NaN, 1], [NaN], [1, 2, 3], "bad"]) {
+    try { abilitiesFromProbabilitiesFactor(p, V, D, F, W, { ...o, mu0: bad }); }
+    catch (e) { if (/mu0/.test(e.message)) raised++; }
+  }
+  check("malformed pair mu0 raises (#838)", [raised], [4], 0.5);
+  // omitted mu0 unchanged (pinned from origin/main 3fa326ee)
+  check("pair without mu0 unchanged (#838)",
+        abilitiesFromProbabilitiesFactor(p, V, D, F, W, { ...o, nIter: 3 }).mu,
+        [-1.1145587159721093, 1.1145587159721093], 1e-12);
+}
+
+// #849: an exact N >= 3 mu0 broke out before the first update and came
+// back with the caller's shift; a perturbed one came back mean-zero
+{
+  const V = [[], [], []], D = [1, 1, 1], F = [[]], W = [1];
+  const t = winProbabilitiesFactor([-1, 0, 1], V, D, F, W, { points: 1001 }).p;
+  const o = { points: 1001, tol: 1e-12, nIter: 50, returnInfo: true };
+  for (const mu0 of [[9, 10, 11], [1e12 - 1, 1e12, 1e12 + 1]]) {
+    const r = abilitiesFromProbabilitiesFactor(t, V, D, F, W, { ...o, mu0 });
+    check(`exact shifted mu0 ${mu0[1]} returns the mean-zero exact start (#849)`,
+          [...r.mu, r.converged ? 0 : 1, r.iterations], [-1, 0, 1, 0, 1], 1e-300);
+  }
+  // a mean-zero start is unchanged (pinned from origin/main 3fa326ee)
+  check("centred mu0 unchanged (#849)",
+        abilitiesFromProbabilitiesFactor(t, V, D, F, W, { ...o, mu0: [-1.001, 0, 1.001] }).mu,
+        [-1.0000000000003233, 2.395494788021237e-13, 1.000000000000084], 1e-12);
+}
+
+// #862: on budget exhaustion the residual and flag were the PRE-update
+// iterate's (0.497, not converged) while the returned mu repriced at
+// 0.071 < tol. They now describe the mu returned; mu itself is unchanged.
+{
+  const target = [0.7, 0.2, 0.1], V = [[], [], []], D = [1, 1, 1], F = [[]], W = [1];
+  const actual = (mu) => {
+    const q = winProbabilitiesFactor(mu, V, D, F, W, { points: 1001 }).p;
+    return Math.max(...q.map((v, i) => Math.abs(Math.log(v) - Math.log(target[i]))));
+  };
+  const one = abilitiesFromProbabilitiesFactor(target, V, D, F, W,
+    { nIter: 1, points: 1001, tol: 0.1, returnInfo: true });
+  check("exhausted fit within tol says converged (#862)", [one.converged ? 0 : 1], [0], 0.5);
+  check("exhausted mu is unchanged (#862)", one.mu,
+        [-0.8856280995076525, 0.22715088511329895, 0.6584772143943536], 1e-12);
+  for (const nIter of [1, 2, 3]) {
+    const f = abilitiesFromProbabilitiesFactor(target, V, D, F, W,
+      { nIter, points: 1001, tol: 1e-12, returnInfo: true });
+    check(`nIter ${nIter}: reported residual is the returned mu's (#862)`,
+          [f.residual], [actual(f.mu)], 1e-12);
+  }
+  // a fit that converges inside its budget is unchanged (origin/main 3fa326ee)
+  const d = abilitiesFromProbabilitiesFactor(target, V, D, F, W, { points: 1001, returnInfo: true });
+  check("converged default fit unchanged (#862)", [...d.mu, d.residual, d.iterations],
+        [-0.8474995800413705, 0.19091763292480116, 0.6565819471165693, 8.219023104327761e-7, 10], 1e-12);
+}
+
 process.exit(failures ? 1 : 0);

@@ -1,0 +1,109 @@
+"""Regressions found by the 2026-10-13 benchmark rerun (#716, #717, #718)."""
+import numpy as np
+import pytest
+from scipy.special import log_ndtr
+
+import winning.likelihood as L
+from winning.likelihood import _choice_logprob_terms, _mills_gap, _tilt_mode
+from winning.methods.orthant_extra import _order_variables
+
+# the contrasts of the julia Fishing fit's first BFGS trial step (#716)
+_C0 = np.array([-174823.91047091805, -174848.3798915476,
+                -174803.45321830967])[:, None]
+_T = np.array([1.6888473976942278, 1.694115546292384,
+               2.9793037849297694])[:, None]
+
+
+def test_tilt_curvature_stays_above_one_at_far_tail_contrasts():
+    """#716: lam (a + lam) cancelled and the tilt curvature went to -196
+    (julia DomainError) / -682 (python NaN)."""
+    m, h, *_ = _tilt_mode(_C0, _T, 1.0)
+    assert np.all(np.isfinite(m)) and np.all(h >= 1.0)
+    rng = np.random.default_rng(1)
+    for scale in (1e3, 1e5, 1e6, 1e8):
+        c0 = -np.abs(rng.normal(scale, scale / 10, (3, 500)))
+        t = rng.uniform(1, 3, (3, 1))
+        m, h, dm_c, dh_c, dm_t, dh_t = _tilt_mode(c0, t, 1.0)
+        assert np.all(h >= 1.0)
+        for arr in (m, dm_c, dh_c, dm_t, dh_t):
+            assert np.all(np.isfinite(arr))
+
+
+def test_mills_gap_far_tail_matches_the_asymptotic_series():
+    for a in (-1e3, -5.7e4, -1e6, -1e9):
+        y = -a
+        lam, gap = _mills_gap(np.array([a]))
+        series = 1 / y - 2 / y ** 3 + 10 / y ** 5 - 74 / y ** 7
+        assert gap[0] == pytest.approx(series, rel=1e-13)
+        assert lam[0] == pytest.approx(y + series, rel=1e-15)
+        assert 0.0 < lam[0] * gap[0] <= 1.0      # 1 - 1/y^2 rounds
+    # nearer in, the old expression's cancellation is still small
+    for a in (-25.0, -50.0):
+        lam, gap = _mills_gap(np.array([a]))
+        old = np.exp(-0.5 * a * a - 0.5 * np.log(2 * np.pi) - log_ndtr(a))
+        assert gap[0] == pytest.approx(a + old, rel=1e-9)
+
+
+def test_mills_gap_is_the_old_expression_above_the_tail_and_continuous():
+    a = np.linspace(L._MILLS_TAIL, 8.0, 2001)
+    lam, gap = _mills_gap(a)
+    old = np.exp(-0.5 * a * a - 0.5 * np.log(2 * np.pi) - log_ndtr(a))
+    assert np.array_equal(lam, old) and np.array_equal(gap, a + old)
+    lo = _mills_gap(np.array([np.nextafter(L._MILLS_TAIL, -np.inf)]))
+    hi = _mills_gap(np.array([L._MILLS_TAIL]))
+    assert lo[0][0] == pytest.approx(hi[0][0], rel=1e-14)
+    assert lo[1][0] == pytest.approx(hi[1][0], rel=1e-10)
+
+
+@pytest.mark.parametrize("J, r, scale", [
+    (2, 1, 1.0), (4, 2, 0.3), (4, 2, 1.0), (4, 2, 3.0), (5, 1, 0.5)])
+def test_value_only_likelihood_is_the_same_to_the_bit(J, r, scale):
+    """#717: the referee and predict_proba ask for lp only."""
+    rng = np.random.default_rng(J * 10 + r)
+    mu = rng.normal(size=(40, J))
+    V = scale * rng.normal(size=(J, r))
+    ch = rng.integers(0, J, size=40)
+    full = _choice_logprob_terms(mu, V, choice=ch)
+    lp, dmu, dV = _choice_logprob_terms(mu, V, choice=ch, score=False)
+    assert dmu is None and dV is None
+    assert np.array_equal(lp, full[0])
+
+
+def _order_reference(a, C):
+    """the #454 key sort, verbatim"""
+    z = a / np.sqrt(np.diag(C))
+    m = len(a)
+
+    def key(t):
+        others = sorted((-float(C[t, s]) for s in range(m) if s != t))
+        return (-float(z[t]), -float(C[t, t]), tuple(others))
+
+    return np.array(sorted(range(m), key=key), dtype=int)
+
+
+def test_order_variables_is_the_full_key_sort():
+    """#718: the tie-break is built only inside tied runs; the order is
+    the one the full key sort gives, ties and signed zeros included."""
+    rng = np.random.default_rng(0)
+    for trial in range(3000):
+        m = int(rng.integers(1, 12))
+        kind = trial % 4
+        if kind == 0:
+            a = rng.normal(size=m)
+        elif kind == 1:
+            a = rng.integers(-2, 3, size=m).astype(float)
+        elif kind == 2:
+            a = np.zeros(m)
+        else:
+            a = np.round(rng.normal(size=m), 1)
+        if trial % 50 == 0:
+            a[0] = -0.0
+        if trial % 3 == 0:
+            B = rng.normal(size=(m, 2))
+            C = B @ B.T + np.eye(m)
+        elif trial % 3 == 1:
+            C = np.ones((m, m)) + np.eye(m)
+        else:
+            B = rng.integers(-1, 2, size=(m, 2)).astype(float)
+            C = B @ B.T + np.diag(rng.integers(1, 3, size=m).astype(float))
+        assert np.array_equal(_order_variables(a, C), _order_reference(a, C))

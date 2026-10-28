@@ -65,7 +65,7 @@ from __future__ import annotations
 
 import itertools
 import numpy as np
-from thurstone import AbilityCalibrator, Density, Race, UniformLattice
+from winning.research import AbilityCalibrator, Density, Race, UniformLattice
 
 L = 240
 UNIT = 0.05

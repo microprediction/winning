@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import List, Sequence
 
@@ -112,7 +113,9 @@ class StatePricer:
     def prices_from_dividends(dividends: Sequence[float], nan_value: float = 2000.0) -> np.ndarray:
         inv = []
         for x in dividends:
-            v = nan_value if (x is None or (isinstance(x, float) and np.isnan(x))) else x
+            # np.floating too: float16/float32 NaNs are not Python floats (#843)
+            missing = x is None or (isinstance(x, (float, np.floating)) and math.isnan(x))
+            v = nan_value if missing else x
             inv.append(0.0 if v <= 0 else 1.0 / float(v))
         p = np.array(inv, dtype=float)
         S = p.sum()

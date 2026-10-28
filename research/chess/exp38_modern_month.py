@@ -201,14 +201,14 @@ from winning.ratings.factor_ratings import fit_design_ratings as linear_ability_
 
 
 def _load_glicko():
-    """Glicko-2 lives in src/winning/, a separate source tree from the
+    """Glicko-2 lives in attic/src/winning/, a separate source tree from the
     installed package, so `import winning.glicko2` does not work. It is
     loaded by path. (A previous edit "simplified" this to a direct
     import; the shim is load-bearing.)"""
     here = os.path.dirname(os.path.abspath(__file__))
     repo = os.path.dirname(os.path.dirname(here))
-    roots = [os.path.join(repo, "src", "winning"),
-             os.path.expanduser("~/github/winning/src/winning")]
+    roots = [os.path.join(repo, "attic", "src", "winning"),
+             os.path.expanduser("~/github/winning/attic/src/winning")]
     root = next((r for r in roots if os.path.isdir(r)), None)
     if root is None:
         raise ImportError(f"glicko2 source tree not found in {roots}")

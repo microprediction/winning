@@ -26,9 +26,17 @@ from .core import (  # noqa: F401
     abilities_from_win_probabilities,
     factor_model_contrast,
     factor_model_projected,
+    fit_tree,
     hermite_nodes,
     jacobian_vector_product,
     qmc_nodes,
     win_probabilities_factor,
 )
+from .missing import fit_factor_model_missing  # noqa: F401
 from .permutations import ordered_probabilities, plackett_luce_prefix_logprob  # noqa: F401
+from .posteriors import (  # noqa: F401
+    crn_posterior,
+    crn_posterior_replicates,
+    feature_bandit_posterior,
+    update_contrast,
+)

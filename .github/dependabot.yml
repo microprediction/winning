@@ -1,0 +1,75 @@
+# Dependabot version updates. One weekly pull request per ecosystem at
+# most (updates are grouped), so it cannot flood the repository.
+#
+# A seven-day cooldown means no release is proposed until it has been
+# public for a week, which keeps a freshly compromised release out.
+#
+# github-actions keeps the commit-SHA pins in .github/workflows current:
+# Dependabot bumps the SHA and the trailing version comment together.
+#
+# R packages (r/*/DESCRIPTION) are not covered: Dependabot has no R
+# ecosystem.
+
+version: 2
+
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: ci
+    groups:
+      github-actions:
+        patterns: ["*"]
+
+  # setup.py (winning), python/fastmvn and rust/fastrace (maturin) pyproject
+  - package-ecosystem: pip
+    directories:
+      - /
+      - /python/fastmvn
+      - /rust/fastrace
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+    groups:
+      python:
+        patterns: ["*"]
+
+  # rust/ is one Cargo workspace with one Cargo.lock, so an update is
+  # proposed against the whole build: the core crate and the fastrace
+  # bindings cannot be moved to versions the other side does not accept
+  - package-ecosystem: cargo
+    directory: /rust
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+    groups:
+      cargo:
+        patterns: ["*"]
+
+  - package-ecosystem: julia
+    directories:
+      - /julia/winning
+      - /julia/MultinomialProbit
+      - /julia/FactorMvNormalCDF
+      - /julia/GMRFExtremes
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+    groups:
+      julia:
+        patterns: ["*"]

@@ -1,66 +1,130 @@
 // Polish a race onto linear constraints -- port of winning/factor/polish.py
 // (augmented Lagrangian with a compact BFGS inner solver standing in for
 // SLSQP; agrees with the reference optimum to optimizer tolerance).
-import { mean } from "./core.mjs";
-import { raceProbabilities, abilitiesFromRace, BASES } from "./races.mjs";
-import { blockRaceJacobian, nestedRaceJacobian, treeRaceJacobian } from "./blocks.mjs";
+import { mean, checkOpts, OPT_HINTS, asLoadings, gaugeCenter, asAbilities,
+         asIdio, isVector } from "./core.mjs";
+import { raceProbabilities, abilitiesFromRace, BASES, SPANS,
+         forwardGrid, factorRule, requireWholeRule, asWindow, asDelta,
+         collapseStructure, translatedHome } from "./races.mjs";
+import { blockRaceJacobian, nestedRaceJacobian, treeRaceJacobian, treeCluster,
+         pairFactor } from "./blocks.mjs";
 
 export function raceJacobian(mu, opts = {}) {
-  const { V = null, D = null, base = "normal", points = 501, structure = null,
-          qa = 9, qf = 15 } = opts;
-  if (structure) {
-    const s = structure;
-    if (s.kind === "Independent") return raceJacobian(mu, { D: s.D, base, points });
-    if (s.kind === "Factor") return raceJacobian(mu, { V: s.V, D: s.D, base, points });
+  checkOpts(opts, RACE_JACOBIAN_OPTS, "raceJacobian", OPT_HINTS);
+  const { V = null, D = null, F = null, W = null, base = "normal",
+          points = 501, structure = null, qa = 9, qf = 15,
+          window: win = "bulk", delta = 1e-12 } = opts;
+  // the forward's lattice controls, validated as the forward validates
+  // them: they were refused as unknown options, so the browser could
+  // price a race on a chosen window or tail budget and only
+  // differentiate the default one (#821, python's race_jacobian)
+  asWindow(win, "raceJacobian");
+  asDelta(delta, "raceJacobian");
+  const c = collapseStructure(structure, V, D, F, W, "raceJacobian");
+  if (c.structure) {
+    const s = c.structure;
+    // the hierarchical kernels are Gaussian hard races: the forward and the
+    // inverse refuse another base, and this silently returned the normal
+    // Jacobian for base "logistic" -- the derivative of a model the caller
+    // did not ask for (#89)
+    // and window/delta likewise, as the forward refuses them (#821)
+    const bad = [];
+    if (base !== "normal") bad.push("base");
+    if (win !== "bulk") bad.push("window");
+    if (delta !== 1e-12) bad.push("delta");
+    if (bad.length)
+      throw new Error(`${s.kind} races do not support ${bad.join(", ")}: the ` +
+        "block/nested/tree kernels are Gaussian hard races on their own " +
+        "lattice windows. Use structure Factor (or V/D).");
+    if (isVector(mu) && mu.length === 2) {
+      // the forward prices a pair as its factor equivalent (#86)
+      const f = pairFactor(mu, s);
+      return raceJacobian(mu, { V: f.V, D: f.D, points });
+    }
     if (s.kind === "Blocks")
       return blockRaceJacobian(mu, s.cluster, s.loading, s.D, { points, qa });
     if (s.kind === "Nested")
       return nestedRaceJacobian(mu, s.cluster, s.loading, s.D,
         { coupling: s.coupling, gamma: s.gamma, points, qa, qf });
     if (s.kind === "Tree")
-      return treeRaceJacobian(mu, s.cluster, s.loading, s.D, s.parent, s.strength,
+      return treeRaceJacobian(mu, treeCluster(s), s.loading, s.D, s.parent, s.strength,
         { points, qa });
     throw new Error("race_jacobian: unknown structure");
   }
+  // the same doors as the forward: a scalar D threw `D.map is not a
+  // function` here while raceProbabilities broadcast it (#254), and a
+  // typed mu broke the default loadings (#334)
+  mu = asAbilities(mu);
   const n = mu.length;
-  const Dv = D || new Array(n).fill(1);
-  const Vv = V || mu.map(() => [0]);
-  return raceJacobianExplicit(mu, Vv, Dv, base, points);
+  if (base === "normal" && n === 2) {
+    // the forward prices a normal pair in closed form, so its Jacobian is
+    // the closed form's: the lattice quotient rule differentiated a map
+    // the forward does not use (python's race_jacobian, #86)
+    const d = -raceProbabilities(mu, { V: c.V, D: c.D, F, W, base, points,
+                                       window: win, delta,
+                                       returnSlopes: true }).slopes[0];
+    return [[-d, d], [d, -d]];
+  }
+  const Dv = asIdio(c.D, n);
+  mu = translatedHome(mu, Dv);                     // as the forward (#477)
+  return raceJacobianExplicit(mu, c.V, Dv, base, points, F, W, win, delta);
 }
 
-import { hermiteNodes } from "./core.mjs";
-function raceJacobianExplicit(mu, V, D, base, points) {
+/* Each exported call declares its own option keys; see checkOpts in
+   core.mjs for why an options object needs this at all. */
+const RACE_JACOBIAN_OPTS = new Set(["V", "D", "F", "W", "base", "points", "qa", "qf", "structure", "window", "delta"]);
+const POLISH_RACE_OPTS = new Set(["V", "D", "F", "W", "base", "points", "structure", "A", "b", "groups", "nameCaps", "p0", "mu0", "fdFallback"]);
+
+/* F0/W0: a caller-supplied factor law. raceProbabilities has always
+   accepted one, and this always built its own standard-normal Hermite
+   rule instead, so the browser could PRICE a discrete or otherwise
+   non-Gaussian factor and could not differentiate or polish it -- the
+   returned Jacobian was the derivative of a different model (#209).
+   Used verbatim, exactly as the forward's setup() uses them. */
+function raceJacobianExplicit(mu, V, D, base, points, F0 = null, W0 = null,
+                              win = "bulk", delta = 1e-12) {
   const n = mu.length;
   const sd = D.map(Math.sqrt);
-  let F = [[0]], W = [1];
-  const hasV = V.some(row => row.some(v => v !== 0));
-  if (hasV) {
-    let sharp = 0;
-    for (let i = 0; i < n; i++) {
-      const nv = Math.sqrt(V[i].reduce((a, b) => a + b * b, 0));
-      sharp = Math.max(sharp, nv / Math.sqrt(Math.max(D[i], 1e-300)));
-    }
-    const r = V[0].length;
-    const cap = r === 1 ? 201 : r === 2 ? 41 : 15;
-    const Q = Math.min(Math.max(Math.ceil(8 * sharp), 15), cap);
-    ({ F, W } = hermiteNodes(r, Q));
-  }
+  // The independent default is the EMPTY node (no coordinates), not the
+  // rank-one node [[0]]: with an (n, 0) loading matrix the conditional
+  // mean below read V[i][0] * F[q][0] = undefined * 0 = NaN, so the
+  // rank-zero Jacobian was all NaN and polishRace died on it, while the
+  // rank-zero forward was already the independent race (#68). A zero
+  // rank-one column gives the same answer either way.
+  let F = [[]], W = [1];
+  requireWholeRule(F0, W0, "raceJacobian");                     // #290
+  V = asLoadings(V, n) || Array.from({ length: n }, () => [0]);   // #232
+  // Gauge-fix before anything reads the loadings, exactly as the
+  // forward path does: a common column cannot move an argmin, so it
+  // must not move the Jacobian either. Uncentered, adding 1 to every
+  // loading moved an entry by 0.0199 (#303).
+  V = gaugeCenter(V);
+  // The SAME factor rule the forward integrates over, from the one
+  // function that chooses it: this used to re-derive only the Hermite
+  // branch, so a sharp rank-one field was priced on a midpoint-quantile
+  // rule and differentiated on a Hermite one, 0.058 apart (#325). A
+  // caller's F/W is validated and used verbatim, as setup() uses it
+  // (#209, #290).
+  ({ F, W } = factorRule(V, D, F0, W0));
   const fn = typeof base === "function" ? base : BASES[base];
-  const spans = { normal: [8, 8], gumbel: [22, 8] };
-  const [left, right] = spans[base] || [12, 12];
+  if (typeof fn !== "function")
+    throw new Error(`unknown base ${JSON.stringify(base)}`);
+  const [left, right] = typeof base === "function" ? [12, 12] : (SPANS[base] || [12, 12]);
   const Mall = F.map(fq => mu.map((m, i) => {
     let s = m;
     for (let r = 0; r < fq.length; r++) s += V[i][r] * fq[r];
     return s;
   }));
-  let mn = Infinity, mx = -Infinity;
-  for (const row of Mall) for (const v of row) { mn = Math.min(mn, v); mx = Math.max(mx, v); }
-  const smax = Math.max(...sd);
-  const P = points;
-  const x = new Array(P);
-  const lo = mn - left * smax, hi = mx + right * smax;
-  for (let t = 0; t < P; t++) x[t] = lo + t * (hi - lo) / (P - 1);
-  const dx = x[1] - x[0];
+  // The SAME lattice raceProbabilities integrates on. This built its own
+  // -- a plain span window, no adaptive placement, no refinement -- so
+  // it differentiated a different grid than the forward computed on, and
+  // the two parted company exactly where the lattice is coarse relative
+  // to the field: on a four-runner race whose variances span 4005x, at
+  // 257 points, the analytic jacobian was 1.0e-3 from finite differences
+  // of its own forward. Sharing the grid brings that to 1.5e-5 (#212).
+  const { x, dx } = forwardGrid(Mall, sd, { V, fn, left, right },
+                                points, win, delta);
+  const P = x.length;
   const J = Array.from({ length: n }, () => new Array(n).fill(0));
   for (let q = 0; q < F.length; q++) {
     const Mq = Mall[q], wq = W[q];
@@ -102,20 +166,74 @@ function raceJacobianExplicit(mu, V, D, base, points) {
   return J;
 }
 
-export function concentrationMatrix(n, { nameCaps = null, groups = null } = {}) {
+/* These inputs are portfolio limits: name caps, sector caps. A typo that
+   DROPS a constraint returns an ordinary-looking result that is simply
+   under-constrained, which is worse than an error. Every malformed shape
+   below used to do exactly that (#247):
+
+     nameCaps of length n-1   the last name was left uncapped, and an 80%
+                              position came back with maxViolation 0
+     nameCaps of length n+1   silently truncated to n
+     a group index of n       wrote past the row; the optimiser returned
+                              NaN for every runner and called it feasible
+     a negative group index   javascript stores it as a non-element
+                              property, so the member was silently
+                              ignored -- python would select the last name
+   Python documents name_caps as "scalar or length-n" and broadcasts,
+   which rejects either wrong length. A non-finite ENTRY is a documented
+   feature there -- "NaN/None entries skipped", meaning no cap for that
+   name -- so it stays one here. Negative group indices are refused in
+   both ports rather than silently meaning different things: python's
+   numpy indexing made -1 the LAST name while javascript dropped the
+   member entirely, and neither is documented. */
+const CONCENTRATION_MATRIX_OPTS = new Set(["nameCaps", "groups"]);
+export function concentrationMatrix(n, opts = {}) {
+  // an inline-destructured signature skipped checkOpts: {namecaps: ...}
+  // returned an EMPTY constraint set (#561)
+  checkOpts(opts, CONCENTRATION_MATRIX_OPTS, "concentrationMatrix", OPT_HINTS);
+  const { nameCaps = null, groups = null } = opts;
   const A = [], b = [];
   if (nameCaps != null) {
-    const caps = Array.isArray(nameCaps) ? nameCaps : new Array(n).fill(nameCaps);
+    let caps;
+    if (isVector(nameCaps)) {
+      // a Float64Array of caps fell into the SCALAR branch, was copied
+      // into every slot as an object, failed Number.isFinite, and so
+      // every cap was "no cap": polishRace returned the unconstrained
+      // race with an empty active set (#334)
+      if (nameCaps.length !== n)
+        throw new Error(
+          `nameCaps must be a scalar or have one entry per contestant; ` +
+          `got ${nameCaps.length} for ${n}`);
+      caps = Array.from(nameCaps);
+    } else if (typeof nameCaps === "number") {
+      caps = new Array(n).fill(nameCaps);
+    } else {
+      throw new Error(`nameCaps must be a number or an array; got ${typeof nameCaps}`);
+    }
     for (let i = 0; i < n; i++) {
-      if (Number.isFinite(caps[i])) {
-        const r = new Array(n).fill(0); r[i] = 1;
-        A.push(r); b.push(caps[i]);
-      }
+      // A non-finite entry means NO cap for that name. That is python's
+      // documented behaviour -- "NaN/None entries skipped" -- so it stays
+      // a feature here, not an error; only the LENGTH was ever wrong.
+      if (!Number.isFinite(caps[i])) continue;
+      const r = new Array(n).fill(0); r[i] = 1;
+      A.push(r); b.push(caps[i]);
     }
   }
-  if (groups) for (const [idx, cap] of groups) {
+  if (groups) for (const [idx0, cap] of groups) {
+    const idx = isVector(idx0) ? Array.from(idx0) : idx0;
+    if (!Array.isArray(idx))
+      throw new Error("each group is [indices, cap]; indices must be an array");
+    if (!Number.isFinite(cap))
+      throw new Error(`group cap for [${idx}] is not a finite number`);
     const r = new Array(n).fill(0);
-    for (const i of idx) r[i] = 1;
+    for (const i of idx) {
+      if (!Number.isInteger(i) || i < 0 || i >= n)
+        throw new Error(
+          `group index ${i} is not an integer in [0, ${n}); a negative ` +
+          "index is silently dropped by javascript rather than counting " +
+          "from the end");
+      r[i] = 1;
+    }
     A.push(r); b.push(cap);
   }
   return { A, b };
@@ -159,30 +277,184 @@ function bfgsMin(x0, obj, grad, maxit = 80) {
 }
 
 export function polishRace(opts = {}) {
-  const { p0 = null, mu0: mu0In = null, V = null, D = null, base = "normal",
-          points = 257, nameCaps = null, groups = null, A = null, b = null,
+  checkOpts(opts, POLISH_RACE_OPTS, "polishRace", OPT_HINTS);
+  const { p0 = null, mu0: mu0In = null, V = null, D = null, F = null,
+          W = null, base = "normal",
+          points = 257, nameCaps = null, groups = null,
           structure = null, fdFallback = true } = opts;
-  const forward = m => raceProbabilities(m, { V, D, base, points, structure });
-  const jac = m => raceJacobian(m, { V, D, base, points, structure });
-  let mu0 = mu0In;
+  let { A = null, b = null } = opts;
+  // F/W must reach the forward, the jacobian AND the inverse that makes
+  // mu0. Polishing under a different factor law than the one the caller
+  // priced with silently optimises the wrong model (#209).
+  const fwdM = m => raceProbabilities(m, { V, D, F, W, base, points, structure });
+  const jacM = m => raceJacobian(m, { V, D, F, W, base, points, structure });
+  let mu0 = mu0In != null ? asAbilities(mu0In, "mu0") : null;
+  // A p0 call is only as good as its inversion: a failed one is not the
+  // caller's race, and certifying the polish of it converged was a false
+  // certificate (#805). Its verdict is carried to info.converged.
+  let invConverged = true;
   if (!mu0) {
     if (!p0) throw new Error("give p0 or mu0");
-    mu0 = abilitiesFromRace(p0, { V, D, base, points, structure });
+    const inv = abilitiesFromRace(p0, { V, D, F, W, base, points, structure,
+                                        returnInfo: true });
+    mu0 = inv.mu;
+    invConverged = inv.converged;
+    if (!invConverged && typeof console !== "undefined")
+      console.warn(
+        "polishRace: abilitiesFromRace did not converge on p0: max |log " +
+        `residual| ${inv.maxLogResidual.toExponential(2)} after ` +
+        `${inv.iterations} iterations; the polished race starts from a ` +
+        "race that is not p0, so info.converged is false. Raise points= " +
+        "or pass mu0.");
   }
   const m0m = mean(mu0);
   mu0 = mu0.map(v => v - m0m);
   const n = mu0.length;
   const cm = concentrationMatrix(n, { nameCaps, groups });
   let A0 = cm.A, b0 = cm.b;
-  if (A) { A0 = A0.concat(A); b0 = b0.concat(b); }
-  if (!b0.length) return { p: forward(mu0), mu: mu0, info: { active: [] } };
+  if (A) {
+    // An explicit A/b pair is consumed row by row against mu of length
+    // n; a row of the wrong width contributes nothing and the constraint
+    // disappears in silence (#247).
+    if (!isVector(A) || !isVector(b))
+      throw new Error("A and b must both be arrays");
+    A = Array.from(A, row => (isVector(row) ? Array.from(row) : row));
+    b = Array.from(b);
+    if (A.length !== b.length)
+      throw new Error(
+        `A has ${A.length} rows and b has ${b.length} entries`);
+    A.forEach((row, k) => {
+      if (!Array.isArray(row) || row.length !== n)
+        throw new Error(
+          `A[${k}] must have one coefficient per contestant; got ` +
+          `${Array.isArray(row) ? row.length : typeof row} for ${n}`);
+      if (!row.every(Number.isFinite))
+        throw new Error(`A[${k}] has a non-finite coefficient`);
+      if (!Number.isFinite(b[k]))
+        throw new Error(`b[${k}] is not a finite number`);
+    });
+    // Each row in its own units: p0 + p1 <= 0.9 and 1e-8 p0 + 1e-8 p1 <=
+    // 9e-9 are the same constraint, but every penalty and every feasibility
+    // and activity threshold below is absolute, so the scaled spelling
+    // passed a 10-point violation as feasible and returned the original
+    // race certified converged (#653). Divide each nonzero row and its
+    // bound by max |coefficient|; a zero row is left as written.
+    A.forEach((row, k) => {
+      const s = Math.max(...row.map(Math.abs));
+      if (s > 0 && s !== 1) { A[k] = row.map(v => v / s); b[k] = b[k] / s; }
+    });
+    A0 = A0.concat(A); b0 = b0.concat(b);
+  }
+  // no constraint left: the warm start is the answer, with the same
+  // diagnostics a constrained solve reports (python's "unconstrained"
+  // branch); omitting them made info.converged undefined (#763)
+  if (!b0.length) return { p: fwdM(mu0), mu: mu0,
+                           info: { active: [], maxViolation: 0,
+                                   converged: invConverged, muDistance: 0 } };
+  // Solve in the FIELD'S units. The objective, the penalty schedule and
+  // every stopping tolerance below are absolute numbers, so the same race
+  // written with abilities x c and variances x c^2 polished differently:
+  // c = 1e-8 returned a reversed race certified converged, c = 100 the
+  // original violating race (#593). The unit is 1 / median_i |J_ii| / p_i
+  // at mu0 -- degree -1 in the ability scale, so u = mu / unit is exactly
+  // equivariant -- and close to 1 for a unit-variance field.
+  // Restore feasibility BEFORE optimising, as python does (#104). From a
+  // saturated race, p = [1, 6e-16], the constraint gradient A J vanishes
+  // and the unit below came from the favourite alone (2.8e14): the
+  // optimiser then walked to the opposite deterministic winner, 4.2e7
+  // ability units away, and certified it converged (#683). Shrinking
+  // toward the uniform race, mu -> t mu0, moves every share toward 1/n;
+  // the largest feasible t on that ray is found by bisection and is a
+  // start where the gradients are alive (for a capped pair it is already
+  // the answer). Scale-free in both mu and the rows, so #593 and #653
+  // still hold.
+  const feasibleAt = m => {
+    const pm = fwdM(m);
+    return A0.every((row, k) => row.reduce((a, v, j) => a + v * pm[j], 0) <= b0[k]);
+  };
+  let startM = mu0;
+  if (!feasibleAt(mu0) && feasibleAt(mu0.map(() => 0))) {
+    let lo = 0, hi = 1;
+    for (let it = 0; it < 40; it++) {
+      const mid = 0.5 * (lo + hi);
+      if (feasibleAt(mu0.map(v => mid * v))) lo = mid; else hi = mid;
+    }
+    startM = mu0.map(v => lo * v);
+  }
+  const unit = (() => {
+    // read at the START: at a saturated mu0 the informative longshot rows
+    // fall below the 1e-12 floor and only the flat favourite is left
+    const pM = fwdM(startM), JM = jacM(startM);
+    const r = [];
+    for (let i = 0; i < n; i++)
+      if (pM[i] > 1e-12 && Number.isFinite(JM[i][i]) && JM[i][i] !== 0)
+        r.push(Math.abs(JM[i][i]) / pM[i]);
+    if (!r.length) return 1;
+    r.sort((a, b) => a - b);
+    const h = Math.floor(r.length / 2);
+    const med = r.length % 2 ? r[h] : 0.5 * (r[h - 1] + r[h]);
+    return Number.isFinite(1 / med) && med > 0 ? 1 / med : 1;
+  })();
+  const forward = u => fwdM(u.map(v => v * unit));
+  const jac = u => jacM(u.map(v => v * unit)).map(row => row.map(v => v * unit));
+  const mu0M = mu0;
+  mu0 = mu0M.map(v => v / unit);
+  const start = startM.map(v => v / unit);
+  // The penalty is bounded -- shares live in [0, 1] -- so from a restored
+  // start a rho of 10 made the saturated mu0 itself the cheaper point and
+  // the first line search jumped straight back to it. Start rho where
+  // every point with at least half mu0's violation costs more than the
+  // restored start: the iterates then stay in the live region.
+  const rho0 = (() => {
+    if (startM === mu0M) return 10;
+    const p = fwdM(mu0M);
+    const v0 = Math.max(...A0.map((row, k) =>
+      row.reduce((a, v, j) => a + v * p[j], 0) - b0[k]));
+    const d2 = start.reduce((a, v, j) => a + (v - mu0[j]) ** 2, 0);
+    return v0 > 0 ? Math.min(Math.max(10, 4 * d2 / (v0 * v0)), 1e6) : 10;
+  })();
   const applyA = p => A0.map(row => row.reduce((a, v, j) => a + v * p[j], 0));
 
+  const jacOf = (mc, useFD) => {
+    if (!useFD) return jac(mc);
+    const h = 1e-6;
+    let Jm = [];
+    for (let j = 0; j < n; j++) {
+      const e = new Array(n).fill(0); e[j] = h;
+      const pp = forward(mc.map((v, i) => v + e[i]));
+      const pm = forward(mc.map((v, i) => v - e[i]));
+      Jm.push(pp.map((v, i) => (v - pm[i]) / (2 * h)));
+    }
+    // Jm is [j][i]; transpose to [i][j]
+    return Jm[0].map((_, i) => Jm.map(col => col[i]));
+  };
+  // gauge-projected gradient of 0.5|m - mu0|^2 + sum_k psi_k (A p(m) - b)_k:
+  // the augmented-Lagrangian gradient while solving, and the KKT
+  // stationarity residual when psi is the multiplier estimate
+  const lagrangianGrad = (mc, psi, useFD) => {
+    const g = mc.map((v, j) => v - mu0[j]);
+    if (psi.some(v => v !== 0)) {
+      const Jm = jacOf(mc, useFD);
+      for (let k = 0; k < b0.length; k++) {
+        if (psi[k] === 0) continue;
+        for (let j = 0; j < n; j++) {
+          let aj = 0;
+          for (let i = 0; i < n; i++) aj += A0[k][i] * Jm[i][j];
+          g[j] += psi[k] * aj;
+        }
+      }
+    }
+    const gm = mean(g);
+    return g.map(v => v - gm);
+  };
+
+  let converged = false;
   const solveAL = useFD => {
     let lam = new Array(b0.length).fill(0);
-    let rho = 10;
-    let m = mu0.slice();
-    for (let outer = 0; outer < 12; outer++) {
+    let rho = rho0;
+    let m = start.slice();
+    converged = false;
+    for (let outer = 0; outer < 40; outer++) {
       const obj = mm => {
         const mc = mm.map(v => v - mean(mm));
         const c = applyA(forward(mc)).map((v, k) => b0[k] - v);
@@ -194,52 +466,65 @@ export function polishRace(opts = {}) {
         const mc = mm.map(v => v - mean(mm));
         const c = applyA(forward(mc)).map((v, k) => b0[k] - v);
         const psi = c.map((v, k) => Math.max(0, lam[k] - rho * v));
-        let Jm;
-        if (useFD) {
-          const h = 1e-6;
-          Jm = [];
-          for (let j = 0; j < n; j++) {
-            const e = new Array(n).fill(0); e[j] = h;
-            const pp = forward(mc.map((v, i) => v + e[i]));
-            const pm = forward(mc.map((v, i) => v - e[i]));
-            Jm.push(pp.map((v, i) => (v - pm[i]) / (2 * h)));
-          }
-          // Jm is [j][i]; transpose to [i][j]
-          Jm = Jm[0].map((_, i) => Jm.map(col => col[i]));
-        } else {
-          Jm = jac(mc);
-        }
-        const g = mc.map((v, j) => v - mu0[j]);
-        for (let k = 0; k < b0.length; k++) {
-          if (psi[k] === 0) continue;
-          for (let j = 0; j < n; j++) {
-            let aj = 0;
-            for (let i = 0; i < n; i++) aj += A0[k][i] * Jm[i][j];
-            g[j] += psi[k] * aj;
-          }
-        }
-        const gm = mean(g);
-        return g.map(v => v - gm);
+        return lagrangianGrad(mc, psi, useFD);
       };
       m = bfgsMin(m, obj, grad, 80);
       m = m.map(v => v - mean(m));
       const c = applyA(forward(m)).map((v, k) => b0[k] - v);
-      lam = c.map((v, k) => Math.max(0, lam[k] - rho * v));
-      if (Math.max(0, -Math.min(...c)) < 1e-8 && outer > 0) break;
-      rho = Math.min(rho * 3, 1e6);
+      const lamN = c.map((v, k) => Math.max(0, lam[k] - rho * v));
+      const viol = Math.max(0, -Math.min(...c));
+      const dLam = Math.max(...lamN.map((v, k) => Math.abs(v - lam[k])));
+      const lamMax = Math.max(1, ...lamN);
+      lam = lamN;
+      // Stop on a KKT point, not on feasibility alone. A multiplier
+      // carried over from an infeasible iterate can push the subproblem
+      // PAST the boundary; that overshot point is feasible, and breaking
+      // there returned a race 8.9% farther from mu0 than the nearest
+      // feasible one, with an empty active set (#379). The multiplier
+      // update lam <- max(0, lam - rho c) is a fixed point exactly when
+      // complementarity holds (lam = 0 on a slack row, c = 0 on a
+      // binding one), so feasibility plus a settled multiplier is the
+      // test. rho grows only while the iterate is still infeasible.
+      if (outer > 0 && viol < 1e-8 && dLam <= 1e-7 * lamMax) { converged = true; break; }
+      // ...or certify the point DIRECTLY. Once infeasible iterates have
+      // driven rho to 1e6, a harmless 3e-9 slack on a binding row moves
+      // the multiplier by 3e-3 per outer step, so the fixed-point test
+      // could never pass at a solved point: a third to a half of
+      // ordinary capped races reported converged: false and paid for a
+      // redundant finite-difference re-solve (2-2.6x, #547). Feasible,
+      // lamN >= 0 by construction, complementarity (lamN_k = 0 unless
+      // row k is within 1e-8 of binding, as the update forces), and a
+      // stationary Lagrangian at lamN is the KKT certificate. The #379
+      // overshoot fails it: every row is slack there, so lamN = 0 and the
+      // residual is the whole distance m - mu0.
+      if (viol < 1e-8) {
+        const comp = Math.max(0, ...lamN.map((v, k) => (v > 0 ? v * Math.max(c[k], 0) : 0)));
+        const r = lagrangianGrad(m, lamN, useFD);
+        // relative to the problem's own size, not floored at 1: a residual
+        // of 1e-7 in coordinates whose whole displacement is 1e-7 is not
+        // stationary (#683)
+        const scale = Math.max(...mu0.map(Math.abs), ...m.map(Math.abs),
+                               ...m.map((v, j) => Math.abs(v - mu0[j])), ...lamN) || 1;
+        if (comp <= 1e-7 * scale && Math.max(...r.map(Math.abs)) <= 1e-6 * scale) {
+          converged = true; break;
+        }
+      }
+      if (viol >= 1e-8) rho = Math.min(rho * 3, 1e6);
     }
     return m;
   };
   let m = solveAL(false);
   let p = forward(m);
   let slack = applyA(p).map((v, k) => b0[k] - v);
-  if (fdFallback && -Math.min(...slack) > 1e-6) {
+  if (fdFallback && (-Math.min(...slack) > 1e-6 || !converged)) {
     m = solveAL(true);
     p = forward(m);
     slack = applyA(p).map((v, k) => b0[k] - v);
   }
-  return { p, mu: m,
+  const mOut = m.map(v => v * unit);
+  return { p, mu: mOut,
            info: { active: slack.map((v, k) => [v, k]).filter(([v]) => v < 1e-6).map(([, k]) => k),
                    maxViolation: Math.max(0, -Math.min(...slack)),
-                   muDistance: Math.sqrt(m.reduce((a, v, j) => a + (v - mu0[j]) ** 2, 0)) } };
+                   converged: converged && invConverged,
+                   muDistance: Math.sqrt(mOut.reduce((a, v, j) => a + (v - mu0M[j]) ** 2, 0)) } };
 }

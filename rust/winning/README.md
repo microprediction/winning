@@ -16,7 +16,7 @@ noise covariance described by any of the race grammars:
   (two message passes)
 - **classic**: the original state-price lattice calibration of
   Cotton (2021), *SIAM J. Financial Math.*, dead heats handled exactly —
-  `classic_state_prices`, `classic_calibrate`
+  `classic_exact_state_prices`, `classic_exact_calibrate`
 - **GHK** all-shares for benchmark comparisons
 
 Parallel over factor nodes (rayon), log-domain throughout, x-tiled for

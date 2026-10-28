@@ -184,3 +184,51 @@ def test_hopeless_runners_do_not_degrade_lattice_accuracy():
     exact_ratio = norm.cdf((mu[1] - mu[0]) / np.sqrt(D.sum() + (v[0] - v[1]) ** 2))
     pair = p[0] / (p[0] + p[1])
     assert abs(pair - exact_ratio) < 5e-4
+
+
+def test_window_search_stops_at_adjacent_floats_and_skips_the_density():
+    """#112: the bisections ran a fixed 80 steps each although the bracket
+    reaches adjacent floats in ~55, and the normal base evaluated its
+    density and slope on every step only to discard them. That fixed
+    Python cost (162 base evaluations per call, independent of n) was most
+    of a small-field race. The window must be bitwise unchanged."""
+    import numpy as np
+    import winning.factor.races as races
+    rng = np.random.default_rng(0)
+    for n in (2, 5, 40, 500):
+        M = rng.normal(size=(3, n)) * rng.uniform(0.1, 3.0)
+        sd = np.sqrt(rng.uniform(0.2, 2.0, n))
+        calls = [0]
+
+        def counted(z):                     # the generic (non-identity) path
+            calls[0] += 1
+            return races._normal(z)
+        generic = races._bulk_window(M, sd, 257, 1e-12, counted)
+        fast = races._bulk_window(M, sd, 257, 1e-12, races._normal)
+        assert np.array_equal(generic, fast)
+        assert calls[0] < 130, calls[0]     # was 162 at every n
+
+
+def test_normal_envelope_in_place_chain_is_bitwise_the_generic_one(
+        monkeypatch):
+    """#112: the normal envelope is now one in-place ufunc chain on
+    (m - x) / s, against ndtr(-((x - m) / s)) before. IEEE subtraction
+    and division are sign-symmetric, so the window must not move a bit --
+    including on ties, exact zeros, and tiny or huge scales. (The
+    rare-winner edge check runs for the normal base only, so it is held
+    off here to compare the bisected windows themselves.)"""
+    import winning.factor.races as races
+    monkeypatch.setattr(races, "_rare_winner_edges",
+                        lambda mu_lo, mu_hi, s, lo, hi, points: (lo, hi, points))
+    rng = np.random.default_rng(112)
+    for k in range(60):
+        n = int(rng.integers(2, 120))
+        scale = float(rng.choice([1e-6, 1.0, 1e3, 1e8]))
+        M = rng.normal(size=(int(rng.choice([1, 3])), n)) * 4.0 * scale
+        if k % 3 == 0:
+            M = np.round(M / scale) * scale       # ties and exact zeros
+        sd = np.exp(rng.normal(size=n) * 0.7) * scale
+        generic = races._bulk_window(M, sd, 257, 1e-12,
+                                     lambda z: races._normal(z))
+        fast = races._bulk_window(M, sd, 257, 1e-12, races._normal)
+        assert generic.tobytes() == fast.tobytes()

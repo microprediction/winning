@@ -10,31 +10,53 @@ data and a formula for alternative-specific covariates, as used by the
 \pkg{mlogit} package.
 }
 \usage{
-mlogit_fast(formula, data, r = 2L, Qf = 7L, Qz = 7L, maxit = 400L)
+mlogit_fast(formula, data, r = NULL, Qf = 7L, Qz = NULL, maxit = 400L)
 }
 \arguments{
   \item{formula}{choice ~ covariates, with the response a logical
     chosen-alternative column and alternative-specific covariates on
-    the right-hand side.}
-  \item{data}{a long-format data set carrying a \code{dfidx}-style
-    index (chooser, alternative), e.g. as produced by
-    \code{dfidx::dfidx}.}
+    the right-hand side. The right-hand side is an ordinary model
+    formula (transformations such as \code{log(x)} or \code{I(x^2)},
+    interactions, factor contrasts). Alternative-specific intercepts
+    are added unless the formula removes the intercept with
+    \code{0 +} or \code{- 1}; multi-part (\code{|}) formulas are not
+    supported. \code{offset()} terms are fixed, coefficient-one
+    additions to each row's utility (several are summed) and must be
+    finite.}
+  \item{data}{a long-format data frame, one row per (chooser,
+    alternative), carrying an \code{idx} column or attribute whose
+    first column is the chooser and second the alternative. A plain
+    data frame works (see Examples); the layout is the one the separate
+    \pkg{dfidx} package produces, which this package does not
+    require.}
   \item{r}{factor rank of the utility covariance; the parameterization
     (rank-\code{r} loadings with zero reference loadings, unit
     idiosyncratic variance) spans the same identified space as
     \pkg{mlogit}'s differenced-Cholesky parameterization with the same
-    degrees of freedom.}
+    degrees of freedom at \code{r = J - 2}. Defaults to
+    \code{min(2, J - 2)}; a rank above \code{J - 2} is an error, because
+    with unit idiosyncratic variances the utility scale is then not
+    identified.}
   \item{Qf, Qz}{Gauss-Hermite orders for the factor and winning-margin
-    integrals; a sharpness rule escalates to Halton nodes when the
-    conditional races become nearly deterministic.}
-  \item{maxit}{BFGS iteration cap.}
+    integrals; a sharpness rule escalates to scrambled Sobol nodes when the
+    conditional races become nearly deterministic. \code{Qz = NULL} takes
+    7 below \code{J = 6} and 11 from \code{J = 6}.}
+  \item{maxit}{BFGS iteration cap, a non-negative whole number.}
 }
 \value{
 An object of class \code{mlogit_fast}: a list with
 \code{coefficients} (named covariate effects),
-\code{covariance_par} (loading parameters), \code{logLik},
-\code{time} (seconds), \code{convergence} (0 for success), \code{J}
-and \code{r}. A \code{print} method summarizes the fit.
+\code{covariance_par} (loading parameters, named \code{v[alternative,column]}),
+\code{loadings} (the loading matrix, rows named by alternative),
+\code{alternatives} (the alternative labels in fitted order),
+\code{logLik} (of the raw per-choice quadrature masses that are
+maximized), \code{time} (seconds), \code{convergence} (0 for success; 2,
+with a warning, when the likelihood has no finite maximizer: an
+alternative is never chosen, or the covariates separate the choices),
+\code{separation} (the recession direction, or \code{NULL}),
+\code{mass_defect} (the largest \code{|1 - sum_k P_k|} over the
+observations: how far the raw masses are from summing to one),
+\code{J} and \code{r}. A \code{print} method summarizes the fit.
 }
 \examples{
 set.seed(1)

@@ -39,7 +39,7 @@ import math
 from typing import Dict, List, Sequence
 
 import numpy as np
-from thurstone import Density, Race
+from winning.research import Density, Race
 
 from winning import Glicko2Rating, ThurstoneRating
 from winning.benchmarks.metrics import Metrics

@@ -1,0 +1,3 @@
+main python: GH 151 (truth) -1216.30; plain Sobol 2^10 -1215.42; plain Halton 2^10 -1217.67; symmetrised Halton 2^10 -1213.26
+branch julia: GH 151 (truth) -1216.28; plain Sobol 2^10 -1213.70; plain Halton 2^10 -1216.07; symmetrised Halton 2^10 -1213.31
+branch python: GH 151 (truth) -1212.87; plain Sobol 2^10 -1212.61; plain Halton 2^10 -1219.12; symmetrised Halton 2^10 -1219.23

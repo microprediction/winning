@@ -1,0 +1,11 @@
+# One workspace, one Cargo.lock: the core crate and its Python bindings
+# always resolve a single set of dependency versions, so an update (by
+# hand or by Dependabot) is proposed against the whole build and cannot
+# move one crate's ndarray past what the other's bindings accept.
+[workspace]
+members = ["winning", "fastrace"]
+resolver = "2"
+
+[profile.release]
+lto = true
+codegen-units = 1

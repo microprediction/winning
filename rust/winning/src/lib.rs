@@ -20,6 +20,7 @@
 //!   factor generalization).
 
 pub use ndarray;
+pub mod special;
 use ndarray::{Array1, ArrayView1, ArrayView2};
 use rayon::prelude::*;
 
@@ -41,6 +42,132 @@ pub fn log_ndtr(z: f64) -> f64 {
     }
 }
 
+/// Below this many n * points cells a one-node field stays on one
+/// thread; above it node_runner_par splits it over runners (#112).
+/// Measured on a loaded 28-core machine: the split wins 2x at
+/// n = 500 x 257 points and is a wash at n = 100, where waking the
+/// pool costs what it saves; so it starts at n ~ 255 on 257 points.
+pub const INNER_PAR_WORK: usize = 65_536;
+const RUNNERS_PER_TASK: usize = 8;
+const COLS_PER_TASK: usize = 32;
+/// Scratch cap per array for node_runner_par, in floats (the sequential
+/// body's own n * tile cap).
+const INNER_SCRATCH: usize = 25_000_000;
+
+/// One factor node of forward_kernel / forward_kernel_base, parallel over
+/// RUNNERS instead of nodes, for the one-node (independent) field whose
+/// node-parallel loop ran on a single thread (#112). Bit-for-bit the
+/// sequential node body: every per-(runner, column) term is the same
+/// expression on the same inputs; the shared field is summed over
+/// runners in index order per column, as before; and each runner sums
+/// its own columns tile by tile, in column order, with the same
+/// `acc += w * s * dx` update after each `tile` columns. Only
+/// independent work moves to threads. Many tiles are filled per
+/// parallel phase (up to INNER_SCRATCH floats per array) so a 257-point
+/// lattice costs three fork-joins, not six. `eval(i, z)` gives
+/// (log S, log g, score) for pass 1 (score stored only if `score`);
+/// `slope(i, z, c, v)` the slope increment for pass 2.
+#[allow(clippy::too_many_arguments)]
+fn node_runner_par<E, S>(m: &[f64], wq: f64, sd: &[f64], lo: f64, dx: f64,
+                         points: usize, tile: usize, use_score: bool,
+                         eval: E, slope: S) -> Vec<f64>
+where
+    E: Fn(usize, f64) -> (f64, f64, f64) + Sync,
+    S: Fn(usize, f64, f64, f64) -> f64 + Sync,
+{
+    let n = m.len();
+    // a block is a whole number of tiles
+    let per = (INNER_SCRATCH / n.max(1) / tile).max(1) * tile;
+    let block = per.min(points.div_ceil(tile) * tile);
+    let mut acc = vec![0.0f64; 2 * n];
+    let mut logs = vec![0.0f64; n * block];
+    let mut logg = vec![0.0f64; n * block];
+    let mut score = vec![0.0f64; if use_score { n * block } else { 0 }];
+    let mut field = vec![0.0f64; block];
+    let mut b0 = 0;
+    while b0 < points {
+        let bl = block.min(points - b0);
+        let fill = |i: usize, row_s: &mut [f64], row_g: &mut [f64],
+                    mut row_c: Option<&mut [f64]>| {
+            let inv_sd = 1.0 / sd[i];
+            let mi = m[i];
+            for t in 0..bl {
+                let x = lo + (b0 + t) as f64 * dx;
+                let z = (x - mi) * inv_sd;
+                let (ls, lg, c) = eval(i, z);
+                row_s[t] = ls;
+                row_g[t] = lg;
+                if let Some(rc) = row_c.as_deref_mut() {
+                    rc[t] = c;
+                }
+            }
+        };
+        if use_score {
+            logs.par_chunks_mut(block)
+                .zip(logg.par_chunks_mut(block))
+                .zip(score.par_chunks_mut(block))
+                .enumerate()
+                .with_min_len(RUNNERS_PER_TASK)
+                .for_each(|(i, ((rs, rg), rc))| fill(i, rs, rg, Some(rc)));
+        } else {
+            logs.par_chunks_mut(block)
+                .zip(logg.par_chunks_mut(block))
+                .enumerate()
+                .with_min_len(RUNNERS_PER_TASK)
+                .for_each(|(i, (rs, rg))| fill(i, rs, rg, None));
+        }
+        // the shared field, summed over runners in index order per column
+        let logs_r = &logs;
+        field[..bl]
+            .par_chunks_mut(COLS_PER_TASK)
+            .enumerate()
+            .for_each(|(k, fc)| {
+                let c0 = k * COLS_PER_TASK;
+                fc.fill(0.0);
+                for i in 0..n {
+                    let row = &logs_r[i * block + c0..i * block + c0 + fc.len()];
+                    for (f, &l) in fc.iter_mut().zip(row) {
+                        *f += l;
+                    }
+                }
+            });
+        let (logg_r, score_r, field_r) = (&logg, &score, &field);
+        let (acc_p, acc_s) = acc.split_at_mut(n);
+        acc_p.par_iter_mut()
+            .zip(acc_s.par_iter_mut())
+            .enumerate()
+            .with_min_len(RUNNERS_PER_TASK)
+            .for_each(|(i, (ap, asl))| {
+                let row_s = &logs_r[i * block..i * block + bl];
+                let row_g = &logg_r[i * block..i * block + bl];
+                let inv_sd = 1.0 / sd[i];
+                let mi = m[i];
+                let mut t0 = 0;
+                while t0 < bl {
+                    let tl = tile.min(bl - t0);
+                    let mut s = 0.0f64;
+                    let mut sl = 0.0f64;
+                    for t in t0..t0 + tl {
+                        let e = row_g[t] + field_r[t] - row_s[t];
+                        if e > -745.0 {
+                            let v = e.exp();
+                            s += v;
+                            let x = lo + (b0 + t) as f64 * dx;
+                            let z = (x - mi) * inv_sd;
+                            let c = if use_score { score_r[i * block + t] } else { 0.0 };
+                            sl += slope(i, z, c, v);
+                        }
+                    }
+                    *ap += wq * s * dx;
+                    *asl += wq * sl * dx;
+                    t0 += tl;
+                }
+            });
+        b0 += bl;
+    }
+    acc
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn forward_kernel(
     mu: ArrayView1<f64>,
@@ -51,6 +178,23 @@ pub fn forward_kernel(
     points: usize,
     lo_in: f64,
     hi_in: f64,
+) -> (Array1<f64>, Array1<f64>, f64) {
+    forward_kernel_impl(mu, v, d, f_nodes, w, points, lo_in, hi_in, true)
+}
+
+/// forward_kernel, optionally without the one-node runner split (the
+/// reference the split is tested against bit for bit, #112).
+#[allow(clippy::too_many_arguments)]
+fn forward_kernel_impl(
+    mu: ArrayView1<f64>,
+    v: ArrayView2<f64>,
+    d: ArrayView1<f64>,
+    f_nodes: ArrayView2<f64>,
+    w: ArrayView1<f64>,
+    points: usize,
+    lo_in: f64,
+    hi_in: f64,
+    inner_ok: bool,
 ) -> (Array1<f64>, Array1<f64>, f64) {
     let n = mu.len();
     let q = f_nodes.nrows();
@@ -84,11 +228,24 @@ pub fn forward_kernel(
     // per-task scratch is n * tile floats twice over; cap it so large n
     // does not swap (n = 1e6 with the fixed 256-tile costs 2 GB per task)
     let tile = TILE.min((25_000_000usize / n.max(1)).max(4));
+    // one node (an independent field, rank 0) left every core but one
+    // idle and lost to numpy (#112): split that node over runners instead
+    let inner = inner_ok && q == 1 && n * points >= INNER_PAR_WORK;
     let p: Vec<f64> = (0..q)
         .into_par_iter()
         .map(|qi| {
             let m = &m_all[qi * n..(qi + 1) * n];
             let wq = w[qi];
+            if inner {
+                return node_runner_par(m, wq, &sd, lo, dx, points, tile, false,
+                                       |i, z| {
+                    (log_ndtr(-z), -0.5 * z * z - log_norm[i], 0.0)
+                }, |i, z, _c, v| {
+                    // (x - mi) * inv_sd * inv_sd * v, as before
+                    let inv_sd = 1.0 / sd[i];
+                    z * inv_sd * v
+                });
+            }
             let mut acc = vec![0.0f64; 2 * n];
             let mut logs = vec![0.0f64; n * tile];
             let mut logg = vec![0.0f64; n * tile];
@@ -271,14 +428,23 @@ pub fn cheb_nodes(a: f64, b: f64, r: usize) -> Vec<f64> {
         .collect()
 }
 
+/// Barycentric weights for arbitrary distinct nodes, up to a common
+/// factor (which the second-kind formula in bary_row cancels). Computed
+/// on nodes rescaled to unit half-width: the raw product of 1/(x_j - x_k)
+/// scales as h^-(r-1), so at r = 48 an interval of width 1e-6 overflowed
+/// 34 of 48 weights to +-inf and bary_row then formed inf/inf (#218).
 pub fn bary_weights(nodes: &[f64]) -> Vec<f64> {
     let r = nodes.len();
+    let lo = nodes.iter().cloned().fold(f64::INFINITY, f64::min);
+    let hi = nodes.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let h = 0.5 * (hi - lo);
+    let h = if h > 0.0 && h.is_finite() { h } else { 1.0 };
     (0..r)
         .map(|j| {
             let mut w = 1.0;
             for k in 0..r {
                 if k != j {
-                    w /= nodes[j] - nodes[k];
+                    w *= h / (nodes[j] - nodes[k]);
                 }
             }
             w
@@ -286,11 +452,39 @@ pub fn bary_weights(nodes: &[f64]) -> Vec<f64> {
         .collect()
 }
 
+/// Scale-free closed-form barycentric weights for the r first-kind
+/// Chebyshev roots that cheb_nodes returns, up to a common factor:
+/// w_j = (-1)^j sin((2j+1) pi / (2r)). Independent of the interval, so
+/// no unit of the caller's can overflow them (#218).
+pub fn cheb_bary_weights(r: usize) -> Vec<f64> {
+    (0..r)
+        .map(|j| {
+            let s = ((2 * j + 1) as f64 * std::f64::consts::PI / (2 * r) as f64).sin();
+            if j % 2 == 0 { s } else { -s }
+        })
+        .collect()
+}
+
 /// Barycentric Lagrange interpolation row for query point q.
+///
+/// A node hit is decided RELATIVE to the node span: the old absolute
+/// `|q - x_j| < 1e-14` collapsed distinct locations onto nodes once the
+/// caller's units made the whole interval that small (#218). A
+/// degenerate span (every node equal) puts the row on the first node.
 pub fn bary_row(nodes: &[f64], wts: &[f64], q: f64) -> Vec<f64> {
     let r = nodes.len();
+    let lo = nodes.iter().cloned().fold(f64::INFINITY, f64::min);
+    let hi = nodes.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let span = hi - lo;
+    if !(span > 0.0) {
+        let mut row = vec![0.0; r];
+        row[0] = 1.0;
+        return row;
+    }
+    let tol = 1e-14 * span;
     for j in 0..r {
-        if (q - nodes[j]).abs() < 1e-14 {
+        let gap = (q - nodes[j]).abs();
+        if gap == 0.0 || gap < tol {
             let mut row = vec![0.0; r];
             row[j] = 1.0;
             return row;
@@ -304,6 +498,12 @@ pub fn bary_row(nodes: &[f64], wts: &[f64], q: f64) -> Vec<f64> {
     row
 }
 
+/// Validity tolerances of the separated pass (#601): the reconstructed
+/// log-survival field may exceed 0 only by rounding, and a share may
+/// leave [0, total] only by rounding.
+const SEP_FIELD_TOL: f64 = 1e-6;
+const SEP_SHARE_TOL: f64 = 1e-9;
+
 #[allow(clippy::too_many_arguments)]
 pub fn separated_kernel(
     mu: ArrayView1<f64>,
@@ -315,12 +515,17 @@ pub fn separated_kernel(
     rm: usize,
     rs_req: usize,
 ) -> (Array1<f64>, f64) {
+    if let Err(e) = check_cheb_orders(rm, rs_req) {
+        panic!("{e}");
+    }
     let n = mu.len();
     let q = f_nodes.nrows();
     let sd: Vec<f64> = d.iter().map(|x| x.sqrt()).collect();
     let sd_min = sd.iter().cloned().fold(f64::MAX, f64::min);
     let sd_max = sd.iter().cloned().fold(f64::MIN, f64::max);
-    let rs = if sd_max - sd_min < 1e-12 { 1 } else { rs_req };
+    // relative, like every other decision here: the absolute 1e-12 used
+    // to call a heterogeneous field homogeneous in small units (#218)
+    let rs = if sd_max - sd_min <= 1e-12 * sd_max { 1 } else { rs_req };
 
     let mut m_all = vec![0.0f64; q * n];
     let mut m_lo = f64::MAX;
@@ -346,8 +551,8 @@ pub fn separated_kernel(
     } else {
         cheb_nodes(sd_min, sd_max, rs)
     };
-    let wm = bary_weights(&mn);
-    let ws = bary_weights(&sn);
+    let wm = cheb_bary_weights(rm);
+    let ws = if rs == 1 { vec![1.0] } else { cheb_bary_weights(rs) };
     let r_tot = rm * rs;
 
     // kernel tables at Chebyshev nodes: (r_tot, points)
@@ -370,7 +575,7 @@ pub fn separated_kernel(
     // per-runner sigma rows (fixed across nodes)
     let ts_rows: Vec<Vec<f64>> = (0..n).map(|i| bary_row(&sn, &ws, sd[i])).collect();
 
-    let p: Vec<f64> = (0..q)
+    let (p, bad): (Vec<f64>, bool) = (0..q)
         .into_par_iter()
         .map(|qi| {
             let m = &m_all[qi * n..(qi + 1) * n];
@@ -389,10 +594,16 @@ pub fn separated_kernel(
             // field(x) = sum_c amat_c logS_c(x); weights = exp(field) dx
             // b_c = sum_x haz_c(x) * weights(x)
             let mut b = vec![0.0f64; r_tot];
+            let mut bad = false;
             for t in 0..points {
                 let mut field = 0.0;
                 for c in 0..r_tot {
                     field += amat[c] * logs_c[c * points + t];
+                }
+                // a sum of log survivals is <= 0: overshoot means the
+                // global polynomial has left its regime (#601)
+                if field > SEP_FIELD_TOL {
+                    bad = true;
                 }
                 if field > -745.0 {
                     let wt = field.exp() * dx;
@@ -412,19 +623,30 @@ pub fn separated_kernel(
                 }
                 acc[i] = wq * s;
             }
-            acc
+            (acc, bad)
         })
         .reduce(
-            || vec![0.0f64; n],
-            |mut a, b| {
+            || (vec![0.0f64; n], false),
+            |(mut a, fa), (b, fb)| {
                 for (x, y) in a.iter_mut().zip(b) {
                     *x += y;
                 }
-                a
+                (a, fa || fb)
             },
         );
 
     let total: f64 = p.iter().sum();
+    // Signed or super-unit shares, or an overshooting field, mean the
+    // interpolant is not a valid law here (#601: D = [1e-4, .16, .16]
+    // gave [277, -168, -108] with total 1.0). Fall back to the exact
+    // field pass on the same automatic window: at most the cost the
+    // separation was saving, never an unbounded refinement.
+    let signed = !(total > 0.0)
+        || p.iter().any(|&x| !(x >= -SEP_SHARE_TOL * total && x <= (1.0 + SEP_SHARE_TOL) * total));
+    if bad || signed {
+        let (pf, _sl, tf) = forward_kernel(mu, v, d, f_nodes, w, points, f64::NAN, f64::NAN);
+        return (pf, tf);
+    }
     let out = Array1::from_iter(p.into_iter().map(|x| x / total));
     (out, total)
 }
@@ -518,7 +740,9 @@ pub fn cholesky(a: &mut [f64], n: usize) -> bool {
         for k in 0..j {
             d -= a[j * n + k] * a[j * n + k];
         }
-        if d <= 0.0 {
+        // a non-finite pivot is no factor: sqrt(inf) was accepted and
+        // every standardised bound came out zero (#409)
+        if !(d > 0.0 && d.is_finite()) {
             return false;
         }
         let dj = d.sqrt();
@@ -537,9 +761,16 @@ pub fn cholesky(a: &mut [f64], n: usize) -> bool {
     true
 }
 
-/// GHK estimate of P(alternative i has the max utility), R draws.
+/// GHK estimate of P(alternative i has the max utility), R draws, from a
+/// dense utility covariance `sigma` (row-major n x n).
 pub fn ghk_prob_one(mu: &[f64], sigma: &[f64], n: usize, i: usize, r_draws: usize,
                 seed: u64) -> f64 {
+    ghk_logprob_one(mu, sigma, n, i, r_draws, seed).exp()
+}
+
+/// log of `ghk_prob_one`, finite where the probability underflows (#270).
+pub fn ghk_logprob_one(mu: &[f64], sigma: &[f64], n: usize, i: usize,
+                       r_draws: usize, seed: u64) -> f64 {
     let m = n - 1;
     // difference covariance C = M Sigma M', means a = mu_others - mu_i
     let others: Vec<usize> = (0..n).filter(|&j| j != i).collect();
@@ -552,11 +783,118 @@ pub fn ghk_prob_one(mu: &[f64], sigma: &[f64], n: usize, i: usize, r_draws: usiz
                 - sigma[i * n + jc] + sigma[i * n + i];
         }
     }
-    for d in 0..m {
-        c[d * m + d] += 1e-12;
+    ghk_contrast(&a, c, m, r_draws, seed)
+}
+
+/// GHK estimate of P(alternative i has the max utility) for the factor
+/// grammar U = mu + V f + sqrt(D) eps, with `v` row-major n x k.
+///
+/// The contrast covariance is formed from the grammar,
+/// C[j,l] = (V_j - V_i).(V_l - V_i) + D_i + [j == l] D_j, never by
+/// materialising Sigma = V V' + diag(D) and differencing it. A common
+/// loading of 1e8 is a shared shock that cancels from every contrast,
+/// but in Sigma the unit variances round away (1e16 + 1 == 1e16) and the
+/// differenced matrix came back zero, so an ordinary 76/24 race was
+/// priced as certain (#302).
+pub fn ghk_prob_one_factor(mu: &[f64], v: &[f64], k: usize, d: &[f64], n: usize,
+                           i: usize, r_draws: usize, seed: u64) -> f64 {
+    ghk_logprob_one_factor(mu, v, k, d, n, i, r_draws, seed).exp()
+}
+
+/// log of `ghk_prob_one_factor`, finite where the probability underflows
+/// (#270).
+#[allow(clippy::too_many_arguments)]
+pub fn ghk_logprob_one_factor(mu: &[f64], v: &[f64], k: usize, d: &[f64],
+                              n: usize, i: usize, r_draws: usize,
+                              seed: u64) -> f64 {
+    let m = n - 1;
+    let others: Vec<usize> = (0..n).filter(|&j| j != i).collect();
+    let mut a = vec![0.0f64; m];
+    let mut c = vec![0.0f64; m * m];
+    for (r_, &jr) in others.iter().enumerate() {
+        a[r_] = mu[jr] - mu[i];
+        for (c_, &jc) in others.iter().enumerate() {
+            let mut sv = 0.0;
+            for q in 0..k {
+                sv += (v[jr * k + q] - v[i * k + q]) * (v[jc * k + q] - v[i * k + q]);
+            }
+            c[r_ * m + c_] = sv + d[i] + if jr == jc { d[jr] } else { 0.0 };
+        }
     }
-    if !cholesky(&mut c, m) {
-        return f64::NAN;
+    ghk_contrast(&a, c, m, r_draws, seed)
+}
+
+/// The GHK recursion on a contrast problem: log P(d < 0), d ~ N(a, C).
+///
+/// Log space throughout (#270): each conditional factor enters as
+/// log_ndtr, the truncated draw is inverted from its log CDF
+/// (ndtri_log), and the draws are averaged by log-sum-exp. Flooring the
+/// factor and the truncated uniform at 1e-300 made every share of an
+/// alternative trailing by ~50 utility units exactly 1e-300 before
+/// normalisation, a plateau rather than a tail.
+///
+/// The contrast covariance is factorised AS GIVEN whenever it has a
+/// Cholesky factor (python: _contrast_cholesky). An absolute 1e-12 ridge
+/// was model noise in the utility unit (#409, #101), and the relative
+/// ridge that replaced it, added always, still inflated a valid small
+/// pivot: two near-twins with variance 2^-43 priced [0.5, 0.167, 0.333]
+/// against the exact [0.5, 0.079, 0.421]; its 1e-300 floor was an
+/// absolute ridge below that scale. The matrix is brought to unit scale
+/// by an exact power of two, factorised unmodified, and given a ridge of
+/// 1e-12 of its unit mean variance only if that fails; the factor is
+/// scaled back exactly. An exactly zero contrast (a tie, Dirac scope)
+/// keeps the old floor.
+fn ghk_contrast(a: &[f64], mut c: Vec<f64>, m: usize, r_draws: usize,
+                seed: u64) -> f64 {
+    let mut tr = 0.0f64;
+    for d in 0..m {
+        tr += c[d * m + d];
+    }
+    tr /= m.max(1) as f64;
+    if tr == f64::INFINITY && (0..m).all(|d| c[d * m + d].is_finite()) {
+        // finite variances whose SUM overflows (D = 5e307): the mean in
+        // units of the largest, or the fallback below put an infinite
+        // ridge on every pivot and priced [1/3, 1/3, 1/3] (#409)
+        let mx = (0..m).map(|d| c[d * m + d]).fold(0.0f64, f64::max);
+        tr = mx * ((0..m).map(|d| c[d * m + d] / mx).sum::<f64>() / m as f64);
+    }
+    if tr > 0.0 && tr.is_finite() {
+        // tr = f 2^e with f in [0.5, 1); scale by 2^(2k), k = -floor(e/2),
+        // applied as two exact multiplications by 2^k so that a subnormal
+        // scale never needs an overflowing 2^(2k)
+        let e = tr.log2().floor() as i32 + 1;
+        let k = -(e.div_euclid(2));
+        let pk = 2f64.powi(k);
+        for x in c.iter_mut() {
+            *x = *x * pk * pk;
+        }
+        let saved = c.clone();
+        if !cholesky(&mut c, m) {
+            c = saved;
+            let mut ts = 0.0f64;
+            for d in 0..m {
+                ts += c[d * m + d];
+            }
+            let ridge = 1e-12 * ts / m as f64;
+            for d in 0..m {
+                c[d * m + d] += ridge;
+            }
+            if !cholesky(&mut c, m) {
+                return f64::NAN;
+            }
+        }
+        let back = 2f64.powi(-k);
+        for x in c.iter_mut() {
+            *x *= back;
+        }
+    } else {
+        let ridge = 1e-12 * tr.max(1e-300);
+        for d in 0..m {
+            c[d * m + d] += ridge;
+        }
+        if !cholesky(&mut c, m) {
+            return f64::NAN;
+        }
     }
     let mut rng = Xo::new(seed);
     // draw-major layout: z[t] is an R-vector; the running mean for step t is
@@ -581,17 +919,39 @@ pub fn ghk_prob_one(mu: &[f64], sigma: &[f64], n: usize, i: usize, r_draws: usiz
         let zt = &mut z[t];
         for dr in 0..r_draws {
             let b = (-at - mean[dr]) / ltt;
-            let fb = ndtr(b);
-            logprob[dr] += fb.max(1e-300).ln();
-            let u = rng.uniform() * fb;
-            zt[dr] = ndtri(u.clamp(1e-300, 1.0 - 1e-16));
+            let lfb = log_ndtr(b);
+            logprob[dr] += lfb;
+            let lu = rng.uniform().max(f64::MIN_POSITIVE).ln() + lfb;
+            zt[dr] = ndtri_log(lu.min((-1e-16f64).ln_1p()));
         }
     }
-    let mut acc = 0.0f64;
-    for lp in logprob.iter() {
-        acc += lp.exp();
+    let top = logprob.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    if !top.is_finite() {
+        return top;
     }
-        acc / r_draws as f64
+    let acc: f64 = logprob.iter().map(|lp| (lp - top).exp()).sum();
+    top + acc.ln() - (r_draws as f64).ln()
+}
+
+/// Phi^-1(exp(lp)) for lp <= 0, accurate where exp(lp) underflows or
+/// falls below ndtri's 1e-300 clamp: ndtri itself while exp(lp) is an
+/// ordinary double, else Newton on log_ndtr(x) = lp from the tail
+/// asymptote (#270).
+pub fn ndtri_log(lp: f64) -> f64 {
+    if lp > -600.0 {
+        return ndtri(lp.exp());
+    }
+    let t = -2.0 * lp;
+    let mut x = -(t - t.ln() - (2.0 * std::f64::consts::PI).ln()).sqrt();
+    for _ in 0..30 {
+        let l = log_ndtr(x);
+        let step = (l - lp) / (-0.5 * x * x - LN_SQRT_2PI - l).exp();
+        x -= step;
+        if step.abs() <= 1e-15 * x.abs() {
+            break;
+        }
+    }
+    x
 }
 
 
@@ -992,6 +1352,9 @@ pub fn tree_kernel(
     lo: f64,
     hi: f64,
 ) -> Vec<f64> {
+    if let Err(e) = check_tree(parent, starts.len()) {
+        panic!("{e}");
+    }
     let n = mu.len();
     let nc = starts.len();
     let nt = parent.len();
@@ -1184,9 +1547,13 @@ pub fn integer_shift(cdf: &[f64], k: i64) -> Vec<f64> {
     } else if k == 0 {
         cdf.to_vec()
     } else {
+        // mass shifted past the top atom lumps on it, mirroring the
+        // negative branch; truncating left a sub-probability CDF (#373)
         let a = k as usize;
         let mut out = vec![0.0; a];
         out.extend_from_slice(&cdf[..cdf.len() - a]);
+        let last = out.len() - 1;
+        out[last] = cdf[cdf.len() - 1];
         out
     }
 }
@@ -1239,78 +1606,253 @@ pub fn winner_of_many(cdfs: &[Vec<f64>]) -> (Vec<f64>, Vec<f64>) {
     (cdf_min, mult)
 }
 
-/// get_the_rest + conditional payoff, summed: the expected payoff of a
-/// contestant with cdf `cdf` against the field (cdf_all, mult_all).
-pub fn expected_payoff_sum(cdf: &[f64], cdf_all: &[f64], mult_all: &[f64]) -> f64 {
-    let m = cdf.len();
-    let f1 = cdf_to_pdf(cdf);
-    let mut cdf_rest = Vec::with_capacity(m);
-    for t in 0..m {
-        let s = 1.0 - cdf_all[t];
-        let s1 = 1.0 - cdf[t];
-        cdf_rest.push(1.0 - (s + 1e-18) / (s1 + 1e-6));
+/// Gauss-Legendre nodes and weights on [0, 1], nodes ascending (numpy's
+/// leggauss mapped by t -> (t + 1)/2). Newton on the Legendre recurrence.
+pub fn gauss_legendre01(n: usize) -> (Vec<f64>, Vec<f64>) {
+    let nf = n as f64;
+    let mut x = Vec::with_capacity(n);
+    let mut w = Vec::with_capacity(n);
+    for i in 0..n {
+        let mut z = (std::f64::consts::PI * (i as f64 + 0.75) / (nf + 0.5)).cos();
+        let mut dp = 1.0;
+        for _ in 0..100 {
+            let (mut p0, mut p1) = (1.0f64, z);
+            for k in 2..=n {
+                let kf = k as f64;
+                let p2 = ((2.0 * kf - 1.0) * z * p1 - (kf - 1.0) * p0) / kf;
+                p0 = p1;
+                p1 = p2;
+            }
+            dp = nf * (z * p1 - p0) / (z * z - 1.0);
+            let dz = p1 / dp;
+            z -= dz;
+            if dz.abs() < 1e-16 {
+                break;
+            }
+        }
+        x.push(0.5 * (z + 1.0));
+        w.push(1.0 / ((1.0 - z * z) * dp * dp));
     }
-    let f_rest = cdf_to_pdf(&cdf_rest);
-    // multiplicity of the rest: left-tail inversion, right-tail asymptotic,
-    // switch at the mode of f1 (first argmax), exactly as the reference
-    let mut kmax = 0;
-    let mut fmax = f64::MIN;
-    for (t, &x) in f1.iter().enumerate() {
-        if x > fmax {
-            fmax = x;
-            kmax = t;
+    x.reverse();
+    w.reverse();
+    (x, w)
+}
+
+/// Nodes that integrate a degree n-1 polynomial exactly.
+pub fn exact_n_nodes(n_runners: usize) -> usize {
+    n_runners / 2 + 1
+}
+
+/// CDF of `density` padded by L-1 zero atoms on each side: the largest
+/// shift low_high returns, so no translated runner loses mass (#373).
+pub fn padded_base_cdf(density: &[f64]) -> Vec<f64> {
+    let l = (density.len() - 1) / 2;
+    let pad = if l >= 1 { l - 1 } else { 0 };
+    let mut d = vec![0.0; pad];
+    d.extend_from_slice(density);
+    d.extend(std::iter::repeat(0.0).take(pad));
+    pdf_to_cdf(&d)
+}
+
+fn survival_and_pdf(cdf: &[f64]) -> (Vec<f64>, Vec<f64>) {
+    let f = cdf_to_pdf(cdf);
+    let s = cdf.iter().map(|&c| (1.0 - c).max(0.0)).collect();
+    (s, f)
+}
+
+/// G[q][t] = prod_j (S_j(t) + u_q f_j(t)) -- the field at the nodes.
+pub fn exact_field(cdfs: &[Vec<f64>], nodes: &[f64]) -> Vec<Vec<f64>> {
+    // an empty field is the empty product (#526: cdfs[0] panicked)
+    let m = cdfs.first().map_or(0, |c| c.len());
+    let mut g = vec![vec![1.0f64; m]; nodes.len()];
+    for c in cdfs {
+        let (s, f) = survival_and_pdf(c);
+        for (q, &u) in nodes.iter().enumerate() {
+            let row = &mut g[q];
+            for t in 0..m {
+                row[t] *= s[t] + u * f[t];
+            }
         }
     }
-    let mut mult_rest = Vec::with_capacity(m);
-    for t in 0..m {
-        let mm = mult_all[t];
-        let s1 = 1.0 - cdf[t];
-        let srest = (1.0 - cdf_all[t] + 1e-18) / (s1 + 1e-6);
-        if t < kmax {
-            let numer =
-                mm * f1[t] * srest + mm * (f1[t] + s1) * f_rest[t] - f1[t] * (srest + f_rest[t]);
-            let denom = f_rest[t] * (f1[t] + s1);
-            mult_rest.push((1e-18 + numer) / (1e-18 + denom));
-        } else {
-            let t1 = (s1 + 1e-18) / (f1[t] + 1e-6);
-            let trest = (srest + 1e-18) / (f_rest[t] + 1e-6);
-            mult_rest.push(mm * trest / (1.0 + t1) + mm - (1.0 + trest) / (1.0 + t1));
-        }
-    }
-    // forced monotone cdf of the rest, then payoff = win + draw/(1 + mult)
-    let mut run = f64::MIN;
+    g
+}
+
+/// Expected equal-split winner claim of a runner with CDF `cdf` against
+/// the field G, the runner divided out: the opponents' product at node
+/// u is G / (S + u f), exact for a member wherever f > 0, capped at one
+/// and nonincreasing in t as the exact cavity always is. Mirrors
+/// winning/classic/lattice.py::_exact_payoff.
+pub fn exact_payoff(cdf: &[f64], g: &[Vec<f64>], nodes: &[f64], weights: &[f64]) -> f64 {
+    let (s, f) = survival_and_pdf(cdf);
     let mut total = 0.0;
-    let mut prev = 0.0;
-    for t in 0..m {
-        run = run.max(cdf_rest[t]);
-        let fr = run - prev;
-        prev = run;
-        total += f1[t] * (1.0 - run) + f1[t] * fr / (1.0 + mult_rest[t]);
+    for (q, &u) in nodes.iter().enumerate() {
+        let row = &g[q];
+        let mut run = 1.0f64;
+        let mut acc = 0.0;
+        for t in 0..cdf.len() {
+            let den = s[t] + u * f[t];
+            if den > 0.0 {
+                run = run.min((row[t] / den).min(1.0));
+            }
+            acc += run * f[t];
+        }
+        total += weights[q] * acc;
     }
     total
 }
 
-/// implicit_state_prices: expected payoff of the base density shifted to
-/// each offset (float offsets blend the two integer shifts).
-pub fn implicit_prices(
-    base_cdf: &[f64],
-    cdf_all: &[f64],
-    mult_all: &[f64],
+/// Node doubling for big fields: see Q_START in
+/// winning/classic/lattice.py. Start at EXACT_Q_START nodes, double
+/// (capped at the exact count) until two rules agree to EXACT_TOL.
+pub const EXACT_Q_START: usize = 8;
+pub const EXACT_TABLE_NODES: usize = 16;
+pub const EXACT_TOL: f64 = 1e-14;
+
+/// Exact state prices (dead heats split equally) of runners with these
+/// CDFs on one common lattice.
+/// An empty field has no state prices: the result is empty (#526).
+pub fn exact_state_prices_from_cdfs(cdfs: &[Vec<f64>]) -> Vec<f64> {
+    if cdfs.is_empty() {
+        return Vec::new();
+    }
+    let exact = exact_n_nodes(cdfs.len());
+    let mut q = EXACT_Q_START.min(exact);
+    let mut prev: Option<Vec<f64>> = None;
+    loop {
+        let (nodes, weights) = gauss_legendre01(q);
+        let g = exact_field(cdfs, &nodes);
+        let p: Vec<f64> = cdfs.par_iter().map(|c| exact_payoff(c, &g, &nodes, &weights)).collect();
+        let done = q >= exact || match &prev {
+            Some(pp) => pp.iter().zip(&p).all(|(a, b)| (a - b).abs() <= EXACT_TOL),
+            None => false,
+        };
+        if done {
+            return p;
+        }
+        prev = Some(p);
+        q = (2 * q).min(exact);
+    }
+}
+
+/// The paper's interpolation table against the exact field.
+pub fn exact_implicit_prices(
+    padded_cdf: &[f64],
+    field_cdfs: &[Vec<f64>],
     offsets: &[f64],
     l: i64,
 ) -> Vec<f64> {
+    let (nodes, weights) = gauss_legendre01(exact_n_nodes(field_cdfs.len()).min(EXACT_TABLE_NODES));
+    let g = exact_field(field_cdfs, &nodes);
     offsets
         .par_iter()
-        .map(|&k| {
-            if k == k.trunc() {
-                expected_payoff_sum(&integer_shift(base_cdf, k as i64), cdf_all, mult_all)
-            } else {
-                let ((a, ac), (b, bc)) = low_high(k, l);
-                ac * expected_payoff_sum(&integer_shift(base_cdf, a), cdf_all, mult_all)
-                    + bc * expected_payoff_sum(&integer_shift(base_cdf, b), cdf_all, mult_all)
-            }
-        })
+        .map(|&k| exact_payoff(&shifted_cdf(padded_cdf, k, l), &g, &nodes, &weights))
         .collect()
+}
+
+/// Only differences between offsets matter. Each offset past +/-(L-2) was
+/// clamped on its own, so translating a book across the lattice edge
+/// erased its contrast: [-3, 3] priced [1, 0] and [17, 23] [0.5, 0.5] at
+/// L=15 (#585). A book with an entry out of range is first moved by the
+/// integer nearest its midpoint; an in-range book is untouched.
+pub fn edge_centred(offsets: &[f64], l: i64) -> Vec<f64> {
+    let fin: Vec<f64> = offsets.iter().copied().filter(|o| o.is_finite()).collect();
+    if fin.is_empty() {
+        return offsets.to_vec();
+    }
+    let lo = fin.iter().copied().fold(f64::INFINITY, f64::min);
+    let hi = fin.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    let edge = (l - 2) as f64;
+    if lo >= -edge && hi <= edge {
+        return offsets.to_vec();
+    }
+    let c = ((lo + hi) / 2.0 + 0.5).floor();
+    offsets.iter().map(|&o| if o.is_finite() { o - c } else { o }).collect()
+}
+
+/// state_prices_from_offsets on the exact engine (#418, #362, #348, #373).
+pub fn exact_state_prices_from_offsets(density: &[f64], offsets: &[f64]) -> Vec<f64> {
+    let l = ((density.len() - 1) / 2) as i64;
+    let offsets = edge_centred(offsets, l);
+    let base = padded_base_cdf(density);
+    let cdfs: Vec<Vec<f64>> = offsets.iter().map(|&o| shifted_cdf(&base, o, l)).collect();
+    exact_state_prices_from_cdfs(&cdfs)
+}
+
+/// The calibration table's offset grid (#473): nonempty, finite and
+/// descending, as winning/classic/lattice_calibration.py's
+/// _assert_descending. Price falls as the offset rises, so only a
+/// descending grid gives interp1 the ascending price axis it needs; an
+/// ascending one clamped target and current price to the same endpoint
+/// and returned the guess (a tie) unchanged.
+pub fn check_offset_samples(xs: &[f64]) -> Result<(), String> {
+    if xs.is_empty() {
+        return Err("offset_samples is empty".into());
+    }
+    check_finite("offset_samples", xs)?;
+    if let Some(i) = (1..xs.len()).find(|&i| xs[i] > xs[i - 1]) {
+        return Err(format!(
+            "offset_samples must be descending; offset_samples[{i}] = {} > offset_samples[{}] = {}",
+            xs[i], i - 1, xs[i - 1]));
+    }
+    Ok(())
+}
+
+/// A calibration iteration budget is a positive count (#628).
+pub fn check_iterations(n_iter: usize) -> Result<(), String> {
+    if n_iter == 0 {
+        return Err("n_iter must be a positive number of iterations; zero returns the warm start".into());
+    }
+    Ok(())
+}
+
+/// solve_for_implied_offsets: the paper's table iteration as a defect
+/// correction, a_i += T^{-1}(p_i) - T^{-1}(P_i(a)), so its fixed point
+/// is the exact forward map (see lattice_calibration.py). The field is
+/// re-centred by the integer part of its mean after each step (#498).
+///
+/// Panics when `n_iter == 0`: zero steps returned the warm start as if it
+/// were a calibration, the contract python, R, the browser and fastrace
+/// already refuse (#543, #628).
+pub fn exact_calibrate(
+    density: &[f64],
+    prices: &[f64],
+    offset_samples: &[f64],
+    guess: &[f64],
+    n_iter: usize,
+) -> Vec<f64> {
+    if let Err(e) = check_iterations(n_iter) {
+        panic!("{e}");
+    }
+    if let Err(e) = check_offset_samples(offset_samples) {
+        panic!("{e}");
+    }
+    // an empty field has nothing to calibrate, whatever n_iter (#526)
+    if prices.is_empty() {
+        return Vec::new();
+    }
+    let l = ((density.len() - 1) / 2) as i64;
+    let base = padded_base_cdf(density);
+    let mut implied: Vec<f64> = guess.to_vec();
+    let mut cdfs: Vec<Vec<f64>> = implied.iter().map(|&o| shifted_cdf(&base, o, l)).collect();
+    for _ in 0..n_iter {
+        let table = exact_implicit_prices(&base, &cdfs, offset_samples, l);
+        let current = exact_state_prices_from_cdfs(&cdfs);
+        for i in 0..implied.len() {
+            implied[i] += interp1(prices[i], &table, offset_samples)
+                - interp1(current[i], &table, offset_samples);
+        }
+        // re-centre by the integer part of the mean (toward zero, as
+        // python's int()): an exact lattice translation that keeps the
+        // field over the absolute table (#498)
+        let shift = (implied.iter().sum::<f64>() / implied.len() as f64).trunc();
+        if shift != 0.0 {
+            for a in implied.iter_mut() {
+                *a -= shift;
+            }
+        }
+        cdfs = implied.iter().map(|&o| shifted_cdf(&base, o, l)).collect();
+    }
+    implied
 }
 
 /// np.interp(x, xp, fp) for ascending xp, end-clamped.
@@ -1333,6 +1875,183 @@ pub fn interp1(x: f64, xp: &[f64], fp: &[f64]) -> f64 {
     fp[j] + (x - xp[j]) / denom * (fp[j + 1] - fp[j])
 }
 
+/// The supported top-k depth: 1 <= k <= n-1, as
+/// winning.factor.topk._as_depth. k = 0 is not an event and k = n is
+/// trivially everyone; the forward/backward deconvolutions assume an
+/// interior depth and returned a mass-0.85 "top zero" vector and a
+/// mass-2.16 "top three of three" for them (#436).
+pub fn check_top_k_depth(k: usize, n: usize) -> Result<(), String> {
+    if k < 1 || k + 1 > n {
+        return Err(format!(
+            "k = {k} is out of range for a field of {n}: k must be in [1, n-1]"));
+    }
+    Ok(())
+}
+
+/// The supported exact rank: ONE-BASED, 1 <= r <= n (#436: r = 0
+/// indexed r - 1 and panicked; r > n read past the leave-one-out pmf).
+pub fn check_rank(r: usize, n: usize) -> Result<(), String> {
+    if r < 1 || r > n {
+        return Err(format!(
+            "r = {r} is out of range for a field of {n}: r is one-based, in [1, n]"));
+    }
+    Ok(())
+}
+
+/// The lattice-window depth: the top-k kernels pass k in [1, n-1] and
+/// the rank kernels pass n-1, which is 0 only for a one-runner field.
+pub fn check_window_depth(k: usize, n: usize) -> Result<(), String> {
+    if n == 0 || k + 1 > n || (k == 0 && n > 1) {
+        return Err(format!(
+            "k = {k} is out of range for a field of {n}: k must be in [1, n-1]"));
+    }
+    Ok(())
+}
+
+/// The supported ordered-prefix length: exacta/trifecta k in {1, 2, 3}
+/// (#403: any other k fell through to the trifecta recurrence while the
+/// buffer was n^k, so k = 4 returned a plausibly normalized tensor of
+/// impossible repeated orders).
+pub fn check_ordered_k(k: usize) -> Result<(), String> {
+    if !(1..=3).contains(&k) {
+        return Err(format!(
+            "k = {k} is not a supported ordered-prefix length: k must be 1, 2 or 3"));
+    }
+    Ok(())
+}
+
+/// check_ordered_k plus the field bound k <= n: an ordered k-prefix needs
+/// k distinct runners, and k > n returned an all-zero tensor of total
+/// mass 0 that callers reported as a lattice failure (#768).
+pub fn check_ordered_prefix(k: usize, n: usize) -> Result<(), String> {
+    check_ordered_k(k)?;
+    if k > n {
+        return Err(format!(
+            "k = {k} is out of range for a field of {n}: k must be in [1, min(3, n)]"));
+    }
+    Ok(())
+}
+
+/// Every entry of a named input is finite (#602). A NaN factor node
+/// used to contribute zero raw mass (every `e > -745` test is false)
+/// and be normalized away, pricing the law conditional on the other
+/// nodes.
+pub fn check_finite<'a>(name: &str, x: impl IntoIterator<Item = &'a f64>)
+                        -> Result<(), String> {
+    for (i, &v) in x.into_iter().enumerate() {
+        if !v.is_finite() {
+            return Err(format!("{name}[{i}] = {v} is not finite"));
+        }
+    }
+    Ok(())
+}
+
+/// Performance scales / idiosyncratic variances: finite and strictly
+/// positive (#506, #519). The lattices divide by sd and take ln(sd), so
+/// a negative scale flipped the density's sign (signed "probabilities")
+/// and a zero one produced NaN or huge signed shares.
+pub fn check_positive<'a>(name: &str, x: impl IntoIterator<Item = &'a f64>)
+                          -> Result<(), String> {
+    for (i, &v) in x.into_iter().enumerate() {
+        if !(v.is_finite() && v > 0.0) {
+            return Err(format!(
+                "{name}[{i}] = {v}; a performance scale/variance must be finite and > 0"));
+        }
+    }
+    Ok(())
+}
+
+/// An explicit lattice window: finite with hi > lo (#516). A reversed
+/// window made the spacing negative and negated every integral.
+pub fn check_window(lo: f64, hi: f64) -> Result<(), String> {
+    if !(lo.is_finite() && hi.is_finite() && hi > lo) {
+        return Err(format!(
+            "lattice window (lo, hi) = ({lo}, {hi}) must be finite with hi > lo"));
+    }
+    Ok(())
+}
+
+/// An optional lattice window: both NaN (choose automatically) or a
+/// valid explicit window.
+pub fn check_optional_window(lo: f64, hi: f64) -> Result<(), String> {
+    if lo.is_nan() && hi.is_nan() {
+        return Ok(());
+    }
+    check_window(lo, hi)
+}
+
+/// top_k_window controls (#516): tail mass 0 < delta < 1, finite
+/// padding pad_sds >= 0. A negative pad or delta >= 1 returned a
+/// reversed window.
+pub fn check_window_controls(delta: f64, pad_sds: f64) -> Result<(), String> {
+    if !(delta > 0.0 && delta < 1.0) {
+        return Err(format!("delta = {delta} must be in (0, 1)"));
+    }
+    if !(pad_sds.is_finite() && pad_sds >= 0.0) {
+        return Err(format!("pad_sds = {pad_sds} must be finite and >= 0"));
+    }
+    Ok(())
+}
+
+/// Chebyshev interpolation orders of the separated kernel (#522): at
+/// least one node each. Zero nodes has no interpolation meaning and
+/// indexed an empty barycentric row.
+pub fn check_cheb_orders(rm: usize, rs: usize) -> Result<(), String> {
+    if rm < 1 || rs < 1 {
+        return Err(format!(
+            "rm = {rm}, rs = {rs}; Chebyshev orders must be at least 1"));
+    }
+    Ok(())
+}
+
+/// Tree topology (#328, #517): nodes 0..n_leaves are the clusters,
+/// every parent is -1 (the root) or another node, following parents
+/// terminates, and there is exactly one root. A forest priced each
+/// component without the others' competitors (two roots, two leaves:
+/// shares [1, 1]).
+pub fn check_tree(parent: &[i64], n_leaves: usize) -> Result<(), String> {
+    let nt = parent.len();
+    if nt < n_leaves {
+        return Err(format!(
+            "parent has {nt} nodes, fewer than the {n_leaves} cluster leaves"));
+    }
+    for (t, &p) in parent.iter().enumerate() {
+        if p < -1 || p >= nt as i64 || p == t as i64 {
+            return Err(format!(
+                "parent[{t}] = {p} is not -1 or another node index in [0, {nt})"));
+        }
+    }
+    for t in 0..nt {
+        let (mut u, mut hops) = (t, 0usize);
+        while parent[u] >= 0 {
+            u = parent[u] as usize;
+            hops += 1;
+            if hops > nt {
+                return Err(format!("parent has a cycle through node {t}"));
+            }
+        }
+    }
+    let roots: Vec<usize> = (0..nt).filter(|&t| parent[t] < 0).collect();
+    if roots.len() != 1 {
+        let shown: Vec<String> = roots.iter().take(8).map(|r| r.to_string()).collect();
+        return Err(format!(
+            "a tree has exactly one root (parent -1); got {} ({})",
+            roots.len(), shown.join(", ")));
+    }
+    Ok(())
+}
+
+/// The normal-base top-k / rank kernels' shared preconditions: scales
+/// finite and positive, locations finite, window finite and ordered.
+fn assert_topk_inputs(mu: &[f64], sd: &[f64], lo: f64, hi: f64) {
+    let r = check_finite("mu", mu)
+        .and_then(|_| check_positive("sd", sd))
+        .and_then(|_| check_window(lo, hi));
+    if let Err(e) = r {
+        panic!("{e}");
+    }
+}
+
 /// The top-k lattice window, normal base: mirrors
 /// winning/factor/topk.py::_count_window -- geometric bracket growth
 /// then bisection on the monotone mean count, Chernoff-slack upper
@@ -1345,7 +2064,18 @@ pub fn top_k_window_kernel(
     pad_sds: f64,
 ) -> (f64, f64) {
     let n = mu.len();
-    let smax = sd.iter().cloned().fold(f64::MIN, f64::max).max(1e-12);
+    let r = check_window_depth(k, n)
+        .and_then(|_| check_finite("mu", mu))
+        .and_then(|_| check_positive("sd", sd))
+        .and_then(|_| check_window_controls(delta, pad_sds));
+    if let Err(e) = r {
+        panic!("{e}");
+    }
+    // the field's own scale (sd is checked positive above): an absolute
+    // 1e-12 floor kept the window from shrinking with the model, so the
+    // same field in units below 1e-12 got a window wider than its
+    // spread and lost resolution (#100)
+    let smax = sd.iter().cloned().fold(f64::MIN, f64::max);
     let mean_count = |x: f64| -> f64 {
         let mut t = 0.0;
         for i in 0..n {
@@ -1443,44 +2173,59 @@ fn topk_field(
     lo: f64,
     dx: f64,
     points: usize,
-) -> (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>) {
+) -> (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>) {
     let n = mu.len();
     let par = points * n * n >= TOPK_PAR_WORK;
     let inv_sqrt2pi = 1.0 / (2.0 * std::f64::consts::PI).sqrt();
     let mut fmat = vec![0.0f64; points * n];
+    let mut smat = vec![0.0f64; points * n];
     let mut dens = vec![0.0f64; points * n];
     let mut zmat = vec![0.0f64; points * n];
-    let fill = |l: usize, frow: &mut [f64], drow: &mut [f64], zrow: &mut [f64]| {
+    // F and the survival S each from the tail where it is small, one erfc
+    // per entry: a top-1 cavity is a product of survivals and 1 - ndtr(z)
+    // rounds a 1e-12 survival to a few digits (#511)
+    let fill = |l: usize, frow: &mut [f64], srow: &mut [f64],
+                drow: &mut [f64], zrow: &mut [f64]| {
         let x = lo + l as f64 * dx;
         for i in 0..n {
             let z = (x - mu[i]) / sd[i];
-            frow[i] = ndtr(z);
+            if z <= 0.0 {
+                frow[i] = ndtr(z);
+                srow[i] = 1.0 - frow[i];
+            } else {
+                srow[i] = ndtr(-z);
+                frow[i] = 1.0 - srow[i];
+            }
             drow[i] = (-0.5 * z * z).exp() * inv_sqrt2pi / sd[i];
             zrow[i] = z;
         }
     };
     if par {
         fmat.par_chunks_mut(n)
+            .zip(smat.par_chunks_mut(n))
             .zip(dens.par_chunks_mut(n))
             .zip(zmat.par_chunks_mut(n))
             .enumerate()
-            .for_each(|(l, ((frow, drow), zrow))| fill(l, frow, drow, zrow));
+            .for_each(|(l, (((frow, srow), drow), zrow))| {
+                fill(l, frow, srow, drow, zrow)
+            });
     } else {
-        for (l, ((frow, drow), zrow)) in fmat
+        for (l, (((frow, srow), drow), zrow)) in fmat
             .chunks_mut(n)
+            .zip(smat.chunks_mut(n))
             .zip(dens.chunks_mut(n))
             .zip(zmat.chunks_mut(n))
             .enumerate()
         {
-            fill(l, frow, drow, zrow);
+            fill(l, frow, srow, drow, zrow);
         }
     }
     let mut c = vec![0.0f64; points * (n + 1)];
     let count = |l: usize, row: &mut [f64]| {
         row[0] = 1.0;
         let frow = &fmat[l * n..(l + 1) * n];
-        for (j, &f) in frow.iter().enumerate() {
-            let s = 1.0 - f;
+        let srow = &smat[l * n..(l + 1) * n];
+        for (j, (&f, &s)) in frow.iter().zip(srow.iter()).enumerate() {
             for m in (1..=j + 1).rev() {
                 row[m] = row[m] * s + row[m - 1] * f;
             }
@@ -1496,51 +2241,178 @@ fn topk_field(
             count(l, row);
         }
     }
-    (fmat, dens, zmat, c)
+    (fmat, smat, dens, zmat, c)
+}
+
+// Cavity deconvolution with error bounds (#511); mirrors
+// winning/factor/topk.py::_deconv. Every count coefficient carries
+// relative roundoff <= 2 (n+1) eps plus an underflow floor; each step adds
+// one subtraction and one division, and the running first-order bound
+// tracks the absolute error of each recovered coefficient (capped at 1).
+// The forward pass is exact at m = 0, the backward at m = n-1; taking
+// each coefficient from the pass with the smaller bound stops subtraction
+// residue from posing as a rare exact-place probability (the old one-
+// direction-per-point rule gave 1.6e12x the true last place at
+// mu = [-12, -4, 4, 12]).
+const TOPK_CDF_REL: f64 = 1e-6;
+
+#[inline]
+fn count_err_consts(n: usize) -> (f64, f64) {
+    // 2 (n+1) eps for the count entry, plus one eps each for the
+    // subtraction (its subtrahend is at most the entry) and the division
+    let m = n as f64 + 1.0;
+    ((2.0 * m + 2.0) * f64::EPSILON, m * f64::MIN_POSITIVE)
 }
 
 /// Full leave-one-out pmf at one lattice point: Q[m] = P(N_{-i} = m),
-/// m = 0..n-1, by stable-direction deconvolution of the count row.
+/// m = 0..n-1, both passes in full, each coefficient from the pass with
+/// the smaller error bound; `eb` receives the chosen bounds.
 #[inline]
-fn loo_pmf_row(row: &[f64], fi: f64, n: usize, q: &mut [f64]) {
-    let si = 1.0 - fi;
-    if si >= fi {
-        let s_safe = si.max(1e-300);
-        q[0] = (row[0] / s_safe).clamp(0.0, 1.0);
-        for m in 1..n {
-            q[m] = ((row[m] - fi * q[m - 1]) / s_safe).clamp(0.0, 1.0);
-        }
+fn loo_pmf_row(row: &[f64], fi: f64, si: f64, n: usize, q: &mut [f64],
+               eb: &mut [f64]) {
+    let (cr, floor) = count_err_consts(n);
+    // forward
+    let inv = 1.0 / si.max(1e-300);
+    let mut qv = (row[0] * inv).min(1.0);
+    let mut e = if si < 1e-300 {
+        1.0
     } else {
-        let f_safe = fi.max(1e-300);
-        q[n - 1] = (row[n] / f_safe).clamp(0.0, 1.0);
-        for m in (0..n - 1).rev() {
-            q[m] = ((row[m + 1] - si * q[m + 1]) / f_safe).clamp(0.0, 1.0);
+        ((cr * row[0] + floor) * inv).min(1.0)
+    };
+    q[0] = qv;
+    eb[0] = e;
+    for m in 1..n {
+        let mq = fi * qv;
+        let qn = ((row[m] - mq) * inv).clamp(0.0, 1.0);
+        e = ((cr * row[m] + floor + fi * e) * inv).min(1.0);
+        qv = qn;
+        q[m] = qv;
+        eb[m] = e;
+    }
+    // backward, replacing a coefficient only where strictly better bounded
+    let inv = 1.0 / fi.max(1e-300);
+    qv = (row[n] * inv).min(1.0);
+    e = if fi < 1e-300 {
+        1.0
+    } else {
+        ((cr * row[n] + floor) * inv).min(1.0)
+    };
+    if e < eb[n - 1] {
+        q[n - 1] = qv;
+        eb[n - 1] = e;
+    }
+    for m in (0..n - 1).rev() {
+        let sq = si * qv;
+        let qn = ((row[m + 1] - sq) * inv).clamp(0.0, 1.0);
+        e = ((cr * row[m + 1] + floor + si * e) * inv).min(1.0);
+        qv = qn;
+        if e < eb[m] {
+            q[m] = qv;
+            eb[m] = e;
         }
     }
 }
 
-/// One pair coefficient P(N_{-ij} = k-1) from the leave-i pmf, stable
-/// direction: forward k-1 steps or backward n-1-k steps.
+/// P(N_{-i} <= k-1) at one lattice point: the forward head sum or one
+/// minus the backward tail sum, whichever has the smaller bound, redone
+/// per coefficient (both passes in full) where even that bound exceeds
+/// 1e-6 of the value. Mirrors topk.py::_leave_one_out_cdf.
 #[inline]
-fn pair_coefficient(qrow: &[f64], fj: f64, n: usize, k: usize) -> f64 {
-    let sj = 1.0 - fj;
-    if sj >= fj {
-        let s_safe = sj.max(1e-300);
-        let mut q = (qrow[0] / s_safe).clamp(0.0, 1.0);
-        for m in 1..k {
-            q = ((qrow[m] - fj * q) / s_safe).clamp(0.0, 1.0);
-        }
-        q
-    } else {
-        let f_safe = fj.max(1e-300);
-        let mut qb = (qrow[n - 1] / f_safe).clamp(0.0, 1.0);
-        let mut m = n as isize - 3;
-        while m >= k as isize - 1 {
-            qb = ((qrow[(m + 1) as usize] - sj * qb) / f_safe).clamp(0.0, 1.0);
-            m -= 1;
-        }
-        qb
+fn loo_cdf_row(row: &[f64], fi: f64, si: f64, n: usize, k: usize,
+               q: &mut [f64], eb: &mut [f64]) -> f64 {
+    if k >= n {
+        return 1.0;
     }
+    let eps = f64::EPSILON;
+    let (cr, floor) = count_err_consts(n);
+    let inv = 1.0 / si.max(1e-300);
+    let mut qv = (row[0] * inv).min(1.0);
+    let mut e = if si < 1e-300 {
+        1.0
+    } else {
+        ((cr * row[0] + floor) * inv).min(1.0)
+    };
+    let mut head = qv;
+    let mut head_e = e;
+    for m in 1..k {
+        let mq = fi * qv;
+        qv = ((row[m] - mq) * inv).clamp(0.0, 1.0);
+        e = ((cr * row[m] + floor + fi * e) * inv).min(1.0);
+        head += qv;
+        head_e += e;
+    }
+    let inv = 1.0 / fi.max(1e-300);
+    qv = (row[n] * inv).min(1.0);
+    e = if fi < 1e-300 {
+        1.0
+    } else {
+        ((cr * row[n] + floor) * inv).min(1.0)
+    };
+    let mut tail = qv;
+    let mut tail_e = eps + e;
+    for m in (k..n - 1).rev() {
+        let sq = si * qv;
+        qv = ((row[m + 1] - sq) * inv).clamp(0.0, 1.0);
+        e = ((cr * row[m + 1] + floor + si * e) * inv).min(1.0);
+        tail += qv;
+        tail_e += e;
+    }
+    let (mut cdf, bound) = if head_e <= tail_e {
+        (head, head_e)
+    } else {
+        (1.0 - tail, tail_e)
+    };
+    if bound > (TOPK_CDF_REL * cdf).max(1e-280) {
+        loo_pmf_row(row, fi, si, n, q, eb);
+        let (mut h, mut he, mut t, mut te) = (0.0, 0.0, 0.0, eps);
+        for m in 0..n {
+            if m < k {
+                h += q[m];
+                he += eb[m];
+            } else {
+                t += q[m];
+                te += eb[m];
+            }
+        }
+        cdf = if he <= te { h } else { 1.0 - t };
+    }
+    cdf.clamp(0.0, 1.0)
+}
+
+/// One pair coefficient P(N_{-ij} = k-1) from the leave-i pmf `qrow`
+/// (bounds `erow`): the forward pass up to coefficient k-1 and the
+/// backward pass down to it, each with its running error bound seeded by
+/// erow, the better-bounded one winning -- loo_pmf_row's rule one level
+/// down. The old one-direction choice by F_j alone returned subtraction
+/// residue as Jacobian off-diagonals 1e5..1e75 times the directly
+/// multiplied pair term (#511 residual).
+#[inline]
+fn pair_coefficient(qrow: &[f64], erow: &[f64], fj: f64, sj: f64, n: usize,
+                    k: usize) -> f64 {
+    let nn = n - 1; // others of i
+    if k > nn {
+        return 0.0; // only n-2 others besides j
+    }
+    let (cr, floor) = count_err_consts(nn);
+    let er = |m: usize| cr * qrow[m] + floor + erow[m];
+    let inv = 1.0 / sj.max(1e-300);
+    let mut qf = (qrow[0] * inv).min(1.0);
+    let mut ef = if sj < 1e-300 { 1.0 } else { (er(0) * inv).min(1.0) };
+    for m in 1..k {
+        qf = ((qrow[m] - fj * qf) * inv).clamp(0.0, 1.0);
+        ef = ((er(m) + fj * ef) * inv).min(1.0);
+    }
+    let inv = 1.0 / fj.max(1e-300);
+    let mut qb = (qrow[nn] * inv).min(1.0);
+    let mut eb = if fj < 1e-300 { 1.0 } else { (er(nn) * inv).min(1.0) };
+    let mut m = nn as isize - 2;
+    while m >= k as isize - 1 {
+        let mu = m as usize;
+        qb = ((qrow[mu + 1] - sj * qb) * inv).clamp(0.0, 1.0);
+        eb = ((er(mu + 1) + sj * eb) * inv).min(1.0);
+        m -= 1;
+    }
+    if ef <= eb { qf } else { qb }
 }
 
 /// Top-k memberships AND their own translation slopes, normal base:
@@ -1555,35 +2427,22 @@ pub fn top_k_slopes_kernel(
     points: usize,
 ) -> (Vec<f64>, Vec<f64>) {
     let n = mu.len();
+    if let Err(e) = check_top_k_depth(k, n) {
+        panic!("{e}");
+    }
+    assert_topk_inputs(mu, sd, lo, hi);
     let dx = (hi - lo) / (points - 1) as f64;
     let par = points * n * n >= TOPK_PAR_WORK;
-    let (fmat, dens, zmat, c) = topk_field(mu, sd, lo, dx, points);
+    let (fmat, smat, dens, zmat, c) = topk_field(mu, sd, lo, dx, points);
     let one = |i: usize| {
             let mut acc_q = 0.0f64;
             let mut acc_sl = 0.0f64;
+            let mut qbuf = vec![0.0f64; n];
+            let mut ebuf = vec![0.0f64; n];
             for l in 0..points {
-                let f = fmat[l * n + i];
-                let s = 1.0 - f;
                 let row = &c[l * (n + 1)..(l + 1) * (n + 1)];
-                let cdf = if s >= f {
-                    let s_safe = s.max(1e-300);
-                    let mut q = (row[0] / s_safe).clamp(0.0, 1.0);
-                    let mut tot = q;
-                    for m in 1..k {
-                        q = ((row[m] - f * q) / s_safe).clamp(0.0, 1.0);
-                        tot += q;
-                    }
-                    tot.clamp(0.0, 1.0)
-                } else {
-                    let f_safe = f.max(1e-300);
-                    let mut q = (row[n] / f_safe).clamp(0.0, 1.0);
-                    let mut tail = q;
-                    for m in (k..n - 1).rev() {
-                        q = ((row[m + 1] - s * q) / f_safe).clamp(0.0, 1.0);
-                        tail += q;
-                    }
-                    (1.0 - tail).clamp(0.0, 1.0)
-                };
+                let cdf = loo_cdf_row(row, fmat[l * n + i], smat[l * n + i],
+                                      n, k, &mut qbuf, &mut ebuf);
                 let d = dens[l * n + i];
                 acc_q += d * cdf;
                 // -f'(z)/sd^2 = z f(z)/sd^2 = z (f(z)/sd) / sd
@@ -1613,17 +2472,24 @@ pub fn top_k_jacobians_kernel(
     points: usize,
 ) -> (Vec<f64>, Vec<f64>) {
     let n = mu.len();
+    if let Err(e) = check_top_k_depth(k, n) {
+        panic!("{e}");
+    }
+    assert_topk_inputs(mu, sd, lo, hi);
     let dx = (hi - lo) / (points - 1) as f64;
     let par = points * n * n >= TOPK_PAR_WORK;
-    let (fmat, dens, zmat, c) = topk_field(mu, sd, lo, dx, points);
+    let (fmat, smat, dens, zmat, c) = topk_field(mu, sd, lo, dx, points);
     let one_row = |i: usize| {
             let mut qi = vec![0.0f64; points * n];
+            let mut ei = vec![0.0f64; points * n];
             for l in 0..points {
                 loo_pmf_row(
                     &c[l * (n + 1)..(l + 1) * (n + 1)],
                     fmat[l * n + i],
+                    smat[l * n + i],
                     n,
                     &mut qi[l * n..(l + 1) * n],
+                    &mut ei[l * n..(l + 1) * n],
                 );
             }
             let mut row_mu = vec![0.0f64; n];
@@ -1637,7 +2503,9 @@ pub fn top_k_jacobians_kernel(
                 for l in 0..points {
                     let pair = pair_coefficient(
                         &qi[l * n..(l + 1) * n],
+                        &ei[l * n..(l + 1) * n],
                         fmat[l * n + j],
+                        smat[l * n + j],
                         n,
                         k,
                     );
@@ -1690,15 +2558,18 @@ pub fn rank_marginals_kernel(
     points: usize,
 ) -> Vec<f64> {
     let n = mu.len();
+    assert_topk_inputs(mu, sd, lo, hi);
     let dx = (hi - lo) / (points - 1) as f64;
     let par = points * n * n >= TOPK_PAR_WORK;
-    let (fmat, dens, _zmat, c) = topk_field(mu, sd, lo, dx, points);
+    let (fmat, smat, dens, _zmat, c) = topk_field(mu, sd, lo, dx, points);
     let one = |i: usize| {
         let mut qi = vec![0.0f64; n];
+        let mut ebuf = vec![0.0f64; n];
         let mut row = vec![0.0f64; n];
         for l in 0..points {
             loo_pmf_row(&c[l * (n + 1)..(l + 1) * (n + 1)],
-                        fmat[l * n + i], n, &mut qi);
+                        fmat[l * n + i], smat[l * n + i], n, &mut qi,
+                        &mut ebuf);
             let d = dens[l * n + i];
             for m in 0..n {
                 row[m] += qi[m] * d;
@@ -1735,15 +2606,21 @@ pub fn rank_jacobian_kernel(
     points: usize,
 ) -> (Vec<f64>, Vec<f64>) {
     let n = mu.len();
+    if let Err(e) = check_rank(r, n) {
+        panic!("{e}");
+    }
+    assert_topk_inputs(mu, sd, lo, hi);
     let dx = (hi - lo) / (points - 1) as f64;
     let par = points * n * n >= TOPK_PAR_WORK;
-    let (fmat, dens, _zmat, c) = topk_field(mu, sd, lo, dx, points);
+    let (fmat, smat, dens, _zmat, c) = topk_field(mu, sd, lo, dx, points);
     let one = |i: usize| {
         let mut qi = vec![0.0f64; points * n];
+        let mut ei = vec![0.0f64; points * n];
         for l in 0..points {
             loo_pmf_row(&c[l * (n + 1)..(l + 1) * (n + 1)],
-                        fmat[l * n + i], n,
-                        &mut qi[l * n..(l + 1) * n]);
+                        fmat[l * n + i], smat[l * n + i], n,
+                        &mut qi[l * n..(l + 1) * n],
+                        &mut ei[l * n..(l + 1) * n]);
         }
         let mut p_i = 0.0f64;
         for l in 0..points {
@@ -1758,17 +2635,19 @@ pub fn rank_jacobian_kernel(
             let mut s = 0.0f64;
             for l in 0..points {
                 let qrow = &qi[l * n..(l + 1) * n];
+                let erow = &ei[l * n..(l + 1) * n];
                 let fj = fmat[l * n + j];
+                let sj = smat[l * n + j];
                 // P(N_{-ij} = n-1) is identically zero (only n-2
                 // others exist); deconvolving it injects clamped junk
                 // hypersensitive to the window edge
                 let mut coef = if r <= n - 1 {
-                    pair_coefficient(qrow, fj, n, r)
+                    pair_coefficient(qrow, erow, fj, sj, n, r)
                 } else {
                     0.0
                 };
                 if r >= 2 {
-                    coef -= pair_coefficient(qrow, fj, n, r - 1);
+                    coef -= pair_coefficient(qrow, erow, fj, sj, n, r - 1);
                 }
                 s += coef * dens[l * n + j] * dens[l * n + i];
             }
@@ -1807,39 +2686,26 @@ pub fn top_k_kernel(
     points: usize,
 ) -> Vec<f64> {
     let n = mu.len();
+    if let Err(e) = check_top_k_depth(k, n) {
+        panic!("{e}");
+    }
+    assert_topk_inputs(mu, sd, lo, hi);
     let dx = (hi - lo) / (points - 1) as f64;
     let par = points * n * n >= TOPK_PAR_WORK;
     // shared field rows and count distribution (serial under the small-
     // field threshold, identical arithmetic)
-    let (fmat, dens, _zmat, c) = topk_field(mu, sd, lo, dx, points);
+    let (fmat, smat, dens, _zmat, c) = topk_field(mu, sd, lo, dx, points);
 
     // deconvolution + integration per runner
     let one = |i: usize| {
             let mut acc = 0.0f64;
+            let mut qbuf = vec![0.0f64; n];
+            let mut ebuf = vec![0.0f64; n];
             for l in 0..points {
-                let f = fmat[l * n + i];
-                let s = 1.0 - f;
                 let row = &c[l * (n + 1)..(l + 1) * (n + 1)];
-                let cdf = if s >= f {
-                    let s_safe = s.max(1e-300);
-                    let mut q = (row[0] / s_safe).clamp(0.0, 1.0);
-                    let mut tot = q;
-                    for m in 1..k {
-                        q = ((row[m] - f * q) / s_safe).clamp(0.0, 1.0);
-                        tot += q;
-                    }
-                    tot
-                } else {
-                    let f_safe = f.max(1e-300);
-                    let mut q = (row[n] / f_safe).clamp(0.0, 1.0);
-                    let mut tail = q;
-                    for m in (k..n - 1).rev() {
-                        q = ((row[m + 1] - s * q) / f_safe).clamp(0.0, 1.0);
-                        tail += q;
-                    }
-                    1.0 - tail
-                };
-                acc += dens[l * n + i] * cdf.clamp(0.0, 1.0);
+                let cdf = loo_cdf_row(row, fmat[l * n + i], smat[l * n + i],
+                                      n, k, &mut qbuf, &mut ebuf);
+                acc += dens[l * n + i] * cdf;
             }
             acc * dx
     };
@@ -1855,8 +2721,9 @@ pub fn top_k_kernel(
 // log S(z), log f(z) and d log f / dz for the same standardized
 // densities winning/factor/races.py ships; ids and parameter layouts
 // match the python dispatch (races._rust_base_spec). Special functions
-// come from puruspe (regularized incomplete gamma and beta) and the
-// owens-t crate (Patefield-Tandy), not hand-rolled code.
+// come from winning::special (tail-accurate regularized incomplete gamma,
+// Student-t and negative-shape skew-normal survival, #134 #193) and the
+// owens-t crate (Patefield-Tandy).
 //   0 normal                      params unused
 //   1 gumbel-min                  params unused
 //   2 logistic                    params unused
@@ -1870,10 +2737,13 @@ pub fn top_k_kernel(
 const EULER_GAMMA: f64 = 0.577_215_664_901_532_9;
 
 fn softplus(u: f64) -> f64 {
+    // ln_1p, not ln(1 + e^u): for u << 0 the sum rounds to one and the
+    // skew-logistic survival -expm1(-alpha*softplus(-x)) lost its right
+    // tail (alpha = 1 was 16.5% low at a 25 sd gap, #108)
     if u > 30.0 {
         u
     } else {
-        (1.0 + u.exp()).ln()
+        u.exp().ln_1p()
     }
 }
 
@@ -1893,14 +2763,17 @@ impl BaseSpec {
                 let c = std::f64::consts::PI / 6.0f64.sqrt();
                 let u = (c * z - EULER_GAMMA).min(30.0);
                 let eu = u.exp();
-                ((-eu).max(-690.0), c.ln() + u - eu, c * (1.0 - eu))
+                // no -690 floor (#502): -eu is the exact log survival,
+                // and a floored one summed as mass plateaued a rare
+                // winner near 1e-300
+                (-eu, c.ln() + u - eu, c * (1.0 - eu))
             }
             2 => {
                 let c = std::f64::consts::PI / 3.0f64.sqrt();
                 let u = (c * z).clamp(-700.0, 700.0);
                 let sp = softplus(u);
                 let sig = 1.0 / (1.0 + (-u).exp());
-                ((-sp).max(-690.0), c.ln() + u - 2.0 * sp,
+                (-sp, c.ln() + u - 2.0 * sp,
                  c * (1.0 - 2.0 * sig))
             }
             3 => {
@@ -1909,7 +2782,10 @@ impl BaseSpec {
                 let lf = -az / b - (2.0 * b).ln();
                 let half = 0.5 * (-az / b).exp();
                 let sv = if z < 0.0 { 1.0 - half } else { half };
-                (sv.max(1e-300).ln(), lf, -z.signum() / b)
+                // exact below 1e-300 rather than floored there (#502);
+                // ln(sv) unchanged wherever it is representable
+                let ls = if sv > 1e-300 { sv.ln() } else { (-std::f64::consts::LN_2 - az / b).max(-1e300) };
+                (ls, lf, -z.signum() / b)
             }
             4 => {
                 let (beta, a) = (p[0], p[1]);
@@ -1917,7 +2793,9 @@ impl BaseSpec {
                 let lf = (beta / (2.0 * a)).ln()
                     - libm::lgamma(1.0 / beta)
                     - t.min(745.0);
-                let half_tail = 0.5 * puruspe::gammq(1.0 / beta, t);
+                // own Q(a, x): puruspe's gammq was wrong at both
+                // extremes of t for small a = 1/beta (#134)
+                let half_tail = 0.5 * special::gamma_q(1.0 / beta, t);
                 let sv = if z >= 0.0 { half_tail } else { 1.0 - half_tail };
                 let dl = -beta * (z.abs() / a).powf(beta - 1.0)
                     * z.signum() / a;
@@ -1927,30 +2805,31 @@ impl BaseSpec {
             5 => {
                 let (nu, sc) = (p[0], p[1]);
                 let x = sc * z;
-                let ib = puruspe::betai(0.5 * nu, 0.5,
-                                        nu / (nu + x * x));
-                let sv = if x >= 0.0 { 0.5 * ib } else { 1.0 - 0.5 * ib };
-                let lf = libm::lgamma(0.5 * (nu + 1.0))
-                    - libm::lgamma(0.5 * nu)
-                    - 0.5 * (nu * std::f64::consts::PI).ln()
-                    - 0.5 * (nu + 1.0) * (1.0 + x * x / nu).ln()
+                // tail-stable survival and a cancellation-free density
+                // normalizer at large nu (#134)
+                let ls = special::student_log_sf(x, nu);
+                let lf = special::student_log_norm(nu)
+                    - 0.5 * (nu + 1.0) * (x * x / nu).ln_1p()
                     + sc.ln();
                 let dl = -(nu + 1.0) * x / (nu + x * x) * sc;
-                (sv.max(1e-300).ln(), lf, dl)
+                (ls.max(-690.7755278982137), lf, dl)
             }
             6 => {
                 let (alpha, m, sd) = (p[0], p[1], p[2]);
                 let x = m + sd * z;
-                // S = Phi(-x) + 2 T(x, alpha)
-                let sv = ndtr(-x) + 2.0 * owens_t::owens_t(x, alpha);
+                // S = Phi(-x) + 2 T(x, alpha), integrated directly in
+                // the negative-shape tail where that identity cancels
+                // (#193)
+                let ls = special::skew_normal_log_sf(x, alpha);
                 let l_phi_ax = log_ndtr(alpha * x);
                 let lf = std::f64::consts::LN_2 - 0.5 * x * x
                     - LN_SQRT_2PI + l_phi_ax + sd.ln();
-                let hazard = (-0.5 * alpha * alpha * x * x
-                    - LN_SQRT_2PI - l_phi_ax)
-                    .exp();
+                // (alpha x)^2, not alpha*alpha*x*x: for a saturated shape
+                // alpha*alpha is inf and inf*0 at x = 0 was NaN (#399)
+                let ax = alpha * x;
+                let hazard = (-0.5 * ax * ax - LN_SQRT_2PI - l_phi_ax).exp();
                 let dl = sd * (-x + alpha * hazard);
-                (sv.clamp(1e-300, 1.0).ln(), lf, dl)
+                (ls.max(-690.7755278982137), lf, dl)
             }
             7 => {
                 let (alpha, m, c) = (p[0], p[1], p[2]);
@@ -1959,8 +2838,11 @@ impl BaseSpec {
                 // S = 1 - (1+e^{-x})^{-alpha}, via expm1 for the far tail
                 let sv = -libm::expm1(-alpha * sp);
                 let lf = alpha.ln() - x - (alpha + 1.0) * sp + c.ln();
-                let sig = 1.0 / (1.0 + (-x.clamp(-700.0, 700.0)).exp());
-                let dl = c * ((alpha + 1.0) * (1.0 - sig) - 1.0);
+                // 1 - sigmoid(x) directly as e^{-softplus(x)}: the
+                // subtraction lost it at large alpha and the own slopes
+                // came out positive (#499, matching python)
+                let sig_c = (-softplus(x)).exp();
+                let dl = c * ((alpha + 1.0) * sig_c - 1.0);
                 (sv.max(1e-300).ln(), lf, dl)
             }
             8 => {
@@ -2000,6 +2882,24 @@ pub fn forward_kernel_base(
     hi_in: f64,
     base: BaseSpec,
 ) -> (Array1<f64>, Array1<f64>, f64) {
+    forward_kernel_base_impl(mu, v, d, f_nodes, w, points, lo_in, hi_in, base, true)
+}
+
+/// forward_kernel_base, optionally without the one-node runner split (the
+/// reference the split is tested against bit for bit, #112).
+#[allow(clippy::too_many_arguments)]
+fn forward_kernel_base_impl(
+    mu: ArrayView1<f64>,
+    v: ArrayView2<f64>,
+    d: ArrayView1<f64>,
+    f_nodes: ArrayView2<f64>,
+    w: ArrayView1<f64>,
+    points: usize,
+    lo_in: f64,
+    hi_in: f64,
+    base: BaseSpec,
+    inner_ok: bool,
+) -> (Array1<f64>, Array1<f64>, f64) {
     let n = mu.len();
     let q = f_nodes.nrows();
     let sd: Vec<f64> = d.iter().map(|x| x.sqrt()).collect();
@@ -2026,11 +2926,24 @@ pub fn forward_kernel_base(
     }
     let dx = (hi - lo) / (points - 1) as f64;
     let tile = TILE.min((25_000_000usize / n.max(1)).max(4));
+    let inner = inner_ok && q == 1 && n * points >= INNER_PAR_WORK;        // (#112)
     let p: Vec<f64> = (0..q)
         .into_par_iter()
         .map(|qi| {
             let m = &m_all[qi * n..(qi + 1) * n];
             let wq = w[qi];
+            if inner {
+                return node_runner_par(m, wq, &sd, lo, dx, points, tile, true,
+                                       |i, z| {
+                    let (ls, lf, dl) = base.eval(z);
+                    (ls, lf - sd[i].ln(), dl)
+                }, |i, _z, c, val| {
+                    let inv_sd = 1.0 / sd[i];
+                    // sl -= c * inv_sd * val, as sl + (-(..)): IEEE
+                    // defines a - b as a + (-b), so the bits agree
+                    -(c * inv_sd * val)
+                });
+            }
             let mut acc = vec![0.0f64; 2 * n];
             let mut logs = vec![0.0f64; n * tile];
             let mut logg = vec![0.0f64; n * tile];
@@ -2075,6 +2988,224 @@ pub fn forward_kernel_base(
                     }
                     acc[i] += wq * s_acc * dx;
                     acc[n + i] += wq * sl * dx;
+                }
+                t0 += tl;
+            }
+            acc
+        })
+        .reduce(
+            || vec![0.0f64; 2 * n],
+            |mut a, b| {
+                for (x, y) in a.iter_mut().zip(b) {
+                    *x += y;
+                }
+                a
+            },
+        );
+    let total: f64 = p[..n].iter().sum();
+    let p_norm: Array1<f64> = Array1::from_iter(p[..n].iter().map(|x| x / total));
+    let slopes: Array1<f64> = Array1::from_iter(p[n..].iter().cloned());
+    (p_norm, slopes, total)
+}
+
+/// Gauss-Legendre nodes and weights on [-1, 1], ascending: Newton on
+/// P_m from the Chebyshev-like start, weights 2 / ((1 - t^2) P_m'(t)^2),
+/// built in symmetric pairs.
+pub fn gauss_legendre(m: usize) -> (Vec<f64>, Vec<f64>) {
+    let mut t = vec![0.0f64; m];
+    let mut w = vec![0.0f64; m];
+    let mf = m as f64;
+    for i in 0..m.div_ceil(2) {
+        let mut x = (std::f64::consts::PI * (i as f64 + 0.75) / (mf + 0.5)).cos();
+        let mut dp = 1.0;
+        for _ in 0..100 {
+            // P_m(x) and P_m'(x) by the three-term recurrence
+            let (mut p0, mut p1) = (1.0f64, x);
+            for k in 2..=m {
+                let kf = k as f64;
+                let p2 = ((2.0 * kf - 1.0) * x * p1 - (kf - 1.0) * p0) / kf;
+                p0 = p1;
+                p1 = p2;
+            }
+            let pm = if m == 0 { 1.0 } else if m == 1 { x } else { p1 };
+            let pm1 = if m == 1 { 1.0 } else { p0 };
+            dp = mf * (x * pm - pm1) / (x * x - 1.0);
+            let dx = pm / dp;
+            x -= dx;
+            if dx.abs() <= 1e-16 * x.abs().max(1.0) {
+                break;
+            }
+        }
+        let wi = 2.0 / ((1.0 - x * x) * dp * dp);
+        // descending x from i = 0: mirror into ascending order
+        t[m - 1 - i] = x;
+        t[i] = -x;
+        w[m - 1 - i] = wi;
+        w[i] = wi;
+    }
+    if m % 2 == 1 {
+        t[m / 2] = 0.0;
+    }
+    (t, w)
+}
+
+/// Nodes and weights over the window [lo, hi] of a `points`-point
+/// uniform lattice, split at every runner's kink and Gauss-Legendre on
+/// each piece: python's races.kink_lattice, the same budget rule. The
+/// kinks are m[i] + kink * sd[i]; at most points / 4 interior ones are
+/// kept (a larger field's are merged onto that many equal-width bins,
+/// the first in each kept), the two outer pieces count at a quarter
+/// weight, and every piece gets at least four nodes, so the node count
+/// stays under about 2 * points however many runners there are.
+pub fn kink_lattice(lo: f64, hi: f64, points: usize, m: &[f64], sd: &[f64],
+                    kinks: &[f64]) -> (Vec<f64>, Vec<f64>) {
+    let (a, b) = (lo, hi);
+    let l = points;
+    let mut k: Vec<f64> = Vec::with_capacity(m.len() * kinks.len());
+    for (i, &mi) in m.iter().enumerate() {
+        for &kk in kinks {
+            let v = mi + kk * sd[i];
+            if v > a && v < b {
+                k.push(v);
+            }
+        }
+    }
+    k.sort_by(|x, y| x.partial_cmp(y).unwrap());
+    k.dedup();
+    let cap = (l / 4).max(1);
+    if k.len() > cap {
+        let width = (b - a) / cap as f64;
+        let mut kept: Vec<f64> = Vec::with_capacity(cap);
+        let mut last_bin = f64::NAN;
+        for &v in &k {
+            let bin = ((v - a) / width).floor();
+            if bin != last_bin {
+                kept.push(v);
+                last_bin = bin;
+            }
+        }
+        k = kept;
+    }
+    let mut cuts = Vec::with_capacity(k.len() + 2);
+    cuts.push(a);
+    cuts.extend_from_slice(&k);
+    cuts.push(b);
+    let pieces = cuts.len() - 1;
+    let mut eff: Vec<f64> = (0..pieces).map(|j| cuts[j + 1] - cuts[j]).collect();
+    eff[0] *= 0.25;
+    eff[pieces - 1] *= 0.25;
+    let total: f64 = eff.iter().sum();
+    let mut xs = Vec::new();
+    let mut ws = Vec::new();
+    for j in 0..pieces {
+        let cnt = ((l as f64 * eff[j] / total).round_ties_even() as usize).max(4);
+        let (t, w) = gauss_legendre(cnt);
+        let mid = 0.5 * (cuts[j + 1] + cuts[j]);
+        let half = 0.5 * (cuts[j + 1] - cuts[j]);
+        for (tt, ww) in t.iter().zip(w.iter()) {
+            xs.push(mid + half * tt);
+            ws.push(half * ww);
+        }
+    }
+    (xs, ws)
+}
+
+/// forward_kernel_base on the kink-split lattice: OPT-IN, for a base
+/// whose density has a kink at each of `kinks` (laplace, exponential
+/// power below beta = 2). A uniform rectangle sum is only second order
+/// across a kink, and the direct Laplace kernel missed the certified
+/// race by 8.4e-5 at 257 points (#541); one kink_lattice per factor node
+/// (the kinks sit at that node's locations) brings it to the window's
+/// own truncation, as python's race_probabilities(..., kink_split=True).
+/// The default forward_kernel_base is untouched. Same window rule,
+/// log-domain field and return convention (normalized p, raw slopes,
+/// raw total), with the lattice weights in place of dx.
+#[allow(clippy::too_many_arguments)]
+pub fn forward_kernel_base_split(
+    mu: ArrayView1<f64>,
+    v: ArrayView2<f64>,
+    d: ArrayView1<f64>,
+    f_nodes: ArrayView2<f64>,
+    w: ArrayView1<f64>,
+    points: usize,
+    lo_in: f64,
+    hi_in: f64,
+    base: BaseSpec,
+    kinks: &[f64],
+) -> (Array1<f64>, Array1<f64>, f64) {
+    let n = mu.len();
+    let q = f_nodes.nrows();
+    let sd: Vec<f64> = d.iter().map(|x| x.sqrt()).collect();
+    let sd_max = sd.iter().cloned().fold(f64::MIN, f64::max);
+    let mut lo = f64::MAX;
+    let mut hi = f64::MIN;
+    let mut m_all = vec![0.0f64; q * n];
+    for qi in 0..q {
+        for i in 0..n {
+            let mut mi = mu[i];
+            for r in 0..v.ncols() {
+                mi += v[[i, r]] * f_nodes[[qi, r]];
+            }
+            m_all[qi * n + i] = mi;
+            lo = lo.min(mi);
+            hi = hi.max(mi);
+        }
+    }
+    lo -= 12.0 * sd_max;
+    hi += 12.0 * sd_max;
+    if lo_in.is_finite() && hi_in.is_finite() && hi_in > lo_in {
+        lo = lo_in;
+        hi = hi_in;
+    }
+    let tile = TILE.min((25_000_000usize / n.max(1)).max(4));
+    let p: Vec<f64> = (0..q)
+        .into_par_iter()
+        .map(|qi| {
+            let m = &m_all[qi * n..(qi + 1) * n];
+            let wq = w[qi];
+            let (xs, ws) = kink_lattice(lo, hi, points, m, &sd, kinks);
+            let nodes = xs.len();
+            let mut acc = vec![0.0f64; 2 * n];
+            let mut logs = vec![0.0f64; n * tile];
+            let mut logg = vec![0.0f64; n * tile];
+            let mut score = vec![0.0f64; n * tile];
+            let mut field = vec![0.0f64; tile];
+            let mut t0 = 0;
+            while t0 < nodes {
+                let tl = tile.min(nodes - t0);
+                field[..tl].fill(0.0);
+                for i in 0..n {
+                    let inv_sd = 1.0 / sd[i];
+                    let mi = m[i];
+                    let row_s = &mut logs[i * tile..i * tile + tl];
+                    let row_g = &mut logg[i * tile..i * tile + tl];
+                    let row_c = &mut score[i * tile..i * tile + tl];
+                    for t in 0..tl {
+                        let z = (xs[t0 + t] - mi) * inv_sd;
+                        let (ls, lf, dl) = base.eval(z);
+                        row_s[t] = ls;
+                        row_g[t] = lf - sd[i].ln();
+                        row_c[t] = dl;
+                        field[t] += ls;
+                    }
+                }
+                for i in 0..n {
+                    let row_s = &logs[i * tile..i * tile + tl];
+                    let row_g = &logg[i * tile..i * tile + tl];
+                    let row_c = &score[i * tile..i * tile + tl];
+                    let inv_sd = 1.0 / sd[i];
+                    let mut s_acc = 0.0f64;
+                    let mut sl = 0.0f64;
+                    for t in 0..tl {
+                        let e = row_g[t] + field[t] - row_s[t];
+                        if e > -745.0 {
+                            let val = e.exp() * ws[t0 + t];
+                            s_acc += val;
+                            sl -= row_c[t] * inv_sd * val;
+                        }
+                    }
+                    acc[i] += wq * s_acc;
+                    acc[n + i] += wq * sl;
                 }
                 t0 += tl;
             }
@@ -2163,6 +3294,9 @@ pub fn ordered_kernel(
     k: usize,
 ) -> (Vec<f64>, f64) {
     let n = mu.len();
+    if let Err(e) = check_ordered_prefix(k, n) {
+        panic!("{e}");
+    }
     let q = f_nodes.nrows();
     let sd: Vec<f64> = d.iter().map(|x| x.sqrt()).collect();
     let sd_max = sd.iter().cloned().fold(f64::MIN, f64::max);
@@ -2246,7 +3380,7 @@ pub fn ordered_kernel(
                     }
                     row
                 }
-                _ => {
+                3 => {
                     let mut slab = vec![0.0f64; n * n];
                     let mut inner = vec![0.0f64; points];
                     for j in 0..n {
@@ -2277,6 +3411,7 @@ pub fn ordered_kernel(
                     }
                     slab
                 }
+                _ => unreachable!("k validated above"),
             })
             .collect();
         let stride = size / n;
@@ -2288,4 +3423,300 @@ pub fn ordered_kernel(
     }
     let total: f64 = out.iter().sum();
     (out, total)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // #112: the one-node field is split over runners, and must return the
+    // sequential node body's bits exactly -- every compiled base, ragged
+    // and whole last tiles, a sub-tile lattice, the default window
+    #[test]
+    fn one_node_runner_split_is_bitwise_sequential() {
+        let bases = [(0u32, [0.0; 6]), (1, [0.0; 6]), (2, [0.0; 6]),
+                     (3, [0.0; 6]), (5, [5.0, (3.0f64 / 5.0).sqrt(), 0.0, 0.0, 0.0, 0.0])];
+        for &(n, points) in &[(300usize, 257usize), (300, 300), (1000, 513),
+                              (256, 256), (800, 83)] {
+            let mu = Array1::from_iter((0..n).map(|i| ((i * 37 % 101) as f64 - 50.0) / 17.0));
+            let d = Array1::from_iter((0..n).map(|i| 0.5 + (i % 7) as f64 / 5.0));
+            let v = ndarray::Array2::<f64>::zeros((n, 1));
+            let f = ndarray::Array2::<f64>::zeros((1, 1));
+            let w = Array1::from_elem(1, 1.0);
+            // the last case takes the kernel's own default window
+            let (lo, hi) = if n != 800 { (-9.0, 8.0) } else { (f64::NAN, f64::NAN) };
+            let pts = points;
+            assert!(n * pts >= INNER_PAR_WORK, "case n={n} must take the split");
+            let (p0, s0, t0) = forward_kernel_impl(mu.view(), v.view(), d.view(), f.view(),
+                                                   w.view(), pts, lo, hi, false);
+            let (p1, s1, t1) = forward_kernel(mu.view(), v.view(), d.view(), f.view(),
+                                              w.view(), pts, lo, hi);
+            assert_eq!(t0.to_bits(), t1.to_bits());
+            for i in 0..n {
+                assert_eq!(p0[i].to_bits(), p1[i].to_bits(), "normal p n={n} i={i}");
+                assert_eq!(s0[i].to_bits(), s1[i].to_bits(), "normal slope n={n} i={i}");
+            }
+            for &(id, params) in &bases {
+                let spec = BaseSpec { id, params };
+                let (p0, s0, t0) = forward_kernel_base_impl(
+                    mu.view(), v.view(), d.view(), f.view(), w.view(), pts, lo, hi, spec, false);
+                let (p1, s1, t1) = forward_kernel_base(
+                    mu.view(), v.view(), d.view(), f.view(), w.view(), pts, lo, hi, spec);
+                assert_eq!(t0.to_bits(), t1.to_bits());
+                for i in 0..n {
+                    assert_eq!(p0[i].to_bits(), p1[i].to_bits(), "base {id} p n={n} i={i}");
+                    assert_eq!(s0[i].to_bits(), s1[i].to_bits(), "base {id} slope n={n} i={i}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn top_k_depth_contract() {
+        assert!(check_top_k_depth(0, 3).is_err());
+        assert!(check_top_k_depth(1, 3).is_ok());
+        assert!(check_top_k_depth(2, 3).is_ok());
+        assert!(check_top_k_depth(3, 3).is_err());
+        assert!(check_top_k_depth(4, 3).is_err());
+        assert!(check_rank(0, 3).is_err());
+        assert!(check_rank(3, 3).is_ok());
+        assert!(check_rank(4, 3).is_err());
+        assert!(check_window_depth(0, 1).is_ok());
+        assert!(check_window_depth(0, 3).is_err());
+        assert!(check_window_depth(3, 3).is_err());
+        let mu = [0.0, 0.2, 0.7];
+        let sd = [1.0; 3];
+        for k in 1..3 {
+            let q = top_k_kernel(&mu, &sd, k, -8.0, 9.0, 1001);
+            assert!((q.iter().sum::<f64>() - k as f64).abs() < 1e-6);
+        }
+    }
+
+    // #511: the old one-direction-per-point deconvolution integrated
+    // subtraction residue as rare places -- last place 1.6e12x too large
+    // at mu = [-12, -4, 4, 12], top-1 1.8e5x at mu = [-14, 0, 0]
+    #[test]
+    fn rare_places_are_not_deconvolution_residue() {
+        for &points in &[513usize, 4097] {
+            let p = rank_marginals_kernel(&[-12.0, -4.0, 4.0, 12.0], &[1.0; 4],
+                                          -21.0, 18.0, points);
+            let last = p[4 + 3];
+            assert!((last / 2.9183334444853456e-30 - 1.0).abs() < 1e-6, "{last}");
+            let q = top_k_kernel(&[-14.0, 0.0, 0.0], &[1.0; 3], 1, -23.0, 9.0,
+                                 points);
+            assert!((q[1] / 2.091912795347403e-23 - 1.0).abs() < 1e-6, "{}", q[1]);
+            let (qs, _) = top_k_slopes_kernel(&[-14.0, 0.0, 0.0], &[1.0; 3], 1,
+                                             -23.0, 9.0, points);
+            assert!((qs[1] / q[1] - 1.0).abs() < 1e-12);
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "k must be in [1, n-1]")]
+    fn top_k_kernel_refuses_k_zero() {
+        top_k_kernel(&[0.0, 0.2, 0.7], &[1.0; 3], 0, -8.0, 9.0, 1001);
+    }
+
+    #[test]
+    #[should_panic(expected = "k must be in [1, n-1]")]
+    fn top_k_kernel_refuses_k_n() {
+        top_k_kernel(&[0.0, 0.2, 0.7], &[1.0; 3], 3, -8.0, 9.0, 1001);
+    }
+
+    #[test]
+    #[should_panic(expected = "r is one-based")]
+    fn rank_kernel_refuses_r_zero() {
+        rank_jacobian_kernel(&[0.0, 0.2, 0.7], &[1.0; 3], 0, -8.0, 9.0, 1001);
+    }
+
+    #[test]
+    #[should_panic(expected = "k must be 1, 2 or 3")]
+    fn ordered_kernel_refuses_k_four() {
+        let mu = ndarray::arr1(&[0.0, 0.2, 0.7]);
+        let v = ndarray::Array2::<f64>::zeros((3, 1));
+        let d = ndarray::arr1(&[1.0, 1.0, 1.0]);
+        let f = ndarray::Array2::<f64>::zeros((1, 1));
+        let w = ndarray::arr1(&[1.0]);
+        ordered_kernel(mu.view(), v.view(), d.view(), f.view(), w.view(),
+                       201, -8.0, 8.7, 4);
+    }
+    #[test]
+    #[should_panic(expected = "k must be in [1, min(3, n)]")]
+    fn ordered_kernel_refuses_k_above_n() {
+        let mu = ndarray::arr1(&[0.0, 0.2]);
+        let v = ndarray::Array2::<f64>::zeros((2, 1));
+        let d = ndarray::arr1(&[1.0, 1.0]);
+        let f = ndarray::Array2::<f64>::zeros((1, 1));
+        let w = ndarray::arr1(&[1.0]);
+        ordered_kernel(mu.view(), v.view(), d.view(), f.view(), w.view(),
+                       201, -8.0, 8.7, 3);
+    }
+
+    #[test]
+    fn ordered_kernel_accepts_full_prefix() {
+        let mu = ndarray::arr1(&[0.0, 0.2, 0.7]);
+        let v = ndarray::Array2::<f64>::zeros((3, 1));
+        let d = ndarray::arr1(&[1.0, 1.0, 1.0]);
+        let f = ndarray::Array2::<f64>::zeros((1, 1));
+        let w = ndarray::arr1(&[1.0]);
+        let (_, total) = ordered_kernel(mu.view(), v.view(), d.view(),
+                                        f.view(), w.view(), 401, -8.0,
+                                        8.7, 3);
+        assert!((total - 1.0).abs() < 1e-3, "{total}");
+    }
+
+    fn separated_price(c: f64, sd_spread: bool) -> Vec<f64> {
+        let mu = ndarray::arr1(&[0.0, 0.4 * c, 1.0 * c]);
+        let v = ndarray::Array2::<f64>::zeros((3, 1));
+        let d = if sd_spread {
+            ndarray::arr1(&[c * c, 1.5 * c * c, 0.7 * c * c])
+        } else {
+            ndarray::arr1(&[c * c, c * c, c * c])
+        };
+        let f = ndarray::Array2::<f64>::zeros((1, 1));
+        let w = ndarray::arr1(&[1.0]);
+        separated_kernel(mu.view(), v.view(), d.view(), f.view(), w.view(),
+                         1501, 48, 14).0.to_vec()
+    }
+
+    #[test]
+    fn separated_kernel_is_scale_invariant() {
+        for &spread in &[false, true] {
+            let p1 = separated_price(1.0, spread);
+            for e in -8..=8 {
+                let c = 10f64.powi(e);
+                let pc = separated_price(c, spread);
+                for (a, b) in p1.iter().zip(&pc) {
+                    assert!(b.is_finite() && (a - b).abs() < 1e-9,
+                            "c=1e{e} spread={spread}: {pc:?} vs {p1:?}");
+                }
+            }
+        }
+        let p = separated_price(1.0, false);
+        let want = [0.5289947793, 0.3279161766, 0.1430890441];
+        for (a, b) in p.iter().zip(&want) {
+            assert!((a - b).abs() < 1e-6, "{p:?}");
+        }
+    }
+
+    #[test]
+    fn bary_weights_do_not_overflow_on_small_intervals() {
+        let nodes = cheb_nodes(0.0, 1e-6, 48);
+        let w = bary_weights(&nodes);
+        assert!(w.iter().all(|x| x.is_finite()));
+        let wc = cheb_bary_weights(48);
+        // same weights up to a common factor
+        let ratio = w[0] / wc[0];
+        for (a, b) in w.iter().zip(&wc) {
+            assert!((a / b - ratio).abs() < 1e-8 * ratio.abs());
+        }
+    }
+
+    #[test]
+    fn value_contracts() {
+        assert!(check_positive("sd", &[1.0, 2.0]).is_ok());
+        for bad in [0.0, -1.0, f64::NAN, f64::INFINITY] {
+            assert!(check_positive("sd", &[1.0, bad]).is_err());
+        }
+        assert!(check_finite("f", &[0.0, f64::NAN]).is_err());
+        assert!(check_window(-8.0, 9.0).is_ok());
+        for (lo, hi) in [(9.0, -8.0), (0.0, 0.0), (f64::NAN, 9.0), (-8.0, f64::INFINITY)] {
+            assert!(check_window(lo, hi).is_err());
+        }
+        assert!(check_optional_window(f64::NAN, f64::NAN).is_ok());
+        assert!(check_optional_window(f64::NAN, 1.0).is_err());
+        assert!(check_window_controls(1e-12, 2.0).is_ok());
+        assert!(check_window_controls(1.0, 2.0).is_err());
+        assert!(check_window_controls(1e-12, -2.0).is_err());
+        assert!(check_cheb_orders(1, 1).is_ok());
+        assert!(check_cheb_orders(0, 14).is_err());
+        assert!(check_cheb_orders(48, 0).is_err());
+        assert!(check_offset_samples(&[2.0, 1.0, 1.0, 0.0]).is_ok());
+        assert!(check_offset_samples(&[0.0, 1.0]).is_err());
+        assert!(check_offset_samples(&[]).is_err());
+        assert!(check_offset_samples(&[1.0, f64::NAN]).is_err());
+    }
+
+    #[test]
+    fn common_translation_across_the_edge_keeps_the_contrast() {
+        // #585: each offset past +/-(L-2) was clamped on its own
+        let l = 15usize;
+        let d: Vec<f64> = (0..2 * l + 1)
+            .map(|i| (-0.5 * ((i as f64 - l as f64) * 0.5).powi(2)).exp())
+            .collect();
+        let s: f64 = d.iter().sum();
+        let d: Vec<f64> = d.iter().map(|x| x / s).collect();
+        let base = exact_state_prices_from_offsets(&d, &[-3.0, 3.0]);
+        for c in [20.0, -20.0, 11.0, 40.0] {
+            let p = exact_state_prices_from_offsets(&d, &[-3.0 + c, 3.0 + c]);
+            assert!((p[0] - base[0]).abs() < 1e-12 && (p[1] - base[1]).abs() < 1e-12, "{c} {p:?} {base:?}");
+        }
+        assert!(base[0] > 0.9);
+        // in range: untouched
+        assert_eq!(edge_centred(&[-13.0, 13.0], 15), vec![-13.0, 13.0]);
+        assert_eq!(edge_centred(&[17.0, 23.0], 15), vec![-3.0, 3.0]);
+    }
+
+    #[test]
+    fn tree_needs_exactly_one_root() {
+        assert!(check_tree(&[2, 2, -1], 2).is_ok());
+        let e = check_tree(&[-1, -1], 2).unwrap_err();
+        assert!(e.contains("exactly one root"), "{e}");
+        assert!(check_tree(&[1, 0, -1], 2).unwrap_err().contains("cycle"));
+    }
+
+    #[test]
+    #[should_panic(expected = "must be finite and > 0")]
+    fn top_k_kernel_refuses_negative_scale() {
+        top_k_kernel(&[0.0, 0.2, 0.7], &[1.0, -1.0, 1.0], 1, -8.0, 9.0, 1001);
+    }
+
+    #[test]
+    #[should_panic(expected = "hi > lo")]
+    fn rank_kernel_refuses_reversed_window() {
+        rank_marginals_kernel(&[0.0, 0.2, 0.7], &[1.0; 3], 9.0, -8.0, 1001);
+    }
+
+    #[test]
+    fn empty_classic_field_is_empty() {
+        let d = [0.05, 0.10, 0.20, 0.30, 0.20, 0.10, 0.05];
+        assert!(exact_state_prices_from_offsets(&d, &[]).is_empty());
+        assert!(exact_calibrate(&d, &[], &[1.0, 0.0, -1.0], &[], 3).is_empty());
+    }
+
+    #[test]
+    #[should_panic(expected = "positive number of iterations")]
+    fn calibrate_refuses_zero_iterations() {
+        // #628: zero steps returned the tied warm start [0, 0]
+        let d = [0.05, 0.10, 0.20, 0.30, 0.20, 0.10, 0.05];
+        exact_calibrate(&d, &[0.7, 0.3], &[1.0, 0.0, -1.0], &[0.0, 0.0], 0);
+    }
+
+    #[test]
+    fn calibrate_one_iteration_moves_the_guess() {
+        let d = [0.05, 0.10, 0.20, 0.30, 0.20, 0.10, 0.05];
+        let a = exact_calibrate(&d, &[0.7, 0.3], &[1.0, 0.0, -1.0], &[0.0, 0.0], 1);
+        assert!(a[0] != a[1], "{a:?}");
+    }
+
+    #[test]
+    #[should_panic(expected = "descending")]
+    fn calibrate_refuses_ascending_grid() {
+        let d = [0.05, 0.10, 0.20, 0.30, 0.20, 0.10, 0.05];
+        exact_calibrate(&d, &[0.5, 0.5], &[-1.0, 0.0, 1.0], &[0.0, 0.0], 1);
+    }
+
+    #[test]
+    fn separated_kernel_never_returns_signed_shares() {
+        // #601: [277, -168, -108] with total 1.0 before the fallback
+        let mu = Array1::from(vec![0.4, -1.0, -0.6]);
+        let v = ndarray::Array2::<f64>::zeros((3, 1));
+        let d = Array1::from(vec![1e-4, 0.16, 0.16]);
+        let f = ndarray::Array2::<f64>::zeros((1, 1));
+        let w = Array1::from(vec![1.0]);
+        let (p, _) = separated_kernel(mu.view(), v.view(), d.view(), f.view(),
+                                      w.view(), 1501, 48, 14);
+        assert!(p.iter().all(|&x| (0.0..=1.0).contains(&x)), "{p:?}");
+        assert!((p[1] - 0.760249107).abs() < 1e-6, "{p:?}");
+    }
 }

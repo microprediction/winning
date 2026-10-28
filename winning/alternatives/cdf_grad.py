@@ -20,6 +20,9 @@ certify against Monte Carlo argmax frequencies.
 """
 import numpy as np
 
+from ..shapes import as_loadings
+
+
 _TINY = 1e-13
 
 
@@ -40,9 +43,7 @@ def cdf_gradient_shares(mu, V, D, n_samples=512, n_grid=96, seed=5):
 
     jax.config.update("jax_enable_x64", True)
     mu = np.asarray(mu, dtype=float)
-    V = np.asarray(V, dtype=float)
-    if V.ndim == 1:
-        V = V.reshape(-1, 1)
+    V = as_loadings(V, len(np.asarray(mu)))
     D = np.asarray(D, dtype=float)
     n, k = V.shape
     sd = np.sqrt(D + (V ** 2).sum(1))

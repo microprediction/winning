@@ -1,0 +1,38 @@
+python exact: referee logLik -1215.86 +- 0.12 in 20.9s (boundary=False)
+ERROR: LoadError: DomainError with -196.19209060821765:
+sqrt was called with a negative real argument but will only return a complex result if called with a complex argument. Try sqrt(Complex(x)).
+Stacktrace:
+  [1] sqrt
+    @ ./math.jl:627 [inlined]
+  [2] _choice_terms(mu::Matrix{Float64}, V::Matrix{Float64}, choice::Vector{Int64}, s::Vector{Float64}, F::Matrix{Float64}, W::Vector{Float64}; tilt::Bool)
+    @ Main.MultinomialProbit ~/github/winning-bench-oct13/julia/MultinomialProbit/src/MultinomialProbit.jl:568
+  [3] _choice_terms
+    @ ~/github/winning-bench-oct13/julia/MultinomialProbit/src/MultinomialProbit.jl:537 [inlined]
+  [4] _choice_logprob_terms(mu::Matrix{Float64}, V::Matrix{Float64}, choice::Vector{Int64}, Dv::Vector{Float64}; Qf::Int64, Qz::Nothing, nodes::Nothing)
+    @ Main.MultinomialProbit ~/github/winning-bench-oct13/julia/MultinomialProbit/src/MultinomialProbit.jl:717
+  [5] _choice_logprob_terms
+    @ ~/github/winning-bench-oct13/julia/MultinomialProbit/src/MultinomialProbit.jl:674 [inlined]
+  [6] choice_loglik_and_score(mu::Matrix{Float64}, V::Matrix{Float64}, choice::Vector{Int64}; D::Nothing, Qf::Int64, Qz::Nothing, nodes::Nothing, per_obs::Bool)
+    @ Main.MultinomialProbit ~/github/winning-bench-oct13/julia/MultinomialProbit/src/MultinomialProbit.jl:800
+  [7] choice_loglik_and_score
+    @ ~/github/winning-bench-oct13/julia/MultinomialProbit/src/MultinomialProbit.jl:784 [inlined]
+  [8] _nll_grad(m::MNProbit, theta::Vector{Float64})
+    @ Main.MultinomialProbit ~/github/winning-bench-oct13/julia/MultinomialProbit/src/MultinomialProbit.jl:1050
+  [9] #61
+    @ ~/github/winning-bench-oct13/julia/MultinomialProbit/src/MultinomialProbit.jl:1250 [inlined]
+ [10] _bfgs(f_g::Main.MultinomialProbit.var"#61#62"{MNProbit}, theta0::Vector{Float64}; maxiter::Int64, gtol::Float64)
+    @ Main.MultinomialProbit ~/github/winning-bench-oct13/julia/MultinomialProbit/src/MultinomialProbit.jl:1088
+ [11] _bfgs
+    @ ~/github/winning-bench-oct13/julia/MultinomialProbit/src/MultinomialProbit.jl:1071 [inlined]
+ [12] fit!(m::MNProbit; method::Symbol, maxiter::Int64, r_draws::Int64, seed::Int64)
+    @ Main.MultinomialProbit ~/github/winning-bench-oct13/julia/MultinomialProbit/src/MultinomialProbit.jl:1250
+ [13] fit!(m::MNProbit)
+    @ Main.MultinomialProbit ~/github/winning-bench-oct13/julia/MultinomialProbit/src/MultinomialProbit.jl:1243
+ [14] top-level scope
+    @ ~/github/winning-bench-oct13/julia/MultinomialProbit/benchmark/fishing_julia.jl:19
+in expression starting at /Users/petercotton/github/winning-bench-oct13/julia/MultinomialProbit/benchmark/fishing_julia.jl:19
+Traceback (most recent call last):
+  File "/Users/petercotton/github/winning-bench-oct13/julia/MultinomialProbit/benchmark/fishing_referee.py", line 15, in <module>
+    jl = json.load(open(sys.argv[2]))
+                   ~~~~^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'bench_results/fishing/2026-10-13/jl.json'

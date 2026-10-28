@@ -1,5 +1,8 @@
-source(file.path("..", "..", "R", "mlogit_fast.R"))
-
+# Run by R CMD check through tests/testthat.R, so the package is
+# already attached and its internals are in scope. These files used
+# to source(file.path("..", "..", "R", ...)) instead, which only
+# works from the repo and fails inside a check -- which is how they
+# went unrun (#142).
 test_that("nll is finite and decreases from start on a synthetic problem", {
   set.seed(3)
   J <- 3; Tn <- 400; r <- 2
@@ -10,7 +13,7 @@ test_that("nll is finite and decreases from start on a synthetic problem", {
   mu <- matrix(X %*% beta_true, Tn, J, byrow = TRUE)
   eps <- t(V %*% matrix(rnorm(2 * Tn), 2)) + matrix(rnorm(Tn * J), Tn, J)
   choice <- max.col(mu + eps)
-  nodes <- .nodes3(7, 7, r); ns <- .halton_nodes3(r, 9L)
+  nodes <- .nodes3(7, 7, r); ns <- .sobol_nodes3(r, 9L)
   th0 <- c(rep(0, 3), rep(0.1, 3))
   v0 <- .nll(th0, list(X), choice, J, r, nodes, ns)
   expect_true(is.finite(v0))
@@ -20,9 +23,9 @@ test_that("nll is finite and decreases from start on a synthetic problem", {
 
 test_that("sharpness escalation switches node families", {
   J <- 3; r <- 2
-  nodes <- .nodes3(7, 7, r); ns <- .halton_nodes3(r, 9L)
+  nodes <- .nodes3(7, 7, r); ns <- .sobol_nodes3(r, 9L)
   X <- cbind(matrix(0, 3 * J, J - 1), rnorm(3 * J))
-  # sharp covariance parameters must route to the Halton set: the nll
+  # sharp covariance parameters must route to the Sobol set: the nll
   # values under the two calls differ only if the branch is taken, so
   # probe via node-count sensitivity at sharp vs mild theta
   th_mild <- c(0, 0, 0, 0.1, 0.1, 0.1)
@@ -30,4 +33,495 @@ test_that("sharpness escalation switches node families", {
   v_m <- .nll(th_mild, list(X), c(1, 2, 3), J, r, nodes, ns)
   v_s <- .nll(th_sharp, list(X), c(1, 2, 3), J, r, nodes, ns)
   expect_true(is.finite(v_m) && is.finite(v_s))
+})
+
+test_that("the triangular loading loop is empty at J = 2, not backwards", {
+  # `(col + 1L):J` is c(3, 2) at J = 2, not empty, so the loop wrote
+  # V[3, 2] on a 2x2 matrix and every binary-choice fit died out of
+  # bounds (#183). The same loop is in rprobitfast, which carries the
+  # end-to-end fit test; this pins the sequence itself.
+  visited <- function(J, r) {
+    out <- character(0)
+    for (col in seq_len(r)) for (row in col + seq_len(J - col))
+      out <- c(out, sprintf("%d,%d", row, col))
+    out
+  }
+  expect_equal(visited(2L, 2L), "2,1")
+  expect_equal(visited(1L, 1L), character(0))
+  expect_true(all(vapply(strsplit(visited(4L, 2L), ","),
+                         function(p) as.integer(p[1]) <= 4L, TRUE)))
+})
+
+# --- the tail likelihood is finite and its score is not zero (#270) ---
+#
+# logPhi was log(pmax(pnorm(a), 1e-300)). pnorm underflows to exactly
+# zero below about -37, so every deep tail collapsed to the SAME
+# -690.78 and the objective went FLAT; the Mills ratio then underflowed
+# to a score of exactly ZERO. An optimizer declares convergence
+# precisely where an observation is most badly contradicted.
+#
+# pnorm(log.p = TRUE) removes both. The quadrature error underneath --
+# the fixed rule sampled the own noise where the prior has mass, not the
+# integrand -- is closed by the closed-form binary and the tilted
+# own-noise nodes.
+
+.binary_ll <- function(gap, Qf = 7L, Qz = 7L) {
+  nd <- .nodes3(Qf = Qf, Qz = Qz, r = 1L)
+  ndS <- .sobol_nodes3(1L, m = 10L)
+  X <- matrix(c(gap, 0), nrow = 2L, ncol = 1L)
+  -.nll_core(c(1, 0), list(X), 1L, 2L, 1L, nd, ndS,
+             want_grad = FALSE)$value
+}
+
+test_that("the objective does not go flat in the tail", {
+  lls <- vapply(c(-40, -60, -100, -200), .binary_ll, 0)
+  expect_true(all(is.finite(lls)))
+  expect_true(all(diff(lls) < -1))          # strictly falling, by a lot
+  expect_lt(min(lls), -1e4)                 # far past the old -690.78
+})
+
+test_that("the score is not zero and points the right way", {
+  nd <- .nodes3(Qf = 7L, Qz = 7L, r = 1L)
+  ndS <- .sobol_nodes3(1L, m = 10L)
+  prev <- NULL
+  for (gap in c(-40, -60, -100, -200)) {
+    X <- matrix(c(gap, 0), nrow = 2L, ncol = 1L)
+    g <- .nll_core(c(1, 0), list(X), 1L, 2L, 1L, nd, ndS,
+                   want_grad = TRUE)$grad
+    expect_true(all(is.finite(g)))
+    expect_true(any(abs(g) > 1e-6))         # not the zero score
+    s <- abs(g[1])
+    if (!is.null(prev)) expect_gt(s, prev)  # grows with the surprise
+    prev <- s
+  }
+})
+
+test_that("moderate gaps are accurate, so the tail failure is the rule", {
+  for (gap in c(-1, -2, -3)) {
+    ex <- pnorm(gap / sqrt(2), log.p = TRUE)
+    expect_lt(abs(.binary_ll(gap) - ex) / abs(ex), 1e-3)
+  }
+})
+
+test_that("the binary tail is exact and the ternary tail is tilted (#270)", {
+  # was 38% away at a gap of -20: J = 2 is the closed form now, and
+  # J >= 3 tilts the own-noise nodes to each observation's mode
+  ex <- pnorm(-20 / sqrt(2), log.p = TRUE)
+  expect_lt(abs(.binary_ll(-20) - ex), 1e-12 * abs(ex))
+  nd <- .nodes3(7L, 7L, 0L); ndS <- .sobol_nodes3(0L, 10L)
+  for (gap in c(-3, -8, -20, -60)) {
+    X <- matrix(c(gap, 0, -80), ncol = 1L)
+    got <- -.nll_core(1, list(X), 1L, 3L, 0L, nd, ndS,
+                      want_grad = FALSE)$value
+    ex <- pnorm(gap / sqrt(2), log.p = TRUE)
+    expect_lt(abs(got - ex), 1e-7 * abs(ex))
+  }
+})
+
+test_that("an ordinary panel still fits", {
+  set.seed(5)
+  n <- 80L; J <- 3L
+  df <- data.frame(id = rep(seq_len(n), each = J),
+                   alt = rep(1:J, times = n), x = rnorm(n * J))
+  u <- 0.7 * df$x + rnorm(n * J)
+  df$chosen <- unlist(lapply(split(u, df$id),
+                             function(v) as.integer(seq_along(v) == which.max(v))))
+  nd <- .nodes3(Qf = 5L, Qz = 5L, r = 1L)
+  ndS <- .sobol_nodes3(1L, m = 8L)
+  X <- matrix(df$x, ncol = 1L)
+  ch <- apply(matrix(df$chosen, nrow = n, ncol = J, byrow = TRUE), 1,
+              which.max)
+  r <- .nll_core(c(0.7, 0, 0), list(X), as.integer(ch), J, 1L, nd, ndS,
+                 want_grad = TRUE)
+  expect_true(is.finite(r$value))
+  expect_true(all(is.finite(r$grad)))
+})
+
+# --- shared-engine regressions (identical in mlogitfast and rprobitfast) ---
+
+test_that("sharp-regime nodes exist at every rank the fitters accept (#388)", {
+  for (r in 1:6) {
+    nd <- .sobol_nodes3(r, 5L)
+    expect_equal(dim(nd$F), c(32L, r + 1L))
+    expect_true(all(is.finite(nd$F)) && all(is.finite(nd$W)))
+    expect_equal(sum(nd$W), 1)
+  }
+  # the rule is built lazily, once
+  lz <- .lazy_sharp_nodes(4L, 5L)
+  expect_identical(lz(), lz())
+  expect_equal(ncol(lz()$F), 5L)
+})
+
+test_that("node dispatch uses the centred pairwise-safe bound (#419)", {
+  V <- matrix(c(0, 1, -2.7), ncol = 1)
+  expect_equal(.mnp_sharpness(V), sqrt(2) * max(abs(V - mean(V))))
+  expect_gt(.mnp_sharpness(V), 3)               # raw max |V_i| is 2.7
+  # gauge invariance: V -> V + 1 c'
+  V2 <- matrix(c(0, 1, -2.7, 0.3, -0.4, 2), ncol = 2)
+  expect_equal(.mnp_sharpness(V2), .mnp_sharpness(sweep(V2, 2, c(5, -3), "+")))
+  # the #419 fixture: alternative 3 wins with exact bivariate-normal
+  # probability 0.15149432190016066; Hermite-7 said 0.16517
+  X <- diag(3)
+  theta <- c(-3.25, 2.47, -1.61, 1, -2.7)
+  gh <- .nodes3(7L, 7L, 1L)
+  got <- exp(-.nll_core(theta, list(X), 3L, 3L, 1L, nodes = gh,
+                        nodes_sharp = .sobol_nodes3(1L, 10L))$value)
+  # smooth sharpness 3.017 sits inside the blend window (#420), so this
+  # is the continuous mix of the tilted tensor and the Sobol cloud, as in
+  # python (0.15682 there; Sobol generators differ)
+  expect_lt(abs(got - 0.15149432190016066), 6e-3)
+  forced_gh <- exp(-.nll_core(theta, list(X), 3L, 3L, 1L, nodes = gh,
+                              nodes_sharp = gh)$value)
+  expect_gt(abs(forced_gh - 0.15149432190016066), 1e-2)
+})
+
+test_that("choices are keyed by observation, one per id (#324, #435)", {
+  ids <- rep(1:3, each = 3); alt <- rep(1:3, 3)
+  ok <- c(TRUE, FALSE, FALSE, FALSE, TRUE, FALSE, FALSE, FALSE, TRUE)
+  expect_equal(.choices_by_id(ids, alt, ok), c(1L, 2L, 3L))
+  expect_equal(.choices_by_id(ids, alt, as.integer(ok)), c(1L, 2L, 3L))
+  cancel <- c(TRUE, TRUE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, TRUE)
+  expect_error(.choices_by_id(ids, alt, cancel, c("a", "b", "c")),
+               "observation 'a' has 2 chosen rows")
+  none <- ok; none[5] <- FALSE
+  expect_error(.choices_by_id(ids, alt, none), "observation '2' has 0")
+  two <- ok; two[6] <- TRUE
+  expect_error(.choices_by_id(ids, alt, two), "has 2 chosen")
+  na <- ok; na[4] <- NA
+  expect_error(.choices_by_id(ids, alt, na), "missing")
+  expect_error(.choices_by_id(ids, alt, ok * 2), "logical or 0/1")
+})
+
+# a minimal stand-in for a dfidx: mlogit_fast reads attr(data, "idx")
+.fake_dfidx <- function(df) {
+  out <- df[, setdiff(names(df), c("id", "alt")), drop = FALSE]
+  attr(out, "idx") <- data.frame(id = df$id, alt = factor(df$alt))
+  out
+}
+
+test_that("mlogit_fast is invariant to long-row order (#215, #355)", {
+  set.seed(8)
+  n <- 40L; J <- 3L
+  df <- data.frame(id = rep(seq_len(n), each = J), alt = rep(1:J, n),
+                   x = rnorm(n * J))
+  u <- 0.8 * df$x + rnorm(n * J)
+  df$chosen <- unlist(lapply(split(u, df$id),
+                             function(v) seq_along(v) == which.max(v)))
+  f1 <- mlogit_fast(chosen ~ x, .fake_dfidx(df), r = 1L, Qf = 5L, Qz = 5L,
+                    maxit = 30L)
+  altmajor <- order(df$alt, df$id)
+  f2 <- mlogit_fast(chosen ~ x, .fake_dfidx(df[altmajor, ]), r = 1L,
+                    Qf = 5L, Qz = 5L, maxit = 30L)
+  shuffled <- sample(nrow(df))
+  f3 <- mlogit_fast(chosen ~ x, .fake_dfidx(df[shuffled, ]), r = 1L,
+                    Qf = 5L, Qz = 5L, maxit = 30L)
+  expect_equal(f1$logLik, f2$logLik)
+  expect_equal(f1$logLik, f3$logLik)
+  expect_equal(f1$coefficients, f3$coefficients)
+})
+
+test_that("mlogit_fast refuses cancelling choices and fits rank four", {
+  d <- data.frame(id = rep(1:3, each = 3), alt = rep(1:3, 3),
+                  x = c(-1, .2, .7, .4, -1.2, .1, .8, -.3, 1.1))
+  d$chosen <- c(TRUE, TRUE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, TRUE)
+  expect_error(mlogit_fast(chosen ~ x, .fake_dfidx(d), r = 1L, Qf = 3L,
+                           Qz = 3L, maxit = 1L),
+               "observation '1' has 2 chosen rows")
+  J <- 6L
+  df <- expand.grid(alt = seq_len(J), id = 1:3)
+  df$chosen <- df$alt == ((df$id - 1L) %% J + 1L)
+  # not linear in the row index, which aliased x with the intercepts
+  # (#581); three observations leave alternatives unchosen (#496)
+  df$x <- sin(seq_len(nrow(df)))
+  fit <- suppressWarnings(
+    mlogit_fast(chosen ~ x, .fake_dfidx(df[, c("id", "alt", "chosen", "x")]),
+                r = 4L, Qf = 3L, Qz = 3L, maxit = 1L))
+  expect_true(is.finite(fit$logLik))
+})
+
+test_that("fractional labels are refused and the rank is identified (#194, #201)", {
+  X <- matrix(rnorm(30 * 3 * 2), nrow = 90, ncol = 2)
+  nd <- .sobol_nodes3(1L, m = 5L)
+  ch <- as.numeric(rep(1:3, length.out = 30)); ch[2] <- 1.5
+  expect_error(.nll_core(c(0.5, 0.2, 0.3), list(X), ch, 3L, 1L, nd, nd,
+                         want_grad = FALSE), "choice\\[2\\] = 1.5")
+  for (J in 2:5) {
+    expect_identical(.check_rank(NULL, J), as.integer(min(2L, J - 2L)))
+    expect_error(.check_rank(J - 1L, J), "not identified")
+  }
+})
+
+test_that("rank and maxit are whole counts (#479, #560)", {
+  for (bad in list(1.1, 1.9, NaN, Inf, TRUE, c(1, 1)))
+    expect_error(.check_rank(bad, 4L), "whole number")
+  expect_identical(.check_rank(2.0, 4L), 2L)
+  set.seed(2)
+  d <- data.frame(id = rep(1:30, each = 3), alt = rep(1:3, 30),
+                  x = rnorm(90))
+  d$choice <- rep(c(1, 2, 3), 10)[d$id] == d$alt
+  attr(d, "idx") <- d[, c("id", "alt")]
+  for (bad in list(NaN, Inf, 0.5, -1, TRUE))
+    expect_error(mlogit_fast(choice ~ x, d, r = 0L, maxit = bad), "maxit")
+})
+
+test_that("contrast-unidentified covariates are refused (#581)", {
+  Tn <- 120L; J <- 3L
+  winner <- rep(1:3, c(30, 50, 40))
+  d <- data.frame(id = rep(seq_len(Tn), each = J), alt = rep(seq_len(J), Tn))
+  d$choice <- d$alt == rep(winner, each = J)
+  d$x <- as.numeric(d$alt == 2L)
+  attr(d, "idx") <- d[, c("id", "alt")]
+  expect_error(mlogit_fast(choice ~ x, d, r = 0L), "x are not identified")
+})
+
+test_that("a never-chosen alternative is not reported converged (#496)", {
+  set.seed(4)
+  Tn <- 60L; J <- 3L
+  d <- data.frame(id = rep(seq_len(Tn), each = J), alt = rep(seq_len(J), Tn),
+                  x = rnorm(Tn * J))
+  d$choice <- d$alt == rep(1L + (seq_len(Tn) %% 2L), each = J)
+  attr(d, "idx") <- d[, c("id", "alt")]
+  expect_warning(fit <- mlogit_fast(choice ~ x, d, r = 0L), "never chosen")
+  expect_equal(fit$convergence, 2L)
+})
+
+test_that("unused factor levels are not phantom choosers or alternatives (#464)", {
+  set.seed(4)
+  n <- 30L; J <- 3L
+  id <- rep(seq_len(n), each = J)
+  alt <- rep(c("x", "y", "z"), times = n)
+  d <- data.frame(v = rnorm(n * J))
+  u <- 0.7 * d$v + rnorm(n * J)
+  d$chosen <- unlist(lapply(split(u, id),
+                            function(w) seq_along(w) == which.max(w)))
+  fit <- function(id, alt) {
+    dd <- d
+    attr(dd, "idx") <- data.frame(id = id, alt = alt)
+    mlogit_fast(chosen ~ v, dd, r = 1L, Qf = 3L, Qz = 3L, maxit = 5L)
+  }
+  id_f <- factor(id * 2L, levels = seq_len(2L * n + 1L))
+  alt_f <- factor(alt, levels = c("x", "w", "y", "z", "zz"))
+  ref <- fit(droplevels(id_f), droplevels(alt_f))
+  for (got in list(fit(id_f, droplevels(alt_f)),
+                   fit(droplevels(id_f), alt_f),
+                   fit(id_f, alt_f))) {
+    expect_identical(got$J, 3L)
+    expect_equal(got$coefficients, ref$coefficients)
+    expect_equal(got$logLik, ref$logLik)
+  }
+  expect_identical(names(ref$coefficients),
+                   c("(Intercept):y", "(Intercept):z", "v"))
+})
+
+test_that("Gauss-Hermite order one is the one-node rule (#504)", {
+  expect_equal(.gh1(1L), list(x = 0, w = 1))
+  for (bad in list(0L, -1L, 1.5, NA_real_, Inf, c(2L, 3L)))
+    expect_error(.gh1(bad), "one positive integer")
+  d <- data.frame(chosen = c(TRUE, FALSE, FALSE, TRUE),
+                  x = c(-1, 1, -0.5, 0.5))
+  attr(d, "idx") <- data.frame(id = rep(1:2, each = 2),
+                               alt = factor(rep(1:2, 2)))
+  # two observations are separated (#642): the warning is expected here
+  f1 <- suppressWarnings(mlogit_fast(chosen ~ x, d, r = 0L, Qf = 1L,
+                                     Qz = 3L, maxit = 3L))
+  f7 <- suppressWarnings(mlogit_fast(chosen ~ x, d, r = 0L, Qf = 7L,
+                                     Qz = 3L, maxit = 3L))
+  expect_equal(f1$logLik, f7$logLik)          # Qf is inert at r = 0
+  expect_true(is.finite(suppressWarnings(
+    mlogit_fast(chosen ~ x, d, r = 0L, Qf = 3L, Qz = 1L, maxit = 3L))$logLik))
+})
+
+test_that("an idx that does not cover data is refused, not a prefix (#520)", {
+  idx1 <- data.frame(id = rep(1L, 3L), alt = factor(c("a", "b", "c")))
+  d <- data.frame(chosen = c(TRUE, FALSE, FALSE, FALSE, FALSE, TRUE),
+                  x = c(-1, 0, 1, 10, 0, -10))
+  attr(d, "idx") <- idx1
+  expect_error(mlogit_fast(chosen ~ x, d, r = 0L, Qf = 3L, Qz = 3L,
+                           maxit = 2L), "got 3 for 6 data rows")
+  short <- d[1:3, , drop = FALSE]
+  attr(short, "idx") <- data.frame(id = rep(1:2, each = 3),
+                                   alt = factor(rep(c("a", "b", "c"), 2)))
+  expect_error(mlogit_fast(chosen ~ x, short, r = 0L, Qf = 3L, Qz = 3L,
+                           maxit = 2L), "got 6 for 3 data rows")
+  attr(d, "idx") <- NULL
+  expect_error(mlogit_fast(chosen ~ x, d, r = 0L, Qf = 3L, Qz = 3L,
+                           maxit = 2L), "idx column or attribute")
+  attr(d, "idx") <- data.frame(id = rep(1:2, each = 3))
+  expect_error(mlogit_fast(chosen ~ x, d, r = 0L, Qf = 3L, Qz = 3L,
+                           maxit = 2L), "idx column or attribute")
+})
+
+test_that("a factor response means its labels, not its level codes (#512)", {
+  set.seed(5)
+  n <- 20L; J <- 3L
+  d <- data.frame(x = rnorm(n * J))
+  u <- 0.7 * d$x + rnorm(n * J)
+  ch <- unlist(lapply(split(u, rep(seq_len(n), each = J)),
+                      function(w) seq_along(w) == which.max(w)))
+  attr(d, "idx") <- data.frame(id = rep(seq_len(n), each = J),
+                               alt = factor(rep(c("a", "b", "c"), n)))
+  fit <- function(resp) {
+    d$chosen <- resp
+    mlogit_fast(chosen ~ x, d, r = 0L, Qf = 3L, Qz = 3L, maxit = 5L)
+  }
+  ref <- fit(ch)
+  for (resp in list(factor(ch, levels = c(FALSE, TRUE)),
+                    factor(as.integer(ch), levels = 0:1),
+                    as.integer(ch))) {
+    got <- fit(resp)
+    expect_equal(got$coefficients, ref$coefficients)
+    expect_equal(got$logLik, ref$logLik)
+  }
+})
+
+test_that("the formula is a model formula, not a list of columns (#472)", {
+  set.seed(6)
+  n <- 30L; J <- 3L
+  d <- data.frame(x = runif(n * J, 0.5, 3), z = rnorm(n * J),
+                  g = factor(sample(c("p", "q", "s"), n * J, TRUE)))
+  u <- 0.8 * log(d$x) + 0.3 * d$z + rnorm(n * J)
+  d$chosen <- unlist(lapply(split(u, rep(seq_len(n), each = J)),
+                            function(w) seq_along(w) == which.max(w)))
+  attr(d, "idx") <- data.frame(id = rep(seq_len(n), each = J),
+                               alt = factor(rep(c("a", "b", "c"), n)))
+  fit <- function(f, dd = d) mlogit_fast(f, dd, r = 0L, Qf = 3L, Qz = 3L,
+                                         maxit = 10L)
+  # 0 + drops the alternative intercepts instead of being ignored
+  expect_identical(names(fit(chosen ~ x)$coefficients),
+                   c("(Intercept):b", "(Intercept):c", "x"))
+  expect_identical(names(fit(chosen ~ 0 + x)$coefficients), "x")
+  expect_identical(names(fit(chosen ~ x - 1)$coefficients), "x")
+  # transformations equal the precomputed column
+  d2 <- d; d2$lx <- log(d$x); d2$x2 <- d$x^2; d2$xz <- d$x * d$z
+  a <- fit(chosen ~ log(x) + I(x^2) + x:z)
+  b <- fit(chosen ~ lx + x2 + xz, d2)
+  expect_equal(unname(a$coefficients), unname(b$coefficients))
+  expect_equal(a$logLik, b$logLik)
+  # a factor covariate gets treatment contrasts
+  expect_identical(names(fit(chosen ~ z + g)$coefficients),
+                   c("(Intercept):b", "(Intercept):c", "z", "gq", "gs"))
+  expect_error(fit(chosen ~ x | 0), "multi-part")
+})
+
+# --- round 3 (#641, #581, #642, #376) ---
+
+.binary_offset_data <- function(off = c(5, 0, 0, 5)) {
+  d <- data.frame(chosen = c(TRUE, FALSE, FALSE, TRUE), off = off,
+                  off2 = c(1, 2, 3, 4))
+  attr(d, "idx") <- data.frame(id = rep(1:2, each = 2), alt = rep(1:2, 2))
+  d
+}
+
+test_that("formula offsets enter the utilities (#641)", {
+  d <- .binary_offset_data()
+  plain <- suppressWarnings(mlogit_fast(chosen ~ 1, d, r = 0L, maxit = 0L))
+  wo <- mlogit_fast(chosen ~ offset(off), d, r = 0L, maxit = 0L)
+  expect_equal(plain$logLik, 2 * log(0.5))
+  expect_equal(wo$logLik, 2 * pnorm(5 / sqrt(2), log.p = TRUE),
+               tolerance = 1e-10)
+  # a common per-choice-set offset changes nothing
+  d2 <- d; d2$off <- d2$off + c(7, 7, -3, -3)
+  expect_equal(mlogit_fast(chosen ~ offset(off), d2, r = 0L,
+                           maxit = 0L)$logLik, wo$logLik)
+  # several offset() terms add
+  two <- mlogit_fast(chosen ~ offset(off) + offset(off2), d, r = 0L,
+                     maxit = 0L)
+  d3 <- d; d3$off <- d$off + d$off2
+  expect_equal(two$logLik, mlogit_fast(chosen ~ offset(off), d3, r = 0L,
+                                       maxit = 0L)$logLik)
+  # row order is canonicalised with the offset
+  dp <- d[c(2, 1, 4, 3), ]
+  attr(dp, "idx") <- attr(d, "idx")[c(2, 1, 4, 3), ]
+  expect_equal(mlogit_fast(chosen ~ offset(off), dp, r = 0L,
+                           maxit = 0L)$logLik, wo$logLik)
+  bad <- .binary_offset_data(c(5, NA, 0, 5))
+  expect_error(mlogit_fast(chosen ~ offset(off), bad, r = 0L), "finite")
+})
+
+test_that("one alternative is refused (#581)", {
+  d <- data.frame(chosen = rep(TRUE, 4), x = 1:4)
+  attr(d, "idx") <- data.frame(id = 1:4, alt = rep(1L, 4))
+  expect_error(mlogit_fast(chosen ~ x, d, r = 0L), "at least two")
+})
+
+test_that("a separated design is flagged and the mass defect reported", {
+  Tn <- 100L
+  d <- data.frame(id = rep(seq_len(Tn), each = 2), alt = rep(1:2, Tn))
+  d$x <- ifelse((d$id <= Tn / 2 & d$alt == 1) | (d$id > Tn / 2 & d$alt == 2),
+                1, -1)
+  d$chosen <- d$x == 1
+  attr(d, "idx") <- d[, c("id", "alt")]
+  expect_warning(f <- mlogit_fast(chosen ~ 0 + x, d, r = 0L, maxit = 500L),
+                 "separated")
+  expect_equal(f$convergence, 2L)
+  expect_gt(abs(f$separation[["x"]]), 0.5)
+  expect_equal(f$alternatives, c("1", "2"))
+  expect_true(f$mass_defect < 1e-12)          # J = 2 is the closed form
+})
+
+test_that("own-noise order: 7 below J = 6, 11 from J = 6 (#173)", {
+  expect_equal(vapply(c(3L, 5L, 6L, 10L), .default_qz, 0L), c(7L, 7L, 11L, 11L))
+  mk <- function(J, n = 40L) {
+    set.seed(173)
+    d <- data.frame(x = rnorm(n * J))
+    u <- 0.7 * d$x + rnorm(n * J)
+    d$chosen <- unlist(lapply(split(u, rep(seq_len(n), each = J)),
+                              function(w) seq_along(w) == which.max(w)))
+    attr(d, "idx") <- data.frame(id = rep(seq_len(n), each = J),
+                                 alt = rep(seq_len(J), n))
+    d
+  }
+  ll <- function(d, ...) suppressWarnings(
+    mlogit_fast(chosen ~ x, d, r = 1L, Qf = 5L, maxit = 0L, ...))$logLik
+  d5 <- mk(5L); d6 <- mk(6L)
+  expect_identical(ll(d5), ll(d5, Qz = 7L))
+  expect_identical(ll(d6), ll(d6, Qz = 11L))
+  expect_false(identical(ll(d6), ll(d6, Qz = 7L)))
+})
+
+test_that("the tilt curvature stays >= 1 at far-tail contrasts (#716)", {
+  # a first BFGS step's contrasts: lam (a + lam) cancelled and the
+  # curvature went to -500 (NaN sigma); julia threw a DomainError
+  set.seed(716)
+  for (sc in c(1e3, 1e5, 1e6, 1e8)) {
+    c0 <- matrix(-abs(rnorm(3 * 200, sc, sc / 10)), 3)
+    tm <- .tilt_mode(c0, runif(3, 1, 3))
+    expect_true(all(tm$h >= 1))
+    expect_true(all(is.finite(tm$m)))
+  }
+  for (a in c(-1e3, -5.7e4, -1e6)) {
+    y <- -a
+    mg <- .mills_gap(a)
+    expect_equal(mg$gap, 1 / y - 2 / y^3 + 10 / y^5 - 74 / y^7,
+                 tolerance = 1e-12)
+  }
+  # above the tail it is the old expression, to the bit
+  a <- seq(-20, 8, length.out = 501)
+  old <- exp(dnorm(a, log = TRUE) - pnorm(a, log.p = TRUE))
+  expect_identical(.mills_gap(a)$lam, old)
+})
+
+test_that("the binary closed form survives an extreme loading scale (#720)", {
+  # sum(d^2) overflowed at loadings 1e154 (Phi(1) priced as 0.5) and s^3
+  # at 9e153 (a zero loading score); the exact score of a chosen loading
+  # is -lambda(1) / (2a) (python's likelihood._choice_pair)
+  lam <- exp(dnorm(1, log = TRUE) - pnorm(1, log.p = TRUE))
+  for (a in c(9e153, 1e154, 1e300)) {
+    tr <- .mnp_pair(matrix(c(0, sqrt(2) * a), 1, 2),
+                    matrix(c(0, a, 0, a), 2, 2), 2L)
+    expect_equal(exp(tr$logp), pnorm(1), tolerance = 1e-14)
+    expect_equal(tr$GV[1, 2, ], rep(-lam / (2 * a), 2), tolerance = 1e-12)
+    expect_equal(tr$GV[1, 1, ], rep(lam / (2 * a), 2), tolerance = 1e-12)
+  }
+})
+
+test_that("an ordinary binary row keeps its closed form (#720)", {
+  tr <- .mnp_pair(matrix(c(.3, -.2, .1, .5), 2, 2),
+                  matrix(c(0, .7, 0, -.4), 2, 2), c(1L, 2L))
+  expect_equal(unname(unlist(tr)), c(
+    -0.59985606892589227, -0.40585832547984518, 0.44312230917883494,
+    -0.33527209333678759, -0.44312230917883494, 0.33527209333678759,
+    0.023410235201900716, 0.061993707824538072, -0.023410235201900716,
+    -0.061993707824538072, -0.013377277258228982, -0.035424975899736047,
+    0.013377277258228982, 0.035424975899736047), tolerance = 1e-14)
 })

@@ -11,7 +11,7 @@ import numpy as np
 from scipy.special import log_ndtr, ndtr, ndtri
 from scipy.stats import qmc
 
-from .registry import register
+from .registry import as_draws, register
 
 
 def _diff_problem(mu, Sigma, i):
@@ -23,15 +23,61 @@ def _diff_problem(mu, Sigma, i):
     M[np.arange(n - 1), others] = 1.0
     M[:, i] -= 1.0
     C = M @ Sigma @ M.T
-    return a, C + 1e-12 * np.eye(n - 1)
+    # jitter RELATIVE to the problem's own scale: an absolute 1e-12
+    # replaced valid small contrast variances, so the same race in
+    # smaller units priced differently (#375)
+    jit = 1e-12 * max(float(np.mean(np.diag(C))), 1e-300) if n > 1 else 0.0
+    return a, C + jit * np.eye(n - 1)
 
 
 def _order_variables(a, C):
     """Genz-style ordering: hardest constraints (smallest marginal
     probability of d_t < 0, i.e. largest a_t/sqrt(C_tt)) first."""
     z = a / np.sqrt(np.diag(C))
-    order = np.argsort(-z)
-    return order
+    # Exact ties (equal abilities are routine) used to fall back to
+    # argsort's input order, so Mendell-Elston still depended on the
+    # contestant labels: 0.0087 on a four-runner field, 0.0147 on a
+    # five-runner one (#287). Ties are broken by quantities that move
+    # WITH the labels -- the difference variance, then the sorted
+    # covariances to the other differences; constraints tied on all of
+    # those are interchangeable by an automorphism and give the same
+    # answer either way.
+    m = len(a)
+
+    def key(t):
+        others = sorted((-float(C[t, s]) for s in range(m) if s != t))
+        return (-float(z[t]), -float(C[t, t]), tuple(others))
+
+    nz = -np.asarray(z, dtype=float)
+    nd = -np.asarray(np.diag(C), dtype=float)
+    if np.isnan(nz).any() or np.isnan(nd).any():
+        # NaN keys order arbitrarily under Python's sort; keep its answer
+        return np.array(sorted(range(m), key=key), dtype=int)
+    # The covariance tie-break is O(m^2 log m) Python work per problem,
+    # and building it for every constraint of every difference problem
+    # made Mendell-Elston 2.1x slower (#718). Sort on the first two key
+    # fields with numpy -- lexsort is stable, as sorted() is, so equal
+    # keys keep index order -- and build the full key only inside runs
+    # that actually tie on both. The result is the same permutation.
+    order = np.lexsort((nd, nz))
+    so, sd = nz[order], nd[order]
+    tie = (so[1:] == so[:-1]) & (sd[1:] == sd[:-1])
+    if not tie.any():
+        return order.astype(int)
+    out = order.astype(int)
+    i = 0
+    while i < m - 1:
+        if not tie[i]:
+            i += 1
+            continue
+        j = i + 1
+        while j < m - 1 and tie[j]:
+            j += 1
+        # positions i..j tie on (z, C_tt); ascending index within the
+        # run (lexsort is stable), so sorted() sees the same input order
+        out[i:j + 1] = sorted(out[i:j + 1].tolist(), key=key)
+        i = j + 1
+    return out
 
 
 def _seq_logprob(a, L, u):
@@ -69,6 +115,7 @@ def _genz_orthant(a, C, points, shifts, seed):
 def genz_bretz(mu, V, D, budget=1024, seed=13):
     """Canonical Genz-Bretz RQMC: variable reordering, scrambled Sobol,
     random shifts (3). budget = points per shift."""
+    budget = as_draws(budget)
     n = len(mu)
     Sigma = V @ V.T + np.diag(D)
     p = np.zeros(n)
@@ -184,6 +231,7 @@ def ep_orthant(mu, V, D, budget=None, seed=None):
 def smc_orthant(mu, V, D, budget=1000, seed=17):
     """Basic Ridgway-style SMC: GHK proposals with systematic resampling
     when the effective sample size drops below half."""
+    budget = as_draws(budget)
     n = len(mu)
     Sigma = V @ V.T + np.diag(D)
     rng = np.random.default_rng(seed)

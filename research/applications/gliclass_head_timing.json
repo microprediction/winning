@@ -1,0 +1,108 @@
+{
+  "backend": "pure numpy/scipy",
+  "winning_version": "1.6.0",
+  "python": "3.14.6",
+  "machine": "macOS-26.2-arm64-arm-64bit-Mach-O",
+  "node_rule": "race_probabilities default (GH_RULE tensor or 8192 Sobol)",
+  "mc_draws": 4000000,
+  "rows": [
+    {
+      "rho": 0.5,
+      "N": 3,
+      "rank": 1,
+      "reps": 21,
+      "median_s": 0.0010868750105146319,
+      "max_abs_err_vs_mc": 0.0003883950301020178
+    },
+    {
+      "rho": 0.5,
+      "N": 10,
+      "rank": 1,
+      "reps": 7,
+      "median_s": 0.0015961249882820994,
+      "max_abs_err_vs_mc": 0.00027452841373702686
+    },
+    {
+      "rho": 0.5,
+      "N": 10,
+      "rank": 2,
+      "reps": 5,
+      "median_s": 0.007935958012240008,
+      "max_abs_err_vs_mc": 0.0002079183219747538
+    },
+    {
+      "rho": 0.5,
+      "N": 50,
+      "rank": 1,
+      "reps": 5,
+      "median_s": 0.004581333021633327,
+      "max_abs_err_vs_mc": 0.00011139525254824645
+    },
+    {
+      "rho": 0.5,
+      "N": 50,
+      "rank": 2,
+      "reps": 3,
+      "median_s": 0.03616987500572577,
+      "max_abs_err_vs_mc": 0.0002535329508568662
+    },
+    {
+      "rho": 0.9,
+      "N": 3,
+      "rank": 1,
+      "reps": 21,
+      "median_s": 0.0010946670081466436,
+      "max_abs_err_vs_mc": 0.00011938933068278423
+    },
+    {
+      "rho": 0.9,
+      "N": 10,
+      "rank": 1,
+      "reps": 7,
+      "median_s": 0.0016522500081919134,
+      "max_abs_err_vs_mc": 0.0004808431904794741
+    },
+    {
+      "rho": 0.9,
+      "N": 10,
+      "rank": 2,
+      "reps": 5,
+      "median_s": 0.00852649999433197,
+      "max_abs_err_vs_mc": 0.00012362131441223667
+    },
+    {
+      "rho": 0.9,
+      "N": 50,
+      "rank": 1,
+      "reps": 5,
+      "median_s": 0.00455429099383764,
+      "max_abs_err_vs_mc": 0.0004516902123161137
+    },
+    {
+      "rho": 0.9,
+      "N": 50,
+      "rank": 2,
+      "reps": 3,
+      "median_s": 0.036289332987507805,
+      "max_abs_err_vs_mc": 0.0003572947451701003
+    },
+    {
+      "rho": 0.9,
+      "N": 10,
+      "rank": 2,
+      "reps": 3,
+      "nodes": "sobol8192 forced",
+      "median_s": 0.3902026659925468,
+      "max_abs_err_vs_mc": 0.0001942690230944677
+    },
+    {
+      "rho": 0.9,
+      "N": 50,
+      "rank": 2,
+      "reps": 3,
+      "nodes": "sobol8192 forced",
+      "median_s": 1.958928250009194,
+      "max_abs_err_vs_mc": 0.00011605160004668491
+    }
+  ]
+}

@@ -45,6 +45,11 @@ function erfcx(x) {
 
 /* log of the standard normal CDF, tail-stable (port of scipy.log_ndtr use) */
 export function logndtr(z) {
+  // the endpoints exactly: a skew-normal at a huge finite shape evaluates
+  // Phi(alpha u) at alpha u = +-Infinity, and the continued fraction
+  // turned erfcx(Infinity) into NaN, so the density was NaN (#399)
+  if (z === Infinity) return 0;
+  if (z === -Infinity) return -Infinity;
   if (z >= 1.0) {
     // log(1 - Phi(-z)); Phi(-z) computed via the negative branch
     return Math.log1p(-Math.exp(logndtr(-z)));
@@ -57,14 +62,182 @@ export function logndtr(z) {
   return Math.log(0.5 * erfcx(x)) - 0.5 * z * z;
 }
 
-function lattice(Mall, sd, points, spans) {
-  let mMin = Infinity, mMax = -Infinity, sMax = 0;
+/* One fixed grid over every conditional mean, padded by the WIDEST
+   runner -- and then refined until it resolves the NARROWEST one.
+
+   The span is set by the widest runner and by the farthest conditional
+   mean, the spacing by `points`, so a distant or diffuse runner could
+   leave the close ones between samples. Shares are normalised and hid
+   it; the unnormalised outputs could not: a runner 100 units behind a
+   close pair cut their tie density by 10.3% (#349), a removed favourite
+   left a deletion row 15% short of mass that normalisation then spread
+   over the survivors (#330), and the home page's 301-point t4 field
+   showed 0.2-point errors (#391). The spacing is now held to half the
+   smallest sd, capped at MAX_POINTS (with a warning past it), which is
+   the resolution target python's forward_grid warns at. A well-resolved
+   field is untouched: the refinement only ever adds points. */
+const MAX_POINTS = 16385;
+function lattice(Mall, sd, points, spans, resolution = 1) {
+  let mMin = Infinity, mMax = -Infinity, sMax = 0, sMin = Infinity;
   for (const row of Mall) for (const v of row) { if (v < mMin) mMin = v; if (v > mMax) mMax = v; }
-  for (const s of sd) if (s > sMax) sMax = s;
+  for (const s of sd) { if (s > sMax) sMax = s; if (s < sMin) sMin = s; }
   const lo = mMin - spans[0] * sMax, hi = mMax + spans[1] * sMax;
+  // `resolution` is the base's own feature width in standard units (1
+  // for a smooth base; a skew-normal's Phi(alpha u) step is ~1/alpha
+  // wide, and a lattice coarser than that aliases the density itself)
+  const need = Math.ceil((hi - lo) / (0.5 * sMin * resolution)) + 1;
+  if (need > points) {
+    if (need > MAX_POINTS && typeof console !== "undefined")
+      console.warn(`factor race lattice cannot resolve the narrowest runner ` +
+                   `(sd ${sMin.toExponential(1)} over ${(hi - lo).toPrecision(3)} ` +
+                   `units) even at ${MAX_POINTS} points`);
+    points = Math.min(need, MAX_POINTS);
+  }
   const x = new Float64Array(points);
   for (let l = 0; l < points; l++) x[l] = lo + (hi - lo) * l / (points - 1);
-  return { x, dx: (hi - lo) / (points - 1) };
+  return { x, dx: (hi - lo) / (points - 1), lo, hi, capped: need > points };
+}
+
+/* The unnormalised single-removal rows q[i][j] = P(j wins | i removed) on
+   an explicit lattice of `pts` points over [lo, hi]: the deletion
+   ensemble's own resolution pass (#455, #785). REMOVAL_CAP and
+   REMOVAL_POINT_BUDGET are python's _REMOVAL_CAP and
+   _REMOVAL_POINT_BUDGET (winning/factor/races.py). */
+const REMOVAL_CAP = 16385;
+const REMOVAL_POINT_BUDGET = 4000000;
+function removalRows(M, sd, base, W, lo, hi, pts) {
+  const N = sd.length, dx = (hi - lo) / (pts - 1);
+  const q = Array.from({ length: N }, () => new Float64Array(N));
+  const logS = Array.from({ length: N }, () => new Float64Array(pts));
+  const f = Array.from({ length: N }, () => new Float64Array(pts));
+  const field = new Float64Array(pts);
+  for (let c = 0; c < M.length; c++) {
+    field.fill(0);
+    for (let i = 0; i < N; i++) for (let l = 0; l < pts; l++) {
+      const { ls, fx } = base.eval((lo + l * dx - M[c][i]) / sd[i], sd[i]);
+      logS[i][l] = ls; f[i][l] = fx; field[l] += ls;
+    }
+    for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+      if (j === i) continue;
+      let acc = 0;
+      for (let l = 0; l < pts; l++) {
+        let e = field[l] - logS[i][l] - logS[j][l];
+        if (e > 0) e = 0;
+        if (e >= -745) acc += f[j][l] * Math.exp(e);
+      }
+      q[i][j] += W[c] * acc * dx;
+    }
+  }
+  return q;
+}
+
+/* ---- the boundary: the same contracts as docs/js/winning/core.mjs ----
+   This module is standalone (it is deployed as docs/assets/js and three
+   pages import it directly), so it carries its own copies. */
+const isVec = (x) => Array.isArray(x) || (ArrayBuffer.isView(x) && !(x instanceof DataView));
+function finiteVec(x, where, what = "entry") {
+  if (!isVec(x)) throw new Error(`${where} must be an array of numbers`);
+  if (x.length === 0) throw new Error(`${where} is empty`);
+  for (let i = 0; i < x.length; i++)
+    if (typeof x[i] !== "number" || !Number.isFinite(x[i]))
+      throw new Error(`${where}[${i}] = ${x[i]} is not a finite ${what}`);
+  return Array.from(x);
+}
+/* D: a finite positive scalar or exactly one variance per contestant.
+   An extra entry used to widen the lattice by its own sd and misprice
+   the field it did not belong to (#254). */
+function asIdio(D, n, where = "D") {
+  let v;
+  if (typeof D === "number") v = new Array(n).fill(D);
+  else if (isVec(D)) {
+    if (D.length !== n)
+      throw new Error(`${where} must be one idiosyncratic variance per contestant; got ${D.length} for ${n}`);
+    v = Array.from(D);
+  } else throw new Error(`${where}: expected a number or array`);
+  for (let i = 0; i < n; i++) {
+    if (typeof v[i] !== "number" || !Number.isFinite(v[i]))
+      throw new Error(`${where} has a non-finite entry at ${i}`);
+    if (!(v[i] > 0))
+      throw new Error(`${where}[${i}] = ${v[i]} must be a strictly positive variance`);
+  }
+  return v;
+}
+/* V: (n, rank) rows (rank 0 allowed), plain or typed, rectangular. */
+function asLoadings(V, n, where = "V") {
+  if (!isVec(V) || V.length !== n)
+    throw new Error(`${where} must have one loading row per contestant; got ${isVec(V) ? V.length : typeof V} for ${n}`);
+  const rows = Array.from(V, (r, i) => {
+    if (!isVec(r)) throw new Error(`${where}[${i}] must be a row of loadings`);
+    return Array.from(r);
+  });
+  const r = rows[0].length;
+  rows.forEach((row, i) => {
+    if (row.length !== r)
+      throw new Error(`${where} is ragged: row ${i} has ${row.length} loadings, row 0 has ${r}`);
+    row.forEach((v, d) => {
+      if (typeof v !== "number" || !Number.isFinite(v))
+        throw new Error(`${where}[${i}][${d}] = ${v} is not finite`);
+    });
+  });
+  return rows;
+}
+/* F: a rectangular Q x rank(V) node matrix. condMeans read the rank off
+   F[0], so a uniformly short F priced a LOWER-rank model (0.083 share
+   move) and a ragged one silently ignored later coordinates (#290). */
+function asNodes(F, r, where = "F") {
+  if (!isVec(F) || F.length === 0)
+    throw new Error(`${where} must be a nonempty array of factor nodes`);
+  return Array.from(F, (row, q) => {
+    if (!isVec(row) || row.length !== r)
+      throw new Error(`${where}[${q}] has ${isVec(row) ? row.length : "no"} coordinate(s) but the loadings have rank ${r}`);
+    const out = Array.from(row);
+    out.forEach((v, d) => {
+      if (typeof v !== "number" || !Number.isFinite(v))
+        throw new Error(`${where}[${q}][${d}] = ${v} is not finite`);
+    });
+    return out;
+  });
+}
+function asBudget(x, dflt, where, name) {
+  if (x === undefined || x === null) return dflt;
+  if (!Number.isInteger(x) || x < 1)
+    throw new Error(`${where}: ${name} must be a finite positive integer; got ${x}. ` +
+                    "0, negatives and NaN used to mean the default or skip the " +
+                    "solve, and Infinity could hang the page (#428).");
+  return x;
+}
+function asPositive(x, dflt, where, name) {
+  if (x === undefined || x === null) return dflt;
+  if (typeof x !== "number" || !Number.isFinite(x) || !(x > 0))
+    throw new Error(`${where}: ${name} must be a finite positive number; got ${x}`);
+  return x;
+}
+/* Only an OMITTED base (undefined) means normal. `b || "normal"` read
+   "", false, 0 and null as the default too, so an invalid base priced --
+   and certified a calibration of -- the normal model (#552). */
+function baseOf(b) {
+  if (b === undefined) b = "normal";
+  const base = (b !== null && typeof b === "object") ? b
+    : (typeof b === "string" && Object.prototype.hasOwnProperty.call(BASES, b)) ? BASES[b]
+    : null;
+  if (!base || typeof base.eval !== "function")
+    throw new Error(`unknown base: ${typeof b === "string" ? JSON.stringify(b) : String(b)}; ` +
+                    `known: ${Object.keys(BASES).join(", ")}, or a base object with eval()`);
+  return base;
+}
+
+/* Each options object declares its keys: a JavaScript object swallows a
+   key nobody reads, so {bsae: "gumbel"} priced -- and certified a
+   calibration of -- the normal model (#559), the failure the modular
+   browser API closed in #186. */
+const WIN_PROBABILITIES_FACTOR_OPTS = new Set(["points", "base", "ownLogSlope", "pairwise", "deletions"]);
+const ABILITIES_FROM_PROBABILITIES_FACTOR_OPTS = new Set(["nIter", "tol", "points", "base", "mu0", "returnInfo"]);
+function checkOpts(opts, known, where) {
+  if (opts === null || typeof opts !== "object" || Array.isArray(opts))
+    throw new Error(`${where}: options must be an object; got ${opts === null ? "null" : typeof opts}`);
+  for (const k of Object.keys(opts))
+    if (!known.has(k))
+      throw new Error(`${where}: unknown option '${k}'. Known: ${[...known].join(", ")}.`);
 }
 
 /* Standardized bases (zero mean, unit variance), matching Python
@@ -98,31 +271,106 @@ const BASES = {
  * fine grid (dx = 0.005): survival by cumulative trapezoid, slope by
  * central differences, log-survival interpolated linearly (log-linear
  * tails). Python parity vs scipy is ~1e-6, not machine precision. */
-function tabulatedBase(pdfStd, spans) {
-  const HALF = 40, NPTS = 16001, DX = 2 * HALF / (NPTS - 1);
+function tabulatedBase(pdfStd, spans, { dpdf = null, dx = 0.005 } = {}) {
+  // Two tiers. The inner one is fine enough for the bulk; the outer one
+  // exists because clamping the lookup at the table edge made the density
+  // FLAT beyond it, so a runner 100 sd behind kept the endpoint density
+  // and the race reported a false longshot floor -- 3.5e-7 at gaps 80 and
+  // 100 where the truth keeps falling (#182). Heavy tails are exactly
+  // where that matters: a Student-t4 survival decays polynomially, so
+  // there is no span past which the omitted mass is negligible, and the
+  // old normalisation divided by the INNER mass alone, which is the same
+  // error again.
+  const HALF = 40;
+  const NPTS = Math.round(2 * HALF / dx) + 1, DX = 2 * HALF / (NPTS - 1);
+  const OUTER = 4000, NOUT = 8001, DXO = (OUTER - HALF) / (NOUT - 1);
   let g = null;
   const build = () => {
-    const f = new Float64Array(NPTS), ls = new Float64Array(NPTS);
+    const f = new Float64Array(NPTS);
     for (let k = 0; k < NPTS; k++) f[k] = pdfStd(-HALF + k * DX);
+    const fR = new Float64Array(NOUT), fL = new Float64Array(NOUT);
+    for (let k = 0; k < NOUT; k++) {
+      fR[k] = pdfStd(HALF + k * DXO);
+      fL[k] = pdfStd(-OUTER + k * DXO);
+    }
+    // one cumulative sweep across all three pieces, left to right, so the
+    // survival is normalised by the WHOLE computed mass
     let C = 0;
-    const cum = new Float64Array(NPTS);
+    const cumL = new Float64Array(NOUT);
+    for (let k = 1; k < NOUT; k++) { C += 0.5 * (fL[k - 1] + fL[k]) * DXO; cumL[k] = C; }
+    const cum = new Float64Array(NPTS); cum[0] = C;
     for (let k = 1; k < NPTS; k++) { C += 0.5 * (f[k - 1] + f[k]) * DX; cum[k] = C; }
-    for (let k = 0; k < NPTS; k++)
-      ls[k] = Math.log(Math.max((C - cum[k]) / C, 1e-300));
-    const fp = new Float64Array(NPTS);
-    for (let k = 1; k < NPTS - 1; k++) fp[k] = (f[k + 1] - f[k - 1]) / (2 * DX);
-    g = { f, ls, fp };
+    const cumR = new Float64Array(NOUT); cumR[0] = C;
+    for (let k = 1; k < NOUT; k++) { C += 0.5 * (fR[k - 1] + fR[k]) * DXO; cumR[k] = C; }
+    const T = C;
+    // No end correction on the cumulative. An Euler-Maclaurin term
+    // (h^2/12)(f'(x) - f'(a)) was tried and measured WORSE than the plain
+    // trapezoid, which is why #211's description and the changelog say it
+    // was removed; it was left in the code by mistake (#216). It could not
+    // have delivered its O(h^4): the cumulative is chained across three
+    // pieces with two different step sizes, corrected per piece with that
+    // piece's h and no correction at the joins, and f'(a) was taken as
+    // fpL[0], which the centred-difference helper never writes, so it was
+    // identically zero rather than the derivative at the left end. What
+    // actually fixed the 1e-5 survival gap was the span widening in the
+    // same PR, BASES.t4 [12,12] -> [24,24].
+    // The survival is swept right to left, not formed as T - c[k]: once
+    // the prefix rounded to T the subtraction erased every right tail
+    // below ~1e-16, and skewNormalBase(10) jumped from e^-30 to the 1e-300
+    // floor at z = 12 (true e^-35); a gap-15 longshot priced 3e-51 for
+    // 9.7e-21 (#501). Same pieces, same trapezoids, same total T.
+    const tailR = new Float64Array(NOUT);
+    for (let k = NOUT - 2; k >= 0; k--) tailR[k] = tailR[k + 1] + 0.5 * (fR[k] + fR[k + 1]) * DXO;
+    const tail = new Float64Array(NPTS); tail[NPTS - 1] = tailR[0];
+    for (let k = NPTS - 2; k >= 0; k--) tail[k] = tail[k + 1] + 0.5 * (f[k] + f[k + 1]) * DX;
+    const tailL = new Float64Array(NOUT); tailL[NOUT - 1] = tail[0];
+    for (let k = NOUT - 2; k >= 0; k--) tailL[k] = tailL[k + 1] + 0.5 * (fL[k] + fL[k + 1]) * DXO;
+    const lsOf = (c, sv) => {
+      const a = new Float64Array(c.length);
+      // the left of the table keeps the subtraction, where T - c is the
+      // accurate one (a survival near 1 summed from the right carries the
+      // whole bulk's rounding); the right uses the swept tail
+      for (let k = 0; k < c.length; k++)
+        a[k] = Math.log(Math.max((sv[k] < 0.5 * T ? sv[k] : T - c[k]) / T, 1e-300));
+      return a;
+    };
+    const dOf = (arr, h) => {
+      const a = new Float64Array(arr.length);
+      for (let k = 1; k < arr.length - 1; k++) a[k] = (arr[k + 1] - arr[k - 1]) / (2 * h);
+      return a;
+    };
+    const fp = dOf(f, DX), fpR = dOf(fR, DXO), fpL = dOf(fL, DXO);
+    g = { f, ls: lsOf(cum, tail), fp,
+          fR, lsR: lsOf(cumR, tailR), fpR,
+          fL, lsL: lsOf(cumL, tailL), fpL };
   };
   return {
     spans,
     eval(z, sd) {
       if (!g) build();
-      let t = (z + HALF) / DX;
-      if (t < 0) t = 0;
-      if (t > NPTS - 2) t = NPTS - 2;
+      let arrF, arrLs, arrFp, t;
+      // Both wings clamp at BOTH ends: the left wing's top index is
+      // NOUT - 1 at z = -HALF exactly, and reading arr[k + 1] there gave
+      // NaN, which the race then carried into the whole field.
+      if (z >= HALF) {
+        t = (z - HALF) / DXO; arrF = g.fR; arrLs = g.lsR; arrFp = g.fpR;
+        t = Math.min(Math.max(t, 0), NOUT - 2);   // past 4000 sd a floor
+      } else if (z <= -HALF) {                    // remains, now ~1e-13
+        t = (z + OUTER) / DXO; arrF = g.fL; arrLs = g.lsL; arrFp = g.fpL;
+        t = Math.min(Math.max(t, 0), NOUT - 2);   // rather than 3.5e-7
+      } else {
+        t = (z + HALF) / DX; arrF = g.f; arrLs = g.ls; arrFp = g.fp;
+      }
       const k = Math.floor(t), a = t - k;
       const lerp = (arr) => arr[k] + a * (arr[k + 1] - arr[k]);
-      return { ls: lerp(g.ls), fx: lerp(g.f) / sd, ds: -lerp(g.fp) / (sd * sd) };
+      if (dpdf) {
+        // analytic density and slope where the base knows them (#331):
+        // a centred difference of a table cannot follow a transition
+        // narrower than its spacing, and the interpolated slope then
+        // came out with the wrong SIGN
+        return { ls: lerp(arrLs), fx: pdfStd(z) / sd, ds: -dpdf(z) / (sd * sd) };
+      }
+      return { ls: lerp(arrLs), fx: lerp(arrF) / sd, ds: -lerp(arrFp) / (sd * sd) };
     },
   };
 }
@@ -132,13 +380,27 @@ const PHI = (z) => Math.exp(logndtr(z));
 /* skew-normal with shape alpha, standardized to mean 0 variance 1;
  * returns a base object usable directly as opts.base */
 export function skewNormalBase(alpha) {
-  const delta = alpha / Math.sqrt(1 + alpha * alpha);
+  // hypot, not sqrt(1 + alpha^2): alpha^2 overflows past ~1.34e154 and
+  // delta became 0, an unstandardized law for a finite shape (#399)
+  if (typeof alpha !== "number" || !Number.isFinite(alpha))
+    throw new Error(`skewNormalBase needs a finite shape; got ${alpha}`);
+  const delta = alpha / Math.hypot(1, alpha);
   const m = delta * Math.sqrt(2 / Math.PI);
   const s = Math.sqrt(1 - m * m);
+  const phi = (u) => Math.exp(-0.5 * u * u) / SQRT_2PI;
   const pdf = (z) => { const u = m + s * z;
-    return s * 2 * Math.exp(-0.5 * u * u) / SQRT_2PI * PHI(alpha * u); };
-  const b = tabulatedBase(pdf, [12, 12]);
+    return s * 2 * phi(u) * PHI(alpha * u); };
+  // d pdf / dz, analytic: the Phi(alpha u) transition is O(1/|alpha|)
+  // wide, and a fixed 0.005 table differenced across it gave a POSITIVE
+  // own slope at alpha = 400, so the inverse walked uphill (#331)
+  const dpdf = (z) => { const u = m + s * z;
+    return s * s * 2 * phi(u) * (alpha * phi(alpha * u) - u * PHI(alpha * u)); };
+  // the survival is still tabulated; resolve the transition with a few
+  // points across it, never coarser than the default
+  const dx = Math.max(Math.min(0.005, 0.25 / Math.max(Math.abs(alpha), 1)), 1e-4);
+  const b = tabulatedBase(pdf, [12, 12], { dpdf, dx });
   b.pdf = pdf;
+  b.resolution = Math.min(1, 2 / Math.max(Math.abs(alpha), 1e-300));
   return b;
 }
 
@@ -146,10 +408,28 @@ BASES.skew = skewNormalBase(3);
 {
   // Student-t, nu = 4, standardized (sd = sqrt(2))
   const SQ2 = Math.SQRT2;
+  // spans: how far past the extreme conditional mean the lattice runs, in
+  // units of the largest sd. Student-t4 keeps real mass a long way out, so
+  // 12 truncated it and the forward sat 1.01e-5 from scipy -- a hundred
+  // times the python reference's own lattice error, and the standing
+  // failure in test_parity.mjs. Measured against that fixture, at the
+  // default 501 points:
+  //
+  //   span   forward error   inverse over 501..4001 points
+  //     12       1.01e-5     2.9e-7 .. 2.3e-6
+  //     20       1.75e-6     2.9e-7 .. 5.0e-7
+  //     24       8.42e-7     2.9e-7 .. 3.5e-7
+  //     32       2.37e-7     2.9e-7 .. 5.3e-7
+  //     40       1.39e-7     NaN at 501, 1001 and 4001
+  //
+  // Both ends cost: too narrow drops tail mass, too wide spreads a fixed
+  // point budget until the bulk is under-resolved, and past ~40 the
+  // inverse returns NaN outright (its own fragility, not this constant --
+  // reported separately). 24 sits where both are good with margin.
   BASES.t4 = tabulatedBase(
     (z) => { const u = SQ2 * z;
       return SQ2 * (3 / 8) * Math.pow(1 + u * u / 4, -2.5); },
-    [12, 12]);
+    [24, 24]);
 }
 
 function condMeans(mu, V, F) {
@@ -167,21 +447,186 @@ function condMeans(mu, V, F) {
   return M;
 }
 
+/* The standardized density of a base (zero mean, unit variance), as the
+   engine integrates it -- for pages that DRAW the fitted performance
+   law. fit.html drew a Gaussian for every base but Gumbel, so a t4 or
+   skew-normal fit was shown as the wrong law (#351). */
+export function basePdf(b) {
+  const base = baseOf(b);
+  return (z) => base.eval(z, 1).fx;
+}
+
 /* forward pass: shares (and optionally slopes, pairwise densities, deletions) */
+/* The factor weights describe a LAW, so W and c*W are the same law and
+   must give the same answer. The forward already did: it normalises its
+   accumulated shares, so `p` was invariant to 1e-16 under any positive
+   rescaling. But it returns the own-slopes UNNORMALISED, and the
+   inverse divides those by the normalised probabilities -- so the
+   Newton derivative carried a factor of c, and only the inverse moved.
+   A self-generated target repriced 0.16 away after fifty iterations at
+   c = 0.1, which is a calibration failure with no error (#281).
+
+   python has the same helper-level mismatch and is saved by its front
+   door: `races._setup` puts W through `winning.shapes.as_weights`. This
+   standalone module has no such boundary, so it grows one, with the
+   same contract -- finite, non-negative, positive total, normalised --
+   which also settles zero and signed weights rather than letting them
+   through to produce a normalised, plausible, wrong answer.
+
+   Deliberately NOT also scaling the slope by the forward total: python
+   does not, and a silent divergence between the ports is worse than
+   either behaviour. This makes the two agree. */
+export function asWeights(W, nNodes, where = "W") {
+  if (!Array.isArray(W) && !ArrayBuffer.isView(W))
+    throw new Error(`${where} must be an array of factor-node weights; got ${typeof W}`);
+  if (W.length !== nNodes)
+    throw new Error(`${where} must have one weight per factor node; got ${W.length} for ${nNodes}`);
+  let top = 0;
+  for (let i = 0; i < W.length; i++) {
+    // a NUMBER, as core.mjs asWeights: Number() made "0.5", true and null
+    // weights, and [true, false] priced the law [1, 0] (#527)
+    const v = W[i];
+    if (typeof v !== "number" || !Number.isFinite(v))
+      throw new Error(`${where}[${i}] = ${W[i]} is not a finite weight`);
+    if (v < 0)
+      throw new Error(`${where}[${i}] = ${v} is a negative weight; a factor law has no negative mass`);
+    if (v > top) top = v;
+  }
+  if (!(top > 0))
+    throw new Error(`${where} must have a positive total; got 0`);
+  // through the LARGEST weight, never the raw total: [1e308, 1e308]
+  // overflows only in the sum, and W / Infinity made every weight zero
+  // and every probability NaN (#415)
+  const u = Array.from(W, (v) => Number(v) / top);
+  const total = u.reduce((a, b) => a + b, 0);
+  return u.map((v) => v / total);
+}
+
+/* (F, W) with zero-weight nodes dropped (python shapes.as_factor_law). A
+   null node is a no-op for the integral but every lattice sizes its
+   window from all the nodes it is given, so zero-mass atoms at f = +-100
+   widened it until each density spike fell between points and the
+   forward returned NaN (#416). */
+export function asFactorLaw(F, W, where = "W") {
+  const Wn = asWeights(W, F.length, where);
+  // ... and the lightest nodes whose COMBINED relative mass is at most
+  // 1e-15: they change no share at double precision but size the
+  // window (#416; python shapes.as_factor_law, the browser's asFactorLaw)
+  const order = Wn.map((_, q) => q).sort((a, b) => Wn[a] - Wn[b] || a - b);
+  const drop = new Array(Wn.length).fill(false);
+  let cum = 0;
+  for (const q of order) {
+    cum += Wn[q];
+    if (cum > 1e-15) break;
+    drop[q] = true;
+  }
+  const keepF = [], keepW = [];
+  let tot = 0;
+  for (let q = 0; q < Wn.length; q++) if (!drop[q] && Wn[q] > 0) { keepF.push(F[q]); keepW.push(Wn[q]); tot += Wn[q]; }
+  return { F: keepF, W: keepW.map((v) => v / tot) };
+}
+
+/* A lattice size: a whole number >= 2. `opts.points || 501` read an
+   explicit 0 as "use the default", and 1 divided by points - 1 = 0 and
+   returned all NaN (#444). Same contract as python shapes.as_points. */
+export function asPoints(points, fallback = 501) {
+  if (points === undefined || points === null) return fallback;
+  const v = Number(points);
+  if (typeof points === "boolean" || !Number.isFinite(v) || !Number.isInteger(v))
+    throw new Error(`points must be a whole number of lattice points; got ${points}`);
+  if (v < 2)
+    throw new Error(`points must be at least 2: a lattice of ${v} point${v === 1 ? "" : "s"} has no spacing to integrate on`);
+  return v;
+}
+
+/* The gauge, scale-safe (python core._gauge_center, #471): an exactly
+   common column centres to exactly zero -- summing row / N left a residue
+   at [1e20] * 9 (a 0.0055 share error) and turned [1e100] * 9 into the
+   uniform vector -- and a column whose mean or differences overflow is
+   centred in units of its largest entry, (V/s - mean) * s. */
+function centredLoadings(V, N) {
+  const r0 = V[0].length;
+  const colMean = new Array(r0).fill(0);
+  for (const row of V) for (let j = 0; j < r0; j++) colMean[j] += row[j] / N;
+  const out = V.map((row) => row.map((v, j) => v - colMean[j]));
+  for (let j = 0; j < r0; j++) {
+    if (V.every((row) => row[j] === V[0][j])) {
+      for (const row of out) row[j] = 0;
+      continue;
+    }
+    if (out.every((row) => Number.isFinite(row[j]))) continue;
+    let s = 0;
+    for (const row of V) s = Math.max(s, Math.abs(row[j]));
+    let m = 0;
+    for (const row of V) m += row[j] / s / N;
+    for (let i = 0; i < N; i++) out[i][j] = (V[i][j] / s - m) * s;
+  }
+  return out;
+}
+
+/* mu moved next to the origin when a common offset dwarfs the field
+   (port of python's races._translated_home): shift by a middle entry
+   (an element, so no sum can overflow) once |offset| > 1e6 field scales;
+   below that nothing moves, so ordinary inputs stay bit-identical. */
+function translatedHome(mu, D) {
+  const s = mu.slice().sort((a, b) => a - b);
+  const off = s[Math.floor(s.length / 2)];
+  let dmax = 0;
+  for (let i = 0; i < D.length; i++) dmax = Math.max(dmax, D[i]);
+  const scale = (s[s.length - 1] - s[0]) + Math.sqrt(dmax);
+  return Math.abs(off) > 1e6 * scale ? mu.map((v) => v - off) : mu;
+}
+
 export function winProbabilitiesFactor(mu, V, D, F, W, opts = {}) {
-  const points = opts.points || 501;
-  const base = (opts.base && typeof opts.base === "object")
-    ? opts.base : BASES[opts.base || "normal"];
-  if (!base) throw new Error("unknown base: " + opts.base);
-  const N = mu.length, Q = F.length;
+  checkOpts(opts, WIN_PROBABILITIES_FACTOR_OPTS, "winProbabilitiesFactor");
+  const points = asBudget(opts.points, 501, "winProbabilitiesFactor", "points");
+  if (points < 3) throw new Error("winProbabilitiesFactor: points must be at least 3");
+  const base = baseOf(opts.base);
+  mu = finiteVec(mu, "mu", "ability");
+  const N = mu.length;
+  V = asLoadings(V, N);
+  D = asIdio(D, N);
+  // the origin is a gauge, but the lattice below is built in the
+  // caller's units: at a common offset of 2^52 it collapsed to the float
+  // spacing and shares moved 1.4e-3 (#477, as python's _translated_home)
+  mu = translatedHome(mu, D);
+  F = asNodes(F, V[0].length);
+  ({ F, W } = asFactorLaw(F, W, "W"));   // zero-weight nodes dropped (#416)
+  const Q = F.length;
   const sd = D.map(Math.sqrt);
+  // gauge-fix matching the python reference: center each factor's
+  // loadings across contestants (a common column cannot move an argmin)
+  V = centredLoadings(V, N);
   const M = condMeans(mu, V, F);
-  const { x, dx } = lattice(M, sd, points, base.spans);
+  const grid = lattice(M, sd, points, base.spans, base.resolution || 1);
+  const { x, dx } = grid;
   const L = x.length;
   const p = new Float64Array(N);
   const slope = new Float64Array(N);
+  // the derivative of the RETURNED (normalised) share needs the raw
+  // total's derivative too: d a_j / d mu_i = w_ij for j != i, so this is
+  // the row sum of the tie densities, accumulated on the same pass (#371)
+  const wantCross = !!opts.ownLogSlope;
+  const cross = new Float64Array(N);
   const w = opts.pairwise ? Array.from({ length: N }, () => new Float64Array(N)) : null;
-  const q = opts.deletions ? Array.from({ length: N }, () => new Float64Array(N)) : null;
+  // Removing either of two runners leaves the other certain, whatever the
+  // field: integrating that anyway let an irrelevant ability gap decide
+  // whether the call succeeded -- a skew-normal pair 1000 apart captured
+  // row mass 1.0096 and threw (#411; python removal_shares)
+  const pairRemoval = !!opts.deletions && N === 2;
+  const q = opts.deletions && !pairRemoval ? Array.from({ length: N }, () => new Float64Array(N)) : null;
+  // The deletion rows have their own resolution target, spacing sd_min/8
+  // over the same window, as python's removal_shares: a lattice that is
+  // fine for the forward shares can still be too coarse for them. A
+  // Laplace field at 933 uncapped points against a target of 3729 gave a
+  // row 70 bp wrong at mass 0.9962 (#785). When the target exceeds this
+  // lattice the rows are computed on their own lattice of
+  // min(target, REMOVAL_CAP) points (and refined past that below), so
+  // the forward pass skips them.
+  const needRemoval = q ? Math.ceil((grid.hi - grid.lo) / (Math.min(...sd) / 8)) + 1 : 0;
+  const removalPts = Math.min(needRemoval, REMOVAL_CAP);
+  const ownRemoval = q && removalPts > L;
+  const qLoop = q && !ownRemoval;
 
   const logS = Array.from({ length: N }, () => new Float64Array(L));
   const f = Array.from({ length: N }, () => new Float64Array(L));
@@ -213,19 +658,24 @@ export function winProbabilitiesFactor(mu, V, D, F, W, opts = {}) {
       p[i] += Wc * acc * dx;
       slope[i] += Wc * accS * dx;
     }
-    if (w) {
+    if (w || wantCross) {
       for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
         if (j === i) continue;
+        if (!w && j < i) continue;           // symmetric: one triangle for cross
         let acc = 0;
         for (let l = 0; l < L; l++) {
           let e = logSfield[l] - logS[i][l] - logS[j][l];
           if (e > 0) e = 0;
           acc += f[i][l] * f[j][l] * (e < -745 ? 0 : Math.exp(e));
         }
-        w[i][j] += Wc * acc * dx;
+        if (w) w[i][j] += Wc * acc * dx;
+        if (wantCross) {
+          if (w) cross[i] += Wc * acc * dx;
+          else { cross[i] += Wc * acc * dx; cross[j] += Wc * acc * dx; }
+        }
       }
     }
-    if (q) {
+    if (qLoop) {
       for (let i = 0; i < N; i++) {
         for (let j = 0; j < N; j++) {
           if (j === i) continue;
@@ -242,73 +692,348 @@ export function winProbabilitiesFactor(mu, V, D, F, W, opts = {}) {
   }
   let total = 0;
   for (const v of p) total += v;
+  // dividing by a zero or non-finite total returned all NaN (#416);
+  // python retries on its bulk window, this standalone module refuses
+  if (!(Number.isFinite(total) && total > 0))
+    throw new Error(`factor race integration failed: quadrature total ${total} ` +
+      "(every density fell between lattice points; raise points or check F, W)");
   const out = Array.from(p, (v) => v / total);
-  const res = { p: out, total, slope: Array.from(slope) };
+  const res = { p: out, total, slope: Array.from(slope), points: L };
+  if (wantCross) {
+    // d log p_i / d mu_i of the normalised share: own term minus the
+    // total's, a_i' / a_i - (a_i' + sum_j w_ij) / T
+    res.ownLogSlope = Array.from(p, (a, i) =>
+      slope[i] / Math.max(a, 1e-300) - (slope[i] + cross[i]) / total);
+  }
   if (w) res.w = w.map((r) => Array.from(r));
-  if (q) {
-    res.deletions = q.map((r) => {
-      let s = 0;
-      for (const v of r) s += v;
-      return Array.from(r, (v) => v / s);
+  if (pairRemoval) {
+    res.deletionMass = [1, 1];
+    res.deletions = [[0, 1], [1, 0]];
+  }
+  if (ownRemoval) {
+    const r = removalRows(M, sd, base, W, grid.lo, grid.hi, removalPts);
+    for (let i = 0; i < N; i++) q[i] = r[i];
+  }
+  // a base's feature width can cap the forward lattice while the removal
+  // target is already met; nothing then needs refining (#697)
+  const start = ownRemoval ? removalPts : L;
+  if (q && needRemoval > start) {
+    // A capped lattice cannot be policed by the row masses: cell errors
+    // of opposite sign cancel in each row sum. A sd-9.3e-4 runner 50
+    // units from a sd-10 one gave the row [0, 0.765, 0.235] at mass
+    // 0.99923 against a direct [0, 0.309, 0.691] (#455). As python's
+    // removal_shares: refine by doubling, watch the CELLS until they stop
+    // moving, and refuse if the budget runs out first.
+    const MOVE_TOL = 1e-3;
+    const needR = needRemoval;
+    const ceiling = Math.max(start, Math.min(needR, Math.floor(REMOVAL_POINT_BUDGET / N)));
+    const norm = (rows) => rows.map((r) => {
+      const t = r.reduce((a, b) => a + b, 0);
+      return Array.from(r, (v) => v / t);
     });
+    let prev = norm(q), moved = Infinity, pts = start, cur = q;
+    while (pts < ceiling) {
+      pts = Math.min(2 * pts - 1, ceiling);
+      cur = removalRows(M, sd, base, W, grid.lo, grid.hi, pts);
+      const nc = norm(cur);
+      moved = 0;
+      for (let i = 0; i < N; i++) for (let j = 0; j < N; j++)
+        moved = Math.max(moved, Math.abs(nc[i][j] - prev[i][j]));
+      prev = nc;
+      if (moved <= MOVE_TOL) break;
+    }
+    if (!(moved <= MOVE_TOL))
+      throw new Error(
+        `deletion rows: the field needs ${needR} lattice points to resolve ` +
+        `its sharpest runner and the budget stops at ${ceiling}; ` +
+        (pts === start ? `the lattice already has ${start}, so no refinement could be measured. `
+                   : `refining to there still moved a share by ${moved.toExponential(2)}. `) +
+        "The row " +
+        "masses are not evidence here -- cell errors of opposite sign " +
+        "cancel in them. Narrow the field.");
+    for (let i = 0; i < N; i++) q[i] = cur[i];
+  }
+  if (q) {
+    // each removal row is its own race and carries its own mass check:
+    // the full race's `total` says nothing about it -- 0.99984 there sat
+    // beside a deletion row 13.4 points wrong (#330)
+    const mass = q.map((r) => r.reduce((a, b) => a + b, 0));
+    const worst = Math.max(...mass.map((m) => Math.abs(m - 1)));
+    if (!(worst <= 5e-3))
+      throw new Error(
+        `deletion rows captured mass ${Math.min(...mass).toFixed(4)}..` +
+        `${Math.max(...mass).toFixed(4)} where each is a whole race: the ` +
+        "lattice cannot resolve a removal counterfactual; raise points=");
+    res.deletionMass = mass;
+    res.deletions = q.map((r, i) => Array.from(r, (v) => v / mass[i]));
   }
   return res;
 }
 
 /* inverse transform: damped coordinatewise Newton (port of
- * abilities_from_probabilities_factor) */
+ * abilities_from_probabilities_factor).
+ *
+ * Returns mu; with opts.returnInfo, {mu, converged, residual,
+ * iterations}. Without it a non-converged solve WARNS rather than
+ * returning an uncertified calibration silently (#358, #428). */
 export function abilitiesFromProbabilitiesFactor(pTarget, V, D, F, W, opts = {}) {
-  const nIter = opts.nIter || 50, tol = opts.tol || 1e-6, points = opts.points || 501;
-  const base = opts.base || "normal";
-  const N = pTarget.length;
-  let psum = 0;
-  for (const v of pTarget) { if (v <= 0) throw new Error("targets must be positive"); psum += v; }
-  const p = pTarget.map((v) => v / psum);
+  const where = "abilitiesFromProbabilitiesFactor";
+  checkOpts(opts, ABILITIES_FROM_PROBABILITIES_FACTOR_OPTS, where);
+  const nIter = asBudget(opts.nIter, 50, where, "nIter");
+  const tol = asPositive(opts.tol, 1e-6, where, "tol");
+  const points = asBudget(opts.points, 501, where, "points");
+  const base = opts.base === undefined ? "normal" : opts.base;   // #552
+  baseOf(base);
+  const target = finiteVec(pTarget, "target", "probability");
+  const N = target.length;
+  ({ F, W } = asFactorLaw(F, W, "W"));   // zero-weight nodes dropped (#416)
+  // through the LARGEST entry first: a relative target of finite entries
+  // can overflow only in its sum, and [0.8, 0.6, 0.4, 0.2] * 1e308 came
+  // back all NaN where * 1e307 calibrated (#475)
+  let top = 0;
+  for (const v of target) { if (v <= 0) throw new Error("targets must be positive"); if (v > top) top = v; }
+  const u = target.map((v) => v / top);
+  const usum = u.reduce((a, b) => a + b, 0);
+  const p = u.map((v) => v / usum);
   const logp = p.map(Math.log);
+  V = asLoadings(V, N);
+  D = asIdio(D, N);
+  const r = V[0].length;
+  F = asNodes(F, r);
+  W = asWeights(W, F.length, "W");
   const sd = D.map(Math.sqrt);
-  const vnorm2 = V.map((row) => row.reduce((a, b) => a + b * b, 0));
+  const fwdOpts = { points, base };
+  const finish = (mu, converged, residual, iterations) => {
+    if (!converged && !opts.returnInfo && typeof console !== "undefined")
+      console.warn(`${where} did not converge: max |log residual| ` +
+                   `${residual.toExponential(2)} after ${iterations} iterations ` +
+                   `(tol ${tol}). Pass returnInfo: true for the diagnostics.`);
+    return opts.returnInfo ? { mu, converged, residual, iterations } : mu;
+  };
+  // validated for every N: the pair branch below returned before mu0 was
+  // read, so a NaN, wrong-length or string start passed silently (#838)
+  let mu0 = null;
+  if (opts.mu0 != null) {
+    mu0 = finiteVec(opts.mu0, "mu0", "ability");
+    if (mu0.length !== N) throw new Error(`mu0 has ${mu0.length} entries for ${N}`);
+  }
+  if (N === 1) return finish([0], true, 0, 0);
+
+  // The factor law actually represented, as python's abilities_from_race
+  // measures it: V -> aV, F -> F/a is the SAME forward, but reading the
+  // factor variance off raw sum(V_i^2) inflated the warm start and the
+  // step cap by a^2 and missed by 89 points at a = 100 (#443).
+  const Vc = centredLoadings(V, N);                 // scale-safe (#471)
+  const Fm = new Array(r).fill(0);
+  F.forEach((fq, k) => fq.forEach((v, d) => { Fm[d] += W[k] * v; }));
+  const CovF = Array.from({ length: r }, (_, a) => Array.from({ length: r }, (_, b) =>
+    F.reduce((acc, fq, k) => acc + W[k] * (fq[a] - Fm[a]) * (fq[b] - Fm[b]), 0)));
+  const quad = (u, v) => u.reduce((acc, ua, a) =>
+    acc + ua * CovF[a].reduce((acc2, c, b) => acc2 + c * v[b], 0), 0);
+  const sigV = Vc.map((row) => quad(row, row));
+  const shift = Vc.map((row) => row.reduce((acc, v, d) => acc + v * Fm[d], 0));
+  const stepCap = D.map((d, i) => Math.sqrt(d + sigV[i]));
+
+  // Tail-aware convergence: shares below the floor are matched best-effort.
+  // But in a multiway field fewer than TWO shares above it carry no
+  // contrast at all -- a
+  // rounded-one favourite alone is matched by any field it dominates, and
+  // [-12, 0, 12] (p = [1, 1.1e-17, 3.5e-65]) certified converged at
+  // abilities that repriced the 1.1e-17 share as 0 (#588). Then every share
+  // counts, so the result either reprices them or says it did not converge.
   const floor = Math.max(1e-9, 1e-4 / N);
-  const ident = p.map((v) => v > floor);
+  let ident = p.map((v) => v > floor);
+  if (N === 2) {
+    // a pair is ONE contrast and the minority is the side that exposes a
+    // law mismatch: the tail mask (p > 5e-5) dropped a 1e-6 minority and
+    // certified a warm start that repriced it at 5e-37 (#727, as python)
+    ident = [true, true];
+  } else if (ident.filter(Boolean).length < 2) {
+    // every share the solver can represent; if that is still one, every
+    // share. Scoring a share below PFLOOR made a self-generated
+    // [1, 1.1e-5, 5.7e-18] an irreducible non-convergence (#588, as python)
+    ident = p.map((v) => v > PFLOOR);
+    if (ident.filter(Boolean).length < 2) ident = p.map(() => true);
+  }
+  const residualOf = (phat) => {
+    let res = 0;
+    for (let i = 0; i < N; i++) if (ident[i]) res = Math.max(res, Math.abs(Math.log(phat[i]) - logp[i]));
+    return res;
+  };
+
+  if (N === 2) {
+    // A pair is ONE number, the gap, and p_0 is monotone in it: solve
+    // that scalar equation against the actual forward. The simultaneous
+    // update is a two-cycle on K_2 (python's closed-form comment), and
+    // this module had no pair branch at all, returning 0.770 for a
+    // target of 0.8 (#198). The Gaussian closed form -- exact for
+    // Gaussian nodes -- is the starting bracket, and the forward has
+    // the last word, so a non-Gaussian rule is handled too.
+    const s0 = Math.sqrt(D[0] + D[1] + quad(
+      Vc[0].map((v, d) => v - Vc[1][d]), Vc[0].map((v, d) => v - Vc[1][d])));
+    // Solve on the MINORITY runner's share, read off its own target.
+    // ndtri(p[0]) with p[0] = 1/(1 + 1e-16) rounded to ndtri(1) = -inf and
+    // came back NaN, while the mirrored target was finite; and log p0 of a
+    // near-certain favourite is flat, so a non-Gaussian [1, 0.001] stalled
+    // at 92% low after fifty iterations where [0.001, 1] converged in 20
+    // (#412). p0 rises with g, p1 falls, so h below is increasing either way.
+    const m = p[1] < p[0] ? 1 : 0;
+    const sgn = m === 0 ? 1 : -1;
+    // a caller's mu0 is the start in place of the closed form, certified
+    // first like it (#838)
+    const g0 = mu0 ? mu0[1] - mu0[0] : sgn * s0 * ndtri(p[m]) - (shift[1] - shift[0]);
+    const p0At = (g) => winProbabilitiesFactor([-0.5 * g, 0.5 * g], V, D, F, W, fwdOpts).p;
+    // both shares scored, floored at 1e-300 as python's _pair_solve: at
+    // PFLOOR a minority below 1e-15 could never certify (#727)
+    let g = g0, ph = p0At(g), res = residualOf(ph.map((v) => Math.max(v, 1e-300)));
+    let it = 0;
+    if (res >= tol) {
+      // bracket the root of h(g) = +-(log p_m(g) - log p_m*), increasing in g;
+      // floored at 1e-300, not PFLOOR, so a 1e-16 minority is still steered
+      const h = (gg) => sgn * (Math.log(Math.max(p0At(gg)[m], 1e-300)) - logp[m]);
+      let lo = g0, hi = g0, step = Math.max(0.25 * s0, 1e-6);
+      let hlo = h(lo), hhi = hlo;
+      while (hlo > 0 && it < nIter) { lo -= step; step *= 2; hlo = h(lo); it++; }
+      step = Math.max(0.25 * s0, 1e-6);
+      while (hhi < 0 && it < nIter) { hi += step; step *= 2; hhi = h(hi); it++; }
+      let side = 0;
+      for (; it < nIter; it++) {
+        // false position inside the bracket (Illinois: an endpoint kept
+        // twice running has its value halved, so the bracket closes from
+        // both sides instead of creeping in from one), bisection when the
+        // secant leaves it
+        let mid = hhi !== hlo ? hi - hhi * (hi - lo) / (hhi - hlo) : 0.5 * (lo + hi);
+        if (!(mid > lo && mid < hi)) mid = 0.5 * (lo + hi);
+        const hm = h(mid);
+        g = mid;
+        ph = p0At(g);
+        res = residualOf(ph.map((v) => Math.max(v, 1e-300)));
+        if (res < tol) { it++; break; }
+        if (hm < 0) {
+          lo = mid; hlo = hm;
+          if (side === -1) hhi *= 0.5;
+          side = -1;
+        } else {
+          hi = mid; hhi = hm;
+          if (side === 1) hlo *= 0.5;
+          side = 1;
+        }
+      }
+    }
+    return finish([-0.5 * g, 0.5 * g], res < tol, res, it);
+  }
 
   let mu;
-  const anyV = V.some((row) => row.some((v) => v !== 0));
-  if (opts.mu0) {
-    mu = opts.mu0.slice();
-  } else if (F[0].length >= 1 && anyV) {
-    const sdTot2 = D.map((d, i) => d + vnorm2[i]);
-    mu = abilitiesFromProbabilitiesFactor(
-      p, V.map(() => [0]), sdTot2, [[0]], [1], { nIter, tol, points, base });
+  const anyV = Vc.some((row) => row.some((v) => v !== 0));
+  if (mu0) {
+    mu = mu0;
+  } else if (r >= 1 && anyV) {
+    // warm start: the independent race at each runner's represented
+    // total variance, shifted by the rule's mean
+    const sdTot2 = D.map((d, i) => d + sigV[i]);
+    const ind = abilitiesFromProbabilitiesFactor(
+      p, V.map(() => [0]), sdTot2, [[0]], [1], { nIter, tol, points, base, returnInfo: true });
+    mu = ind.mu.map((m, i) => m - shift[i]);
   } else {
+    // min-wins and in the field's units, as python (#100)
     const m = logp.reduce((a, b) => a + b, 0) / N;
-    mu = logp.map((v) => (v - m) / 2.0);
+    const ds = D.slice().sort((a, b) => a - b);
+    const med = N % 2 ? ds[(N - 1) / 2] : 0.5 * (ds[N / 2 - 1] + ds[N / 2]);
+    mu = logp.map((v) => -(v - m) / 2.0 * Math.sqrt(med));
   }
-  const stepCap = D.map((d, i) => Math.sqrt(d + vnorm2[i]));
-  let prevRes = Infinity, damp = 1.0, res = Infinity;
+  // two runners holding nearly all the mass two-cycle undamped, at any N
+  // (python's abilities_from_race; #358): start damped there
+  const top2 = p.slice().sort((a, b) => b - a).slice(0, 2).reduce((a, b) => a + b, 0);
+  let damp = top2 > 0.8 ? 0.7 : 1.0;
+  let prevRes = Infinity, res = Infinity, iters = 0;
+  let prevDelta = null;
   for (let it = 0; it < nIter; it++) {
-    const fwd = winProbabilitiesFactor(mu, V, D, F, W, { points, base });
-    const phat = fwd.p.map((v) => Math.max(v / 1.0, PFLOOR));
-    const slope = fwd.slope;
+    iters = it + 1;
+    const fwd = winProbabilitiesFactor(mu, V, D, F, W, { ...fwdOpts, ownLogSlope: true });
+    const phat = fwd.p.map((v) => Math.max(v, PFLOOR));
     const resid = phat.map((v, i) => Math.log(v) - logp[i]);
-    res = 0;
-    let any = false;
-    for (let i = 0; i < N; i++) if (ident[i]) { any = true; res = Math.max(res, Math.abs(resid[i])); }
-    if (!any) for (let i = 0; i < N; i++) res = Math.max(res, Math.abs(resid[i]));
-    if (res < tol) break;
+    res = residualOf(phat);
+    if (!Number.isFinite(res)) break;
+    if (res < tol) {
+      // an exact mu0 stops before any update, and the update is what
+      // centres: it came back with the caller's shift (#849)
+      if (mu0 && it === 0) {
+        const m0 = mu.reduce((a, b) => a + b, 0) / N;
+        for (let i = 0; i < N; i++) mu[i] -= m0;
+      }
+      break;
+    }
     if (res > prevRes * 1.2) damp = Math.max(0.25, damp * 0.5);
     prevRes = res;
-    let mean = 0;
+    const delta = new Array(N);
     for (let i = 0; i < N; i++) {
-      let dlogp = slope[i] / phat[i];
+      // the derivative of the share the forward RETURNS (normalised), not
+      // the raw own-density slope divided by it: on a coarse lattice the
+      // two parted by 85% and the solve missed by 22 points (#371)
+      let dlogp = fwd.ownLogSlope[i];
       const ceil = -1e-3 / (sd[i] + 1e-9);
-      if (dlogp > ceil) dlogp = ceil;
-      let delta = damp * resid[i] / dlogp;
-      if (delta > stepCap[i]) delta = stepCap[i];
-      if (delta < -stepCap[i]) delta = -stepCap[i];
-      mu[i] -= delta;
-      mean += mu[i];
+      if (!(dlogp <= ceil)) dlogp = ceil;           // also catches NaN (#210)
+      let d = damp * resid[i] / dlogp;
+      if (d > stepCap[i]) d = stepCap[i];
+      if (d < -stepCap[i]) d = -stepCap[i];
+      delta[i] = d;
     }
+    // an observed two-cycle (consecutive steps pointing back) damps, as
+    // python's _jacobi_sweeps estimates it from the step pair
+    if (prevDelta) {
+      let dot = 0, nn = 0;
+      for (let i = 0; i < N; i++) { dot += delta[i] * prevDelta[i]; nn += prevDelta[i] * prevDelta[i]; }
+      if (nn > 0 && dot / nn < -0.5) damp = Math.max(0.25, damp * 0.7);
+    }
+    prevDelta = delta;
+    let mean = 0;
+    for (let i = 0; i < N; i++) { mu[i] -= delta[i]; mean += mu[i]; }
     mean /= N;
     for (let i = 0; i < N; i++) mu[i] -= mean;
   }
-  return mu;
+  if (iters === nIter && Number.isFinite(res) && !(res < tol) &&
+      mu.every((v) => Number.isFinite(v))) {
+    // the budget ran out after an update the loop never priced: report
+    // the residual of the mu actually returned, one forward and only on
+    // exhaustion, as python (#538). The stale pre-update residual said
+    // 0.497 / not converged at a mu whose residual was 0.071 < tol (#862)
+    // (shares only: the same bits as the loop's slope-carrying call)
+    const phat = winProbabilitiesFactor(mu, V, D, F, W, fwdOpts).p;
+    res = residualOf(phat.map((v) => Math.max(v, PFLOOR)));
+  }
+  if (!Number.isFinite(res) || mu.some((v) => !Number.isFinite(v)))
+    throw new Error(`${where}: the iteration produced a non-finite residual; ` +
+                    "the lattice cannot resolve this field (raise points= or narrow the base's spans)");
+  return finish(mu, res < tol, res, iters);
+}
+
+/* inverse normal cdf (Acklam, refined by one Halley step) */
+function ndtri(p) {
+  const a = [-39.6968302866538, 220.946098424521, -275.928510446969,
+             138.357751867269, -30.6647980661472, 2.50662827745924];
+  const b = [-54.4760987982241, 161.585836858041, -155.698979859887,
+             66.8013118877197, -13.2806815528857];
+  const c = [-0.00778489400243029, -0.322396458041136, -2.40075827716184,
+             -2.54973253934373, 4.37466414146497, 2.93816398269878];
+  const d = [0.00778469570904146, 0.32246712907004, 2.445134137143,
+             3.75440866190742];
+  const pl = 0.02425;
+  let x;
+  if (p < pl) {
+    const q = Math.sqrt(-2 * Math.log(p));
+    x = (((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) /
+        ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);
+  } else if (p > 1 - pl) {
+    return -ndtri(1 - p);
+  } else {
+    const q = p - 0.5, r2 = q * q;
+    x = (((((a[0]*r2+a[1])*r2+a[2])*r2+a[3])*r2+a[4])*r2+a[5])*q /
+        (((((b[0]*r2+b[1])*r2+b[2])*r2+b[3])*r2+b[4])*r2+1);
+  }
+  const e = Math.exp(logndtr(x)) - p;
+  const u = e * SQRT_2PI * Math.exp(0.5 * x * x);
+  // below p ~ 1e-309 exp(x^2/2) overflows and the step is Inf/Inf = NaN:
+  // keep the finite Acklam estimate rather than return NaN (#832)
+  const step = u / (1 + 0.5 * x * u);
+  return Number.isFinite(step) ? x - step : x;
 }

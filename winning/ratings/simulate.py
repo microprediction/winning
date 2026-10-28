@@ -23,6 +23,12 @@ from __future__ import annotations
 
 import numpy as np
 
+from ..shapes import as_variance
+
+
+from ..shapes import as_loadings
+
+
 _EULER = 0.5772156649015329
 _C_GUMBEL = np.pi / np.sqrt(6.0)
 
@@ -89,14 +95,12 @@ def correlated_draws(rng, M, m, v, V=None, beta2=1.0, base="normal"):
     max-wins base noise. Returns (s, x), each (M, n). With base="normal"
     and V given this is tests/test_correlated_updates.py::_simulate."""
     m = np.asarray(m, dtype=float)
-    v = np.asarray(v, dtype=float)
     n = len(m)
+    v = as_variance(v, n)
     s = m + np.sqrt(v) * rng.normal(size=(M, n))
     x = s.copy()
     if V is not None:
-        V = np.atleast_2d(np.asarray(V, dtype=float))
-        if V.shape[0] != n:
-            V = V.T
+        V = as_loadings(V, n)
         f = rng.normal(size=(M, V.shape[1]))
         x = x + f @ V.T
     b2 = np.broadcast_to(np.asarray(beta2, dtype=float), (n,))
@@ -117,9 +121,7 @@ def independent_world(rng, M=8, K=5, n=40, prior_var=1.0, beta2=1.0, V=None,
     a = rng.normal(0.0, 1.0, M) * np.sqrt(float(prior_var))
     a = a - a.mean()
     if V is not None:
-        V = np.atleast_2d(np.asarray(V, dtype=float))
-        if V.shape[0] != M:
-            V = V.T
+        V = as_loadings(V, M)
     sb = np.sqrt(float(beta2))
     events = []
     for _ in range(n):

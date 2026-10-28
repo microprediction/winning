@@ -14,11 +14,13 @@ to quadrature accuracy, with the analytic score and the
 sharpness-escalating node rule.
 
 ```r
-fit <- rprobit_fast(df, covariates = c("price"), r = 2)
+fit <- rprobit_fast(df, covariates = c("price"))   # r = min(2, J - 2)
 ```
 
 df in long format: id, alt, chosen, covariates. Synthetic J=3, T=1500
-MNP fits in ~4 s with correct recovery. Boundary-seeking covariance
+MNP fits in ~4 s with correct recovery of the slope direction. The
+factor rank must be at most J - 2: with unit idiosyncratic variances a
+higher rank leaves the utility scale free, so it is refused. Boundary-seeking covariance
 (the pathology documented in r/mlogitfast and winning.mnprobit) is
 detected and flagged.
 

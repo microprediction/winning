@@ -1,7 +1,6 @@
 # Choice-Set Restriction in Machines and People
 
-**Status: draft, no venue.** First version November 2024; this version
-15 August 2026. Not submitted anywhere.
+First version November 2024; this version 15 August 2026.
 
 ## What is here
 
@@ -32,4 +31,3 @@ The paper now cites those paths directly instead of an absent appendix.
   per-category RMSE bars) were never carried into this repository. They
   are regenerable from the sweep above, but the plotting sources are
   gone. The relevant `\section` carries a comment saying so.
-- No venue has been chosen.
