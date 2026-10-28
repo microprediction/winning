@@ -23,7 +23,7 @@ one of the great unconscious modelling acts. When the support shrinks because so
 learned about a fixed experiment, that re-scaling is the conditional law and there is nothing to
 choose. When instead somebody intervenes on what may be chosen, the old vector does not determine
 the new one, and re-scaling amounts to assuming a Gumbel distribution within the additive
-random-utility class\footnotemark[6]. A Gaussian is an equally canonical and equally tuning-free
+random-utility class\footnotemark[1]. A Gaussian is an equally canonical and equally tuning-free
 choice. We call the latter \emph{Gaussian renormalization} and set it alongside linear, or
 proportional, renormalization in a two horse empirical race, which is fair because neither carries
 a parameter fitted to the data being predicted. In part we re-litigate the psychology debate that
@@ -37,7 +37,7 @@ they are small, a median of $0.004$ nats across the thirty-nine rows, and twelve
 with a maximum of $0.05$.
 \end{abstract}
 
-\footnotetext[6]{The Gumbel construction is due to Holman and Marley
+\footnotetext[1]{The Gumbel construction is due to Holman and Marley
 \cite{lucesuppes1965,holman1974}; the uniqueness is Yellott's \cite{yellott1977}.}
 
 \section{A two horse race between zero parameter choice models}
@@ -327,7 +327,7 @@ that the refit nulls elsewhere in the paper do.
 \toprule
 Population & Restriction & Gain & Null freq. & Family \\
 \midrule
-News slates & observed impressions & $+.0496$ & $.016$\footnotemark[7] & clicks \\
+News slates & observed impressions & $+.0496$ & $.016$\footnotemark[2] & clicks \\
 Sounds, eight to four, $\{1,3,5,7\}$ & observed menus & $+.0490$ & $\le .005$ & Getty \\
 Sounds, eight to four, $\{1,2,5,6\}$ & observed menus & $+.0453$ & $\le .005$ & Getty \\
 Consumer goods 1, forced choice & observed menus & $+.0442$ & $.005$ & Costa-Gomes \\
@@ -361,12 +361,12 @@ Gambles, low arithmetic cost & observed menus & $+.0002$ & $.667$ & Aguiar \\
 Wikipedia links & observed removals & $-.0001$ & $.005$ & clicks \\
 Tones, wide, ten to eight & observed menus & $-.0041$ & n/a & Stewart \\
 Tones, narrow, ten to eight & observed menus & $-.0051$ & n/a & Stewart \\
-Lines, twelve to eight & observed menus & $-.0057$ & $1.000$ & lines\footnotemark[8] \\
-Lines, twelve to four & observed menus & $-.0090$ & $1.000$ & lines\footnotemark[8] \\
+Lines, twelve to eight & observed menus & $-.0057$ & $1.000$ & lines\footnotemark[3] \\
+Lines, twelve to four & observed menus & $-.0090$ & $1.000$ & lines\footnotemark[3] \\
 Sounds, eight to four, $\{3,4,5,6\}$ & observed menus & $-.0127$ & $1.000$ & Getty \\
 Tones, narrow, ten to six & observed menus & $-.0133$ & n/a & Stewart \\
 Tones, wide, ten to six & observed menus & $-.0173$ & n/a & Stewart \\
-Lines, twelve to two & observed menus & $-.0322$ & $1.000$ & lines\footnotemark[8] \\
+Lines, twelve to two & observed menus & $-.0322$ & $1.000$ & lines\footnotemark[3] \\
 \bottomrule
 \end{tabular}
 \caption{Held-out log loss of linear renormalization minus that of Gaussian renormalization, in
@@ -377,15 +377,15 @@ row, four hundred; the tone matrices are participant-averaged, so no null freque
 \label{tab:scoreboard}
 \end{table}
 
-\footnotetext[7]{The news figure rests on sixty replicates, so $.016$ is the floor $1/61$ rather
+\footnotetext[2]{The news figure rests on sixty replicates, so $.016$ is the floor $1/61$ rather
 than a measured frequency.}
-\footnotetext[8]{The twelve-line data is unpublished laboratory data with no licence file and no
+\footnotetext[3]{The twelve-line data is unpublished laboratory data with no licence file and no
 associated publication, so we do not attribute it to a named author. See the data section.}
 
 Gaussian renormalization performs strongly. It has the lower held-out log loss in thirty of the
 thirty-nine rows. That count is a description of this table and not an estimate of any rate,
 because the rows are not independent and the families contribute unequal numbers of
-them.\footnote{As a finer point, the collections were assembled by searching for restriction data.
+them.\setcounter{footnote}{3}\footnote{As a finer point, the collections were assembled by searching for restriction data.
 It could be argued that this is therefore not a fair sample from a population of applications.}
 
 We forward an explanation for eight of the nine rows where linear renormalization wins. Four are
@@ -440,23 +440,23 @@ Twelve-line laboratory data & all restricted blocks & $-.0134$ & $[-.0176, -.010
 \midrule
 \multicolumn{5}{l}{\emph{Designed, across groups}} \\
 Wills et al. & Experiment 2, 39 cells & $+.0299$ & $[+.0175, +.0717]$ & Gaussian \\
-Aguiar et al. & high arithmetic cost & $+.0101$ & $[+.0046, +.0246]$ & Gaussian\footnotemark[10] \\
+Aguiar et al. & high arithmetic cost & $+.0101$ & $[+.0046, +.0246]$ & Gaussian\footnotemark[5] \\
 \midrule
 \multicolumn{5}{l}{\emph{Ecological: the menu changed outside the design}} \\
 Microsoft News & 6{,}000 nested slate pairs & $+.0496$ & not computed & unresolved \\
-US state ballots 2024 & 263 state pairs & $+.0002$ & $[+.0001, +.0002]$ & Gaussian\footnotemark[11] \\
+US state ballots 2024 & 263 state pairs & $+.0002$ & $[+.0001, +.0002]$ & Gaussian\footnotemark[6] \\
 Wikipedia clickstream & 3{,}544 pages & $-.0001$ & not computed & unresolved \\
 \midrule
 \multicolumn{5}{l}{\emph{Ranking-induced}} \\
 Occupational prestige & all proper restrictions & $+.0391$ & $[+.0201, +.0759]$ & Gaussian \\
 Sushi & all proper restrictions & $+.0111$ & $[+.0088, +.0142]$ & Gaussian \\
 Political goals & all proper restrictions & $+.0076$ & $[+.0060, +.0096]$ & Gaussian \\
-General Social Survey & two items pooled\footnotemark[13] & $+.0038$ & $[+.0027, +.0069]$ & Gaussian \\
-Jester & three files pooled\footnotemark[13] & $+.0020$ & $[+.0016, +.0027]$ & Gaussian \\
+General Social Survey & two items pooled\footnotemark[7] & $+.0038$ & $[+.0027, +.0069]$ & Gaussian \\
+Jester & three files pooled\footnotemark[7] & $+.0020$ & $[+.0016, +.0027]$ & Gaussian \\
 PrefLib perceptual & dots & $+.0014$ & $[+.0008, +.0030]$ & Gaussian \\
 PrefLib perceptual & puzzles & $+.0009$ & $[+.0005, +.0024]$ & Gaussian \\
-Netflix & five files pooled\footnotemark[13] & $+.0018$ & $[+.0006, +.0037]$ & Gaussian \\
-Sports participation & all proper restrictions & $+.0051$ & $[+.0027, +.0168]$ & excluded\footnotemark[12] \\
+Netflix & five files pooled\footnotemark[7] & $+.0018$ & $[+.0006, +.0037]$ & Gaussian \\
+Sports participation & all proper restrictions & $+.0051$ & $[+.0027, +.0168]$ & excluded\footnotemark[8] \\
 \bottomrule
 \end{tabular}
 \caption{One row per source. A verdict of Gaussian or linear means the interval excludes zero;
@@ -471,13 +471,13 @@ an interval from them are in the repository.}
 \label{tab:bysource}
 \end{table}
 
-\footnotetext[10]{The low-cost frame of the same experiment is a draw, $+.0002$ with an interval
+\footnotetext[5]{The low-cost frame of the same experiment is a draw, $+.0002$ with an interval
 of $[-.0037, +.0180]$, which is the gradient discussed in Section~\ref{sec:more}.}
-\footnotetext[11]{The interval excludes zero and the gain is negligible. Third-party candidates
+\footnotetext[6]{The interval excludes zero and the gain is negligible. Third-party candidates
 carry almost no mass, so the two maps agree to within a rounding error whatever the truth.}
-\footnotetext[12]{Sports participation sits exactly on its shrinkage null, frequency $0.509$, so
+\footnotetext[8]{Sports participation sits exactly on its shrinkage null, frequency $0.509$, so
 its gain carries no evidence about the restriction map and it is excluded from every claim.}
-\footnotetext[13]{Where a source has more than one file or item at the same design, that is what
+\footnotetext[7]{Where a source has more than one file or item at the same design, that is what
 we report: every file or item, calibrated and scored on its own, then pooled at the observation
 level. An earlier version of this table picked one, and in three of three cases the one with the
 larger gain, without stating why.}
@@ -612,7 +612,7 @@ nucleus or temperature sampling and rescaling the survivors distorts the relativ
 among them, sometimes by two orders of magnitude, purely from the renormalization step and
 before any question of which map is more accurate is even asked. Unit-variance Gaussian gives
 Case V, which is the classical
-model of a latent contest and the one Thurstone proposed.\footnote{The asymmetry between the two
+model of a latent contest and the one Thurstone proposed.\setcounter{footnote}{8}\footnote{The asymmetry between the two
 is notable. Case V is a model somebody proposed and defended. Linear renormalization is the
 Gumbel-noise member of the same class, and it is not adopted because anyone argues that choice
 errors are double exponential. It is adopted because dividing by a smaller total is the obvious
@@ -2036,7 +2036,7 @@ the answer.
 Source & Domain & Restriction & Status \\
 \midrule
 Clarke \cite{clarke1957} & speech in noise & $8 \to 4$, $6 \to 3$ & library access \\
-Pollack and Decker \cite{pollackdecker1960} & consonants & $8 \to 4$, three sets & not scoreable\footnotemark[9] \\
+Pollack and Decker \cite{pollackdecker1960} & consonants & $8 \to 4$, three sets & not scoreable\footnotemark[10] \\
 Hodge and Pollack & auditory, unidimensional & nested & library access \\
 Lacouture et al. & line lengths & nested & library access \\
 Kent and Lamberts & dot separation & $N = 2,4,6,8,10$ & library access \\
@@ -2053,7 +2053,7 @@ four-descriptor menu, so they calibrate and cannot score.}
 \label{tab:census}
 \end{table}
 
-\footnotetext[9]{Pollack and Decker's three overlapping four-way matrices were reduced to mean
+\footnotetext[10]{Pollack and Decker's three overlapping four-way matrices were reduced to mean
 absolute deviations before publication, one scalar per set per signal-to-noise level, so the
 subset matrices do not exist in print. Their four eight-way masters were recovered and are
 scoreable only as master matrices.}
