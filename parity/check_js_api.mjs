@@ -3536,5 +3536,28 @@ rejects(C => demo.fitGrammar(C, 1, 0, { method: "ipaf", tol: 0 }),
   accepts("and the pricer takes it too (#822)", () => races.raceProbabilities([0, 0.1, 0.2], { structure: deep }));
 }
 
+// --- structureCov takes rank-one Tree leaf loadings only, as the pricers (#827)
+{
+  const S = structures, sc = demo.structureCov;
+  const eq = (A, B) => JSON.stringify(A) === JSON.stringify(B);
+  // #827: rank-one leaf loadings only
+  const T = L => S.Tree([0, 0, 1, 1], L, [0.4, 0.5, 0.6, 0.7], [2, 2, -1], [0, 0, 0.55]);
+  const r2 = T([[0.9, 0.1], [-0.5, 0.7], [0.25, -0.8], [-0.6, -0.2]]);
+  rejects(sc, [r2], "structureCov refuses a rank-two Tree loading (#827)", "rank-one");
+  rejects(() => races.raceProbabilities([-0.6, -0.1, 0.35, 0.8], { structure: r2 }), [],
+          "and so does the Tree pricer (#827)", "rank-one");
+  const flat = [0.9, -0.5, 0.25, -0.6];
+  const Cflat = sc(T(flat));
+  holds("structureCov Tree flat, (n, 1) and (1, n) loadings agree and are unchanged (#827)",
+        eq(sc(T(flat.map(x => [x]))), Cflat) && eq(sc(T([flat])), Cflat)
+        && Math.abs(Cflat[0][1] - (0.9 * -0.5 + 0.3025)) < 1e-15 && Cflat[0][2] === 0.30250000000000005);
+  holds("structureCov scalar Tree loading is a common loading (#827)",
+        eq(sc(T(0.5)), sc(T([0.5, 0.5, 0.5, 0.5]))));
+  const rb = sc(S.Blocks([0, 0, 1, 1], [[0.9, 0.1], [-0.5, 0.7], [0.25, -0.8], [-0.6, -0.2]],
+                         [0.4, 0.5, 0.6, 0.7]))[0];
+  holds("structureCov rank-two Blocks stays general (#827)",
+        Math.max(...rb.map((x, j) => Math.abs(x - [1.22, -0.38, 0, 0][j]))) < 1e-15, String(rb));
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");

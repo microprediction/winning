@@ -707,6 +707,13 @@ export function structureCov(s) {
     // the kernels, imported rather than repeated.
     checkCluster(s.cluster);                              // (#792)
     const cluster = treeCluster(s);                       // (#372)
+    // rank-one leaf loadings only, as every Tree pricer: a rank-r one
+    // built a covariance the kernels refuse (#827)
+    const L = asLoadings(s.loading, n, "loading");
+    if (L && L.length && L[0].length > 1)
+      throw new Error(
+        "structureCov: tree races take scalar (rank-one) leaf-cluster loadings; rank-r " +
+        "leaf effects are supported by the block grammar only.");
     const anc = [];
     const nc = Math.max(...cluster) + 1;
     // the kernels' topology door: a forest (two roots) was walked as if a
@@ -723,7 +730,6 @@ export function structureCov(s) {
       }
       anc.push(a);
     }
-    const L = asLoadings(s.loading, n, "loading");
     for (let i = 0; i < n; i++)
       for (let j = 0; j < n; j++) {
         let v = 0;
