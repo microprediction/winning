@@ -917,10 +917,12 @@ function pairClosedForm(st, nodesGiven, returnSlopes) {
 }
 
 export function raceProbabilities(mu, opts = {}) {
-  const { V = null, D = null, F = null, W = null, base = "normal",
+  const { V = null, D = null, F = null, W = null, base: base0 = "normal",
           points = 257, returnSlopes = false, window: win = "bulk",
           delta = 1e-12, structure = null, qa = 9, qf = 15 } = opts;
   checkOpts(opts, FORWARD_OPTS, "raceProbabilities", OPT_HINTS);
+  // the exported callable is the named law: same exact dispatch (#858)
+  const base = base0 === BASES.normal ? "normal" : base0;
   // one of two names: every value but "bulk" -- a typo, null, a number --
   // silently meant span and moved a share by 39 points (#582). undefined
   // is omission, as for every option.
@@ -1082,9 +1084,11 @@ function validatedRaceTarget(pTarget, targetFloor) {
 
 export function abilitiesFromRace(pTarget, opts = {}) {
   const { nIter = 60, tol = 1e-8, structure = null, V = null, D = null,
-          F = null, W = null, base = "normal", points = 257,
+          F = null, W = null, base: base0 = "normal", points = 257,
           targetFloor = null, returnInfo = false, qa = 9, qf = 15 } = opts;
   checkOpts(opts, INVERSE_OPTS, "abilitiesFromRace", OPT_HINTS);
+  // the exported callable is the named law: same exact dispatch (#858)
+  const base = base0 === BASES.normal ? "normal" : base0;
   asIterations(nIter, "abilitiesFromRace");
   asTolerance(tol, "abilitiesFromRace");
   const { target, floored } = validatedRaceTarget(pTarget, targetFloor);
@@ -1094,7 +1098,7 @@ export function abilitiesFromRace(pTarget, opts = {}) {
     // the caller's base, window and delta travel too, so the hierarchical
     // kernels can refuse what they would otherwise ignore (#89)
     const r = dispatchAbilities(target, c.structure,
-      { ...opts, points, qa, qf, tol });
+      { ...opts, base, points, qa, qf, tol });
     return inverseReturn(r.mu, r.converged, r.maxLogResidual, r.iterations,
                          floored, tol, returnInfo);
   }

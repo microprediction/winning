@@ -296,6 +296,13 @@ def _log_survival(fn, z, S):
 _NAMED_BASES = (_normal, _gumbel_min, _logistic, _laplace)
 BASES = {"normal": _normal, "gumbel": _gumbel_min,
          "logistic": _logistic, "laplace": _laplace}
+
+
+def _canonical_base(base):
+    """The exported normal callable is the named law: map it to "normal" so
+    it takes the same exact dispatch (pair closed form, Rust, GHK rescue)
+    as the string. A wrapper or any other callable is left alone (#858)."""
+    return "normal" if base is _normal else base
 _SPANS = {"normal": (8.0, 8.0), "gumbel": (22.0, 8.0),   # (left, right) tails
           "logistic": (16.0, 16.0), "laplace": (18.0, 18.0)}
 _RUST_BASE_IDS = {"gumbel": 1, "logistic": 2, "laplace": 3}
@@ -1584,6 +1591,7 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
     than that against a compiled default. Smooth bases ignore it, as
     does a tempered race (the softmin kernel smooths the kink); with
     structure= it raises."""
+    base = _canonical_base(base)                             # (#858)
     # the lattice mode is one of two names: every value but "bulk" used
     # to mean span, so window="bulkk" moved a share by 39 points (#582)
     if not (isinstance(window, str) and window in ("bulk", "span")):
@@ -1860,6 +1868,7 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
     spacings had an own-slope 6x too large and exact self-generated
     targets failed to converge, missing by 0.099 (#267). The residual is
     always the map being inverted, so the answer is that map's."""
+    base = _canonical_base(base)                             # (#858)
     # finite and >= 0; negative and NaN used to select the hard race
     # silently, and +inf failed in grid sizing (#366)
     temperature = as_soft_temperature(temperature)
@@ -3131,6 +3140,7 @@ def failure_base(q, width=0.35, offset=6.0, base="normal",
     the lump is a separate event on top. Pass standardize=True only if
     you specifically want the mixture itself normalized.
     """
+    base = _canonical_base(base)                             # (#858)
     q = float(q)
     if not 0.0 <= q < 1.0:
         raise ValueError("failure probability q must lie in [0, 1)")

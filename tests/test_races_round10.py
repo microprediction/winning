@@ -1,5 +1,6 @@
 """Round-10 race regressions: the guarded final Jacobi reprice (#823) and
-the bounded open-bracket Newton step of the pair-mixture inverse (#830)."""
+the bounded open-bracket Newton step of the pair-mixture inverse (#830),
+the exported normal callable taking the named dispatch (#858)."""
 import json
 import os
 import shutil
@@ -10,7 +11,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from winning.factor.races import (_jacobi_sweeps, abilities_from_race,
+from winning.factor.races import (BASES, _jacobi_sweeps, abilities_from_race,
                                   race_probabilities)
 from winning.factor.topk import abilities_from_topk, top_k_probabilities
 
@@ -180,3 +181,71 @@ def test_browser_pair_mixture_inverse_recovers_plateau_target():
         assert f["converged"] and f["iterations"] == 0
         np.testing.assert_allclose(f["mu"], [-0.025, 0.025], atol=1e-12)
         assert f["resid"] < 1e-8
+
+
+# -- #858: BASES["normal"] is the named law, so it takes the exact pair path -
+
+@pytest.mark.parametrize("gap", [20.0, 33.0, 40.0])
+@pytest.mark.parametrize("flip", [False, True])
+def test_normal_callable_takes_the_pair_closed_form(gap, flip):
+    # the callable went to the generic lattice: gap 40 came back +-46.07,
+    # residual 286.5, not converged, against an exact +-20 (#858)
+    truth = np.array([gap / 2, -gap / 2] if flip else [-gap / 2, gap / 2])
+    t = race_probabilities(truth, D=[1, 1], base=BASES["normal"])
+    np.testing.assert_array_equal(t, race_probabilities(truth, D=[1, 1]))
+    named = abilities_from_race(t, D=[1, 1], return_info=True)
+    called = abilities_from_race(t, D=[1, 1], base=BASES["normal"],
+                                 return_info=True)
+    np.testing.assert_array_equal(called[0], named[0])
+    assert called[1]["converged"] and called[1]["iterations"] == 0
+    np.testing.assert_allclose(called[0], truth, atol=1e-6)
+
+
+def test_normal_callable_matches_named_on_ordinary_fields():
+    # a three-runner field and a factor pair: same answer either way
+    mu = np.array([-0.4, 0.1, 0.3])
+    np.testing.assert_array_equal(
+        race_probabilities(mu, D=[1, 0.5, 2], base=BASES["normal"]),
+        race_probabilities(mu, D=[1, 0.5, 2]))
+    p = np.array([0.5, 0.3, 0.2])
+    np.testing.assert_array_equal(
+        abilities_from_race(p, D=[1, 0.5, 2], base=BASES["normal"]),
+        abilities_from_race(p, D=[1, 0.5, 2]))
+    kw = dict(V=[[0.5], [-0.3]], D=[0.6, 0.9])
+    np.testing.assert_array_equal(
+        abilities_from_race([0.7, 0.3], base=BASES["normal"], **kw),
+        abilities_from_race([0.7, 0.3], **kw))
+
+
+_JS858 = r"""
+import { BASES, raceProbabilities, abilitiesFromRace } from %s;
+console.warn = () => {};
+const out = [];
+for (const gap of [20, 33, 40]) for (const flip of [false, true]) {
+  const truth = flip ? [gap / 2, -gap / 2] : [-gap / 2, gap / 2];
+  const t = raceProbabilities(truth, {D: [1, 1], base: BASES.normal});
+  const tn = raceProbabilities(truth, {D: [1, 1]});
+  const named = abilitiesFromRace(t, {D: [1, 1], returnInfo: true});
+  const called = abilitiesFromRace(t, {D: [1, 1], base: BASES.normal, returnInfo: true});
+  out.push({truth, t, tn, named, called});
+}
+const p3 = [0.5, 0.3, 0.2], D3 = [1, 0.5, 2];
+const ord = {
+  f: [raceProbabilities([-0.4, 0.1, 0.3], {D: D3, base: BASES.normal}),
+      raceProbabilities([-0.4, 0.1, 0.3], {D: D3})],
+  i: [abilitiesFromRace(p3, {D: D3, base: BASES.normal}), abilitiesFromRace(p3, {D: D3})],
+};
+console.log(JSON.stringify({out, ord}));
+"""
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_browser_normal_callable_takes_the_pair_closed_form():
+    got = _node(_JS858, "races.mjs")
+    for r in got["out"]:
+        assert r["t"] == r["tn"]
+        assert r["called"]["mu"] == r["named"]["mu"]
+        assert r["called"]["converged"] and r["called"]["iterations"] == 0
+        np.testing.assert_allclose(r["called"]["mu"], r["truth"], atol=1e-6)
+    assert got["ord"]["f"][0] == got["ord"]["f"][1]
+    assert got["ord"]["i"][0] == got["ord"]["i"][1]
