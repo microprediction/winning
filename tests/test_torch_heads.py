@@ -848,8 +848,10 @@ def test_equal_means_any_scales_give_exact_identities(ratio):
     p01 = torch.exp(wt.ordered_prefix_log_prob(mu, torch.tensor([0, 1]), sd))
     p10 = torch.exp(wt.ordered_prefix_log_prob(mu, torch.tensor([1, 0]), sd))
     assert abs(float(p01) - 0.5) < 1e-9 and abs(float(p10) - 0.5) < 1e-9
-    top2 = torch.exp(wt.topk_log_prob(mu, 2, sd))
-    torch.testing.assert_close(top2, _t([1.0, 1.0]), rtol=0, atol=1e-9)
+    # top-1 on the event lattice (top-2 of a pair, membership 1, is
+    # outside the k <= n-1 contract, #869)
+    top1 = torch.exp(wt.topk_log_prob(mu, 1, sd))
+    torch.testing.assert_close(top1, _t([0.5, 0.5]), rtol=0, atol=1e-9)
 
 
 def test_unresolvable_scale_ratio_warns_and_points_resolves_it():
@@ -857,11 +859,11 @@ def test_unresolvable_scale_ratio_warns_and_points_resolves_it():
     # probability above one; points= large enough resolves it
     mu, sd = _t([0.0, 0.0]), _t([1.0, 1000.0])
     with pytest.warns(RuntimeWarning, match="cannot resolve the narrowest"):
-        wt.topk_log_prob(mu, 2, sd)
+        wt.topk_log_prob(mu, 1, sd)
     with warnings.catch_warnings():
         warnings.simplefilter("error")
-        top2 = torch.exp(wt.topk_log_prob(mu, 2, sd, points=60001))
-    torch.testing.assert_close(top2, _t([1.0, 1.0]), rtol=0, atol=1e-8)
+        top1 = torch.exp(wt.topk_log_prob(mu, 1, sd, points=60001))
+    torch.testing.assert_close(top1, _t([0.5, 0.5]), rtol=0, atol=1e-8)
 
 
 def test_event_lattice_is_quiet_on_ordinary_heads():
@@ -1112,7 +1114,8 @@ def test_865_race_prefix_topk_are_invariant_under_rescaling(scale):
                 wt.ordered_prefix_log_prob(mu, torch.tensor([1, 0, 2])
                                            [:min(3, len(mu))], sd),
                 wt.topk_log_prob(mu, 1, sd),
-                wt.topk_log_prob(mu, 2, sd)]
+                # k <= n - 1: top-2 of a pair is outside the contract (#869)
+                wt.topk_log_prob(mu, min(2, len(mu) - 1), sd)]
 
     for mu, sd in fields:
         ref = heads(_t(mu), _t(sd))
@@ -1134,6 +1137,7 @@ def test_865_ordinary_lattices_never_reach_the_width_guard():
             for base in ("normal", "gumbel"):
                 x = wt.race_lattice(_t(mu), _t(sd), base=base)
                 assert float(x[-1] - x[0]) > 5.0 * sd.max(), (n, spread)
+
 
 # ------------- #865 (reopened): the pair window past sd**2 over/underflow
 @pytest.mark.parametrize("scale", [1e-154, 1e-160, 1e-170, 1e-300,
@@ -1243,3 +1247,45 @@ def test_866_heterogeneous_gumbel_field_is_finite_in_both_dtypes(dtype,
         assert np.all(np.isfinite(g))
         assert np.abs(g - r).max() < tol, (g, r)
 
+
+# ----------------- #869: top-k depth is 1 <= k <= n-1, per active row
+@pytest.mark.parametrize("n,k", [(1, 1), (2, 2), (2, 3), (3, 3), (3, 50)])
+def test_869_topk_refuses_k_at_or_beyond_n(n, k):
+    with pytest.raises(ValueError, match=r"\[1, n-1\]"):
+        wt.topk_log_prob(_t(np.arange(float(n))), k)
+    # numpy refuses the same depths
+    if n >= 2:
+        with pytest.raises(ValueError, match=r"\[1, n-1\]"):
+            top_k_probabilities(np.arange(float(n)), k)
+
+
+def test_869_topk_refuses_a_masked_row_with_too_few_active_runners():
+    mu = _t([[0.0, 1.0, 2.0, 3.0], [0.0, 1.0, 2.0, 3.0]])
+    mask = torch.tensor([[True, True, True, True],
+                         [True, False, True, False]])
+    with pytest.raises(ValueError, match="n=2 active"):
+        wt.topk_log_prob(mu, 2, mask=mask)
+    # k = 1 is legal on both rows and unchanged
+    lp = wt.topk_log_prob(mu, 1, mask=mask)
+    assert torch.allclose(lp[1, [0, 2]], wt.topk_log_prob(_t([0.0, 2.0]), 1),
+                          atol=1e-12)
+
+
+def test_869_an_oversized_k_is_refused_before_the_count_program(monkeypatch):
+    # an oversized depth fails fast, without building O(k) count states
+    import winning.torch.losses as L
+    calls = []
+    real = torch.logaddexp
+    monkeypatch.setattr(L.torch, "logaddexp",
+                        lambda *a, **kw: calls.append(1) or real(*a, **kw))
+    with pytest.raises(ValueError):
+        wt.topk_log_prob(_t([0.0, 1.0, 2.0]), 400)
+    assert not calls
+
+
+def test_869_legal_depths_are_unchanged():
+    mu, sd = _t([0.3, -0.2, 1.1, 0.0]), _t([1.0, 0.7, 1.4, 0.9])
+    for k in (1, 2, 3):
+        lp = wt.topk_log_prob(mu, k, sd)
+        ref = top_k_probabilities(mu.numpy(), k, D=sd.numpy() ** 2)
+        assert np.abs(np.exp(lp.numpy()) / ref - 1).max() < 1e-9
