@@ -34,10 +34,12 @@ def _node(js, *mods):
 
 # -- #823: the exhaustion reprice is guarded like the in-loop forward -------
 
-_MU823 = [-7.645826295483857, -4.355092679616064, 4.016859659459442,
-          7.984059315640479]
 _D823 = [0.028135701064085954, 0.02463857634420256, 2.010569296584627,
          0.028414577208752127]
+# the issue's exact target, as the forward prints it on the reporting
+# platform; regenerating it elsewhere can round a membership to 1
+_Q823 = [0.9999999999999999, 0.9999999999999999, 0.9972676865924252,
+         0.0027323134075749387]
 
 
 def _refusing(m):
@@ -65,7 +67,7 @@ def _logit(p):
 
 def test_topk_inverse_does_not_throw_on_its_budget():
     # n_iter = 3 and 4 raised "membership above one" (#823)
-    q = top_k_probabilities(_MU823, 3, D=_D823)
+    q = np.array(_Q823)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         for n in (2, 3, 4, 5):
@@ -90,8 +92,7 @@ _JS823 = r"""
 import { topKProbabilities, abilitiesFromTopk } from %s;
 import { jacobiSweeps } from %s;
 console.warn = () => {};
-const mu = %s, D = %s;
-const q = topKProbabilities(mu, 3, {D});
+const q = %s, D = %s;
 const out = {q, fits: []};
 for (const nIter of [2, 3, 4, 5]) {
   try {
@@ -114,7 +115,7 @@ console.log(JSON.stringify(out));
 
 @pytest.mark.skipif(NODE is None, reason="node is not installed")
 def test_browser_final_reprice_is_guarded():
-    got = _node(_JS823 % ("%s", "%s", json.dumps(_MU823), json.dumps(_D823)),
+    got = _node(_JS823 % ("%s", "%s", json.dumps(_Q823), json.dumps(_D823)),
                 "topk.mjs", "core.mjs")
     q = np.asarray(got["q"])
     for f in got["fits"]:
