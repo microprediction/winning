@@ -664,4 +664,30 @@ check("calibrated abilities vs truth", muHat, mu, 5e-6);
         [-1.0000000000003233, 2.395494788021237e-13, 1.000000000000084], 1e-300);
 }
 
+// #862: on budget exhaustion the residual and flag were the PRE-update
+// iterate's (0.497, not converged) while the returned mu repriced at
+// 0.071 < tol. They now describe the mu returned; mu itself is unchanged.
+{
+  const target = [0.7, 0.2, 0.1], V = [[], [], []], D = [1, 1, 1], F = [[]], W = [1];
+  const actual = (mu) => {
+    const q = winProbabilitiesFactor(mu, V, D, F, W, { points: 1001 }).p;
+    return Math.max(...q.map((v, i) => Math.abs(Math.log(v) - Math.log(target[i]))));
+  };
+  const one = abilitiesFromProbabilitiesFactor(target, V, D, F, W,
+    { nIter: 1, points: 1001, tol: 0.1, returnInfo: true });
+  check("exhausted fit within tol says converged (#862)", [one.converged ? 0 : 1], [0], 0.5);
+  check("exhausted mu is unchanged (#862)", one.mu,
+        [-0.8856280995076525, 0.22715088511329895, 0.6584772143943536], 1e-300);
+  for (const nIter of [1, 2, 3]) {
+    const f = abilitiesFromProbabilitiesFactor(target, V, D, F, W,
+      { nIter, points: 1001, tol: 1e-12, returnInfo: true });
+    check(`nIter ${nIter}: reported residual is the returned mu's (#862)`,
+          [f.residual], [actual(f.mu)], 1e-12);
+  }
+  // a fit that converges inside its budget is unchanged (origin/main 3fa326ee)
+  const d = abilitiesFromProbabilitiesFactor(target, V, D, F, W, { points: 1001, returnInfo: true });
+  check("converged default fit unchanged (#862)", [...d.mu, d.residual, d.iterations],
+        [-0.8474995800413705, 0.19091763292480116, 0.6565819471165693, 8.219023104327761e-7, 10], 1e-300);
+}
+
 process.exit(failures ? 1 : 0);

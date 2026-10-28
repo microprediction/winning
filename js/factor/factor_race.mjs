@@ -991,6 +991,16 @@ export function abilitiesFromProbabilitiesFactor(pTarget, V, D, F, W, opts = {})
     mean /= N;
     for (let i = 0; i < N; i++) mu[i] -= mean;
   }
+  if (iters === nIter && Number.isFinite(res) && !(res < tol) &&
+      mu.every((v) => Number.isFinite(v))) {
+    // the budget ran out after an update the loop never priced: report
+    // the residual of the mu actually returned, one forward and only on
+    // exhaustion, as python (#538). The stale pre-update residual said
+    // 0.497 / not converged at a mu whose residual was 0.071 < tol (#862)
+    // (shares only: the same bits as the loop's slope-carrying call)
+    const phat = winProbabilitiesFactor(mu, V, D, F, W, fwdOpts).p;
+    res = residualOf(phat.map((v) => Math.max(v, PFLOOR)));
+  }
   if (!Number.isFinite(res) || mu.some((v) => !Number.isFinite(v)))
     throw new Error(`${where}: the iteration produced a non-finite residual; ` +
                     "the lattice cannot resolve this field (raise points= or narrow the base's spans)");
