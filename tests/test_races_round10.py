@@ -1,6 +1,7 @@
 """Round-10 race regressions: the guarded final Jacobi reprice (#823) and
 the bounded open-bracket Newton step of the pair-mixture inverse (#830),
-the exported normal callable taking the named dispatch (#858)."""
+the exported normal callable taking the named dispatch (#858), and the
+finite nonempty door of the closed-form Luce helpers (#799)."""
 import json
 import os
 import shutil
@@ -11,8 +12,11 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from winning.factor.permutations import plackett_luce_prefix_logprob
 from winning.factor.races import (BASES, _jacobi_sweeps, abilities_from_race,
-                                  race_probabilities)
+                                  abilities_from_softmax,
+                                  plackett_luce_order_logprob,
+                                  race_probabilities, softmax_probabilities)
 from winning.factor.topk import abilities_from_topk, top_k_probabilities
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -249,3 +253,49 @@ def test_browser_normal_callable_takes_the_pair_closed_form():
         np.testing.assert_allclose(r["called"]["mu"], r["truth"], atol=1e-6)
     assert got["ord"]["f"][0] == got["ord"]["f"][1]
     assert got["ord"]["i"][0] == got["ord"]["i"][1]
+
+
+# -- #799: the closed-form Luce helpers refuse empty and non-finite input ---
+
+_BAD = [np.inf, -np.inf, np.nan]
+_VF = dict(V=[[0.3], [-0.1], [0.2]], F=[[-1.0], [1.0]], W=[0.5, 0.5])
+
+
+@pytest.mark.parametrize("bad", _BAD)
+def test_luce_helpers_refuse_non_finite_abilities(bad):
+    # [0, inf, 1] priced [0.73, 0, 0.27]; the order logprob of [0, inf]
+    # was 0.0 (certainty); NaN came back as NaN (#799)
+    mu = [0.0, bad, 1.0]
+    for kw in ({}, _VF):
+        with pytest.raises(ValueError, match="not finite"):
+            softmax_probabilities(mu, **kw)
+        with pytest.raises(ValueError, match="not finite"):
+            plackett_luce_order_logprob(mu, [0, 1, 2], **kw)
+        with pytest.raises(ValueError, match="not finite"):
+            plackett_luce_prefix_logprob(mu, [0, 1], **kw)
+    with pytest.raises(ValueError, match="non-finite"):
+        abilities_from_softmax([0.2, bad, 0.8])
+
+
+def test_luce_helpers_refuse_empty_input():
+    # abilities_from_softmax([]) returned [] (#799)
+    with pytest.raises(ValueError, match="nonempty"):
+        abilities_from_softmax([])
+    with pytest.raises(ValueError, match="empty"):
+        softmax_probabilities([])
+    with pytest.raises(ValueError, match="empty"):
+        plackett_luce_order_logprob([], [])
+
+
+def test_luce_helpers_ordinary_inputs_unchanged():
+    mu = np.array([0.0, 0.5, 1.0])
+    z = np.exp(-mu)
+    np.testing.assert_allclose(softmax_probabilities(mu), z / z.sum(),
+                               rtol=1e-15)
+    p = softmax_probabilities(mu)
+    np.testing.assert_allclose(abilities_from_softmax(p), mu - mu.mean(),
+                               atol=1e-15)
+    lp = np.log(z[0] / z.sum()) + np.log(z[1] / (z[1] + z[2]))
+    assert abs(plackett_luce_order_logprob(mu, [0, 1, 2]) - lp) < 1e-14
+    assert abs(plackett_luce_prefix_logprob(mu, [0, 1]) - lp) < 1e-14
+    assert np.isfinite(softmax_probabilities(mu, **_VF)).all()
