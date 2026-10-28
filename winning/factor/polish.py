@@ -255,11 +255,29 @@ def polish_race(p0=None, mu0=None, V=None, D=None, F=None, W=None,
                                       points=points)
         invert = lambda p: abilities_from_race(np.asarray(p, float), V=V,
                                                D=D, F=F, W=W, base=base,
-                                               points=points)
+                                               points=points,
+                                               return_info=True)
+    # A p0 call is only as good as its inversion: a failed one is not the
+    # caller's race, and certifying the polish of it converged was a false
+    # certificate (#805). Its verdict is carried to info["converged"].
+    inv_converged = True
     if mu0 is None:
         if p0 is None:
             raise ValueError("give p0 or mu0")
-        mu0 = invert(np.asarray(p0, float))
+        if structure is not None:
+            mu0 = invert(np.asarray(p0, float))
+        else:
+            mu0, inv = invert(np.asarray(p0, float))
+            inv_converged = inv["converged"]
+            if not inv_converged:
+                import warnings
+                warnings.warn(
+                    f"polish_race: abilities_from_race did not converge on "
+                    f"p0: max |log residual| {inv['max_log_residual']:.2e} "
+                    f"after {inv['iterations']} iterations; the polished "
+                    "race starts from a race that is not p0, so "
+                    "info['converged'] is False. Raise points= or pass mu0.",
+                    RuntimeWarning, stacklevel=2)
     mu0 = np.asarray(mu0, float) - np.mean(mu0)
     n = len(mu0)
     A0, b0 = concentration_matrix(n, name_caps=name_caps, groups=groups)
@@ -269,7 +287,8 @@ def polish_race(p0=None, mu0=None, V=None, D=None, F=None, W=None,
     if len(b0) == 0:
         return forward(mu0), mu0, {"active": [], "nit": 0,
                                    "max_violation": 0.0, "mu_distance": 0.0,
-                                   "converged": True, "feasible": True,
+                                   "converged": inv_converged,
+                                   "feasible": True,
                                    "status": 0, "message": "unconstrained"}
 
     def p_of(m):
@@ -346,7 +365,8 @@ def polish_race(p0=None, mu0=None, V=None, D=None, F=None, W=None,
     return p, mu, {"active": list(np.flatnonzero(slack < 1e-6)),
                    "nit": int(res.nit), "max_violation": max_violation,
                    "mu_distance": float(np.linalg.norm(mu - mu0)),
-                   "converged": bool(feasible_out and res.success),
+                   "converged": bool(feasible_out and res.success
+                                     and inv_converged),
                    "feasible": bool(feasible_out),
                    "status": int(res.status), "message": str(res.message)}
 

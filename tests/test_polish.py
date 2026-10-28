@@ -225,3 +225,47 @@ def test_jacobian_is_the_derivative_of_the_map_that_was_evaluated():
     # the restricted row is the full row, not an approximation to it
     row = race_jacobian_row(mu, 2, V=V, D=D, points=257)
     assert np.abs(row - race_jacobian(mu, V=V, D=D, points=257)[2]).max() < 1e-14
+
+
+# #805: a p0 call is only as good as its inversion. This seeded fixture
+# (four runners, rank one, a deliberately coarse 33-point lattice) is
+# priced by the forward itself, yet abilities_from_race stalls at a max
+# |log residual| of 3.63 -- and polish_race certified the race it then
+# returned converged.
+_P0_805 = np.array([2.5561714747719375e-8, 0.003954132588313348,
+                    0.3838102877687196, 0.6122355540812523])
+_V_805 = np.array([[-2.4482602171824595], [-3.909470185595318],
+                   [-2.465409300506771], [3.865886382696166]])
+_D_805 = np.array([0.5440542468074961, 1.1197260935882694,
+                   0.43645493804312074, 0.698143690730512])
+
+
+def test_polish_reports_a_failed_p0_inversion_as_not_converged():
+    import warnings
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        p, mu, info = polish_race(p0=_P0_805, V=_V_805, D=_D_805, points=33)
+    assert info["converged"] is False
+    # the failure is still the inversion's, and it is said so
+    assert any("did not converge on p0" in str(w.message) for w in caught)
+    # nothing else in the unconstrained diagnostics moved
+    assert info["feasible"] is True and info["message"] == "unconstrained"
+    assert info["active"] == [] and info["mu_distance"] == 0.0
+
+
+def test_polish_from_an_inverted_p0_still_certifies_ordinary_races():
+    # the same field on an ordinary lattice inverts, and nothing changes:
+    # converged as before, no polish warning, the race the mu0 path gives
+    import warnings
+    mu = np.array([3.87612150370894, 3.974112836166338,
+                   -1.0855625523652705, -3.049817603104663])
+    p0 = race_probabilities(mu, V=_V_805, D=_D_805, points=257)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        p, mu1, info = polish_race(p0=p0, V=_V_805, D=_D_805, points=257)
+        pc, _, infoc = polish_race(p0=p0, V=_V_805, D=_D_805, points=257,
+                                   name_caps=0.5)
+    assert info["converged"] is True and infoc["converged"] is True
+    assert not any("polish_race" in str(w.message) for w in caught)
+    assert np.abs(np.log(p) - np.log(p0)).max() < 1e-6
+    assert pc.max() <= 0.5 + 1e-6
