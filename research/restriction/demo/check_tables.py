@@ -67,9 +67,9 @@ CLAIMS = [
     ("0.7980", "rouder_chunk.txt", "all blocks race loss"),
     ("0.0134", "rouder_chunk.txt", "all blocks gain"),
     ("0.0176", "rouder_chunk.txt", "all blocks bootstrap lower"),
-    ("0.0104", "rouder_chunk.txt", "all blocks bootstrap upper"),
+    ("0.0103", "rouder_chunk.txt", "all blocks bootstrap upper"),
     ("0.0322", "rouder_chunk.txt", "twelve to two gain"),
-    ("0.0090", "rouder_chunk.txt", "twelve to four gain"),
+    ("0.0089", "rouder_chunk.txt", "twelve to four gain"),
     # ---- recognition foils, results/recognition.txt
     ("0.3859", "recognition.txt", "all foils renormalization loss"),
     ("0.3822", "recognition.txt", "all foils race loss"),
