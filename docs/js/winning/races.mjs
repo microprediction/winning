@@ -848,8 +848,12 @@ function pairMixtureGap(target, proj, w, d0, d1, g0, h) {
     let gn = ratio > 0 ? g - f * sd / ratio : NaN;
     // quadratic convergence: from 1e-8 the step lands at rounding
     if (Math.abs(f) < 1e-8 && lo < gn && gn < hi) return gn;
-    if (!(lo < gn && gn < hi)) {
-      if (Number.isFinite(lo) && Number.isFinite(hi)) gn = 0.5 * (lo + hi);
+    // while one side is open a Newton step is capped at h too: on a
+    // mixture plateau the ratio is ~1e-66 and the uncapped step
+    // (-6.7e64) set a bracket end bisection never came back from (#830)
+    const open = !(Number.isFinite(lo) && Number.isFinite(hi));
+    if (!(lo < gn && gn < hi) || (open && Math.abs(gn - g) > h)) {
+      if (!open) gn = 0.5 * (lo + hi);
       else { gn = f > 0 ? g - h : g + h; h *= 2; }
     }
     if (Math.abs(gn - g) <= 2 * Number.EPSILON * Math.max(Math.abs(g), sd)) return gn;

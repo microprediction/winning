@@ -2215,8 +2215,12 @@ def _pair_mixture_gap(target, dV, d0, d1, F, W, g0, h):
             # quadratic convergence: from a relative error of 1e-8 the
             # step lands at rounding, and the caller certifies it
             return float(gn)
-        if not (lo < gn < hi):
-            if np.isfinite(lo) and np.isfinite(hi):
+        # While one side is open a Newton step is capped at h too: on a
+        # mixture plateau the ratio is ~1e-66 and the uncapped step
+        # (-6.7e64) set a bracket end bisection never came back from (#830).
+        is_open = not (np.isfinite(lo) and np.isfinite(hi))
+        if not (lo < gn < hi) or (is_open and abs(gn - g) > h):
+            if not is_open:
                 gn = 0.5 * (lo + hi)
             else:
                 gn = g - h if f > 0.0 else g + h

@@ -1,4 +1,5 @@
-"""Round-10 race regressions: the guarded final Jacobi reprice (#823)."""
+"""Round-10 race regressions: the guarded final Jacobi reprice (#823) and
+the bounded open-bracket Newton step of the pair-mixture inverse (#830)."""
 import json
 import os
 import shutil
@@ -9,7 +10,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from winning.factor.races import _jacobi_sweeps
+from winning.factor.races import (_jacobi_sweeps, abilities_from_race,
+                                  race_probabilities)
 from winning.factor.topk import abilities_from_topk, top_k_probabilities
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -120,3 +122,61 @@ def test_browser_final_reprice_is_guarded():
     assert h["residMax"] == 1 and h["iterations"] == 1
     assert got["cold"] == "threw"
     assert got["ordinary"]["info"]["converged"]
+
+
+# -- #830: the pair-mixture Newton step is capped while a side is open ------
+
+_V830 = [[1.0], [0.0]]
+_F830 = [[10.0], [0.0], [-10.0]]
+_W830 = [0.12, 0.72, 0.16]
+
+
+def _pair_fit(D):
+    kw = dict(V=_V830, D=[D, D], F=_F830, W=_W830)
+    t = race_probabilities([-0.025, 0.025], **kw)
+    mu, info = abilities_from_race(t, return_info=True, **kw)
+    back = race_probabilities(mu, **kw)
+    return mu, info, float(np.abs(np.log(back) - np.log(t)).max())
+
+
+def test_pair_mixture_inverse_recovers_plateau_target():
+    # a ~1e-66 derivative ratio on the 0.12 plateau proposed a -6.7e64
+    # step that the open bracket accepted; the scalar solve then failed
+    # and the generic fallback returned +-0.873, residual 1.05 (#830)
+    mu, info, resid = _pair_fit(0.005)
+    assert info["converged"] and info["iterations"] == 0
+    np.testing.assert_allclose(mu, [-0.025, 0.025], atol=1e-12)
+    assert resid < 1e-8
+
+
+def test_pair_mixture_inverse_ordinary_neighbours():
+    # the D the scalar solve already handled: still exact, still direct
+    for D in (0.05, 0.5, 2.0):
+        mu, info, resid = _pair_fit(D)
+        assert info["converged"] and info["iterations"] == 0
+        np.testing.assert_allclose(mu, [-0.025, 0.025], atol=1e-12)
+        assert resid < 1e-12
+
+
+_JS830 = r"""
+import { raceProbabilities, abilitiesFromRace } from %s;
+console.warn = () => {};
+const V = [[1], [0]], F = [[10], [0], [-10]], W = [0.12, 0.72, 0.16];
+const out = [];
+for (const d of [0.005, 0.05, 0.5, 2]) {
+  const D = [d, d];
+  const t = raceProbabilities([-0.025, 0.025], {V, D, F, W});
+  const f = abilitiesFromRace(t, {V, D, F, W, returnInfo: true});
+  const b = raceProbabilities(f.mu, {V, D, F, W});
+  out.push({...f, resid: Math.max(...b.map((x, i) => Math.abs(Math.log(x / t[i]))))});
+}
+console.log(JSON.stringify(out));
+"""
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_browser_pair_mixture_inverse_recovers_plateau_target():
+    for f in _node(_JS830, "races.mjs"):     # D = 0.005 gave +-0.873
+        assert f["converged"] and f["iterations"] == 0
+        np.testing.assert_allclose(f["mu"], [-0.025, 0.025], atol=1e-12)
+        assert f["resid"] < 1e-8
