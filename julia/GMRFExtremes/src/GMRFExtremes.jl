@@ -178,9 +178,11 @@ function chain_from_precision(mu::AbstractVector, Q::AbstractMatrix;
     # refusal off. tol = Inf passed every bandwidth and symmetry check and
     # the off-band entries were dropped: a distance-two coupling priced
     # 0.125 for a true 0.1049 (#562). NaN and negative values had
-    # accidental comparison semantics.
-    (tol isa Real && isfinite(tol) && tol >= 0) || throw(ArgumentError(
-        "tol must be a finite, nonnegative number; got " * string(tol)))
+    # accidental comparison semantics. Bool <: Real and true == 1.0, so
+    # tol = true silently dropped the same coupling (#562).
+    (tol isa Real && !(tol isa Bool) && isfinite(tol) && tol >= 0) ||
+        throw(ArgumentError("tol must be a finite, nonnegative number; " *
+                            "got " * string(tol)))
     tol = Float64(tol)
     # strict tridiagonality check
     if Q isa SparseMatrixCSC
@@ -276,9 +278,13 @@ const _LATTICE_DOUBLES = 20_000_000
 
 function _check_lattice(L::Int, n::Int)
     n >= 2 || return nothing             # no transition matrix at all
-    L * L <= _LATTICE_DOUBLES || throw(ArgumentError(string(
+    # L * L wrapped for L = 2^32 (to 0) and typemax(Int) (to 1), so the
+    # guard passed and the allocation was attempted (#533); compare in
+    # Float64, exact for every L the budget admits
+    Float64(L)^2 <= _LATTICE_DOUBLES || throw(ArgumentError(string(
         "a ", L, "-point lattice needs ", L, " x ", L, " transition ",
-        "matrices (", round(8 * L^2 / 1e6; digits = 1), " MB each), over ",
+        "matrices (", round(8 * Float64(L)^2 / 1e6; digits = 1),
+        " MB each), over ",
         "the ", 8 * _LATTICE_DOUBLES ÷ 1_000_000, " MB budget; use at most ",
         isqrt(_LATTICE_DOUBLES), " points")))
     return nothing
@@ -435,9 +441,32 @@ function _lattice(c::GaussMarkovChain, points, R::AbstractMatrix;
     return _Lattice(lo, dz, L)
 end
 
-"""Threshold offsets R[t, k] = us[k] - mu[t]."""
-_offsets(c::GaussMarkovChain, us) =
-    [Float64(u) - c.mu[t] for t in 1:length(c), u in us]
+"""`x - a` in units of 2^e. For e > 0 the operands are scaled first:
+subtracting first overflowed means [1e308, -1e308] to -Inf at a scale
+where the contrast is finite (#657, #363). A scaled operand is then at
+most floatmax/2, so the difference cannot overflow, and a power-of-two
+scale is exact, so the bits are those of the old order wherever it did
+not overflow. For e <= 0 the old order is kept outright."""
+@inline _contrast(x::Float64, a::Float64, e::Int) =
+    e > 0 ? ldexp(x, -e) - ldexp(a, -e) : ldexp(x - a, -e)
+
+"""Threshold offsets R[t, k] = us[k] - mu[t], in units of 2^e."""
+_offsets(c::GaussMarkovChain, us, e::Int = 0) =
+    [_contrast(Float64(u), c.mu[t], e) for t in 1:length(c), u in us]
+
+"""Means as contrasts `d` from an anchor `a`, in units of 2^e. The anchor
+is mu[1]. Only if a contrast is still infinite (means more than about
+1e308 marginal sds apart, possible only for e <= 0) is the anchor moved
+to the highest mean and the contrasts below -floatmax/2 saturated there:
+such a node is never the maximum to any Float64 precision. Before, the
+infinite contrast reached the lattice and the call threw (#657, #363)."""
+function _mean_contrasts(c::GaussMarkovChain, e::Int)
+    a = c.mu[1]
+    d = [_contrast(m, a, e) for m in c.mu]
+    all(isfinite, d) && return a, d
+    a = maximum(c.mu)
+    return a, [max(_contrast(m, a, e), -floatmax(Float64) / 2) for m in c.mu]
+end
 
 """The chain in units of 2^e, the binary order of its largest marginal
 sd, and that exponent. The lattice is laid in these units.
@@ -461,7 +490,7 @@ end
 """Offsets `_offsets(c, us)` and the chain, both in units of 2^e."""
 function _scaled_problem(c::GaussMarkovChain, us)
     cs, e = _unit_scaled(c)
-    return cs, ldexp.(_offsets(c, us), -e), e
+    return cs, _offsets(c, us, e), e
 end
 
 """Mass of N(m, sd^2) on [a, b), tail-stable.
@@ -703,8 +732,7 @@ function expected_max(c::GaussMarkovChain; points = 400, nu = 200)
     # thresholds and offsets in units of 2^e, mapped back at the end (#363)
     cs, e = _unit_scaled(c)
     msd = marginal_sd(cs)
-    a = c.mu[1]
-    d = ldexp.(c.mu .- a, -e)
+    a, d = _mean_contrasts(c, e)        # scale, then subtract (#657)
     lo = minimum(d) - 8.0 * maximum(msd)
     hi = maximum(d) + 8.0 * maximum(msd)
     us = collect(range(lo, hi, length = nu))
@@ -715,7 +743,10 @@ function expected_max(c::GaussMarkovChain; points = 400, nu = 200)
     # trapezoid in the threshold: the left-rectangle rule biased
     # E[max] by O(du) (measured +0.053 at nu = 200 against MC)
     surv = 1.0 .- F
-    return a + ldexp(lo + (sum(surv) - surv[1] / 2 - surv[end] / 2) * du, e)
+    off = lo + (sum(surv) - surv[1] / 2 - surv[end] / 2) * du
+    # a + ldexp(off, e) overflowed for an anchor of -1e308 and a maximum
+    # near +1e308; adding in units of 2^e (e > 0) is the same rounding
+    return e > 0 ? ldexp(ldexp(a, -e) + off, e) : a + ldexp(off, e)
 end
 
 # ---- argmax marginals (per-threshold forward and backward) ---------
@@ -768,7 +799,8 @@ function argmax_marginals(c::GaussMarkovChain; points = 300,
                           resolution_tol = ARGMAX_RESOLUTION_TOL)
     n = length(c)
     _, e = _unit_scaled(c)                # in units of 2^e (#363)
-    c = GaussMarkovChain(ldexp.(c.mu .- c.mu[1], -e), ldexp(c.sd0, -e),
+    # scale, then subtract: [1e308, -1e308] overflowed to -Inf (#657)
+    c = GaussMarkovChain(_mean_contrasts(c, e)[2], ldexp(c.sd0, -e),
                          c.phi, ldexp.(c.s, -e))
     x, dx = _grid(c, points)
     err, t = _tie_bias(c, dx)

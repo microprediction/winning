@@ -505,6 +505,19 @@ end
     Qr = [2.0 -0.5 1e-14; -0.5 2.0 -0.5; 1e-14 -0.5 2.0]
     c = chain_from_precision(zeros(3), Qr; tol = 1e-12)
     @test length(c) == 3
+    # Bool <: Real and true == 1.0: tol = true dropped the 0.5 coupling
+    # and priced 0.125 for 0.1049 (#562 residual)
+    for tol in (true, false)
+        @test_throws ArgumentError chain_from_precision(zeros(3), Q; tol = tol)
+        @test_throws ArgumentError chain_from_precision(zeros(3), Qr; tol = tol)
+    end
+    # numeric tolerances are unchanged, of any Real type
+    for tol in (1e-12, 1e-10, big"1e-12", 1 // 10^12, 1f-6)
+        ct = chain_from_precision(zeros(3), Qr; tol = tol)
+        @test ct.phi == c.phi && ct.s == c.s && ct.sd0 == c.sd0
+    end
+    @test length(chain_from_precision(zeros(3), [2.0 -0.5 0.0; -0.5 2.0 -0.5;
+                                                 0.0 -0.5 2.0]; tol = 0)) == 3
 end
 
 @testset "memory is O(L^2), not O(n L^2) (#533)" begin
@@ -538,6 +551,18 @@ end
                                        points = 10_000)
     @test_throws ArgumentError argmax_marginals(stationary_ar1(0.5, 3);
                                                 points = 10_000)
+    # L * L wrapped: 2^32 squared to 0 and typemax(Int) to 1, so the
+    # guard passed; it is checked without the overflow now (#533)
+    for L in (1 << 32, typemax(Int), (1 << 31) + 1, 3037000500)
+        @test_throws ArgumentError GE._check_lattice(L, 2)
+    end
+    @test GE._check_lattice(typemax(Int), 1) === nothing
+    # the budget boundary itself is where it was
+    @test GE._check_lattice(4472, 2) === nothing
+    @test GE._check_lattice(isqrt(GE._LATTICE_DOUBLES), 1000) === nothing
+    @test_throws ArgumentError GE._check_lattice(4473, 2)
+    msg = sprint(showerror, try GE._check_lattice(4473, 2) catch err; err end)
+    @test occursin("160.1 MB each", msg)
     # a single node has no transition, so no matrix to budget
     @test isfinite(max_cdf(GaussMarkovChain([0.0], 1.0, Float64[], Float64[]),
                            0.0; points = 10_000))
@@ -627,6 +652,54 @@ end
     @test_logs max_cdf(stationary_ar1(0.5, 20), 0.5; points = 2000)
     # a threshold that does force a much coarser lattice still warns
     @test_logs (:warn, r"far outside") max_cdf(c, 30.0)
+end
+
+# --- opposite-sign finite means: scale, then subtract (#657, #363) -----
+#
+# The means and thresholds were subtracted before the power-of-two
+# rescaling, so 1e308 - (-1e308) overflowed to Inf although the contrast
+# is finite in the chain's own units: max_cdf priced the second node as
+# unbounded (0.5 for Phi(0) Phi(2) = 0.48862), and expected_max and
+# argmax_marginals threw on internally generated infinities.
+@testset "opposite-sign finite means (#657, #363)" begin
+    Phi = GE.ndtr
+    c = GaussMarkovChain([1e308, -1e308], 1e308, [0.0], [1e308])
+    exact = Phi(0.0) * Phi(2.0)                     # 0.4886249340259104
+    @test abs(max_cdf(c, 1e308) - exact) < 1e-12
+    @test abs(excursion_probability(c, 1e308) - (1 - exact)) < 1e-12
+    @test abs(sum(first_passage(c, 1e308)) - 1) < 1e-12
+    @test abs(max_cdf(c, [1e308])[1] - exact) < 1e-5   # unaligned lattice
+    # sd 1e307: the second node wins with probability Phi(-14.14) ~ 1e-45
+    for (mu, top) in (([1e308, -1e308], 1), ([-1e308, 1e308], 2))
+        c = GaussMarkovChain(mu, 1e307, [0.0], [1e307])
+        x = expected_max(c)
+        @test isfinite(x) && abs(x / 1e308 - 1) < 1e-6
+        P = argmax_marginals(c)
+        @test abs(P[top] - 1) < 1e-12 && 0 <= P[3 - top] < 1e-40
+    end
+    # sd 1: the contrast is past Float64 in the chain's units, so the
+    # lower node is saturated; it can never be the maximum
+    for (mu, top) in (([1e308, -1e308], 1), ([-1e308, 1e308], 2))
+        c = GaussMarkovChain(mu, 1.0, [0.0], [1.0])
+        @test argmax_marginals(c)[top] == 1.0
+        @test argmax_marginals(c)[3 - top] == 0.0
+        x = expected_max(c)
+        @test isfinite(x) && abs(x / 1e308 - 1) < 1e-2   # threshold grid
+        @test abs(max_cdf(c, 1e308) - 0.5) < 1e-12
+    end
+    # ordinary inputs: the scaled-first contrasts are the same bits as
+    # the old subtract-then-scale ones, for e > 0 and e <= 0 alike
+    for (mu, sd) in (([0.0, 0.3, -0.2], 1.0), ([3.0, -3.0, 1.7], 2.5),
+                     ([-1e5, 2e5, 7.0], 1e4), ([0.1, -0.1, 0.05], 1e-3),
+                     ([1e12, 1e12 + 0.25, 1e12 - 0.5], 3.0))
+        ch = GaussMarkovChain(mu, sd, [0.6, -0.4], [0.8sd, 0.9sd])
+        _, e = GE._unit_scaled(ch)
+        us = [mu[1] + sd, mu[2] - 2sd, Inf, -Inf]
+        @test GE._offsets(ch, us, e) == ldexp.(GE._offsets(ch, us), -e)
+        a, d = GE._mean_contrasts(ch, e)
+        @test a === mu[1]
+        @test d == ldexp.(ch.mu .- mu[1], -e)
+    end
 end
 
 println("all GMRFExtremes tests passed")
