@@ -275,9 +275,23 @@ export function polishRace(opts = {}) {
   const fwdM = m => raceProbabilities(m, { V, D, F, W, base, points, structure });
   const jacM = m => raceJacobian(m, { V, D, F, W, base, points, structure });
   let mu0 = mu0In != null ? asAbilities(mu0In, "mu0") : null;
+  // A p0 call is only as good as its inversion: a failed one is not the
+  // caller's race, and certifying the polish of it converged was a false
+  // certificate (#805). Its verdict is carried to info.converged.
+  let invConverged = true;
   if (!mu0) {
     if (!p0) throw new Error("give p0 or mu0");
-    mu0 = abilitiesFromRace(p0, { V, D, F, W, base, points, structure });
+    const inv = abilitiesFromRace(p0, { V, D, F, W, base, points, structure,
+                                        returnInfo: true });
+    mu0 = inv.mu;
+    invConverged = inv.converged;
+    if (!invConverged && typeof console !== "undefined")
+      console.warn(
+        "polishRace: abilitiesFromRace did not converge on p0: max |log " +
+        `residual| ${inv.maxLogResidual.toExponential(2)} after ` +
+        `${inv.iterations} iterations; the polished race starts from a ` +
+        "race that is not p0, so info.converged is false. Raise points= " +
+        "or pass mu0.");
   }
   const m0m = mean(mu0);
   mu0 = mu0.map(v => v - m0m);
@@ -321,8 +335,8 @@ export function polishRace(opts = {}) {
   // diagnostics a constrained solve reports (python's "unconstrained"
   // branch); omitting them made info.converged undefined (#763)
   if (!b0.length) return { p: fwdM(mu0), mu: mu0,
-                           info: { active: [], maxViolation: 0, converged: true,
-                                   muDistance: 0 } };
+                           info: { active: [], maxViolation: 0,
+                                   converged: invConverged, muDistance: 0 } };
   // Solve in the FIELD'S units. The objective, the penalty schedule and
   // every stopping tolerance below are absolute numbers, so the same race
   // written with abilities x c and variances x c^2 polished differently:
@@ -497,6 +511,6 @@ export function polishRace(opts = {}) {
   return { p, mu: mOut,
            info: { active: slack.map((v, k) => [v, k]).filter(([v]) => v < 1e-6).map(([, k]) => k),
                    maxViolation: Math.max(0, -Math.min(...slack)),
-                   converged,
+                   converged: converged && invConverged,
                    muDistance: Math.sqrt(mOut.reduce((a, v, j) => a + (v - mu0M[j]) ** 2, 0)) } };
 }

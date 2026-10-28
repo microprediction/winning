@@ -3454,5 +3454,50 @@ rejects(C => demo.fitGrammar(C, 1, 0, { method: "ipaf", tol: 0 }),
            blocks.blockRaceProbabilities(mu, cl, rot(V), D, { nodes })) > 1e-6);
 }
 
+// #805: a p0 call is only as good as its inversion. This seeded fixture
+// (four runners, rank one, a deliberately coarse 33-point lattice) is
+// priced by the forward itself, yet abilitiesFromRace stalls at a max
+// |log residual| of 3.63 -- and polishRace certified the race it then
+// returned converged. The same field on an ordinary lattice is untouched.
+{
+  const V = [[-2.4482602171824595], [-3.909470185595318],
+             [-2.465409300506771], [3.865886382696166]];
+  const D = [0.5440542468074961, 1.1197260935882694,
+             0.43645493804312074, 0.698143690730512];
+  const p0 = [2.5561714747719375e-8, 0.003954132588313348,
+              0.3838102877687196, 0.6122355540812523];
+  const said = [];
+  const ow = console.warn;
+  console.warn = (...x) => said.push(x.join(" "));
+  let out = null, ok = null, capped = null;
+  try {
+    out = polish.polishRace({ p0, V, D, points: 33 });
+    const mu = [3.87612150370894, 3.974112836166338,
+                -1.0855625523652705, -3.049817603104663];
+    const q0 = races.raceProbabilities(mu, { V, D, points: 257 });
+    said.length = 0;
+    ok = polish.polishRace({ p0: q0, V, D, points: 257 });
+    capped = polish.polishRace({ p0: q0, V, D, points: 257, nameCaps: 0.55 });
+  } catch (e) {
+    console.warn = ow;
+    holds("polishRace on the #805 fixture runs", false, e.message);
+  }
+  console.warn = ow;
+  if (out) {
+    holds("polishRace reports a failed p0 inversion as not converged (#805)",
+          out.info.converged === false, JSON.stringify(out.info));
+    holds("...and nothing else in its diagnostics moves (#805)",
+          out.info.maxViolation === 0 && out.info.muDistance === 0 &&
+          out.info.active.length === 0);
+  }
+  if (ok) {
+    holds("an ordinary p0 still polishes converged, unconstrained and capped (#805)",
+          ok.info.converged === true && capped.info.converged === true &&
+          Math.max(...capped.p) <= 0.55 + 1e-6);
+    holds("...without a polishRace warning (#805)",
+          !said.some(s => s.includes("polishRace")), said.join(" | "));
+  }
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");
