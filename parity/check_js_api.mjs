@@ -3479,5 +3479,33 @@ rejects(C => demo.fitGrammar(C, 1, 0, { method: "ipaf", tol: 0 }),
         eq(sc(S.Blocks([0, 0, 1], 2, [1, 1, 1])), [[5, 4, 0], [4, 5, 0], [0, 0, 5]]));
 }
 
+// --- structureCov reads Nested gamma through the pricers' door (#812)
+{
+  const S = structures, sc = demo.structureCov;
+  const eq = (A, B) => JSON.stringify(A) === JSON.stringify(B);
+  const price = s => () => races.raceProbabilities([0, 0.1, 0.2, 0.3], { structure: s });
+  // #812: gamma through the pricers' door
+  const nest = gamma => S.Nested([0, 0, 1, 1], [0.2, 0.4, 0.3, 0.5], [1, 1, 1, 1],
+                                 [1, -1, 0.5, -0.5], gamma);
+  for (const g of [null, false, true, "2", NaN, Infinity, -Infinity]) {
+    rejects(sc, [nest(g)], `structureCov refuses gamma ${String(g)} (#812)`, "gamma must be a finite number");
+    rejects(price(nest(g)), [], `and so does the Nested pricer for gamma ${String(g)} (#812)`,
+            "gamma must be a finite number");
+  }
+  rejects(sc, [S.Nested([0, 0, 1], [1, 1, 1], [1, 1, 1], null, "1")],
+          "structureCov refuses a malformed gamma without a coupling, as the pricer (#812)",
+          "gamma must be a finite number");
+  const nb = (cl, g) => S.Nested([0, 0, 1], [1, 2, 3], [1, 1, 1], [1, 0, 1], g);
+  const blocks3 = [[2, 2, 0], [2, 5, 0], [0, 0, 10]];
+  const withG = g2 => blocks3.map((r, i) => r.map((v, j) => v + g2 * [1, 0, 1][i] * [1, 0, 1][j]));
+  holds("structureCov Nested gamma 0, 1, 2, -0.5 unchanged (#812)",
+        eq(sc(nb(0, 0)), blocks3) && eq(sc(nb(0, 1)), withG(1)) && eq(sc(nb(0, 2)), withG(4))
+        && eq(sc(nb(0, -0.5)), withG(0.25)));
+  holds("structureCov Nested default and omitted gamma are gamma 1 (#812)",
+        eq(sc(S.Nested([0, 0, 1], [1, 2, 3], [1, 1, 1], [1, 0, 1])), withG(1))
+        && eq(sc({ kind: "Nested", cluster: [0, 0, 1], loading: [1, 2, 3], D: [1, 1, 1],
+                   coupling: [1, 0, 1] }), withG(1)));
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");

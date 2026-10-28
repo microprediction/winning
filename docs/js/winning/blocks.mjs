@@ -499,7 +499,7 @@ function coupledShift(g, gamma, node) {
   return g.map(gi => gi.reduce((a, b, r) => a + (gamma * b) * node[r], 0));
 }
 
-function asGamma(gamma, where) {
+export function asGamma(gamma, where) {
   if (typeof gamma !== "number" || !Number.isFinite(gamma))
     throw new Error(`${where}: gamma must be a finite number; got ${typeof gamma === "string" ? JSON.stringify(gamma) : String(gamma)}`);
   return gamma;

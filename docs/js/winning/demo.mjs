@@ -3,7 +3,7 @@
 // a Monte Carlo sampler to race against.
 import { hermite1, interpClamped, solve, firstPrimes, asLoadings,
          isVector, asCount, asIdio, asTolerance } from "./core.mjs";
-import { treeCluster } from "./blocks.mjs";
+import { treeCluster, asGamma } from "./blocks.mjs";
 
 /* Halton sequence through the normal quantile: equal-weight nodes for
    E over N(0, I_r). The fitted grammar has rank k+m > 2, where tensor
@@ -687,10 +687,14 @@ export function structureCov(s) {
   } else if (s.kind === "Blocks") {
     addBlocks();
   } else if (s.kind === "Nested") {
+    // gamma through the pricing kernels' door: null was read as 1, false
+    // as 0, "2" as 2 and NaN as an all-NaN matrix (#812). Omitted is the
+    // default 1, as the kernels' own default parameter reads it.
+    const gamma = asGamma(s.gamma === undefined ? 1 : s.gamma, "structureCov");
     addBlocks();
-    if (s.coupling != null && s.gamma !== 0) {
+    if (s.coupling != null && gamma !== 0) {
       const g = asLoadings(s.coupling, n, "coupling");
-      const g2 = (s.gamma ?? 1) ** 2;
+      const g2 = gamma ** 2;
       for (let i = 0; i < n; i++)
         for (let j = 0; j < n; j++) C[i][j] += g2 * dot(g[i], g[j]);
     }
