@@ -810,6 +810,13 @@ export function abilitiesFromProbabilitiesFactor(pTarget, V, D, F, W, opts = {})
                    `(tol ${tol}). Pass returnInfo: true for the diagnostics.`);
     return opts.returnInfo ? { mu, converged, residual, iterations } : mu;
   };
+  // validated for every N: the pair branch below returned before mu0 was
+  // read, so a NaN, wrong-length or string start passed silently (#838)
+  let mu0 = null;
+  if (opts.mu0 != null) {
+    mu0 = finiteVec(opts.mu0, "mu0", "ability");
+    if (mu0.length !== N) throw new Error(`mu0 has ${mu0.length} entries for ${N}`);
+  }
   if (N === 1) return finish([0], true, 0, 0);
 
   // The factor law actually represented, as python's abilities_from_race
@@ -872,7 +879,9 @@ export function abilitiesFromProbabilitiesFactor(pTarget, V, D, F, W, opts = {})
     // (#412). p0 rises with g, p1 falls, so h below is increasing either way.
     const m = p[1] < p[0] ? 1 : 0;
     const sgn = m === 0 ? 1 : -1;
-    const g0 = sgn * s0 * ndtri(p[m]) - (shift[1] - shift[0]);
+    // a caller's mu0 is the start in place of the closed form, certified
+    // first like it (#838)
+    const g0 = mu0 ? mu0[1] - mu0[0] : sgn * s0 * ndtri(p[m]) - (shift[1] - shift[0]);
     const p0At = (g) => winProbabilitiesFactor([-0.5 * g, 0.5 * g], V, D, F, W, fwdOpts).p;
     // both shares scored, floored at 1e-300 as python's _pair_solve: at
     // PFLOOR a minority below 1e-15 could never certify (#727)
@@ -916,9 +925,8 @@ export function abilitiesFromProbabilitiesFactor(pTarget, V, D, F, W, opts = {})
 
   let mu;
   const anyV = Vc.some((row) => row.some((v) => v !== 0));
-  if (opts.mu0 != null) {
-    mu = finiteVec(opts.mu0, "mu0", "ability");
-    if (mu.length !== N) throw new Error(`mu0 has ${mu.length} entries for ${N}`);
+  if (mu0) {
+    mu = mu0;
   } else if (r >= 1 && anyV) {
     // warm start: the independent race at each runner's represented
     // total variance, shifted by the rule's mean
@@ -946,7 +954,15 @@ export function abilitiesFromProbabilitiesFactor(pTarget, V, D, F, W, opts = {})
     const resid = phat.map((v, i) => Math.log(v) - logp[i]);
     res = residualOf(phat);
     if (!Number.isFinite(res)) break;
-    if (res < tol) break;
+    if (res < tol) {
+      // an exact mu0 stops before any update, and the update is what
+      // centres: it came back with the caller's shift (#849)
+      if (mu0 && it === 0) {
+        const m0 = mu.reduce((a, b) => a + b, 0) / N;
+        for (let i = 0; i < N; i++) mu[i] -= m0;
+      }
+      break;
+    }
     if (res > prevRes * 1.2) damp = Math.max(0.25, damp * 0.5);
     prevRes = res;
     const delta = new Array(N);
@@ -974,6 +990,16 @@ export function abilitiesFromProbabilitiesFactor(pTarget, V, D, F, W, opts = {})
     for (let i = 0; i < N; i++) { mu[i] -= delta[i]; mean += mu[i]; }
     mean /= N;
     for (let i = 0; i < N; i++) mu[i] -= mean;
+  }
+  if (iters === nIter && Number.isFinite(res) && !(res < tol) &&
+      mu.every((v) => Number.isFinite(v))) {
+    // the budget ran out after an update the loop never priced: report
+    // the residual of the mu actually returned, one forward and only on
+    // exhaustion, as python (#538). The stale pre-update residual said
+    // 0.497 / not converged at a mu whose residual was 0.071 < tol (#862)
+    // (shares only: the same bits as the loop's slope-carrying call)
+    const phat = winProbabilitiesFactor(mu, V, D, F, W, fwdOpts).p;
+    res = residualOf(phat.map((v) => Math.max(v, PFLOOR)));
   }
   if (!Number.isFinite(res) || mu.some((v) => !Number.isFinite(v)))
     throw new Error(`${where}: the iteration produced a non-finite residual; ` +
@@ -1006,5 +1032,8 @@ function ndtri(p) {
   }
   const e = Math.exp(logndtr(x)) - p;
   const u = e * SQRT_2PI * Math.exp(0.5 * x * x);
-  return x - u / (1 + 0.5 * x * u);
+  // below p ~ 1e-309 exp(x^2/2) overflows and the step is Inf/Inf = NaN:
+  // keep the finite Acklam estimate rather than return NaN (#832)
+  const step = u / (1 + 0.5 * x * u);
+  return Number.isFinite(step) ? x - step : x;
 }

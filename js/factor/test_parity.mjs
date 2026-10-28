@@ -601,4 +601,94 @@ check("calibrated abilities vs truth", muHat, mu, 5e-6);
         [0, 0.6550416000142272, 0.3449583999857729], 1e-300);
 }
 
+// #832: the pair seed's ndtri refinement overflowed exp(x^2/2) below
+// p ~ 1e-309 and returned Inf/Inf = NaN, so a valid subnormal pair target
+// threw "mu[0] = NaN". Finite, mirror-equivariant, and the Gaussian
+// contrast is scipy's ndtri (the forward's 1e-300 floor leaves it
+// uncertified, which is a separate matter).
+{
+  const oracle = [[1e-315, 18.983650175533683], [1e-320, 19.134562671516324],
+                  [Number.MIN_VALUE, 19.233702808572172]];
+  for (const [t, half] of oracle) {
+    let a, b;
+    try {
+      a = abilitiesFromProbabilitiesFactor([t, 1], [[0], [0]], [0.5, 0.5], [[0]], [1], { returnInfo: true }).mu;
+      b = abilitiesFromProbabilitiesFactor([1, t], [[0], [0]], [0.5, 0.5], [[0]], [1], { returnInfo: true }).mu;
+    } catch (e) { a = [NaN, NaN]; b = [NaN, NaN]; console.log("   " + e.message); }
+    check(`subnormal pair target ${t} is the ndtri contrast (#832)`, a, [half, -half], 1e-7);
+    check(`subnormal pair target ${t} is mirror-equivariant (#832)`, b, [-a[0], -a[1]], 1e-300);
+  }
+  // nearby ordinary deep tail unchanged (pinned from origin/main 3fa326ee;
+  // 1e-12, not bitwise: libm differs across platforms)
+  check("pair target 1e-300 unchanged (#832)",
+        abilitiesFromProbabilitiesFactor([1e-300, 1], [[0], [0]], [0.5, 0.5], [[0]], [1]),
+        [18.5235481496806, -18.5235481496806], 1e-12);
+}
+
+// #838: the pair branch returned before mu0 was read, so an exact start
+// was ignored (residual 0.034 at nIter 1) and a malformed one accepted
+{
+  const V = [[-1], [1]], D = [0.05, 0.2], F = [[-3], [0], [2]], W = [0.2, 0.3, 0.5];
+  const p = winProbabilitiesFactor([-0.5, 0.5], V, D, F, W, { points: 4001 }).p;
+  const o = { points: 4001, nIter: 1, tol: 1e-10, returnInfo: true };
+  let fit = { mu: [NaN, NaN], converged: false };
+  try { fit = abilitiesFromProbabilitiesFactor(p, V, D, F, W, { ...o, mu0: [-0.5, 0.5] }); } catch (e) { console.log("   " + e.message); }
+  check("exact pair mu0 certifies at nIter 1 (#838)", [...fit.mu, fit.converged ? 0 : 1], [-0.5, 0.5, 0], 1e-12);
+  const sh = abilitiesFromProbabilitiesFactor(p, V, D, F, W, { ...o, mu0: [9.5, 10.5] });
+  check("shifted exact pair mu0 returns the centred pair (#838)", sh.mu, [-0.5, 0.5], 1e-12);
+  let raised = 0;
+  for (const bad of [[NaN, 1], [NaN], [1, 2, 3], "bad"]) {
+    try { abilitiesFromProbabilitiesFactor(p, V, D, F, W, { ...o, mu0: bad }); }
+    catch (e) { if (/mu0/.test(e.message)) raised++; }
+  }
+  check("malformed pair mu0 raises (#838)", [raised], [4], 0.5);
+  // omitted mu0 unchanged (pinned from origin/main 3fa326ee)
+  check("pair without mu0 unchanged (#838)",
+        abilitiesFromProbabilitiesFactor(p, V, D, F, W, { ...o, nIter: 3 }).mu,
+        [-1.1145587159721093, 1.1145587159721093], 1e-12);
+}
+
+// #849: an exact N >= 3 mu0 broke out before the first update and came
+// back with the caller's shift; a perturbed one came back mean-zero
+{
+  const V = [[], [], []], D = [1, 1, 1], F = [[]], W = [1];
+  const t = winProbabilitiesFactor([-1, 0, 1], V, D, F, W, { points: 1001 }).p;
+  const o = { points: 1001, tol: 1e-12, nIter: 50, returnInfo: true };
+  for (const mu0 of [[9, 10, 11], [1e12 - 1, 1e12, 1e12 + 1]]) {
+    const r = abilitiesFromProbabilitiesFactor(t, V, D, F, W, { ...o, mu0 });
+    check(`exact shifted mu0 ${mu0[1]} returns the mean-zero exact start (#849)`,
+          [...r.mu, r.converged ? 0 : 1, r.iterations], [-1, 0, 1, 0, 1], 1e-300);
+  }
+  // a mean-zero start is unchanged (pinned from origin/main 3fa326ee)
+  check("centred mu0 unchanged (#849)",
+        abilitiesFromProbabilitiesFactor(t, V, D, F, W, { ...o, mu0: [-1.001, 0, 1.001] }).mu,
+        [-1.0000000000003233, 2.395494788021237e-13, 1.000000000000084], 1e-12);
+}
+
+// #862: on budget exhaustion the residual and flag were the PRE-update
+// iterate's (0.497, not converged) while the returned mu repriced at
+// 0.071 < tol. They now describe the mu returned; mu itself is unchanged.
+{
+  const target = [0.7, 0.2, 0.1], V = [[], [], []], D = [1, 1, 1], F = [[]], W = [1];
+  const actual = (mu) => {
+    const q = winProbabilitiesFactor(mu, V, D, F, W, { points: 1001 }).p;
+    return Math.max(...q.map((v, i) => Math.abs(Math.log(v) - Math.log(target[i]))));
+  };
+  const one = abilitiesFromProbabilitiesFactor(target, V, D, F, W,
+    { nIter: 1, points: 1001, tol: 0.1, returnInfo: true });
+  check("exhausted fit within tol says converged (#862)", [one.converged ? 0 : 1], [0], 0.5);
+  check("exhausted mu is unchanged (#862)", one.mu,
+        [-0.8856280995076525, 0.22715088511329895, 0.6584772143943536], 1e-12);
+  for (const nIter of [1, 2, 3]) {
+    const f = abilitiesFromProbabilitiesFactor(target, V, D, F, W,
+      { nIter, points: 1001, tol: 1e-12, returnInfo: true });
+    check(`nIter ${nIter}: reported residual is the returned mu's (#862)`,
+          [f.residual], [actual(f.mu)], 1e-12);
+  }
+  // a fit that converges inside its budget is unchanged (origin/main 3fa326ee)
+  const d = abilitiesFromProbabilitiesFactor(target, V, D, F, W, { points: 1001, returnInfo: true });
+  check("converged default fit unchanged (#862)", [...d.mu, d.residual, d.iterations],
+        [-0.8474995800413705, 0.19091763292480116, 0.6565819471165693, 8.219023104327761e-7, 10], 1e-12);
+}
+
 process.exit(failures ? 1 : 0);
