@@ -12,7 +12,7 @@
 
 \title{\textbf{Think Before Rescaling Probabilities to Unity:\\Evidence from Thirty-Nine Tests of Linear\\versus Gaussian Renormalization}}
 \author{Peter Cotton}
-\date{Provisional draft, 31 August 2026}
+\date{This version: 30 October 2026}
 
 \begin{document}
 \maketitle
@@ -33,7 +33,7 @@ has the lower held-out log loss in thirty of thirty-nine comparisons. Those rows
 also count by source, taking one specification per study and calling a source drawn when its
 resampling interval covers zero: Gaussian renormalization is then ahead in fifteen sources,
 linear renormalization in one, with one drawn and three unresolved. The differences are small where
-they are small, a median of $0.004$ nats across the thirty-nine rows, and twelve exceed $0.01$
+they are small, a median of $0.004$ nats across the thirty-nine rows, and twelve gains exceed $0.01$
 with a maximum of $0.05$.
 \end{abstract}
 
@@ -372,8 +372,8 @@ Lines, twelve to two & observed menus & $-.0322$ & $1.000$ & lines\footnotemark[
 \caption{Held-out log loss of linear renormalization minus that of Gaussian renormalization, in
 nats per prediction. Here we read a positive gain as a win for Gaussian renormalization. The null
 frequency is defined in the text. It is a parametric bootstrap diagnostic for departure from the
-constant-ratio rule, not a $p$-value and not a statement about predictive superiority. Replicates are two hundred except for the news row, sixty, and the Wills
-row, four hundred; the tone matrices are participant-averaged, so no null frequency is computed.}
+constant-ratio rule, not a $p$-value and not a statement about predictive superiority. Replicates are two thousand for the twelve ranking-induced rows and two
+hundred elsewhere, except for the news row, sixty, and the Wills row, four hundred; the tone matrices are participant-averaged, so no null frequency is computed.}
 \label{tab:scoreboard}
 \end{table}
 
@@ -543,8 +543,8 @@ concentrating the withdrawn mass onto whichever survivor most resembles the remo
 rather than spreading it proportionally. Townsend and Landon attribute that to Debreu's
 similarity objection, and Rouder brackets the same failure from the other side, finding real
 behaviour better than a guessing correction predicts. And every claim of conformity that was later
-retested with a test that had power was overturned. Holloway reversed his own 1970 conclusion in
-1971 \cite{holloway1970,holloway1971}, and Morgan's likelihood-ratio test rejected the rule on
+retested with a test that had power was overturned. Holloway's 1971 reanalysis found a dependency his
+earlier analysis had not \cite{holloway1970,holloway1971}, and Morgan's likelihood-ratio test rejected the rule on
 both of the datasets he applied it to, Clarke's and Egan's \cite{egan1957,morgan1974}.
 
 The reason the question stayed open is stated in the literature itself. Clarke returned to it in
@@ -587,9 +587,9 @@ Conditioning requires a model of how the probabilities were generated, and linea
 
 Which model it supplies is known. Within the class of independent additive random-utility
 models, Gumbel errors generate Equation~\eqref{eq:luce}
-\cite{lucesuppes1965,holman1974}, and Yellott \cite{yellott1977} showed the noise law is
-identified once menus of three or more are included, though not from pairwise comparisons
-alone. So the constant-ratio rule is one point of a family.
+\cite{lucesuppes1965,holman1974}, and Yellott \cite{yellott1977} showed that the Gumbel is the only
+such noise law consistent with the axiom once menus of three or more are included, though
+pairwise comparisons alone do not single it out. So the constant-ratio rule is one point of a family.
 
 One need not stand on exactly one point of it. Anyone with restricted-menu observations to fit
 can estimate an interpolating model, which is no worse in sample and may or may not be better
@@ -606,11 +606,11 @@ vector in one pass over a shared grid.
 Any noise law fixed in advance up to location gives a map with nothing left to choose, so the
 class supplies many zero-parameter candidates and not two. We compare two of them because they
 are the conventional ones. Gumbel gives linear renormalization, which is the unconsidered default
-and the architecture of a masked softmax. Kempton and Burrell \cite{kemptonburrell2025} measure
-the same renormalization directly in language-model decoding: truncating a softmax for top-$k$,
-nucleus or temperature sampling and rescaling the survivors distorts the relative probabilities
-among them, sometimes by two orders of magnitude, purely from the renormalization step and
-before any question of which map is more accurate is even asked. Unit-variance Gaussian gives
+and the architecture of a masked softmax. Kempton and Burrell \cite{kemptonburrell2025} quantify a
+consequence of the same per-step renormalization in language-model decoding: because top-$k$,
+nucleus and temperature sampling renormalize locally at every token, the relative probabilities
+of whole completions are distorted relative to the globally normalized distribution, in half of
+sampled pairs by a factor of several hundred. Unit-variance Gaussian gives
 Case V, which is the classical
 model of a latent contest and the one Thurstone proposed.\setcounter{footnote}{8}\footnote{The asymmetry between the two
 is notable. Case V is a model somebody proposed and defended. Linear renormalization is the
@@ -759,7 +759,8 @@ $\beta > 0$,
 P_S(i \mid \theta) = \frac{\exp\{V_i(\theta)/\beta\}}{\sum_{j \in S}\exp\{V_j(\theta)/\beta\}},
 \label{eq:condluce}
 \end{equation}
-which by Yellott's theorem is the same as choosing the largest
+which by the Holman--Marley construction \cite{lucesuppes1965,holman1974} is the same as
+choosing the largest
 $V_i(\theta) + \beta G_i(\theta)$ for independent standard Gumbel $G_i(\theta)$.
 
 \begin{proposition}[Gaussian taste heterogeneity]
@@ -1057,8 +1058,8 @@ sampling noise in what it predicts; all three null frequencies are at the $0.005
 
 The six-symbol gain is the larger of the two arms. The same pairs were also run \emph{announced in advance}, so the
 observer can aim attention at them. That arm was not analysed by the original authors and is
-recovered here from the trial files. There the advantage falls by roughly seven eighths, from
-$+0.0147$ or $+0.0277$ to $+0.0038$, though its interval, $[+0.0006, +0.0072]$, still excludes
+recovered here from the trial files. There the advantage falls by about three quarters, from
+$+0.0147$ to $+0.0038$, though its interval, $[+0.0006, +0.0072]$, still excludes
 zero. Accuracy rises from $0.780$ to $0.850$, linear renormalization becomes close to exactly
 right, and Gaussian renormalization begins to over-contract.
 
@@ -1191,7 +1192,7 @@ cent share to thirty-five per cent raises the excess from $+0.0001$ to $+0.0005$
 $3{,}544$, $817$ and $121$ pages. That is consistent with attenuation by measurement, and also
 with the threshold selecting a different population of pages, which these data cannot separate.
 
-Wikipedia and the two General Social Survey collections put the
+Wikipedia, occupational prestige and the two General Social Survey collections put the
 truth between the two maps, contracting when an alternative goes but by less than Case V says.
 They are the exception. Fitting the contraction slope $\lambda$ of Table~\ref{tab:mixture} to
 each collection's observed pairwise choices puts the observed slope \emph{above} Case V's in
@@ -1290,11 +1291,12 @@ Puzzles & $+.0010$ & $+.0009$ & $+.0008$ & & $+.0009$ & $+.0007$ & $+.0015$ \\
 \caption{Held-out gain under three smoothing conventions and three menu weightings. Smoothing
 moves most collections by $0.0001$ or less across the three values; the exceptions are
 occupational prestige, unscorable at $\alpha = 0$ and falling to $+0.0153$ at $\alpha = 1$,
-GSS socialization ($+0.0059$ to $+0.0055$), sports participation ($+0.0056$ to $+0.0046$) and
-Netflix ($+0.0019$ to $+0.0016$).
+GSS socialization ($+0.0059$ to $+0.0055$), sports participation ($+0.0056$ to $+0.0046$),
+Netflix ($+0.0019$ to $+0.0016$) and puzzles ($+0.0010$ to $+0.0008$).
 Weighting changes magnitude and not sign. Uniform by surviving size is smaller than the subset
-count in eleven of twelve collections and larger on Sushi ($+0.0121$ against $+0.0111$); pairs
-alone are larger everywhere, and Sushi runs from $+0.0111$ to $+0.0412$ depending which is
+count in ten of twelve collections, larger on Sushi ($+0.0121$ against $+0.0111$) and identical
+on Netflix, where $K = 3$ leaves only pairs; pairs alone are larger everywhere except occupational
+prestige, where they are smaller, and Netflix, and Sushi runs from $+0.0111$ to $+0.0412$ depending which is
 chosen. All thirty-six cells that can be computed are positive.}
 \label{tab:conventions}
 \end{table}
