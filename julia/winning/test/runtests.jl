@@ -126,6 +126,21 @@ end
     @test_throws ArgumentError hermite_nodes(-1, 5)
     @test_throws ArgumentError hermite_nodes(1, 0)
     @test_throws ArgumentError hermite_nodes(1, -3)
+    # pruned weights are renormalized, as in python and R (#802): a 0.5
+    # threshold keeps only the central product node, which summed to 0.284
+    hp = hermite_nodes(2, 5, 0.5)
+    @test size(hp.F) == (1, 2)
+    @test hp.W == [1.0]
+    # the default rule loses ~1.2e-6 of mass to pruning at rank 4, order 15
+    @test abs(sum(hermite_nodes(4, 15).W) - 1.0) < 1e-14
+    # nearby ordinary rules: same nodes, weights only rescaled
+    for (k, q) in ((2, 15), (3, 9))
+        h = hermite_nodes(k, q)
+        h1 = winning.hermite1(q)
+        full = [prod(h1.weights[findfirst(==(x), h1.nodes)] for x in r)
+                for r in eachrow(h.F)]
+        @test h.W ≈ full ./ sum(full) rtol = 1e-14
+    end
 end
 
 @testset "zero-rank loadings reach top-k" begin
