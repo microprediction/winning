@@ -2471,6 +2471,43 @@ accepts("raceProbabilities takes delta=1e-3 (#445)",
            [0.3010448211736288, 0.21615827747634736, 0.15439283696956393, 0.3284040643804598]) < 1e-14);
 }
 
+// --- Nested gamma and -gamma are the same Gaussian law, at every coupling
+// rank: the rank-3+ Halton rule is not symmetric under f -> -f (#871)
+{
+  const n = 6, ph = 8, scale = 0.7;
+  const mu = Array.from({ length: n }, (_, i) => 0.7 * Math.sin((i + 1) * (ph + 1) * 0.37) + 0.2 * i);
+  const G = Array.from({ length: n }, (_, i) =>
+    Array.from({ length: 12 }, (_, j) => scale * Math.sin((i + 1) * (j + 2) + ph * 0.31)));
+  const cl = Array.from({ length: n }, (_, i) => i), L = new Array(n).fill(0);
+  const D = Array.from({ length: n }, (_, i) => 0.03 + 0.015 * (i % 4));
+  const md = (a, b) => Math.max(...a.map((x, i) => Math.abs(x - b[i])));
+  for (const k of [1, 2, 3, 12]) {
+    const g = G.map(row => row.slice(0, k));
+    for (const a of [1, 0.5]) {
+      const o = gm => ({ coupling: g, gamma: gm, points: 65 });
+      holds(`nested prices at rank ${k} agree for gamma = +-${a} (#871)`,
+            md(blocks.nestedRaceProbabilities(mu, cl, L, D, o(a)),
+               blocks.nestedRaceProbabilities(mu, cl, L, D, o(-a))) < 1e-15);
+      holds(`nested Jacobians at rank ${k} agree for gamma = +-${a} (#871)`,
+            md(blocks.nestedRaceJacobian(mu, cl, L, D, o(a)).flat(),
+               blocks.nestedRaceJacobian(mu, cl, L, D, o(-a)).flat()) < 1e-15);
+    }
+  }
+  const S = gm => structures.Nested(cl, L, D, G, gm);
+  holds("the structured Nested race agrees for gamma = +-1 (#871)",
+        md(races.raceProbabilities(mu, { structure: S(1), points: 65 }),
+           races.raceProbabilities(mu, { structure: S(-1), points: 65 })) < 1e-15);
+  // ordinary inputs nearby: positive gamma prices as before
+  holds("rank-12 gamma = 1 is unchanged (#871)",
+        md(blocks.nestedRaceProbabilities(mu, cl, L, D, { coupling: G, gamma: 1, points: 65 }),
+           [0.25786619827701934, 0.15482977250869812, 0.29190668241523776,
+            0.07515511139859908, 0.15360040729715324, 0.06664182810329264]) < 1e-14);
+  holds("rank-12 gamma = 0.5 is unchanged (#871)",
+        md(blocks.nestedRaceProbabilities(mu, cl, L, D, { coupling: G, gamma: 0.5, points: 65 }),
+           [0.33741142156854376, 0.1409954341891887, 0.33006376648414,
+            0.03262864561864453, 0.14214578479423912, 0.01675494734524407]) < 1e-14);
+}
+
 // --- treeFromLinkage checks topology and heights itself (#328, #459)
 for (const [Z, why] of [
   [[[0, 1, -0.5, 2], [2, 3, 0.8, 3]], "a negative height"],

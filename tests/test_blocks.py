@@ -644,3 +644,52 @@ def test_front_door_keeps_its_own_mass_tolerance_777():
     with B._trial_mass_tolerance():
         p = B.block_race_probabilities(*args, points=6)
     assert abs(p.sum() - 1.0) < 1e-12
+
+
+def _sign_fixture_871(k):
+    n, ph, sc = 6, 8, 0.7
+    mu = np.array([0.7 * np.sin((i + 1) * (ph + 1) * 0.37) + 0.2 * i
+                   for i in range(n)])
+    G = np.array([[sc * np.sin((i + 1) * (j + 2) + ph * 0.31)
+                   for j in range(12)] for i in range(n)])[:, :k]
+    D = [0.03 + 0.015 * (i % 4) for i in range(n)]
+    return mu, list(range(n)), [0.0] * n, D, G
+
+
+@pytest.mark.parametrize("k,qf", [(1, 9), (2, 9), (3, 3), (12, 2)])
+def test_nested_gamma_sign_is_the_same_race_871(k, qf):
+    """gamma f and -gamma f are the same Gaussian law, but the rank-3+
+    scrambled-Sobol rule is not symmetric under f -> -f: rank 12 moved
+    a price by 6e-3 and a Jacobian entry by 2.8e-2 on the sign alone
+    (rank 1 and 2 by a few ulps)."""
+    from winning.factor.blocks import (nested_race_probabilities,
+                                       nested_race_jacobian)
+    mu, cl, ld, D, G = _sign_fixture_871(k)
+    kw = dict(coupling=G, qf=qf, points=65)
+    for a in (1.0, 0.5):
+        assert np.array_equal(
+            nested_race_probabilities(mu, cl, ld, D, gamma=a, **kw),
+            nested_race_probabilities(mu, cl, ld, D, gamma=-a, **kw))
+    assert np.array_equal(
+        nested_race_jacobian(mu, cl, ld, D, gamma=1.0, **kw),
+        nested_race_jacobian(mu, cl, ld, D, gamma=-1.0, **kw))
+
+
+def test_nested_gamma_sign_structured_871():
+    from winning.factor.structures import Nested
+    from winning.factor.races import race_probabilities
+    mu, cl, ld, D, G = _sign_fixture_871(3)
+    assert np.array_equal(
+        race_probabilities(mu, structure=Nested(cl, ld, D, G, 1.0), points=65),
+        race_probabilities(mu, structure=Nested(cl, ld, D, G, -1.0), points=65))
+
+
+def test_nested_positive_gamma_is_unchanged_871():
+    """Ordinary inputs near #871: gamma > 0 keeps main's values (e2525dda)."""
+    from winning.factor.blocks import nested_race_probabilities
+    mu, cl, ld, D, G = _sign_fixture_871(12)
+    p = nested_race_probabilities(mu, cl, ld, D, coupling=G, gamma=1.0,
+                                  qf=2, points=65)
+    assert np.abs(p - [0.2490212363933028, 0.15427418618453928,
+                       0.29221022531631824, 0.07794352382629406,
+                       0.16267235313672598, 0.06387847514281957]).max() < 1e-14

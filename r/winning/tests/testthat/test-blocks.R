@@ -206,6 +206,32 @@ test_that("ordinary nested races are unchanged (#477, #722)", {
                                          gamma = .8), ref, tolerance = 1e-12)
 })
 
+# gamma f and -gamma f are the same Gaussian law; python's and the
+# browser's rank-3+ rules are not symmetric under f -> -f and priced the
+# sign (#871). Here the Hermite grids differed by a few ulps.
+test_that("nested gamma and -gamma are the same race (#871)", {
+  n <- 6; ph <- 8
+  mu <- 0.7 * sin((1:n) * (ph + 1) * 0.37) + 0.2 * (0:(n - 1))
+  G <- outer(1:n, 1:2, function(i, j) 0.7 * sin(i * (j + 1) + ph * 0.31))
+  D <- 0.03 + 0.015 * ((0:(n - 1)) %% 4)
+  cl <- 0:(n - 1); ld <- rep(0, n)
+  for (k in 1:2) for (a in c(1, 0.5)) {
+    g <- G[, 1:k, drop = FALSE]
+    expect_identical(
+      nested_race_probabilities(mu, cl, ld, D, coupling = g, gamma = a, points = 65),
+      nested_race_probabilities(mu, cl, ld, D, coupling = g, gamma = -a, points = 65))
+    expect_identical(
+      nested_race_jacobian(mu, cl, ld, D, coupling = g, gamma = a, points = 65),
+      nested_race_jacobian(mu, cl, ld, D, coupling = g, gamma = -a, points = 65))
+  }
+  # ordinary inputs nearby: gamma > 0 keeps main's values (e2525dda)
+  expect_equal(
+    nested_race_probabilities(mu, cl, ld, D, coupling = G, gamma = 1, points = 65),
+    c(0.41819240433039889, 0.17662632413362278, 0.33162209023760175,
+      0.043814897183277496, 0.021290157617092267, 0.008454126498006637),
+    tolerance = 1e-14)
+})
+
 test_that("tree scalar loading equals its expansion (#780)", {
   # .scalar_loading(.3) kept length one and v[ord] filled NA for the rest
   mu <- c(-.5, -.1, .2, .4); cl <- c(1L, 1L, 2L, 2L)

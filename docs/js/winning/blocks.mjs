@@ -501,8 +501,12 @@ export function pairFactor(mu, s) {
    gamma / c is the same race, but at c = 1e308 the raw g @ node
    overflowed before gamma was applied (NaN lattice mass, #722). That
    spelling is kept wherever it is finite; otherwise gamma is absorbed
-   into g first. */
+   into g first. The sign of gamma is not identified either (gamma f and
+   -gamma f are the same Gaussian law), but the rank-3+ Halton rule is
+   not symmetric under f -> -f, so gamma = -1 priced differently from
+   gamma = 1 (#871): |gamma| is used. */
 function coupledShift(g, gamma, node) {
+  gamma = Math.abs(gamma);
   const s = g.map(gi => gi.reduce((a, b, r) => a + b * node[r], 0));
   if (s.every(Number.isFinite)) return s.map(v => gamma * v);
   return g.map(gi => gi.reduce((a, b, r) => a + (gamma * b) * node[r], 0));
