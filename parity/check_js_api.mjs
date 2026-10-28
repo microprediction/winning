@@ -2425,6 +2425,30 @@ accepts("raceProbabilities takes delta=1e-3 (#445)",
           p => md(p, c) < 1e-12);
 }
 
+// --- a custom block node's coordinates in the loadings' null space do not
+// size the window: only v . f moves a runner (#807)
+{
+  const mu = [0, 0.2, 0.5, -0.1], cl = [0, 0, 1, 1], D = [1, 1, 1, 1];
+  const L = [[0.7, 0], [0.3, 0], [0.6, 0], [0.2, 0]];
+  const md = (a, b) => Math.max(...a.map((x, i) => Math.abs(x - b[i])));
+  const rule = M => ({ nodes: [[-1, -M], [-1, M], [1, -M], [1, M]], w: [0.25, 0.25, 0.25, 0.25] });
+  const base = blocks.blockRaceProbabilities(mu, cl, L, D, { nodes: rule(0) });
+  holds("the null-coordinate-free rule prices as before (#807)",
+        md(base, [0.3073128641534906, 0.20814267517446675, 0.16320134218035226, 0.32134311849169056]) < 1e-14);
+  for (const M of [1, 1000, 1e6])
+    accepts(`a null coordinate of ${M} leaves the 257-point block race unchanged (#807)`,
+            () => blocks.blockRaceProbabilities(mu, cl, L, D, { nodes: rule(M) }),
+            p => md(p, base) < 1e-14, p => md(p, base).toExponential(2));
+  // ordinary inputs nearby: the automatic rule and a full-rank custom rule
+  holds("the automatic rule is unchanged (#807)",
+        md(blocks.blockRaceProbabilities(mu, cl, L, D),
+           [0.3061703107471863, 0.2091839026995875, 0.16248513700275158, 0.3221606495504745]) < 1e-14);
+  holds("a full-rank custom rule is unchanged (#807)",
+        md(blocks.blockRaceProbabilities(mu, cl, L, D,
+             { nodes: { nodes: [[-1, 0], [1, 0], [0, -1], [0, 1]], w: [0.25, 0.25, 0.25, 0.25] } }),
+           [0.3010448211736288, 0.21615827747634736, 0.15439283696956393, 0.3284040643804598]) < 1e-14);
+}
+
 // --- treeFromLinkage checks topology and heights itself (#328, #459)
 for (const [Z, why] of [
   [[[0, 1, -0.5, 2], [2, 3, 0.8, 3]], "a negative height"],

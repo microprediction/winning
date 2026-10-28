@@ -397,14 +397,23 @@ function blockMax(mu, sd, cluster, loading, points, qa, nodesOverride) {
     ? checkedNodes(nodesOverride, r) : clusterNodes(r, qa);
   if (!nodesOverride && r <= 2) warnIfSharp(VO, sdO, qa);
   const Q = nodes.length;
-  const maxNodeNorm = Math.max(...nodes.map(nq => Math.sqrt(nq.reduce((a, b) => a + b * b, 0))));
-  const amp = VO.map(vi => Math.sqrt(vi.reduce((a, b) => a + b * b, 0)) * maxNodeNorm);
+  const shifts = VO.map(vi => nodes.map(nq => vi.reduce((a, b, k) => a + b * nq[k], 0)));
+  // a custom rule is sized by the shifts it actually makes: the bound
+  // ||v|| max ||f|| counted node coordinates in the loadings' null space,
+  // and an irrelevant +-1000 there failed a 257-point call on mass (#807).
+  // The automatic rule keeps its bound.
+  let amp;
+  if (nodesOverride) {
+    amp = shifts.map(row => Math.max(...row.map(Math.abs)));
+  } else {
+    const maxNodeNorm = Math.max(...nodes.map(nq => Math.sqrt(nq.reduce((a, b) => a + b * b, 0))));
+    amp = VO.map(vi => Math.sqrt(vi.reduce((a, b) => a + b * b, 0)) * maxNodeNorm);
+  }
   const [lo, hi] = windowNodes(muO, sdO, amp);
   const P = asPoints(points);              // #444
   const x = new Array(P);
   for (let t = 0; t < P; t++) x[t] = lo + t * (hi - lo) / (P - 1);
   const dx = x[1] - x[0];
-  const shifts = VO.map(vi => nodes.map(nq => vi.reduce((a, b, k) => a + b * nq[k], 0)));
   const { S, logF, pdf } = fieldPass(muO, sdO, shifts, cO, nC, x);
   const G = Array.from({ length: nC }, () => new Array(P).fill(0));
   for (let c = 0; c < nC; c++)
