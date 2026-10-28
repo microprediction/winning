@@ -66,3 +66,57 @@ test_that("max_iter bounds every phase and tol is live (#364)", {
   for (bad in list(-1, 1.5, NA, Inf))
     expect_error(fx(1e-9, bad), "max_iter")
 })
+
+# --- race_jacobian takes the forward's window and delta (#821) ---------
+#
+# The forward prices on a chosen window or tail budget; the Jacobian had
+# no way to take them, so it could only differentiate another lattice.
+
+test_that("race_jacobian differentiates the forward's chosen lattice (#821)", {
+  mu <- c(1.45, 0.44, 0.88, -0.30); D <- c(0.83, 1.16, 1.74, 0.34)
+  # the raw lattice derivative on forward_grid(..., delta = 0.1), as the
+  # python reference (_raw_and_derivative) and the browser compute it
+  J01 <- matrix(c(
+    -0.054290929558844736, 0.010512198572153074, 0.006387752276396653, 0.03739097871029501,
+    0.010512198572153074, -0.2499025381714874, 0.03592423072716642, 0.2034661088721679,
+    0.006387752276396653, 0.03592423072716642, -0.16631405225331547, 0.1240020692497524,
+    0.03739097871029501, 0.2034661088721679, 0.12400206924975245, -0.36485915683221537),
+    4, byrow = TRUE)
+  J <- race_jacobian(mu, D = D, base = "logistic", points = 257, delta = 0.1)
+  expect_lt(max(abs(J - J01)), 1e-12)
+  # a span window is the span forward's derivative
+  Js <- race_jacobian(mu, D = D, base = "logistic", points = 257,
+                      window = "span")
+  h <- 1e-5
+  for (j in 1:4) {
+    e <- numeric(4); e[j] <- h
+    fd <- (race_probabilities(mu + e, D = D, base = "logistic", points = 257,
+                              window = "span") -
+           race_probabilities(mu - e, D = D, base = "logistic", points = 257,
+                              window = "span")) / (2 * h)
+    expect_lt(max(abs(Js[, j] - fd)), 1e-9)
+  }
+  # a Factor structure carries them to the same lattice
+  V <- matrix(c(0.3, 0.1, -0.2, 0.4))
+  expect_identical(race_jacobian(mu, structure = Factor(V, D), delta = 0.1),
+                   race_jacobian(mu, V = V, D = D, delta = 0.1))
+  # refused as the forward refuses them
+  for (bad in list(list(delta = 0.7), list(delta = "x"),
+                   list(window = "spam"))) {
+    expect_error(do.call(race_probabilities, c(list(mu, D = D), bad)))
+    expect_error(do.call(race_jacobian, c(list(mu, D = D), bad)),
+                 "delta|window")
+  }
+  expect_error(race_jacobian(mu, structure = Blocks(c(1, 1, 2, 2), 0.5, D),
+                             delta = 0.1), "do not support delta")
+})
+
+test_that("race_jacobian without window/delta is unchanged (#821)", {
+  # the historical lattice, bit for bit: nothing given, nothing moves
+  mu <- c(1.45, 0.44, 0.88, -0.30); D <- c(0.83, 1.16, 1.74, 0.34)
+  J <- race_jacobian(mu, D = D, base = "logistic", points = 257)
+  expect_equal(J[1, 1], -0.054290958999543587, tolerance = 1e-14)
+  expect_identical(race_jacobian(mu, D = D, points = 101),
+                   race_jacobian(mu, D = D, points = 101, window = NULL,
+                                 delta = NULL))
+})

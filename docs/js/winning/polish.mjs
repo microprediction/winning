@@ -4,7 +4,7 @@
 import { mean, checkOpts, OPT_HINTS, asLoadings, gaugeCenter, asAbilities,
          asIdio, isVector } from "./core.mjs";
 import { raceProbabilities, abilitiesFromRace, BASES, SPANS,
-         forwardGrid, factorRule, requireWholeRule,
+         forwardGrid, factorRule, requireWholeRule, asWindow, asDelta,
          collapseStructure, translatedHome } from "./races.mjs";
 import { blockRaceJacobian, nestedRaceJacobian, treeRaceJacobian, treeCluster,
          pairFactor } from "./blocks.mjs";
@@ -12,7 +12,14 @@ import { blockRaceJacobian, nestedRaceJacobian, treeRaceJacobian, treeCluster,
 export function raceJacobian(mu, opts = {}) {
   checkOpts(opts, RACE_JACOBIAN_OPTS, "raceJacobian", OPT_HINTS);
   const { V = null, D = null, F = null, W = null, base = "normal",
-          points = 501, structure = null, qa = 9, qf = 15 } = opts;
+          points = 501, structure = null, qa = 9, qf = 15,
+          window: win = "bulk", delta = 1e-12 } = opts;
+  // the forward's lattice controls, validated as the forward validates
+  // them: they were refused as unknown options, so the browser could
+  // price a race on a chosen window or tail budget and only
+  // differentiate the default one (#821, python's race_jacobian)
+  asWindow(win, "raceJacobian");
+  asDelta(delta, "raceJacobian");
   const c = collapseStructure(structure, V, D, F, W, "raceJacobian");
   if (c.structure) {
     const s = c.structure;
@@ -20,8 +27,13 @@ export function raceJacobian(mu, opts = {}) {
     // inverse refuse another base, and this silently returned the normal
     // Jacobian for base "logistic" -- the derivative of a model the caller
     // did not ask for (#89)
-    if (base !== "normal")
-      throw new Error(`${s.kind} races do not support base: the ` +
+    // and window/delta likewise, as the forward refuses them (#821)
+    const bad = [];
+    if (base !== "normal") bad.push("base");
+    if (win !== "bulk") bad.push("window");
+    if (delta !== 1e-12) bad.push("delta");
+    if (bad.length)
+      throw new Error(`${s.kind} races do not support ${bad.join(", ")}: the ` +
         "block/nested/tree kernels are Gaussian hard races on their own " +
         "lattice windows. Use structure Factor (or V/D).");
     if (isVector(mu) && mu.length === 2) {
@@ -49,17 +61,18 @@ export function raceJacobian(mu, opts = {}) {
     // the closed form's: the lattice quotient rule differentiated a map
     // the forward does not use (python's race_jacobian, #86)
     const d = -raceProbabilities(mu, { V: c.V, D: c.D, F, W, base, points,
+                                       window: win, delta,
                                        returnSlopes: true }).slopes[0];
     return [[-d, d], [d, -d]];
   }
   const Dv = asIdio(c.D, n);
   mu = translatedHome(mu, Dv);                     // as the forward (#477)
-  return raceJacobianExplicit(mu, c.V, Dv, base, points, F, W);
+  return raceJacobianExplicit(mu, c.V, Dv, base, points, F, W, win, delta);
 }
 
 /* Each exported call declares its own option keys; see checkOpts in
    core.mjs for why an options object needs this at all. */
-const RACE_JACOBIAN_OPTS = new Set(["V", "D", "F", "W", "base", "points", "qa", "qf", "structure"]);
+const RACE_JACOBIAN_OPTS = new Set(["V", "D", "F", "W", "base", "points", "qa", "qf", "structure", "window", "delta"]);
 const POLISH_RACE_OPTS = new Set(["V", "D", "F", "W", "base", "points", "structure", "A", "b", "groups", "nameCaps", "p0", "mu0", "fdFallback"]);
 
 /* F0/W0: a caller-supplied factor law. raceProbabilities has always
@@ -68,7 +81,8 @@ const POLISH_RACE_OPTS = new Set(["V", "D", "F", "W", "base", "points", "structu
    non-Gaussian factor and could not differentiate or polish it -- the
    returned Jacobian was the derivative of a different model (#209).
    Used verbatim, exactly as the forward's setup() uses them. */
-function raceJacobianExplicit(mu, V, D, base, points, F0 = null, W0 = null) {
+function raceJacobianExplicit(mu, V, D, base, points, F0 = null, W0 = null,
+                              win = "bulk", delta = 1e-12) {
   const n = mu.length;
   const sd = D.map(Math.sqrt);
   // The independent default is the EMPTY node (no coordinates), not the
@@ -109,7 +123,7 @@ function raceJacobianExplicit(mu, V, D, base, points, F0 = null, W0 = null) {
   // 257 points, the analytic jacobian was 1.0e-3 from finite differences
   // of its own forward. Sharing the grid brings that to 1.5e-5 (#212).
   const { x, dx } = forwardGrid(Mall, sd, { V, fn, left, right },
-                                points, "bulk", 1e-12);
+                                points, win, delta);
   const P = x.length;
   const J = Array.from({ length: n }, () => new Array(n).fill(0));
   for (let q = 0; q < F.length; q++) {
