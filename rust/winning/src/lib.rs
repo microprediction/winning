@@ -1582,6 +1582,9 @@ pub fn shifted_cdf(cdf: &[f64], offset: f64, l: i64) -> Vec<f64> {
 /// Fold the field: density/cdf/multiplicity of the minimum, dead heats
 /// tracked via the reference _winner_of_two_pdf recursion.
 pub fn winner_of_many(cdfs: &[Vec<f64>]) -> (Vec<f64>, Vec<f64>) {
+    if let Err(e) = check_lattice_lengths(cdfs) {
+        panic!("{e}");
+    }
     let m = cdfs[0].len();
     let mut cdf_min = cdfs[0].clone();
     let mut mult = vec![1.0f64; m];
@@ -1604,6 +1607,23 @@ pub fn winner_of_many(cdfs: &[Vec<f64>]) -> (Vec<f64>, Vec<f64>) {
         mult = new_mult;
     }
     (cdf_min, mult)
+}
+
+/// Every CDF in a fold shares the first one's lattice length. The fold
+/// fixed its length from the first and indexed the rest unchecked, so a
+/// longer later CDF was truncated and a shorter one panicked out of
+/// bounds; R recycled the same input into negative mass (#813).
+pub fn check_lattice_lengths(cdfs: &[Vec<f64>]) -> Result<(), String> {
+    let Some(first) = cdfs.first() else {
+        return Err("winner_of_many needs at least one cdf".to_string());
+    };
+    let m = first.len();
+    if let Some((i, c)) = cdfs.iter().enumerate().find(|(_, c)| c.len() != m) {
+        return Err(format!(
+            "winner_of_many needs cdfs of one lattice length; cdf {} has \
+             length {} but cdf 1 has length {m}", i + 1, c.len()));
+    }
+    Ok(())
 }
 
 /// Gauss-Legendre nodes and weights on [0, 1], nodes ascending (numpy's
@@ -3718,5 +3738,29 @@ mod tests {
                                       w.view(), 1501, 48, 14);
         assert!(p.iter().all(|&x| (0.0..=1.0).contains(&x)), "{p:?}");
         assert!((p[1] - 0.760249107).abs() < 1e-6, "{p:?}");
+    }
+
+    // #813: mixed lattice lengths were truncated (longer later cdf) or
+    // indexed out of bounds (shorter later cdf); now a named refusal
+    #[test]
+    fn winner_of_many_refuses_mixed_lattice_lengths() {
+        let c7 = pdf_to_cdf(&[1.0 / 7.0; 7]);
+        let c21 = pdf_to_cdf(&[1.0 / 21.0; 21]);
+        for cdfs in [vec![c7.clone(), c21.clone()], vec![c21.clone(), c7.clone()],
+                     vec![c21.clone(), c21.clone(), c7.clone()]] {
+            let r = std::panic::catch_unwind(|| winner_of_many(&cdfs));
+            let e = r.expect_err("mixed lengths must panic");
+            let msg = e.downcast_ref::<String>().cloned().unwrap_or_default();
+            assert!(msg.contains("one lattice length"), "{msg}");
+        }
+        assert!(check_lattice_lengths(&[]).is_err());
+        assert!(check_lattice_lengths(&[c7.clone(), c7.clone()]).is_ok());
+        // equal lengths are untouched: nonnegative mass, unit total
+        let (cdf, mult) = winner_of_many(&[c21.clone(), c21.clone()]);
+        let f = cdf_to_pdf(&cdf);
+        assert_eq!(f.len(), 21);
+        assert_eq!(mult.len(), 21);
+        assert!((f.iter().sum::<f64>() - 1.0).abs() < 1e-12);
+        assert!(f.iter().all(|&x| x >= 0.0), "{f:?}");
     }
 }

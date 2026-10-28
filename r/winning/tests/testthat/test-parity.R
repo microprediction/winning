@@ -46,3 +46,18 @@ test_that("winner_of_many mass is conserved", {
   w <- winner_of_many(list(d, d, d))
   expect_lt(abs(sum(w$density) - 1), 1e-9)
 })
+
+test_that("winner_of_many refuses mixed lattice lengths (#813)", {
+  d7 <- rep(1 / 7, 7)
+  d21 <- rep(1 / 21, 21)
+  # 21 is a multiple of 7, so base R recycled silently into a -0.53 atom
+  expect_error(winner_of_many(list(d7, d21)), "density 2 has length 21")
+  expect_error(winner_of_many(list(d21, d7)), "density 2 has length 7")
+  expect_error(winner_of_many(list(d21, d21, d7)), "density 3 has length 7")
+  expect_error(winner_of_many(list()), "at least one density")
+  # equal lengths are untouched: nonnegative mass, unit total
+  w <- winner_of_many(list(d21, d21))
+  expect_length(w$density, 21)
+  expect_lt(abs(sum(w$density) - 1), 1e-12)
+  expect_true(all(w$density >= 0))
+})
