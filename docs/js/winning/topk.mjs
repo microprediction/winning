@@ -604,19 +604,26 @@ export function bottomKProbabilities(mu, k, opts = {}) {
   k = asDepth(k, n);
   const sd = asIdio(D, n).map(Math.sqrt);
   const fn = baseFn(base);
-  if (V == null) return checkedTopk(bottomkIndependent(mu, sd, k, fn, points), k, "bottom-k race");
+  // the same bounded 2p - 1 refinement as top-k (#769): the default 513
+  // points threw "membership 1.98" on a Laplace field 1025 resolves (#800)
+  if (V == null)
+    return refinedTopk(pts => bottomkIndependent(mu, sd, k, fn, pts), k, points,
+                       "bottom-k race");
   const { Vm, nodes, w } = factorNodes(V, n, qa, D);
-  const raw = new Array(n).fill(0);
-  for (let q = 0; q < nodes.length; q++) {
-    const shifted = mu.map((m, i) => {
-      let s = m;
-      for (let c = 0; c < nodes[q].length; c++) s += Vm[i][c] * nodes[q][c];
-      return s;
-    });
-    const node = bottomkIndependent(shifted, sd, k, fn, points);
-    for (let i = 0; i < n; i++) raw[i] += w[q] * node[i];
-  }
-  return checkedTopk(raw, k, "bottom-k race");
+  const rawAt = (pts) => {
+    const raw = new Array(n).fill(0);
+    for (let q = 0; q < nodes.length; q++) {
+      const shifted = mu.map((m, i) => {
+        let s = m;
+        for (let c = 0; c < nodes[q].length; c++) s += Vm[i][c] * nodes[q][c];
+        return s;
+      });
+      const node = bottomkIndependent(shifted, sd, k, fn, pts);
+      for (let i = 0; i < n; i++) raw[i] += w[q] * node[i];
+    }
+    return raw;
+  };
+  return refinedTopk(rawAt, k, points, "bottom-k race");
 }
 
 export function topKJacobians(mu, k, opts = {}) {

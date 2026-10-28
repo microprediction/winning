@@ -832,18 +832,24 @@ def bottom_k_probabilities(mu, k, V=None, D=None, base="normal",
     D = np.ones(n) if D is None else as_idio(D, n, positive=True)
     sd = np.sqrt(D)
     base_rows = BASES[base] if not callable(base) else base
+    # the same bounded 2p - 1 refinement as top-k (#623): the default 513
+    # points threw "membership 1.98" on a Laplace field 1025 resolves (#800)
     if V is None:
-        raw = _topk_independent(mu, sd, k, base_rows, points, upper=True,
-                                kink_split=kink_split)
-        return _checked_topk(raw, k, "bottom-k race")
+        def raw_at(pts):
+            return _topk_independent(mu, sd, k, base_rows, pts, upper=True,
+                                     kink_split=kink_split)
+        return _refined_topk(raw_at, k, points, "bottom-k race")
     mu = _translated_home(mu, D)                                 # (#477)
     Vm, nodes, w = _factor_nodes(V, n, qa, "bottom_k_probabilities", D)
-    raw = np.zeros(n)
-    for q in range(len(nodes)):
-        raw += w[q] * _topk_independent(mu + Vm @ nodes[q], sd, k,
-                                        base_rows, points, upper=True,
-                                        kink_split=kink_split)
-    return _checked_topk(raw, k, "bottom-k race")
+
+    def raw_at(pts):
+        raw = np.zeros(n)
+        for q in range(len(nodes)):
+            raw += w[q] * _topk_independent(mu + Vm @ nodes[q], sd, k,
+                                            base_rows, pts, upper=True,
+                                            kink_split=kink_split)
+        return raw
+    return _refined_topk(raw_at, k, points, "bottom-k race")
 
 
 def _pair_pmf_at(Qi, F, i, k, S=None, Qerr=None, chunk=256):
