@@ -236,3 +236,42 @@ def test_811_distinct_ids_unchanged():
     r, lz = rate_history([{"runners": ["a", "b", "c"], "t": 0.0,
                            "winner": 0}])
     assert r["a"][0] > 0 and np.isfinite(lz)
+
+
+# --- #837: a resumed history grows for newcomers ----------------------------
+
+def _two_batches():
+    b1 = [{"t": 0.0, "runners": ["a", "b"], "scores": [1.0, 0.0]},
+          {"t": 0.5, "runners": ["b", "a"], "order": [1, 0]}]
+    b2 = [{"t": 1.0, "runners": ["a", "c"], "scores": [0.0, 1.0]},
+          {"t": 3.0, "runners": ["d", "c", "b", "e"], "order": [2, 0, 3, 1]},
+          {"t": 4.0, "runners": ["e", "a"], "winner": 0}]
+    return b1, b2
+
+
+@pytest.mark.parametrize("drift", [{}, {"prior_mean": 0.3, "prior_var": 2.0,
+                                        "timescale": 5.0}])
+def test_837_resume_with_newcomers_equals_one_pass(drift):
+    from winning.ratings.history import rate_history
+    b1, b2 = _two_batches()
+    full = rate_history(b1 + b2, return_state=True, **drift)
+    first = rate_history(b1, return_state=True, **drift)
+    # drift settings come from the saved state on resume (#776)
+    split = rate_history(b2, state=first[2], return_state=True)
+    assert split[2]["index"] == full[2]["index"]
+    np.testing.assert_allclose(split[2]["m"], full[2]["m"],
+                               rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(split[2]["S"], full[2]["S"],
+                               rtol=1e-12, atol=1e-12)
+    assert np.isclose(first[1] + split[1], full[1], rtol=1e-12)
+
+
+def test_837_resume_with_known_runners_only_is_exact():
+    from winning.ratings.history import rate_history
+    b1, _ = _two_batches()
+    later = [{"t": 2.0, "runners": ["b", "a"], "scores": [0.2, 0.1]}]
+    full = rate_history(b1 + later, return_state=True)
+    first = rate_history(b1, return_state=True)
+    split = rate_history(later, state=first[2], return_state=True)
+    assert np.array_equal(split[2]["m"], full[2]["m"])
+    assert np.array_equal(split[2]["S"], full[2]["S"])

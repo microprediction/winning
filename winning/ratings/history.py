@@ -106,7 +106,9 @@ def rate_history(races, ids=None, prior_mean=None, prior_var=None,
 
     prior_mean, prior_var, timescale: the OU drift (defaults 0, 1, 200).
     Omitted on a resumed filter (state=...), they are read from the
-    state, so a split history equals the single pass (#776).
+    state, so a split history equals the single pass (#776). A runner
+    the state has not seen joins at that prior, uncorrelated with the
+    rest (#837).
 
     Returns (ratings, history_logZ): ratings maps runner id ->
     (mean, sd) at the final time; history_logZ is the total evidence,
@@ -199,6 +201,21 @@ def rate_history(races, ids=None, prior_mean=None, prior_var=None,
             m, S = diffuse_full(m, S, dt=t - t_last, timescale=timescale,
                                 prior_mean=prior_mean, prior_var=prior_var)
         t_last = t
+        # A runner the state has not seen debuts at the population
+        # prior, uncorrelated with everyone, as a fresh pass would have
+        # carried it (the OU prior is stationary). A resumed state never
+        # grew, so a newcomer in a later batch was a KeyError (#837).
+        new = [r for r in race["runners"] if r not in index]
+        if new:
+            n_old = n_all
+            for r in new:
+                index[r] = len(index)
+            n_all = len(index)
+            m = np.concatenate([m, np.full(len(new), float(prior_mean))])
+            S_grown = np.zeros((n_all, n_all))
+            S_grown[:n_old, :n_old] = S
+            S_grown[n_old:, n_old:] = np.eye(len(new)) * float(prior_var)
+            S = S_grown
         idx = np.array([index[r] for r in race["runners"]])
         # every observation goes through the FULL state via the race's
         # selection matrix: the entrants' block is what the observation
