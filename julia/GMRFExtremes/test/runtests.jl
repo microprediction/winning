@@ -505,6 +505,19 @@ end
     Qr = [2.0 -0.5 1e-14; -0.5 2.0 -0.5; 1e-14 -0.5 2.0]
     c = chain_from_precision(zeros(3), Qr; tol = 1e-12)
     @test length(c) == 3
+    # Bool <: Real and true == 1.0: tol = true dropped the 0.5 coupling
+    # and priced 0.125 for 0.1049 (#562 residual)
+    for tol in (true, false)
+        @test_throws ArgumentError chain_from_precision(zeros(3), Q; tol = tol)
+        @test_throws ArgumentError chain_from_precision(zeros(3), Qr; tol = tol)
+    end
+    # numeric tolerances are unchanged, of any Real type
+    for tol in (1e-12, 1e-10, big"1e-12", 1 // 10^12, 1f-6)
+        ct = chain_from_precision(zeros(3), Qr; tol = tol)
+        @test ct.phi == c.phi && ct.s == c.s && ct.sd0 == c.sd0
+    end
+    @test length(chain_from_precision(zeros(3), [2.0 -0.5 0.0; -0.5 2.0 -0.5;
+                                                 0.0 -0.5 2.0]; tol = 0)) == 3
 end
 
 @testset "memory is O(L^2), not O(n L^2) (#533)" begin

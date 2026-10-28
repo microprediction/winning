@@ -178,9 +178,11 @@ function chain_from_precision(mu::AbstractVector, Q::AbstractMatrix;
     # refusal off. tol = Inf passed every bandwidth and symmetry check and
     # the off-band entries were dropped: a distance-two coupling priced
     # 0.125 for a true 0.1049 (#562). NaN and negative values had
-    # accidental comparison semantics.
-    (tol isa Real && isfinite(tol) && tol >= 0) || throw(ArgumentError(
-        "tol must be a finite, nonnegative number; got " * string(tol)))
+    # accidental comparison semantics. Bool <: Real and true == 1.0, so
+    # tol = true silently dropped the same coupling (#562).
+    (tol isa Real && !(tol isa Bool) && isfinite(tol) && tol >= 0) ||
+        throw(ArgumentError("tol must be a finite, nonnegative number; " *
+                            "got " * string(tol)))
     tol = Float64(tol)
     # strict tridiagonality check
     if Q isa SparseMatrixCSC
