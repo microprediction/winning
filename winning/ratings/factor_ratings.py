@@ -194,6 +194,11 @@ def _design_triplets(events, n_feat):
         K, nf = Zc.shape
         if nf != n_feat:
             raise ValueError(f"Z has {nf} columns, expected n_feat={n_feat}")
+        # Stored entries only, so a sparse Z is never densified. A NaN
+        # or inf feature made the objective NaN at the first step and
+        # the fit returned its all-zero start as the model (#808).
+        if not np.all(np.isfinite(Zc.data)):
+            raise ValueError("design Z has a non-finite entry")
         perm, n = _finish_perm(order, K)
         Zp = Zc[perm].tocoo()
         yield Zp.row, Zp.col, Zp.data, K, n
@@ -216,6 +221,8 @@ def _factor_rows(subset, x, n_entities, n_cov):
     else:
         raise ValueError("x must be (n_cov,) shared by the field or "
                          "(K, n_cov) per entrant")
+    if not np.all(np.isfinite(x)):
+        raise ValueError("covariates x have a non-finite entry")   # #808
     return subset, X
 
 
@@ -435,6 +442,8 @@ def _as_ridge(ridge, n_feat):
     if lam.shape != (n_feat,):
         raise ValueError(f"ridge must be a scalar or one value per feature "
                          f"({n_feat})")
+    if not np.all(np.isfinite(lam)):
+        raise ValueError("ridge penalties must be finite")         # #808
     if np.any(lam < 0.0):
         raise ValueError("ridge penalties must be non-negative")
     return lam
