@@ -1902,6 +1902,28 @@ accepts("the inverse takes a scalar D, matching python",
   holds("average linkages are never refused as inverted (#667)", refused === 0, String(refused));
 }
 
+// --- cutLinkage takes treeFromLinkage's row contract, not coerced rows (#801)
+{
+  for (const [Z, why, says] of [
+    [[[0.4, 1, 1, 2]], "a fractional id", "whole numbers"],
+    [[["0", 1, 1, 2]], "a string id", "whole numbers"],
+    [[[0, 1, "1", 2]], "a string height", "non-negative"],
+    [[[0, 1, -1, 2], [2, 3, 0, 3]], "a negative first height", "non-negative"]]) {
+    rejects(structures.cutLinkage, [Z, Z.length + 1, Math.max(1, Z.length)],
+            `cutLinkage refuses ${why} (#801)`, says);
+    rejects(structures.treeFromLinkage, [Z], `...as treeFromLinkage does (#801)`, says);
+  }
+  // valid linkages nearby: same partitions as before, integer-valued floats included
+  const Zv = [[0, 1, 0, 2], [2, 3, 0.25, 2], [4, 5, 1, 4]];
+  const want = { 1: [0, 0, 0, 0], 2: [0, 0, 1, 1], 3: [0, 0, 1, 2], 4: [0, 1, 2, 3] };
+  for (const k of [1, 2, 3, 4])
+    holds(`a valid linkage still cuts as before at k=${k} (#801)`,
+          JSON.stringify(structures.cutLinkage(Zv, 4, k)) === JSON.stringify(want[k]),
+          JSON.stringify(structures.cutLinkage(Zv, 4, k)));
+  holds("a one-leaf linkage is still one cluster (#801)",
+        JSON.stringify(structures.cutLinkage([], 1, 1)) === "[0]");
+}
+
 // --- demo helpers: structureCov for every grammar (#337); fitGrammar
 // validates its input (#357), keeps a pair's contrast and is scale
 // equivariant (#341), and does not cut a tied eigenspace (#383); the
@@ -2273,9 +2295,9 @@ for (const r of [NaN, -1, 2.5, Infinity])
   rejects(demo.haltonNormalNodes, [r, 3], `haltonNormalNodes refuses rank ${r} (#557)`, "rank");
 rejects(core.firstPrimes, [Infinity], "firstPrimes refuses Infinity rather than hanging (#557)");
 rejects(structures.cutLinkage, [[[0, 0, 0.1, 2], [1, 3, 0.2, 3]], 3, 1],
-        "cutLinkage refuses a self-merge (#603)", "same cluster");
+        "cutLinkage refuses a self-merge (#603)", "with itself");     // checkLinkage's words (#801)
 rejects(structures.cutLinkage, [[[0, 1, 0.1, 2], [0, 3, 0.2, 3]], 3, 1],
-        "cutLinkage refuses a reused cluster (#603)", "same cluster");
+        "cutLinkage refuses a reused cluster (#603)", "reuses cluster");
 
 // --- demo covariance helpers keep the shape and PSD contracts (#563, #564)
 {
