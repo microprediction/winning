@@ -618,10 +618,11 @@ check("calibrated abilities vs truth", muHat, mu, 5e-6);
     check(`subnormal pair target ${t} is the ndtri contrast (#832)`, a, [half, -half], 1e-7);
     check(`subnormal pair target ${t} is mirror-equivariant (#832)`, b, [-a[0], -a[1]], 1e-300);
   }
-  // nearby ordinary deep tail unchanged (pinned from origin/main 3fa326ee)
+  // nearby ordinary deep tail unchanged (pinned from origin/main 3fa326ee;
+  // 1e-12, not bitwise: libm differs across platforms)
   check("pair target 1e-300 unchanged (#832)",
         abilitiesFromProbabilitiesFactor([1e-300, 1], [[0], [0]], [0.5, 0.5], [[0]], [1]),
-        [18.5235481496806, -18.5235481496806], 1e-300);
+        [18.5235481496806, -18.5235481496806], 1e-12);
 }
 
 // #838: the pair branch returned before mu0 was read, so an exact start
@@ -644,7 +645,7 @@ check("calibrated abilities vs truth", muHat, mu, 5e-6);
   // omitted mu0 unchanged (pinned from origin/main 3fa326ee)
   check("pair without mu0 unchanged (#838)",
         abilitiesFromProbabilitiesFactor(p, V, D, F, W, { ...o, nIter: 3 }).mu,
-        [-1.1145587159721093, 1.1145587159721093], 1e-300);
+        [-1.1145587159721093, 1.1145587159721093], 1e-12);
 }
 
 // #849: an exact N >= 3 mu0 broke out before the first update and came
@@ -661,7 +662,7 @@ check("calibrated abilities vs truth", muHat, mu, 5e-6);
   // a mean-zero start is unchanged (pinned from origin/main 3fa326ee)
   check("centred mu0 unchanged (#849)",
         abilitiesFromProbabilitiesFactor(t, V, D, F, W, { ...o, mu0: [-1.001, 0, 1.001] }).mu,
-        [-1.0000000000003233, 2.395494788021237e-13, 1.000000000000084], 1e-300);
+        [-1.0000000000003233, 2.395494788021237e-13, 1.000000000000084], 1e-12);
 }
 
 // #862: on budget exhaustion the residual and flag were the PRE-update
@@ -677,7 +678,7 @@ check("calibrated abilities vs truth", muHat, mu, 5e-6);
     { nIter: 1, points: 1001, tol: 0.1, returnInfo: true });
   check("exhausted fit within tol says converged (#862)", [one.converged ? 0 : 1], [0], 0.5);
   check("exhausted mu is unchanged (#862)", one.mu,
-        [-0.8856280995076525, 0.22715088511329895, 0.6584772143943536], 1e-300);
+        [-0.8856280995076525, 0.22715088511329895, 0.6584772143943536], 1e-12);
   for (const nIter of [1, 2, 3]) {
     const f = abilitiesFromProbabilitiesFactor(target, V, D, F, W,
       { nIter, points: 1001, tol: 1e-12, returnInfo: true });
@@ -687,7 +688,7 @@ check("calibrated abilities vs truth", muHat, mu, 5e-6);
   // a fit that converges inside its budget is unchanged (origin/main 3fa326ee)
   const d = abilitiesFromProbabilitiesFactor(target, V, D, F, W, { points: 1001, returnInfo: true });
   check("converged default fit unchanged (#862)", [...d.mu, d.residual, d.iterations],
-        [-0.8474995800413705, 0.19091763292480116, 0.6565819471165693, 8.219023104327761e-7, 10], 1e-300);
+        [-0.8474995800413705, 0.19091763292480116, 0.6565819471165693, 8.219023104327761e-7, 10], 1e-12);
 }
 
 process.exit(failures ? 1 : 0);
