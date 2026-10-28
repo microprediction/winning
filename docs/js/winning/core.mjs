@@ -308,8 +308,11 @@ export function solve(A, b) {
 
 export function mean(v) { return v.reduce((a, b) => a + b, 0) / v.length; }
 export function interpClamped(x, xp, fp) {
-  // np.interp semantics: ascending xp, end-clamped
-  if (x <= xp[0]) return fp[0];
+  // np.interp semantics: ascending xp, end-clamped. Only x BELOW xp[0]
+  // clamps: at a duplicated lower knot the search takes the last of the
+  // plateau as numpy does, where this returned the first and sent a
+  // zero-priced classic runner across the field (#842)
+  if (x < xp[0]) return fp[0];
   const last = xp.length - 1;
   if (x >= xp[last]) return fp[last];
   let lo = 0, hi = last;                 // largest j with xp[j] <= x

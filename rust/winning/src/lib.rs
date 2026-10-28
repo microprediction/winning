@@ -1877,7 +1877,11 @@ pub fn exact_calibrate(
 
 /// np.interp(x, xp, fp) for ascending xp, end-clamped.
 pub fn interp1(x: f64, xp: &[f64], fp: &[f64]) -> f64 {
-    if x <= xp[0] {
+    // only x BELOW xp[0] clamps: at a duplicated lower knot the search
+    // takes the last of the plateau as numpy does, where this returned
+    // the first and sent a zero-priced classic runner across the field
+    // (#842)
+    if x < xp[0] {
         return fp[0];
     }
     let last = xp.len() - 1;

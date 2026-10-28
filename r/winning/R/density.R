@@ -31,6 +31,12 @@ center_density <- function(density) {
 #' @return numeric density of length 2L+1, centered then shifted by loc
 #' @export
 skew_normal_density <- function(L, unit, loc = 0, scale = 1.0, a = 2.0) {
+  # a whole half-width the classic consumers accept: 2.5 and 2 came back
+  # as vectors every classic entry point refuses (#868)
+  if (length(L) != 1L || !is.numeric(L) || !is.finite(L) || L != round(L) ||
+      L < MIN_CLASSIC_L)
+    stop("skew_normal_density: L must be a whole number >= ", MIN_CLASSIC_L,
+         "; got ", deparse(L), call. = FALSE)
   # a lattice spacing and a scale are positive: a negative one was
   # normalised away into a different law (#509)
   for (nm in c("unit", "scale")) {

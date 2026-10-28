@@ -740,14 +740,17 @@ def state_prices_from_extended_offsets(density, offsets, max_depth=3, unit_ratio
     W = int(approximate_support_width(density))
     really_bad_horse_offset = min(offsets) + W # <--- No chance of winning
 
-    # If there are bad but finite horses, set them to float('inf') and call again
-    # On the next call, hopefully the centering leaves us inside the lattice
+    # The raw test above drops a horse more than W behind, but _low_high
+    # mixes a fractional offset's floor and ceil shifts, so one just past W
+    # can still dead-heat the best at the support endpoint: [0, 1.0001] at
+    # W = 1 was [1, 0] against the exact 0.125 claim (#794). Only a horse
+    # whose lowest cell lies past the best's highest is certainly out. A
+    # near miss is priced exactly when the field fits the lattice, and
+    # dropped as before when it would hang. (np.floor keeps a NaN offset on
+    # the same path as before.)
     extremely_bad_ndxs = [i for i, o in enumerate(offsets) if o > really_bad_horse_offset ]
-    if any(extremely_bad_ndxs):
-        augmented_offsets = [o if i not in extremely_bad_ndxs else float('inf') for i, o in enumerate(offsets)]
-        return state_prices_from_extended_offsets(density=density,
-                                                  offsets=int_centered(augmented_offsets),
-                                                  max_depth=max_depth)
+    reach = np.ceil(min(offsets)) + W
+    kept_ndxs = [i for i, o in enumerate(offsets) if not np.floor(o) > reach]
 
     # If there is a solitary standout horse, short-circuit
     diff_to_best = [ o - min(offsets) for o in offsets]
@@ -760,7 +763,7 @@ def state_prices_from_extended_offsets(density, offsets, max_depth=3, unit_ratio
 
     # At this point in the algorithm we have a race that isn't completely degenerate
     # Let's center and then see if any horses are hanging off the lattice.
-    centered_offsets = int_centered(offsets)
+    centered_offsets = int_centered([offsets[i] for i in kept_ndxs])
     # L - W keeps a support of width W inside the lattice. Once W reaches
     # L that interval is empty or reversed -- the standard L=500,
     # unit=0.01 normal has W = 1000 -- and every in-window field was
@@ -777,7 +780,22 @@ def state_prices_from_extended_offsets(density, offsets, max_depth=3, unit_ratio
     hanging = bool(hanging_right or hanging_left)
     if not hanging:
         # Should be good to go!
-        return state_prices_from_offsets(density=density, offsets=centered_offsets)
+        if len(kept_ndxs) == n:
+            return state_prices_from_offsets(density=density, offsets=centered_offsets)
+        kept_prices = [1.0] if len(kept_ndxs) == 1 else state_prices_from_offsets(density=density, offsets=centered_offsets)
+        state_prices = [0 for _ in range(n)]
+        for j, ndx in enumerate(kept_ndxs):
+            state_prices[ndx] = kept_prices[j]
+        return state_prices
+    elif extremely_bad_ndxs:
+        # If there are bad but finite horses, set them to float('inf') and call again
+        # On the next call, hopefully the centering leaves us inside the lattice.
+        # (This tested any() over the indices, which skipped a lone bad horse
+        # at index 0, so the price depended on the order of the field, #794)
+        augmented_offsets = [o if i not in extremely_bad_ndxs else float('inf') for i, o in enumerate(offsets)]
+        return state_prices_from_extended_offsets(density=density,
+                                                  offsets=int_centered(augmented_offsets),
+                                                  max_depth=max_depth)
     else:
         if max_depth==0:
             # If we've already tried pretty hard, just set hangers to inf or -inf and call one more time

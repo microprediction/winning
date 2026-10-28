@@ -239,7 +239,9 @@ exact_implicit_prices <- function(padded_cdf, field_cdfs, offsets, L) {
 # np.interp semantics: ascending xp, end-clamped, largest j with xp[j] <= x
 np_interp <- function(x, xp, fp) {
   vapply(x, function(v) {
-    if (v <= xp[1]) return(fp[1])
+    # only v BELOW xp[1] clamps: at a duplicated lower knot findInterval
+    # takes the last of the plateau as numpy does (#842)
+    if (v < xp[1]) return(fp[1])
     n <- length(xp)
     if (v >= xp[n]) return(fp[n])
     j <- findInterval(v, xp)
