@@ -1,0 +1,4 @@
+python bysource_pooled.py 2000 GSS          (2026-10-28, WINNING_PURE=1)
+GSS      pooled gain +0.0038  refit interval [+0.0026, +0.0070]  2000 reps  95%
+
+Jester: python bysource_pooled.py 2000 Jester was still running when this file was committed.
