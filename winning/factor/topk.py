@@ -668,6 +668,24 @@ def _as_rank(r, n, where="r"):
     return rr
 
 
+def _as_runner_index(i, n, where="i"):
+    """A runner index: a Python or NumPy integer in [0, n), not a bool.
+
+    The single-row Jacobians and the reduced-rank representation indexed
+    with it directly, so -1 silently meant the last runner, and int(y)
+    read 0.9 as runner 0 and True as runner 1 -- a plausible gradient
+    for the wrong alternative (#846)."""
+    if isinstance(i, (bool, np.bool_)) or not isinstance(i, (int, np.integer)):
+        raise ValueError(
+            f"{where} must be an integer runner index; got {i!r}")
+    ii = int(i)
+    if not 0 <= ii < n:
+        raise ValueError(
+            f"{where} must be a runner index in [0, n); got {where}={i!r}, "
+            f"n={n}")
+    return ii
+
+
 def _is_symmetric(base_rows):
     """S(z) + S(-z) == 1 on a probe set: the noise law is symmetric."""
     z = np.array([-2.3, -1.1, -0.35, 0.6, 1.7])
@@ -783,7 +801,7 @@ def top_k_probabilities(mu, k, V=None, D=None, base="normal", points=513,
     return _refined_topk(raw_at, k, points, "top-k race")
 
 
-def _refined_topk(raw_at, k, points, kind):
+def _refined_topk(raw_at, k, points, kind, check=None):
     """_checked_topk on raw_at(points), refining a lattice that fails it.
 
     The checks only see a defect; they cannot fix one, and the remedy
@@ -794,13 +812,20 @@ def _refined_topk(raw_at, k, points, kind):
     lattice cap: bounded at about seven ordinary calls, and only ever
     paid by a call that would otherwise have raised. A field that still
     fails raises, naming the points it tried. A call that passes first
-    time is untouched."""
+    time is untouched.
+
+    check: the validator, raising RuntimeError on a defect; default
+    _checked_topk. rank_probabilities passes its own row/column identity
+    checks, so the rank marginals share this bounded policy (#819)."""
     points = as_points(points)     # int() read 2.5 and "257" as budgets (#444)
     cap = min(4 * (points - 1) + 1, _MAX_TOPK_POINTS)
+    if check is None:
+        def check(raw):
+            return _checked_topk(raw, k, kind)
     pts = points
     while True:
         try:
-            return _checked_topk(raw_at(pts), k, kind)
+            return check(raw_at(pts))
         except RuntimeError as e:
             if pts >= cap:
                 if pts == points:
@@ -832,18 +857,24 @@ def bottom_k_probabilities(mu, k, V=None, D=None, base="normal",
     D = np.ones(n) if D is None else as_idio(D, n, positive=True)
     sd = np.sqrt(D)
     base_rows = BASES[base] if not callable(base) else base
+    # the same bounded 2p - 1 refinement as top-k (#623): the default 513
+    # points threw "membership 1.98" on a Laplace field 1025 resolves (#800)
     if V is None:
-        raw = _topk_independent(mu, sd, k, base_rows, points, upper=True,
-                                kink_split=kink_split)
-        return _checked_topk(raw, k, "bottom-k race")
+        def raw_at(pts):
+            return _topk_independent(mu, sd, k, base_rows, pts, upper=True,
+                                     kink_split=kink_split)
+        return _refined_topk(raw_at, k, points, "bottom-k race")
     mu = _translated_home(mu, D)                                 # (#477)
     Vm, nodes, w = _factor_nodes(V, n, qa, "bottom_k_probabilities", D)
-    raw = np.zeros(n)
-    for q in range(len(nodes)):
-        raw += w[q] * _topk_independent(mu + Vm @ nodes[q], sd, k,
-                                        base_rows, points, upper=True,
-                                        kink_split=kink_split)
-    return _checked_topk(raw, k, "bottom-k race")
+
+    def raw_at(pts):
+        raw = np.zeros(n)
+        for q in range(len(nodes)):
+            raw += w[q] * _topk_independent(mu + Vm @ nodes[q], sd, k,
+                                            base_rows, pts, upper=True,
+                                            kink_split=kink_split)
+        return raw
+    return _refined_topk(raw_at, k, points, "bottom-k race")
 
 
 def _pair_pmf_at(Qi, F, i, k, S=None, Qerr=None, chunk=256):
@@ -894,6 +925,7 @@ def top_k_jacobian_row(mu, i, k, D=None, base="normal", points=513):
     mu = np.asarray(mu, float)
     n = len(mu)
     k = _as_depth(k, n)
+    i = _as_runner_index(i, n)                                   # (#846)
     D = np.ones(n) if D is None else as_idio(D, n, positive=True)
     # scalar, length-n, and no
     # negative or zero variance: a bare asarray made a scalar 0-d, and
@@ -950,6 +982,7 @@ def top_k_jacobian_row_sigma(mu, i, k, D=None, base="normal", points=513):
     mu = np.asarray(mu, float)
     n = len(mu)
     k = _as_depth(k, n)
+    i = _as_runner_index(i, n)                                   # (#846)
     D = np.ones(n) if D is None else as_idio(D, n, positive=True)
     # scalar, length-n, and no
     # negative or zero variance: a bare asarray made a scalar 0-d, and
@@ -1227,13 +1260,18 @@ def _retry_on_failure(first, attempt, starts):
     converged=False. Either way info["iterations"] becomes the total
     over every attempt made, so the reported cost is honest. A first
     attempt that made no iteration (n_iter=0) is not retried: that
-    budget prices the start and must not move it."""
+    budget prices the start and must not move it. A retry that raises
+    (say its start's first pricing exhausts the lattice refinement) is
+    skipped: it must not discard the completed attempts (#855)."""
     if first[-1]["converged"] or first[-1]["iterations"] == 0:
         # n_iter=0 prices the start and performs no update (#441, #497)
         return first
     best, total = first, first[-1]["iterations"]
     for start in starts(first):
-        out = attempt(start)
+        try:
+            out = attempt(start)
+        except Exception:
+            continue
         total += out[-1]["iterations"]
         if out[-1]["converged"]:
             best = out
@@ -2030,7 +2068,9 @@ def rank_probabilities(mu, D=None, base="normal", points=513, V=None,
     pricing uses the zero-finish coefficient, second place the
     one-finish coefficient, and so on down the field. Rows sum to one
     (every runner takes exactly one rank) and columns sum to one (every
-    rank is taken), and both identities are enforced. Cumulative row
+    rank is taken), and both identities are enforced; a lattice that
+    fails them is refined as in top_k_probabilities, up to four times
+    the requested points, before raising. Cumulative row
     sums reproduce top_k_probabilities. O(n^2 L) per factor node.
     kink_split as in top_k_probabilities (opt-in, default off)."""
     mu = np.asarray(mu, float)
@@ -2043,7 +2083,7 @@ def rank_probabilities(mu, D=None, base="normal", points=513, V=None,
     sd = np.sqrt(D)
     base_rows = BASES[base] if not callable(base) else base
 
-    def one_node(m):
+    def one_node(m, points):
         m = _translated_home(np.asarray(m, float), sd * sd)    # (#477)
         lo, hi = _count_window(m, sd, n - 1, base_rows,
                                is_normal=(base == "normal"))
@@ -2076,13 +2116,17 @@ def rank_probabilities(mu, D=None, base="normal", points=513, V=None,
         return P
 
     if V is None:
-        P = one_node(mu)
+        def raw_at(pts):
+            return one_node(mu, pts)
     else:
         mu = _translated_home(mu, D)                             # (#477)
         Vm, nodes, w = _factor_nodes(V, n, qa, "rank_probabilities", D)
-        P = np.zeros((n, n))
-        for q in range(len(nodes)):
-            P += w[q] * one_node(mu + Vm @ nodes[q])
+
+        def raw_at(pts):
+            P = np.zeros((n, n))
+            for q in range(len(nodes)):
+                P += w[q] * one_node(mu + Vm @ nodes[q], pts)
+            return P
 
     # Check what is RETURNED, not what was computed. Row normalisation is
     # not neutral: it makes every row exact and moves the columns, so a
@@ -2118,12 +2162,19 @@ def rank_probabilities(mu, D=None, base="normal", points=513, V=None,
             f"column-sum error {ce:.2e}. Raise points=, or report this "
             "field.")
 
-    re_raw, ce_raw = _defects(P)
-    if not np.isfinite(P).all() or re_raw > 5e-3 or ce_raw > 5e-3:
-        _reject("before normalisation", re_raw, ce_raw)
-    P = np.clip(P / np.maximum(P.sum(axis=1)[:, None], _TINY), 0.0, 1.0)
-    re_out, ce_out = _defects(P)
-    if not np.isfinite(P).all() or re_out > 5e-3 or ce_out > 5e-3:
-        _reject("in the RETURNED matrix after row normalisation",
-                re_out, ce_out)
-    return P
+    def _checked(P):
+        re_raw, ce_raw = _defects(P)
+        if not np.isfinite(P).all() or re_raw > 5e-3 or ce_raw > 5e-3:
+            _reject("before normalisation", re_raw, ce_raw)
+        P = np.clip(P / np.maximum(P.sum(axis=1)[:, None], _TINY), 0.0, 1.0)
+        re_out, ce_out = _defects(P)
+        if not np.isfinite(P).all() or re_out > 5e-3 or ce_out > 5e-3:
+            _reject("in the RETURNED matrix after row normalisation",
+                    re_out, ce_out)
+        return P
+
+    # a defect is refined on nested 2p - 1 lattices, as top-k (#623): the
+    # default 513 and 1025 points both rejected a Laplace field that 2049
+    # resolves (#819). A call that passes first time is untouched.
+    return _refined_topk(raw_at, None, points, "rank marginals",
+                         check=_checked)

@@ -234,3 +234,67 @@ def test_zero_iteration_budget_is_not_retried(monkeypatch):
     _, _, info = T.loc_scale_from_topk_pair(q1, 1, q2, 2, n_iter=0,
                                             return_info=True)
     assert info["iterations"] == 0
+
+
+# ------------------------------------------------- a retry that raises (#855)
+
+def _first_855():
+    return (np.array([0.0]), np.array([1.0]),
+            {"converged": False, "iterations": 7, "max_logit_residual": 0.2})
+
+
+def _raises(_):
+    raise RuntimeError("lattice")
+
+
+def test_855_raising_retry_keeps_the_first_result():
+    first = _first_855()
+    out = T._retry_on_failure(first, _raises, lambda _: [np.array([1.0])])
+    assert out is first
+    assert out[-1] == {"converged": False, "iterations": 7,
+                       "max_logit_residual": 0.2}
+
+
+def test_855_raising_retry_is_skipped_not_fatal():
+    """A later start still runs and can win; the raising one costs no
+    iterations."""
+    good = (np.array([1.0]), np.array([1.0]),
+            {"converged": True, "iterations": 3, "max_logit_residual": 0.0})
+
+    def attempt(s):
+        if s == "bad":
+            raise RuntimeError("lattice")
+        return good
+    out = T._retry_on_failure(_first_855(), attempt,
+                              lambda _: ["bad", "good"])
+    assert out is good and out[-1]["iterations"] == 10
+
+
+def test_855_converged_first_attempt_untouched():
+    first = (np.array([0.0]), {"converged": True, "iterations": 4,
+                               "max_logit_residual": 1e-12})
+    assert T._retry_on_failure(first, _raises, lambda _: [0]) is first
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_855_browser_raising_retry_keeps_the_first_result():
+    mod = json.dumps(Path(ROOT, "docs", "js", "winning",
+                          "topk.mjs").as_uri())
+    got = _node(f"""
+import {{ _retryOnFailure }} from {mod};
+const first = {{ mu: [0], info: {{ converged: false, iterations: 7,
+                                  maxLogitResidual: 0.2 }} }};
+const boom = () => {{ throw new Error("lattice"); }};
+const a = _retryOnFailure(first, boom, () => [[1]], "maxLogitResidual");
+const good = {{ mu: [1], info: {{ converged: true, iterations: 3,
+                                 maxLogitResidual: 0 }} }};
+const b = _retryOnFailure(
+  {{ mu: [0], info: {{ converged: false, iterations: 7, maxLogitResidual: 0.2 }} }},
+  s => {{ if (s === "bad") throw new Error("lattice"); return good; }},
+  () => ["bad", "good"], "maxLogitResidual");
+console.log(JSON.stringify({{ a, same: a === first, b }}));
+""")
+    assert got["same"]
+    assert got["a"]["info"] == {"converged": False, "iterations": 7,
+                                "maxLogitResidual": 0.2}
+    assert got["b"]["info"]["converged"] and got["b"]["info"]["iterations"] == 10

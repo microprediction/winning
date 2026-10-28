@@ -614,6 +614,20 @@ end
     @test !z.converged
 end
 
+@testset "a retry that raises keeps the completed attempts (#855)" begin
+    first = (mu = [0.0], converged = false, iterations = 7,
+             max_logit_residual = 0.2)
+    boom(s) = error("lattice")
+    out = winning._retry_on_failure(first, boom, f -> [1], :max_logit_residual)
+    @test out == first
+    good = (mu = [1.0], converged = true, iterations = 3, max_logit_residual = 0.0)
+    out = winning._retry_on_failure(first, s -> s == "bad" ? error("x") : good,
+                                    f -> ["bad", "good"], :max_logit_residual)
+    @test out.converged && out.iterations == 10
+    conv = merge(first, (converged = true,))
+    @test winning._retry_on_failure(conv, boom, f -> [1], :max_logit_residual) === conv
+end
+
 @testset "the rank-one Hermite/midpoint handover is a band (#783)" begin
     # sd0 = 1 sits at the old ceil(8 sharp) > 80 switch, where a 1e-7
     # change in sd moved a top-2 membership by 31bp; outside the band the
