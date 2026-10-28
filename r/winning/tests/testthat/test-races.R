@@ -335,3 +335,34 @@ test_that("an ordinary pair keeps its closed form (#86)", {
                                   D = c(1, .7)),
                c(0.68189917673080014, 0.31810082326919986), tolerance = 1e-14)
 })
+
+# The exhaustion reprice is guarded like the in-loop forward (#823): one
+# permitted step onto an unpriceable iterate returned an error instead of
+# the priced start, and abilities_from_topk threw at n_iter = 3 only.
+test_that("a refused final reprice returns the last priced iterate", {
+  fw <- function(m) {
+    if (max(abs(m)) > 0.5) stop("unpriceable iterate")
+    list(resid = c(1, -1), dres = c(-1, -1))
+  }
+  out <- .jacobi_sweeps(c(0, 0), fw, 1, 1, 1, 1e-8)
+  expect_identical(out$mu, c(0, 0))
+  expect_false(out$converged)
+  expect_identical(out$resid, 1)
+  expect_error(.jacobi_sweeps(c(1, 1), fw, 1, 1, 1, 1e-8), "unpriceable")
+  mu <- c(-7.645826295483857, -4.355092679616064, 4.016859659459442,
+          7.984059315640479)
+  D <- c(0.028135701064085954, 0.02463857634420256, 2.010569296584627,
+         0.028414577208752127)
+  q <- top_k_probabilities(mu, 3, D = D)
+  lg <- function(p) log(p) - log1p(-p)
+  for (n in 2:5) {
+    r <- suppressWarnings(abilities_from_topk(q, 3, D = D, n_iter = n,
+                                              return_info = TRUE))
+    expect_false(r$converged)
+    back <- top_k_probabilities(r$mu, 3, D = D)
+    expect_lt(abs(max(abs(lg(back) - lg(q))) - r$max_logit_residual), 1e-9)
+  }
+  # ordinary input converges inside the loop, so the guard is never hit
+  q2 <- top_k_probabilities(c(-0.6, -0.1, 0.2, 0.5), 2)
+  expect_true(abilities_from_topk(q2, 2, return_info = TRUE)$converged)
+})

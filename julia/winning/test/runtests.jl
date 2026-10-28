@@ -650,3 +650,21 @@ end
     @test nw(8.0) == 33 + 34           # held at the cap
     @test winning._rank1_hermite_rule(9.0)[2] == winning.hermite_nodes(1, 72).W
 end
+
+@testset "a refused final reprice returns the last priced iterate (#823)" begin
+    # one permitted step lands on an unpriceable iterate: the exhaustion
+    # reprice threw instead of returning the priced start
+    fw(m) = maximum(abs.(m)) > 0.5 ? error("unpriceable iterate") :
+            ([1.0, -1.0], [-1.0, -1.0])
+    mu, conv, rmax, iters = winning._jacobi_sweeps([0.0, 0.0], fw, 1.0, 1.0,
+                                                   1, 1e-8)
+    @test mu == [0.0, 0.0] && conv === false && rmax == 1.0 && iters == 1
+    @test_throws ErrorException winning._jacobi_sweeps([1.0, 1.0], fw, 1.0,
+                                                       1.0, 1, 1e-8)
+    # a forward that never refuses takes the unguarded path unchanged:
+    # the step to [-0.25, 0.25] is repriced and kept
+    ok(m) = ([-0.25, 0.25] .- m, [-1.0, -1.0])
+    mu, conv, rmax, _ = winning._jacobi_sweeps([0.0, 0.0], ok, 1.0, 1.0, 1,
+                                               1e-8)
+    @test mu == [-0.25, 0.25] && conv && rmax == 0.0
+end

@@ -2401,7 +2401,18 @@ def _jacobi_sweeps(mu, forward, scale, alpha, n_iter, tol):
         # finite initializer (#497). Price the returned iterate -- one
         # forward, only on exhaustion -- and keep the better of the two.
         last = (mu, resid_max) if prev is None else (prev[0], prev[3])
-        fwd = cached if cached is not None else forward(mu)
+        if cached is not None:
+            fwd = cached
+        else:
+            try:
+                fwd = forward(mu)
+            except RuntimeError:
+                # The last step crossed the forward's refusal guard: return
+                # the last priced iterate as not converged, as the in-loop
+                # backoff does. With nothing priced it still raises (#823).
+                if prev is None:
+                    raise
+                return prev[0], False, prev[3], iters
         r_end = np.abs(np.asarray(fwd[0], dtype=float)).max()
         if prev is not None and not r_end < last[1]:
             mu = last[0]
