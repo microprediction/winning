@@ -142,11 +142,19 @@ class _Gumbel:
         # log(1 - exp(-e^u)), stable both ways. Each branch sees a clamped
         # argument (same values where it is selected): far left, e < 1e-16
         # makes log1p(-exp(-e)) = log(0), and its infinite derivative times
-        # torch.where's zero gave NaN gradients on separated fields (#753)
-        e = torch.exp(cls._u(z))
-        return torch.where(e < 0.6931,
-                           torch.log(-torch.expm1(-e.clamp(max=0.6931))),
-                           torch.log1p(-torch.exp(-e.clamp(min=0.6931))))
+        # torch.where's zero gave NaN gradients on separated fields (#753).
+        # Farther left still, e = e^u is subnormal or 0 and log(1-e^-e)
+        # came out -inf (NaN gradient) where it is u - e/2 + O(e^2) = u
+        # to rounding (#866): below u = log(tiny) that is the answer.
+        u = cls._u(z)
+        far = math.log(torch.finfo(u.dtype).tiny)
+        e = torch.exp(u.clamp(min=far))
+        return torch.where(u < far, u,
+                           torch.where(e < 0.6931,
+                                       torch.log(-torch.expm1(
+                                           -e.clamp(max=0.6931))),
+                                       torch.log1p(-torch.exp(
+                                           -e.clamp(min=0.6931)))))
 
     @classmethod
     def dlog_pdf(cls, z):

@@ -1180,3 +1180,66 @@ def test_865_power_of_two_unit_leaves_ordinary_windows_bitwise():
         old = torch.minimum(own, m_pair + qn * prec.rsqrt()).max(-1).values
         assert torch.equal(hi, torch.maximum(old, lo + sd.max(-1).values))
 
+
+# ------------------- #866: the min-Gumbel log-CDF in its far-left tail
+def _gumbel_log_cdf_ref(z):
+    import mpmath
+    mpmath.mp.dps = 50
+    c = mpmath.pi / mpmath.sqrt(6)
+    u = c * mpmath.mpf(z) - mpmath.euler
+    e = mpmath.exp(u)
+    return (float(mpmath.log(-mpmath.expm1(-e))),
+            float(c * e / mpmath.expm1(e)))
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, F64])
+@pytest.mark.parametrize("z", [-100.0, -70.0, -68.0, -40.0, -5.0, 0.0,
+                               -560.0, -800.0])
+def test_866_gumbel_log_cdf_value_and_gradient_far_left(dtype, z):
+    pytest.importorskip("mpmath")
+    from winning.torch.race import _Gumbel
+    t = torch.tensor(z, dtype=dtype, requires_grad=True)
+    y = _Gumbel.log_cdf(t)
+    y.backward()
+    v, d = _gumbel_log_cdf_ref(z)
+    eps = 2e-6 if dtype == torch.float32 else 1e-13
+    assert math.isfinite(y.item()) and math.isfinite(t.grad.item())
+    assert abs(y.item() - v) <= eps * max(1.0, abs(v)), (y.item(), v)
+    assert abs(t.grad.item() - d) <= eps * max(1.0, abs(d)), (t.grad, d)
+
+
+def test_866_gumbel_log_cdf_is_bitwise_where_it_was_finite():
+    # the existing branches, as they were, on everything they resolved
+    from winning.torch.race import _Gumbel, _GUMBEL_C, _EULER
+    for dtype, z0 in ((torch.float32, -67.0), (F64, -550.0)):
+        z = torch.linspace(z0, 20.0, 20001, dtype=dtype)
+        e = torch.exp(torch.clamp(_GUMBEL_C * z - _EULER, max=_Gumbel._UMAX))
+        old = torch.where(e < 0.6931,
+                          torch.log(-torch.expm1(-e.clamp(max=0.6931))),
+                          torch.log1p(-torch.exp(-e.clamp(min=0.6931))))
+        assert torch.equal(_Gumbel.log_cdf(z), old)
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, F64])
+@pytest.mark.parametrize("head", ["prefix3", "prefix2", "top2"])
+def test_866_heterogeneous_gumbel_field_is_finite_in_both_dtypes(dtype,
+                                                                  head):
+    # float32 gave NaN (prefix [1, 0, 2]) or NaN gradients for the narrow
+    # runner (prefix [1, 0], top-2); float64 is the reference
+    def run(dt):
+        mu = torch.zeros(3, dtype=dt, requires_grad=True)
+        sd = torch.tensor([1.0, 0.2, 1.0], dtype=dt, requires_grad=True)
+        if head == "top2":
+            lp = wt.topk_log_prob(mu, 2, sd, base="gumbel")
+        else:
+            order = [1, 0, 2] if head == "prefix3" else [1, 0]
+            lp = wt.ordered_prefix_log_prob(mu, order, sd, base="gumbel")
+        lp.sum().backward()
+        return [a.detach().double().numpy() for a in (lp, mu.grad, sd.grad)]
+
+    got, ref = run(dtype), run(F64)
+    tol = 1e-4 if dtype == torch.float32 else 1e-12
+    for g, r in zip(got, ref):
+        assert np.all(np.isfinite(g))
+        assert np.abs(g - r).max() < tol, (g, r)
+
