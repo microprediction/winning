@@ -810,6 +810,13 @@ export function abilitiesFromProbabilitiesFactor(pTarget, V, D, F, W, opts = {})
                    `(tol ${tol}). Pass returnInfo: true for the diagnostics.`);
     return opts.returnInfo ? { mu, converged, residual, iterations } : mu;
   };
+  // validated for every N: the pair branch below returned before mu0 was
+  // read, so a NaN, wrong-length or string start passed silently (#838)
+  let mu0 = null;
+  if (opts.mu0 != null) {
+    mu0 = finiteVec(opts.mu0, "mu0", "ability");
+    if (mu0.length !== N) throw new Error(`mu0 has ${mu0.length} entries for ${N}`);
+  }
   if (N === 1) return finish([0], true, 0, 0);
 
   // The factor law actually represented, as python's abilities_from_race
@@ -872,7 +879,9 @@ export function abilitiesFromProbabilitiesFactor(pTarget, V, D, F, W, opts = {})
     // (#412). p0 rises with g, p1 falls, so h below is increasing either way.
     const m = p[1] < p[0] ? 1 : 0;
     const sgn = m === 0 ? 1 : -1;
-    const g0 = sgn * s0 * ndtri(p[m]) - (shift[1] - shift[0]);
+    // a caller's mu0 is the start in place of the closed form, certified
+    // first like it (#838)
+    const g0 = mu0 ? mu0[1] - mu0[0] : sgn * s0 * ndtri(p[m]) - (shift[1] - shift[0]);
     const p0At = (g) => winProbabilitiesFactor([-0.5 * g, 0.5 * g], V, D, F, W, fwdOpts).p;
     // both shares scored, floored at 1e-300 as python's _pair_solve: at
     // PFLOOR a minority below 1e-15 could never certify (#727)
@@ -916,9 +925,8 @@ export function abilitiesFromProbabilitiesFactor(pTarget, V, D, F, W, opts = {})
 
   let mu;
   const anyV = Vc.some((row) => row.some((v) => v !== 0));
-  if (opts.mu0 != null) {
-    mu = finiteVec(opts.mu0, "mu0", "ability");
-    if (mu.length !== N) throw new Error(`mu0 has ${mu.length} entries for ${N}`);
+  if (mu0) {
+    mu = mu0;
   } else if (r >= 1 && anyV) {
     // warm start: the independent race at each runner's represented
     // total variance, shifted by the rule's mean

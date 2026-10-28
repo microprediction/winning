@@ -624,4 +624,27 @@ check("calibrated abilities vs truth", muHat, mu, 5e-6);
         [18.5235481496806, -18.5235481496806], 1e-300);
 }
 
+// #838: the pair branch returned before mu0 was read, so an exact start
+// was ignored (residual 0.034 at nIter 1) and a malformed one accepted
+{
+  const V = [[-1], [1]], D = [0.05, 0.2], F = [[-3], [0], [2]], W = [0.2, 0.3, 0.5];
+  const p = winProbabilitiesFactor([-0.5, 0.5], V, D, F, W, { points: 4001 }).p;
+  const o = { points: 4001, nIter: 1, tol: 1e-10, returnInfo: true };
+  let fit = { mu: [NaN, NaN], converged: false };
+  try { fit = abilitiesFromProbabilitiesFactor(p, V, D, F, W, { ...o, mu0: [-0.5, 0.5] }); } catch (e) { console.log("   " + e.message); }
+  check("exact pair mu0 certifies at nIter 1 (#838)", [...fit.mu, fit.converged ? 0 : 1], [-0.5, 0.5, 0], 1e-12);
+  const sh = abilitiesFromProbabilitiesFactor(p, V, D, F, W, { ...o, mu0: [9.5, 10.5] });
+  check("shifted exact pair mu0 returns the centred pair (#838)", sh.mu, [-0.5, 0.5], 1e-12);
+  let raised = 0;
+  for (const bad of [[NaN, 1], [NaN], [1, 2, 3], "bad"]) {
+    try { abilitiesFromProbabilitiesFactor(p, V, D, F, W, { ...o, mu0: bad }); }
+    catch (e) { if (/mu0/.test(e.message)) raised++; }
+  }
+  check("malformed pair mu0 raises (#838)", [raised], [4], 0.5);
+  // omitted mu0 unchanged (pinned from origin/main 3fa326ee)
+  check("pair without mu0 unchanged (#838)",
+        abilitiesFromProbabilitiesFactor(p, V, D, F, W, { ...o, nIter: 3 }).mu,
+        [-1.1145587159721093, 1.1145587159721093], 1e-300);
+}
+
 process.exit(failures ? 1 : 0);
