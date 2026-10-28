@@ -386,10 +386,19 @@ function extendedStatePrices(density, offsets, maxDepth, unitRatio) {
   const supp = supportIndices(density);
   const W = supp[supp.length - 1] - supp[0];
   const best = minOf(offsets);
-  if (offsets.some(o => o > best + W))       // no chance of winning
-    return extendedStatePrices(density, intCentred(offsets.map(o => (o > best + W ? Infinity : o))),
-                               maxDepth, unitRatio);
-  const co = intCentred(offsets);
+  // No chance of winning. The reference drops a runner more than W behind,
+  // but lowHigh mixes a fractional offset's floor and ceil shifts, so one
+  // just past W can still dead-heat the best at the support endpoint:
+  // [0, 1.0001] at W = 1 was [1, 0] against the exact 0.125 claim (#794).
+  // Only a runner whose lowest cell lies past the best's highest is
+  // certainly out. A near miss is priced exactly when the field fits the
+  // lattice, and dropped as before when it would send the field to the
+  // approximate cluster path.
+  const out = offsets.map(o => o > best + W);
+  const reach = Math.ceil(best) + W;
+  const kept = [];
+  offsets.forEach((o, i) => { if (!(Math.floor(o) > reach)) kept.push(i); });
+  const co = intCentred(kept.map(i => offsets[i]));
   // R's hanging test: would the shifted density lose mass off the
   // lattice (or pass lowHigh's exact range)? See calibration.R.
   const sLo = supp[0] - L, sHi = supp[supp.length - 1] - L;
@@ -413,7 +422,16 @@ function extendedStatePrices(density, offsets, maxDepth, unitRatio) {
     if (Math.floor(o) + sLo < -L || o < -L + 2) left.push(i);
     if (Math.ceil(o) + sHi > L || o > L - 2) right.push(i);
   });
-  if (!left.length && !right.length) return statePricesFromOffsets(density, co);
+  if (!left.length && !right.length) {
+    if (kept.length === n) return statePricesFromOffsets(density, co);
+    const sub = kept.length === 1 ? [1] : statePricesFromOffsets(density, co);
+    const sp = new Array(n).fill(0);
+    kept.forEach((i, k) => { sp[i] = sub[k]; });
+    return sp;
+  }
+  if (out.some(Boolean))
+    return extendedStatePrices(density, intCentred(offsets.map((o, i) => (out[i] ? Infinity : o))),
+                               maxDepth, unitRatio);
   if (maxDepth === 0) {
     right.forEach(i => { co[i] = Infinity; });
     left.forEach(i => { co[i] = -Infinity; });

@@ -316,12 +316,13 @@ ability_implied_state_prices <- function(ability, density, unit = 1.0,
   L <- implied_L(density)
   W <- as.integer(.approximate_support_width(density))
   bad <- offsets > min(offsets) + W          # no chance of winning
-  if (any(bad)) {
-    aug <- offsets
-    aug[bad] <- Inf
-    return(.state_prices_from_extended_offsets(density, .int_centered(aug),
-                                              max_depth))
-  }
+  # ... except that low_high mixes a fractional offset's floor and ceil
+  # shifts, so a runner just past W can still dead-heat the best at the
+  # support endpoint: [0, 1.0001] at W = 1 was [1, 0] against the exact
+  # 0.125 claim (#794). Only a runner whose lowest cell lies past the
+  # best's highest is certainly out. A near miss is priced exactly when
+  # the field fits the lattice, and dropped as before when it would hang.
+  kept <- which(!(floor(offsets) > ceiling(min(offsets)) + W))
   # python's walkover test compares min(diff_to_best), which is always 0,
   # so it never fires; kept for fidelity
   diff_best <- offsets - min(offsets)
@@ -330,7 +331,7 @@ ability_implied_state_prices <- function(ability, density, unit = 1.0,
     sp[which.min(offsets)] <- 1
     return(sp)
   }
-  co <- .int_centered(offsets)
+  co <- .int_centered(offsets[kept])
   # Hanging = the shifted density would lose mass off the lattice (or the
   # offset is past the exact range of low_high). Python tests the cruder
   # |o| <= L - W, which misfires whenever the support width W exceeds L:
@@ -357,8 +358,18 @@ ability_implied_state_prices <- function(ability, density, unit = 1.0,
     left <- which(floor(co) + min(supp) < -L | co < -L + 2)
     right <- which(ceiling(co) + max(supp) > L | co > L - 2)
   }
-  if (!length(left) && !length(right))
-    return(state_prices_from_offsets(density, co))
+  if (!length(left) && !length(right)) {
+    if (length(kept) == n) return(state_prices_from_offsets(density, co))
+    sp <- numeric(n)
+    sp[kept] <- if (length(kept) == 1L) 1 else state_prices_from_offsets(density, co)
+    return(sp)
+  }
+  if (any(bad)) {
+    aug <- offsets
+    aug[bad] <- Inf
+    return(.state_prices_from_extended_offsets(density, .int_centered(aug),
+                                              max_depth))
+  }
   if (max_depth == 0L) {
     co[right] <- Inf
     co[left] <- -Inf
