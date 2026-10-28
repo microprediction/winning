@@ -1133,7 +1133,9 @@ export function mendellElstonOne(mu, C, i) {
     for (let aj = 0; aj < alive.length; aj++)
       for (let ak = aj; ak < alive.length; ak++) {
         const j = alive[aj], l = alive[ak];
-        const upd = (S[k * d + j] * S[k * d + l] / skk) * del;
+        // ratio first: the O(s^4) product of two covariances over/under-
+        // flowed under a valid change of units s (1e78, 1e-100) (#795)
+        const upd = (S[k * d + j] / skk) * S[k * d + l] * del;
         S[j * d + l] -= upd;
         if (l !== j) S[l * d + j] -= upd;
       }

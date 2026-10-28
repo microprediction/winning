@@ -3580,5 +3580,28 @@ rejects(C => demo.fitGrammar(C, 1, 0, { method: "ipaf", tol: 0 }),
         JSON.stringify(Object.keys(eig)) === '["V","D"]' && eig.ipaf === undefined);
 }
 
+// --- Mendell-Elston is unit free at both ends of the range (#795)
+{
+  const shares = (mu, C, s) => {
+    const m = mu.map(x => s * x), S = C.map(r => r.map(x => s * s * x));
+    const raw = m.map((_, i) => demo.mendellElstonOne(m, S, i));
+    const t = raw.reduce((a, b) => a + b, 0);
+    return raw.map(x => x / t);
+  };
+  const mx = (a, b) => Math.max(...a.map((x, i) => Math.abs(x - b[i])));
+  const C1 = [[1, 0.5, 0.2], [0.5, 1, 0.3], [0.2, 0.3, 1]];
+  const py1 = [0.20755944, 0.01733613, 0.77510443];   // python mendell_elston
+  const v = [-50, 0, 50];
+  const C2 = v.map((x, i) => v.map((y, j) => x * y + (i === j ? 1e-4 : 0)));
+  const base1 = shares([0, 1, -1], C1, 1), base2 = shares([0, -4, 0], C2, 1);
+  holds("Mendell-Elston ordinary field is python's (#795)", mx(base1, py1) < 1e-8, String(base1));
+  for (const s of [1e-100, 1e78, 1e100]) {
+    const a = shares([0, 1, -1], C1, s), b = shares([0, -4, 0], C2, s);
+    holds(`Mendell-Elston is unchanged by units ${s} (#795)`,
+          mx(a, base1) < 1e-12 && mx(b, base2) < 1e-12,
+          `${mx(a, base1).toExponential(2)}, ${mx(b, base2).toExponential(2)}`);
+  }
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");
