@@ -3603,5 +3603,113 @@ rejects(C => demo.fitGrammar(C, 1, 0, { method: "ipaf", tol: 0 }),
   }
 }
 
+// #805: a p0 call is only as good as its inversion. This seeded fixture
+// (four runners, rank one, a deliberately coarse 33-point lattice) is
+// priced by the forward itself, yet abilitiesFromRace stalls at a max
+// |log residual| of 3.63 -- and polishRace certified the race it then
+// returned converged. The same field on an ordinary lattice is untouched.
+{
+  const V = [[-2.4482602171824595], [-3.909470185595318],
+             [-2.465409300506771], [3.865886382696166]];
+  const D = [0.5440542468074961, 1.1197260935882694,
+             0.43645493804312074, 0.698143690730512];
+  const p0 = [2.5561714747719375e-8, 0.003954132588313348,
+              0.3838102877687196, 0.6122355540812523];
+  const said = [];
+  const ow = console.warn;
+  console.warn = (...x) => said.push(x.join(" "));
+  let out = null, ok = null, capped = null;
+  try {
+    out = polish.polishRace({ p0, V, D, points: 33 });
+    const mu = [3.87612150370894, 3.974112836166338,
+                -1.0855625523652705, -3.049817603104663];
+    const q0 = races.raceProbabilities(mu, { V, D, points: 257 });
+    said.length = 0;
+    ok = polish.polishRace({ p0: q0, V, D, points: 257 });
+    capped = polish.polishRace({ p0: q0, V, D, points: 257, nameCaps: 0.55 });
+  } catch (e) {
+    console.warn = ow;
+    holds("polishRace on the #805 fixture runs", false, e.message);
+  }
+  console.warn = ow;
+  if (out) {
+    holds("polishRace reports a failed p0 inversion as not converged (#805)",
+          out.info.converged === false, JSON.stringify(out.info));
+    holds("...and nothing else in its diagnostics moves (#805)",
+          out.info.maxViolation === 0 && out.info.muDistance === 0 &&
+          out.info.active.length === 0);
+  }
+  if (ok) {
+    holds("an ordinary p0 still polishes converged, unconstrained and capped (#805)",
+          ok.info.converged === true && capped.info.converged === true &&
+          Math.max(...capped.p) <= 0.55 + 1e-6);
+    holds("...without a polishRace warning (#805)",
+          !said.some(s => s.includes("polishRace")), said.join(" | "));
+  }
+}
+
+// #821: raceJacobian refused the forward's window and delta as unknown
+// options, so a race priced on a chosen lattice could only be
+// differentiated on the default one. Now it takes them, builds the same
+// lattice, and refuses what the forward refuses.
+{
+  const mu = [1.45, 0.44, 0.88, -0.30];
+  const o = { D: [0.83, 1.16, 1.74, 0.34], base: "logistic", points: 257 };
+  const mx = (A, B) => Math.max(...A.flatMap((r, i) => r.map((v, j) => Math.abs(v - B[i][j]))));
+  accepts("raceJacobian takes delta (#821)",
+          () => polish.raceJacobian(mu, { ...o, delta: 0.1 }));
+  accepts("raceJacobian takes window (#821)",
+          () => polish.raceJacobian(mu, { ...o, window: "span" }));
+  // on delta = 0.1 the bulk window truncates 0.15% of the mass, so its
+  // lattice is visibly not the default one: the raw lattice derivative
+  // there, as python's _raw_and_derivative and R's race_jacobian(delta =
+  // 0.1) compute it on forward_grid(..., delta = 0.1), agree to 6e-17
+  const J01 = [
+    [-0.054290929558844736, 0.010512198572153074, 0.006387752276396653, 0.03739097871029501],
+    [0.010512198572153074, -0.2499025381714874, 0.03592423072716642, 0.2034661088721679],
+    [0.006387752276396653, 0.03592423072716642, -0.16631405225331547, 0.1240020692497524],
+    [0.03739097871029501, 0.2034661088721679, 0.12400206924975245, -0.36485915683221537]];
+  accepts("raceJacobian with delta differentiates the delta lattice (#821)",
+          () => mx(polish.raceJacobian(mu, { ...o, delta: 0.1 }), J01),
+          d => d < 1e-12, d => d.toExponential(2));
+  // a span window differentiates the span forward: central differences of
+  // raceProbabilities(..., window: "span") agree to 8e-12
+  accepts("raceJacobian with window span is the span forward's derivative (#821)",
+          () => {
+            const J = polish.raceJacobian(mu, { ...o, window: "span" });
+            const h = 1e-5;
+            let d = 0;
+            for (let j = 0; j < 4; j++) {
+              const a = mu.slice(), b = mu.slice();
+              a[j] += h; b[j] -= h;
+              const pa = races.raceProbabilities(a, { ...o, window: "span" });
+              const pb = races.raceProbabilities(b, { ...o, window: "span" });
+              for (let i = 0; i < 4; i++)
+                d = Math.max(d, Math.abs(J[i][j] - (pa[i] - pb[i]) / (2 * h)));
+            }
+            return d;
+          }, d => d < 1e-9, d => d.toExponential(2));
+  accepts("raceJacobian with the default window and delta spelled out is the default (#821)",
+          () => mx(polish.raceJacobian(mu, { ...o, window: "bulk", delta: 1e-12 }),
+                   polish.raceJacobian(mu, o)),
+          d => d === 0, d => String(d));
+  accepts("a pair's closed-form Jacobian takes them too (#821)",
+          () => polish.raceJacobian([0.2, -0.1], { D: [1, 2], window: "span", delta: 0.01 }));
+  for (const bad of [{ delta: 0.7 }, { delta: "x" }, { window: "spam" }, { window: null }]) {
+    rejects(races.raceProbabilities, [mu, { ...o, ...bad }],
+            `forward refuses ${JSON.stringify(bad)} (#821)`);
+    rejects(polish.raceJacobian, [mu, { ...o, ...bad }],
+            `raceJacobian refuses ${JSON.stringify(bad)} as the forward does (#821)`,
+            "raceJacobian:");
+  }
+  const blk = { kind: "Blocks", cluster: [0, 0, 1, 1], loading: 0.5, D: 1 };
+  rejects(polish.raceJacobian, [mu, { structure: blk, delta: 0.1 }],
+          "the block Jacobian refuses delta as the block forward does (#821)",
+          "do not support delta");
+  rejects(polish.raceJacobian, [mu, { structure: blk, window: "span" }],
+          "the block Jacobian refuses window as the block forward does (#821)",
+          "do not support window");
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");

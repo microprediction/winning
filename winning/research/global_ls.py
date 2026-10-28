@@ -5,7 +5,7 @@ from typing import Dict, List, Optional, Sequence
 
 import numpy as np
 
-from .inference import AbilityCalibrator
+from .inference import AbilityCalibrator, _validated_scales
 
 
 @dataclass
@@ -42,12 +42,19 @@ class GlobalLSCalibrator:
         scales: Optional[Sequence[float]] = None,
     ) -> None:
         prices_arr = np.asarray(prices, dtype=float)
-        scales_arr = None if scales is None else np.asarray(scales, dtype=float)
-        # Ensure lookup curves exist at least once
-        if (calibrator.lookup_curve_1d_prices is None) and (not calibrator.lookup_curves_2d_prices):
+        scales_arr = None if scales is None else _validated_scales(scales, len(prices_arr))
+        # Ensure lookup curves exist at least once (the 2-D solve below builds its own)
+        if (
+            scales_arr is None
+            and (calibrator.lookup_curve_1d_prices is None)
+            and (not calibrator.lookup_curves_2d_prices)
+        ):
             calibrator.solve_from_prices(prices_arr)
-        # Precompute local raw locs once for this race
-        local_locs = np.array(calibrator.solve_from_prices(prices_arr), dtype=float)
+        # Precompute local raw locs once for this race, using this race's own
+        # scales (which also builds the 2-D curves the slope weights read).
+        local_locs = np.array(
+            calibrator.solve_from_prices(prices_arr, scales=scales_arr), dtype=float
+        )
         self.races.append(
             RaceLS(
                 calibrator=calibrator,
@@ -61,7 +68,9 @@ class GlobalLSCalibrator:
     def _invert_and_center(self, race: RaceLS) -> np.ndarray:
         """Return median-centered per-race locs (translation-free)."""
         if race.local_locs is None:
-            est = np.array(race.calibrator.solve_from_prices(race.prices), dtype=float)
+            est = np.array(
+                race.calibrator.solve_from_prices(race.prices, scales=race.scales), dtype=float
+            )
             race.local_locs = est
         return race.local_locs - np.median(race.local_locs)
 

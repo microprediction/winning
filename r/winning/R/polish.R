@@ -10,19 +10,43 @@
 #' densities, factored stably as [f_i prod_k S_k / S_i] x [f_j / S_j].
 #'
 #' @inheritParams race_probabilities
+#' @param window,delta the forward's lattice controls. Given (either one),
+#'   the Jacobian is taken on the lattice
+#'   \code{race_probabilities(..., window = , delta = )} integrates on,
+#'   the unset one at the forward's default ("bulk", 1e-12). Both NULL
+#'   (the default) keeps the span lattice this function has always used.
 #' @return n x n matrix
 #' @export
 race_jacobian <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
                           base = "normal", points = 501, structure = NULL,
-                          qa = 9, qf = 15) {
+                          qa = 9, qf = 15, window = NULL, delta = NULL) {
+  # the forward's lattice controls, validated as the forward validates
+  # them: without them a race priced on a chosen window or tail budget
+  # could only be differentiated on another lattice (#821, python's
+  # race_jacobian). NULL leaves the historical lattice untouched.
+  lattice_given <- !is.null(window) || !is.null(delta)
+  if (lattice_given) {
+    if (is.null(window)) window <- "bulk"
+    if (is.null(delta)) delta <- 1e-12
+    if (!(is.character(window) && length(window) == 1L && !is.na(window) &&
+          window %in% c("bulk", "span")))
+      stop(sprintf("window must be \"bulk\" or \"span\"; got %s",
+                   paste(deparse(window), collapse = " ")), call. = FALSE)
+    delta <- .as_delta(delta)
+  }
   if (!is.null(structure)) {
     cls <- class(structure)[1]
     if (cls == "Independent")
       return(race_jacobian(mu, V = NULL, D = structure$D, base = base,
-                           points = points))
+                           points = points, window = window, delta = delta))
     if (cls == "Factor")
       return(race_jacobian(mu, V = structure$V, D = structure$D,
-                           base = base, points = points))
+                           base = base, points = points, window = window,
+                           delta = delta))
+    # the hierarchical kernels keep their own lattice windows; refuse a
+    # window/delta as the forward does rather than drop it (#821, #89)
+    if (lattice_given && cls %in% c("Blocks", "Nested", "Tree"))
+      .refuse_hierarchical_controls(cls, "normal", window, delta)
     if (cls == "Blocks")
       return(block_race_jacobian(mu, structure$cluster, structure$loading,
                                  structure$D, points = points, qa = qa))
@@ -43,9 +67,15 @@ race_jacobian <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
   sd <- sqrt(st$D)
   Q <- nrow(st$F)
   M_all <- matrix(st$mu, Q, n, byrow = TRUE) + st$F %*% t(st$V)
-  x <- seq(min(M_all) - st$left * max(sd), max(M_all) + st$right * max(sd),
-           length.out = points)
-  dx <- x[2] - x[1]
+  if (lattice_given) {
+    # the SAME lattice race_probabilities integrates on (#821)
+    lat <- .race_lattice(st, M_all, sd, .as_points(points), window, delta)
+    x <- lat$x; dx <- lat$dx; points <- lat$points
+  } else {
+    x <- seq(min(M_all) - st$left * max(sd), max(M_all) + st$right * max(sd),
+             length.out = points)
+    dx <- x[2] - x[1]
+  }
   xm <- matrix(x, n, points, byrow = TRUE)
   J <- matrix(0, n, n)
   for (q in seq_len(Q)) {

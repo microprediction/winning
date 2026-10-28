@@ -33,6 +33,16 @@ def implicit_state_prices(base: Density, offsets: Sequence[float]) -> List[float
     return state_prices_from_densities(dens)
 
 
+def _validated_scales(scales: Sequence[float], n: int) -> np.ndarray:
+    """Per-runner scales for a race of ``n`` runners: length n, finite, positive (#841)."""
+    arr = np.asarray(scales, dtype=float)
+    if arr.ndim != 1 or len(arr) != n:
+        raise ValueError(f"scales must have one entry per runner ({n}), got shape {arr.shape}")
+    if not np.all(np.isfinite(arr)) or np.any(arr <= 0):
+        raise ValueError("scales must be finite and positive")
+    return arr
+
+
 # ---- Calibration (inverse) ----
 
 
@@ -156,11 +166,18 @@ class AbilityCalibrator:
         prices: Sequence[float],
         *,
         initial_offsets: Optional[Sequence[float]] = None,
+        scales: Optional[Sequence[float]] = None,
     ) -> List[float]:
+        """Invert prices to abilities.
+
+        ``scales`` (per-runner) takes precedence over ``self.scales`` for this
+        call only, without mutating the calibrator (#841).
+        """
         prices_arr = np.asarray(prices, dtype=float)
         n = len(prices_arr)
+        active_scales = self.scales if scales is None else np.asarray(scales, dtype=float)
         # 2D path if scales provided and length matches; else 1D fallback
-        if self.scales is None or len(self.scales) != n:
+        if active_scales is None or len(active_scales) != n:
             # ---- 1D global-curve inversion against current field (winning-style) ----
             if initial_offsets is None:
                 initial_offsets = [0.0 for _ in prices_arr]
@@ -207,7 +224,7 @@ class AbilityCalibrator:
             return list(np.array(offsets, dtype=float) * unit)
 
         # ---- 2D calibration in (loc, scale) per runner ----
-        scales = np.asarray(self.scales, dtype=float)
+        scales = np.asarray(active_scales, dtype=float)
         unit = self.base.lattice.unit
         # Initialize locs (abilities) in physical units
         if initial_offsets is None:
