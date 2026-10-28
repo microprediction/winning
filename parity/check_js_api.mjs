@@ -3559,5 +3559,26 @@ rejects(C => demo.fitGrammar(C, 1, 0, { method: "ipaf", tol: 0 }),
         Math.max(...rb.map((x, j) => Math.abs(x - [1.22, -0.38, 0, 0][j]))) < 1e-15, String(rb));
 }
 
+// --- an ipaf fit spreads into raceProbabilities as { V, D } (#852)
+{
+  const v = [0.2, -0.4, 0.7], D = [0.8, 0.6, 0.9];
+  const C = v.map((x, i) => v.map((y, j) => x * y + (i === j ? D[i] : 0)));
+  for (const [name, scale] of [["unit", 1], ["rescaled", 1e300]]) {
+    const Cs = C.map(r => r.map(x => x * scale));
+    const fit = demo.fitGrammar(Cs, 1, 0, { method: "ipaf" });
+    holds(`${name} ipaf fit keys are exactly V, D and fit.ipaf still reads (#852)`,
+          JSON.stringify(Object.keys(fit)) === '["V","D"]' && fit.ipaf && fit.ipaf.converged === true
+          && typeof fit.ipaf.contrastResidualMax === "number", JSON.stringify(Object.keys(fit)));
+    if (scale === 1)
+      accepts("raceProbabilities(mu, { ...ipafFit }) prices as explicit V, D (#852)",
+              () => races.raceProbabilities([-0.3, 0, 0.2], { ...fit }),
+              p => JSON.stringify(p) === JSON.stringify(
+                races.raceProbabilities([-0.3, 0, 0.2], { V: fit.V, D: fit.D })));
+  }
+  const eig = demo.fitGrammar(C, 1, 0);
+  holds("the eig fit still spreads as V, D with no ipaf report (#852)",
+        JSON.stringify(Object.keys(eig)) === '["V","D"]' && eig.ipaf === undefined);
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");

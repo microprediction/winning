@@ -364,7 +364,8 @@ const FIT_GRAMMAR_OBJECT_OPTS = new Set(["k", "m", "method", "maxIter", "tol"]);
    (default 1e-12). Two deterministic starts (SMC uniquenesses, then
    the eigen fit's diagonal), the smaller residual kept, so at most
    2 maxIter iterations. The result carries
-   ipaf: { iterations, converged, residual } (iterations summed over the
+   ipaf: { iterations, converged, residual } (non-enumerable, so the
+   result spreads as { V, D }; iterations summed over the
    starts run; residual relative to ||P C P||_F; n >= 3 and k >= 1).
    The report also carries contrastResidualMax, and converged requires
    it to be <= 1 (a contrast off by its own size).
@@ -425,7 +426,7 @@ export function fitGrammar(C, k = 3, m = 4, opts = undefined) {
   const down = 2 ** (-e / 2);
   const out = { V: fit.V.map(row => row.map(v => v * down)),
                 D: fit.D.map(d => d * down * down) };
-  if (fit.ipaf) out.ipaf = fit.ipaf;
+  if (fit.ipaf) withIpaf(out, fit.ipaf);                 // (#852)
   withCrm(out);
   if (!out.D.every(Number.isFinite) || !out.V.flat().every(Number.isFinite))
     throw new Error("fitGrammar: the fitted grammar is not representable in " +
@@ -621,8 +622,16 @@ function fitGrammarScaled(C, k, m, ip = null) {
     V.push(cols.map(col => col[i]));
     D.push(Dc[i]);
   }
-  return report ? { V, D, ipaf: report } : { V, D };
+  // the ipaf report non-enumerable, as contrastResidualMax: an
+  // enumerable one made raceProbabilities(mu, { ...fit }) refuse the
+  // unknown option 'ipaf' (#852); fit.ipaf still reads it
+  const out = { V, D };
+  if (report) withIpaf(out, report);
+  return out;
 }
+
+const withIpaf = (o, report) =>
+  Object.defineProperty(o, "ipaf", { value: report, enumerable: false });
 
 export function structureCov(s) {
   // dense covariance implied by a grammar structure (for the MC sampler).
