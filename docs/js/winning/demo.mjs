@@ -3,7 +3,7 @@
 // a Monte Carlo sampler to race against.
 import { hermite1, interpClamped, solve, firstPrimes, asLoadings,
          isVector, asCount, asIdio, asTolerance } from "./core.mjs";
-import { treeCluster } from "./blocks.mjs";
+import { treeCluster, asGamma, validateTree } from "./blocks.mjs";
 
 /* Halton sequence through the normal quantile: equal-weight nodes for
    E over N(0, I_r). The fitted grammar has rank k+m > 2, where tensor
@@ -364,7 +364,8 @@ const FIT_GRAMMAR_OBJECT_OPTS = new Set(["k", "m", "method", "maxIter", "tol"]);
    (default 1e-12). Two deterministic starts (SMC uniquenesses, then
    the eigen fit's diagonal), the smaller residual kept, so at most
    2 maxIter iterations. The result carries
-   ipaf: { iterations, converged, residual } (iterations summed over the
+   ipaf: { iterations, converged, residual } (non-enumerable, so the
+   result spreads as { V, D }; iterations summed over the
    starts run; residual relative to ||P C P||_F; n >= 3 and k >= 1).
    The report also carries contrastResidualMax, and converged requires
    it to be <= 1 (a contrast off by its own size).
@@ -425,7 +426,7 @@ export function fitGrammar(C, k = 3, m = 4, opts = undefined) {
   const down = 2 ** (-e / 2);
   const out = { V: fit.V.map(row => row.map(v => v * down)),
                 D: fit.D.map(d => d * down * down) };
-  if (fit.ipaf) out.ipaf = fit.ipaf;
+  if (fit.ipaf) withIpaf(out, fit.ipaf);                 // (#852)
   withCrm(out);
   if (!out.D.every(Number.isFinite) || !out.V.flat().every(Number.isFinite))
     throw new Error("fitGrammar: the fitted grammar is not representable in " +
@@ -621,8 +622,16 @@ function fitGrammarScaled(C, k, m, ip = null) {
     V.push(cols.map(col => col[i]));
     D.push(Dc[i]);
   }
-  return report ? { V, D, ipaf: report } : { V, D };
+  // the ipaf report non-enumerable, as contrastResidualMax: an
+  // enumerable one made raceProbabilities(mu, { ...fit }) refuse the
+  // unknown option 'ipaf' (#852); fit.ipaf still reads it
+  const out = { V, D };
+  if (report) withIpaf(out, report);
+  return out;
 }
+
+const withIpaf = (o, report) =>
+  Object.defineProperty(o, "ipaf", { value: report, enumerable: false });
 
 export function structureCov(s) {
   // dense covariance implied by a grammar structure (for the MC sampler).
@@ -661,7 +670,18 @@ export function structureCov(s) {
   const C = Array.from({ length: n }, (_, i) =>
     Array.from({ length: n }, (_, j) => (i === j ? D[i] : 0)));
   const dot = (a, b) => a.reduce((acc, v, k) => acc + v * b[k], 0);
+  // one label per contestant, as the pricing kernels' blockArgs demands:
+  // n comes from D, and a short cluster compared its missing labels as
+  // undefined === undefined -- a phantom block of the trailing runners
+  // (an overlong one was silently cut) (#792)
+  const checkCluster = c => {
+    if (!isVector(c) || c.length !== n)
+      throw new Error(
+        `structureCov: cluster must have one label per contestant; got ` +
+        `${isVector(c) ? c.length : typeof c} for ${n}`);
+  };
   const addBlocks = () => {
+    checkCluster(s.cluster);
     const L = asLoadings(s.loading, n, "loading");
     for (let i = 0; i < n; i++)
       for (let j = 0; j < n; j++)
@@ -676,10 +696,14 @@ export function structureCov(s) {
   } else if (s.kind === "Blocks") {
     addBlocks();
   } else if (s.kind === "Nested") {
+    // gamma through the pricing kernels' door: null was read as 1, false
+    // as 0, "2" as 2 and NaN as an all-NaN matrix (#812). Omitted is the
+    // default 1, as the kernels' own default parameter reads it.
+    const gamma = asGamma(s.gamma === undefined ? 1 : s.gamma, "structureCov");
     addBlocks();
-    if (s.coupling != null && s.gamma !== 0) {
+    if (s.coupling != null && gamma !== 0) {
       const g = asLoadings(s.coupling, n, "coupling");
-      const g2 = (s.gamma ?? 1) ** 2;
+      const g2 = gamma ** 2;
       for (let i = 0; i < n; i++)
         for (let j = 0; j < n; j++) C[i][j] += g2 * dot(g[i], g[j]);
     }
@@ -690,25 +714,36 @@ export function structureCov(s) {
     // every shared factor silently gone -- and negative or string
     // labels threw `anc[...] is not iterable` (#306). Same remapper as
     // the kernels, imported rather than repeated.
+    checkCluster(s.cluster);                              // (#792)
     const cluster = treeCluster(s);                       // (#372)
+    // rank-one leaf loadings only, as every Tree pricer: a rank-r one
+    // built a covariance the kernels refuse (#827)
+    const L = asLoadings(s.loading, n, "loading");
+    if (L && L.length && L[0].length > 1)
+      throw new Error(
+        "structureCov: tree races take scalar (rank-one) leaf-cluster loadings; rank-r " +
+        "leaf effects are supported by the block grammar only.");
     const anc = [];
     const nc = Math.max(...cluster) + 1;
+    // the kernels' topology door: a forest (two roots) was walked as if a
+    // zero-strength common root joined it (#822)
+    const tv = validateTree(s.parent, s.strength, nc, "structureCov");
+    const parent = tv.parent, strength = tv.strength;
     for (let c = 0; c < nc; c++) {
       const a = new Set();
       let u = c, hops = 0;
-      while (s.parent[u] >= 0) {
-        a.add(s.parent[u]); u = s.parent[u];
-        if (++hops > s.parent.length)
+      while (parent[u] >= 0) {
+        a.add(parent[u]); u = parent[u];
+        if (++hops > parent.length)
           throw new Error("structureCov: Tree parent contains a cycle");
       }
       anc.push(a);
     }
-    const L = asLoadings(s.loading, n, "loading");
     for (let i = 0; i < n; i++)
       for (let j = 0; j < n; j++) {
         let v = 0;
         for (const t of anc[cluster[i]])
-          if (anc[cluster[j]].has(t)) v += s.strength[t] ** 2;
+          if (anc[cluster[j]].has(t)) v += strength[t] ** 2;
         if (s.cluster[i] === s.cluster[j]) v += dot(L[i], L[j]);
         C[i][j] += v;
       }
@@ -1098,7 +1133,9 @@ export function mendellElstonOne(mu, C, i) {
     for (let aj = 0; aj < alive.length; aj++)
       for (let ak = aj; ak < alive.length; ak++) {
         const j = alive[aj], l = alive[ak];
-        const upd = (S[k * d + j] * S[k * d + l] / skk) * del;
+        // ratio first: the O(s^4) product of two covariances over/under-
+        // flowed under a valid change of units s (1e78, 1e-100) (#795)
+        const upd = (S[k * d + j] / skk) * S[k * d + l] * del;
         S[j * d + l] -= upd;
         if (l !== j) S[l * d + j] -= upd;
       }
