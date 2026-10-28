@@ -696,4 +696,8 @@ end
     mu, conv, rmax, _ = winning._jacobi_sweeps([0.0, 0.0], ok, 1.0, 1.0, 1,
                                                1e-8)
     @test mu == [-0.25, 0.25] && conv && rmax == 0.0
+    # only a refusal is absorbed: a bug at the final reprice propagates
+    bug(m) = maximum(abs.(m)) > 0.5 ? [1.0][3] : ([1.0, -1.0], [-1.0, -1.0])
+    @test_throws BoundsError winning._jacobi_sweeps([0.0, 0.0], bug, 1.0, 1.0,
+                                                    1, 1e-8)
 end

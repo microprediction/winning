@@ -776,7 +776,11 @@ function _jacobi_sweeps(mu, forward, scale, alpha, n_iter, tol)
             fwd = try
                 forward(mu)
             catch e
-                (prev === nothing || e isa InterruptException) && rethrow()
+                # only the forward's refusal (error(...), an ErrorException,
+                # as python catches only RuntimeError): a MethodError or
+                # BoundsError is a bug and must propagate, not be reported
+                # as converged = false
+                (prev === nothing || !(e isa ErrorException)) && rethrow()
                 return prev[1], false, prev[4], iters
             end
         end
