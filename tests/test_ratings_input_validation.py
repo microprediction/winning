@@ -53,3 +53,75 @@ def test_808_ordinary_design_and_factor_fits_unchanged():
     fevents = [([0, 1, 2], [2, 0], [1.0, 0.5]) for _ in range(5)]
     B = fit_factor_ratings(fevents, 3, 2, ridge=1.0)
     assert np.all(np.isfinite(B))
+
+
+# --- #809: cardinal and market noise variances ----------------------------
+
+def _market_args():
+    m = np.array([0.2, -0.4, 0.7])
+    v = np.array([0.5, 1.0, 2.0])
+    y = np.array([1.0, -0.5, 0.2])
+    y = y - y.mean()
+    return m, v, (lambda _: y)
+
+
+@pytest.mark.parametrize("kw", [{"beta2": np.nan}, {"beta2": np.inf},
+                                {"beta2": [-1.0, 1.0, 1.0]},
+                                {"meas_var": np.inf}, {"meas_var": -1.0}])
+def test_809_invalid_cardinal_noise_raises(kw):
+    from winning.ratings.history import rate_history, update_margins_full
+    from winning.ratings.teams import update_team_margins_full
+    with pytest.raises(ValueError, match="noise variance"):
+        update_margins_full(np.zeros(3), np.eye(3), scores=[1.0, 0.0, -1.0],
+                            lengths_scale=1.0, **kw)
+    with pytest.raises(ValueError, match="noise variance"):
+        update_team_margins_full(np.zeros(3), np.eye(3), np.eye(3),
+                                 scores=[1.0, 0.0, -1.0], **kw)
+    with pytest.raises(ValueError, match="noise variance"):
+        rate_history([{"t": 0.0, "runners": ["a", "b", "c"],
+                       "scores": [1.0, 0.0, -1.0]}], **kw)
+
+
+@pytest.mark.parametrize("tau2", [-0.1, np.nan, np.inf, [-1.0, 1.0, 1.0]])
+def test_809_invalid_market_tau2_raises(tau2):
+    from winning.ratings.full import update_market_full
+    from winning.ratings.market import update_market
+    from winning.ratings.teams import update_team_market_full
+    m, v, inv = _market_args()
+    with pytest.raises(ValueError, match="tau2"):
+        update_market(m, v, None, tau2=tau2, invert=inv)
+    with pytest.raises(ValueError, match="tau2"):
+        update_market_full(m, np.diag(v), None, tau2=tau2, invert=inv)
+    with pytest.raises(ValueError, match="tau2"):
+        update_team_market_full(m, np.diag(v), np.eye(3), None, tau2=tau2,
+                                invert=inv)
+
+
+def test_809_valid_noise_unchanged_and_zero_legal():
+    from winning.ratings.history import update_margins_full
+    from winning.ratings.market import update_market
+    from winning.ratings.teams import update_team_market_full
+    mp, Sp, lz = update_margins_full(np.zeros(3), np.eye(3),
+                                     scores=[1.0, 0.0, -1.0],
+                                     lengths_scale=1.0)
+    assert np.allclose(mp, [0.5, 0.0, -0.5]) and np.isclose(lz, -3.03102425)
+    # heterogeneous positive tau2 and zero meas_var / beta2 entries pass
+    m, v, inv = _market_args()
+    for tau2 in ([0.1, 0.3, 0.5], 0.25):
+        out = update_market(m, v, None, tau2=tau2, invert=inv)
+        assert np.all(np.isfinite(out[0]))
+        out = update_team_market_full(m, np.diag(v), np.eye(3), None,
+                                      tau2=tau2, invert=inv)
+        assert np.all(np.isfinite(out[0]))
+    update_margins_full(np.zeros(3), np.eye(3), scores=[1.0, 0.0, -1.0],
+                        beta2=[0.0, 1.0, 1.0], meas_var=0.0)
+
+
+def test_809_zero_noise_variance_is_legal():
+    # an exact observation is a limit, not an invalid variance (#778),
+    # so the contract lets zero through; what the market update then
+    # does at tau2 = 0 is #778's business
+    from winning.ratings._checks import as_noise_variances
+    assert np.array_equal(as_noise_variances(0.0, 3, "tau2"), np.zeros(3))
+    assert np.array_equal(as_noise_variances([0.0, 2.0], 2, "beta2"),
+                          [0.0, 2.0])
