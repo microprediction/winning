@@ -848,8 +848,12 @@ function pairMixtureGap(target, proj, w, d0, d1, g0, h) {
     let gn = ratio > 0 ? g - f * sd / ratio : NaN;
     // quadratic convergence: from 1e-8 the step lands at rounding
     if (Math.abs(f) < 1e-8 && lo < gn && gn < hi) return gn;
-    if (!(lo < gn && gn < hi)) {
-      if (Number.isFinite(lo) && Number.isFinite(hi)) gn = 0.5 * (lo + hi);
+    // while one side is open a Newton step is capped at h too: on a
+    // mixture plateau the ratio is ~1e-66 and the uncapped step
+    // (-6.7e64) set a bracket end bisection never came back from (#830)
+    const open = !(Number.isFinite(lo) && Number.isFinite(hi));
+    if (!(lo < gn && gn < hi) || (open && Math.abs(gn - g) > h)) {
+      if (!open) gn = 0.5 * (lo + hi);
       else { gn = f > 0 ? g - h : g + h; h *= 2; }
     }
     if (Math.abs(gn - g) <= 2 * Number.EPSILON * Math.max(Math.abs(g), sd)) return gn;
@@ -913,10 +917,12 @@ function pairClosedForm(st, nodesGiven, returnSlopes) {
 }
 
 export function raceProbabilities(mu, opts = {}) {
-  const { V = null, D = null, F = null, W = null, base = "normal",
+  const { V = null, D = null, F = null, W = null, base: base0 = "normal",
           points = 257, returnSlopes = false, window: win = "bulk",
           delta = 1e-12, structure = null, qa = 9, qf = 15 } = opts;
   checkOpts(opts, FORWARD_OPTS, "raceProbabilities", OPT_HINTS);
+  // the exported callable is the named law: same exact dispatch (#858)
+  const base = base0 === BASES.normal ? "normal" : base0;
   // one of two names: every value but "bulk" -- a typo, null, a number --
   // silently meant span and moved a share by 39 points (#582). undefined
   // is omission, as for every option.
@@ -1078,9 +1084,11 @@ function validatedRaceTarget(pTarget, targetFloor) {
 
 export function abilitiesFromRace(pTarget, opts = {}) {
   const { nIter = 60, tol = 1e-8, structure = null, V = null, D = null,
-          F = null, W = null, base = "normal", points = 257,
+          F = null, W = null, base: base0 = "normal", points = 257,
           targetFloor = null, returnInfo = false, qa = 9, qf = 15 } = opts;
   checkOpts(opts, INVERSE_OPTS, "abilitiesFromRace", OPT_HINTS);
+  // the exported callable is the named law: same exact dispatch (#858)
+  const base = base0 === BASES.normal ? "normal" : base0;
   asIterations(nIter, "abilitiesFromRace");
   asTolerance(tol, "abilitiesFromRace");
   const { target, floored } = validatedRaceTarget(pTarget, targetFloor);
@@ -1090,7 +1098,7 @@ export function abilitiesFromRace(pTarget, opts = {}) {
     // the caller's base, window and delta travel too, so the hierarchical
     // kernels can refuse what they would otherwise ignore (#89)
     const r = dispatchAbilities(target, c.structure,
-      { ...opts, points, qa, qf, tol });
+      { ...opts, base, points, qa, qf, tol });
     return inverseReturn(r.mu, r.converged, r.maxLogResidual, r.iterations,
                          floored, tol, returnInfo);
   }

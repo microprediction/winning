@@ -296,6 +296,13 @@ def _log_survival(fn, z, S):
 _NAMED_BASES = (_normal, _gumbel_min, _logistic, _laplace)
 BASES = {"normal": _normal, "gumbel": _gumbel_min,
          "logistic": _logistic, "laplace": _laplace}
+
+
+def _canonical_base(base):
+    """The exported normal callable is the named law: map it to "normal" so
+    it takes the same exact dispatch (pair closed form, Rust, GHK rescue)
+    as the string. A wrapper or any other callable is left alone (#858)."""
+    return "normal" if base is _normal else base
 _SPANS = {"normal": (8.0, 8.0), "gumbel": (22.0, 8.0),   # (left, right) tails
           "logistic": (16.0, 16.0), "laplace": (18.0, 18.0)}
 _RUST_BASE_IDS = {"gumbel": 1, "logistic": 2, "laplace": 3}
@@ -688,16 +695,16 @@ def _translated_home(mu, D):
     return mu
 
 
-def _setup(mu, V, D, F, W, base):
-    caller_rule = F is not None
+def _as_abilities(mu):
+    """mu as a float array, refused if empty or non-finite. mu was the one
+    argument nobody checked: D goes through as_idio, V through
+    as_loadings, W through as_weights, and the abilities themselves went
+    straight to the lattice. A NaN or inf there came back as NaN
+    probabilities that sum to nothing, silently. R and julia already
+    refused it, which is how the cross-port divergence scan found it. The
+    closed-form Luce helpers share this door (#799)."""
     mu = np.asarray(mu, dtype=float)
     n = len(mu)
-    # mu was the one argument nobody checked: D goes through as_idio, V
-    # through as_loadings, W through as_weights, and the abilities
-    # themselves went straight to the lattice. A NaN or inf there came
-    # back as NaN probabilities that sum to nothing, silently. R and
-    # julia already refused it, which is how the cross-port divergence
-    # scan found it.
     if n == 0:
         raise ValueError("mu is empty; a race needs at least one contestant")
     bad = np.flatnonzero(~np.isfinite(mu))
@@ -706,6 +713,13 @@ def _setup(mu, V, D, F, W, base):
             f"mu[{int(bad[0])}] = {float(mu[bad[0]])!r} is not finite "
             f"({bad.size} of {n} are); an ability is a finite location on "
             "the performance scale")
+    return mu
+
+
+def _setup(mu, V, D, F, W, base):
+    caller_rule = F is not None
+    mu = _as_abilities(mu)
+    n = len(mu)
     D = np.ones(n) if D is None else as_idio(D, n, positive=True)
     mu = _translated_home(mu, D)                     # (#477)
     if (F is None) != (W is None):
@@ -1584,6 +1598,7 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
     than that against a compiled default. Smooth bases ignore it, as
     does a tempered race (the softmin kernel smooths the kink); with
     structure= it raises."""
+    base = _canonical_base(base)                             # (#858)
     # the lattice mode is one of two names: every value but "bulk" used
     # to mean span, so window="bulkk" moved a share by 39 points (#582)
     if not (isinstance(window, str) and window in ("bulk", "span")):
@@ -1860,6 +1875,7 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
     spacings had an own-slope 6x too large and exact self-generated
     targets failed to converge, missing by 0.099 (#267). The residual is
     always the map being inverted, so the answer is that map's."""
+    base = _canonical_base(base)                             # (#858)
     # finite and >= 0; negative and NaN used to select the hard race
     # silently, and +inf failed in grid sizing (#366)
     temperature = as_soft_temperature(temperature)
@@ -2215,8 +2231,12 @@ def _pair_mixture_gap(target, dV, d0, d1, F, W, g0, h):
             # quadratic convergence: from a relative error of 1e-8 the
             # step lands at rounding, and the caller certifies it
             return float(gn)
-        if not (lo < gn < hi):
-            if np.isfinite(lo) and np.isfinite(hi):
+        # While one side is open a Newton step is capped at h too: on a
+        # mixture plateau the ratio is ~1e-66 and the uncapped step
+        # (-6.7e64) set a bracket end bisection never came back from (#830).
+        is_open = not (np.isfinite(lo) and np.isfinite(hi))
+        if not (lo < gn < hi) or (is_open and abs(gn - g) > h):
+            if not is_open:
                 gn = 0.5 * (lo + hi)
             else:
                 gn = g - h if f > 0.0 else g + h
@@ -2401,7 +2421,18 @@ def _jacobi_sweeps(mu, forward, scale, alpha, n_iter, tol):
         # finite initializer (#497). Price the returned iterate -- one
         # forward, only on exhaustion -- and keep the better of the two.
         last = (mu, resid_max) if prev is None else (prev[0], prev[3])
-        fwd = cached if cached is not None else forward(mu)
+        if cached is not None:
+            fwd = cached
+        else:
+            try:
+                fwd = forward(mu)
+            except RuntimeError:
+                # The last step crossed the forward's refusal guard: return
+                # the last priced iterate as not converged, as the in-loop
+                # backoff does. With nothing priced it still raises (#823).
+                if prev is None:
+                    raise
+                return prev[0], False, prev[3], iters
         r_end = np.abs(np.asarray(fwd[0], dtype=float)).max()
         if prev is not None and not r_end < last[1]:
             mu = last[0]
@@ -2843,7 +2874,7 @@ def softmax_probabilities(mu, temperature=1.0, V=None, F=None, W=None):
     reason to simulate. Heterogeneous Gumbel scales have no closed
     form; use race_probabilities(..., base="gumbel") there.
     """
-    mu = np.asarray(mu, dtype=float)
+    mu = _as_abilities(mu)                                   # (#799)
     # finite and positive: NaN passed the old `tau <= 0` test, and +inf
     # collapsed every field to uniform (#366)
     tau = as_luce_temperature(temperature)
@@ -2888,7 +2919,7 @@ def plackett_luce_order_logprob(mu, order, temperature=1.0, V=None, F=None,
     are exactly the non-Gumbel ordering problem, i.e. the still-open
     shared-noise ranked-moments item.
     """
-    mu = np.asarray(mu, dtype=float)
+    mu = _as_abilities(mu)                                   # (#799)
     tau = as_luce_temperature(temperature)                     # #366
     # a complete order of distinct labels: [0, 0] scored p = 0.5 (#129)
     order = as_order(order, len(mu), full=True)
@@ -3001,7 +3032,9 @@ def plackett_luce_topk_probabilities(p, k=3):
 def abilities_from_softmax(p, temperature=1.0):
     """Exact inverse of the independent softmax race: mean-zero mu with
     softmax_probabilities(mu, temperature) = p. Closed form."""
-    p = np.asarray(p, dtype=float)
+    # nonempty and finite first: NaN passed `p <= 0` and came back as NaN
+    # abilities, and [] came back as [] (#799)
+    p = as_target(p, "p")
     if np.any(p <= 0):
         raise ValueError("all target probabilities must be positive")
     # tau = 0 mapped EVERY target to equal abilities, which the forward
@@ -3116,6 +3149,7 @@ def failure_base(q, width=0.35, offset=6.0, base="normal",
     the lump is a separate event on top. Pass standardize=True only if
     you specifically want the mixture itself normalized.
     """
+    base = _canonical_base(base)                             # (#858)
     q = float(q)
     if not 0.0 <= q < 1.0:
         raise ValueError("failure probability q must lie in [0, 1)")

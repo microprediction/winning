@@ -768,7 +768,22 @@ function _jacobi_sweeps(mu, forward, scale, alpha, n_iter, tol)
         # exhausted after a step no sweep priced: price the returned
         # iterate (one forward, only here) and keep the better (#497)
         last = prev === nothing ? (mu, resid_max) : (prev[1], prev[4])
-        fwd = cached !== nothing ? cached : forward(mu)
+        fwd = cached
+        if fwd === nothing
+            # the last step crossed the forward's refusal guard: return the
+            # last priced iterate as not converged; with nothing priced it
+            # still throws (#823)
+            fwd = try
+                forward(mu)
+            catch e
+                # only the forward's refusal (error(...), an ErrorException,
+                # as python catches only RuntimeError): a MethodError or
+                # BoundsError is a bug and must propagate, not be reported
+                # as converged = false
+                (prev === nothing || !(e isa ErrorException)) && rethrow()
+                return prev[1], false, prev[4], iters
+            end
+        end
         r_end = maximum(abs.(fwd[1]))
         if prev !== nothing && !(r_end < last[2])
             mu = last[1]

@@ -624,7 +624,16 @@ attr(.base_laplace, "log_sf") <- function(z) {
     # exhausted after a step no sweep priced: price the returned iterate
     # (one forward, only here) and keep the better of the two, so the
     # warning describes the mu returned (#497, matching python)
-    fw <- if (is.null(cached)) forward(mu) else cached
+    fw <- cached
+    if (is.null(fw)) fw <- tryCatch(forward(mu), error = function(e) e)
+    if (inherits(fw, "error")) {
+      # the last step crossed the forward's refusal guard: return the last
+      # priced iterate as not converged, as the in-loop backoff does; with
+      # nothing priced it still errors (#823)
+      if (is.null(prev)) stop(fw)
+      return(list(mu = prev$mu, converged = FALSE, resid = prev$rmax,
+                  iters = iters))
+    }
     r_end <- max(abs(fw$resid))
     if (!is.null(prev) && !isTRUE(r_end < prev$rmax)) mu <- prev$mu
     else rmax <- r_end

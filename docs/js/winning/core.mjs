@@ -945,7 +945,19 @@ export function jacobiSweeps(mu, forward, scale, alpha, nIter, tol) {
     // exhausted after a step no sweep priced: price the returned iterate
     // (one forward, only here) and keep the better of the two, so the
     // diagnostics describe the mu returned (#497, port of python)
-    const fwd = cached || forward(mu);
+    // A refusal here (the last step crossed the lattice/membership guard)
+    // returns the last priced iterate as not converged, as the in-loop
+    // backoff does; with nothing priced it still throws (#823).
+    let fwd = cached;
+    if (!fwd) {
+      try {
+        fwd = forward(mu);
+      } catch (e) {
+        if (!prev) throw e;
+        return { mu: prev.mu, converged: false,
+                 residMax: prev.residMax, iterations: iters };
+      }
+    }
     const rEnd = maxOf(fwd.resid.map(Math.abs));
     if (prev && !(rEnd < prev.residMax)) mu = prev.mu;
     else residMax = rEnd;
