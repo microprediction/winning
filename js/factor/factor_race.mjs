@@ -954,7 +954,15 @@ export function abilitiesFromProbabilitiesFactor(pTarget, V, D, F, W, opts = {})
     const resid = phat.map((v, i) => Math.log(v) - logp[i]);
     res = residualOf(phat);
     if (!Number.isFinite(res)) break;
-    if (res < tol) break;
+    if (res < tol) {
+      // an exact mu0 stops before any update, and the update is what
+      // centres: it came back with the caller's shift (#849)
+      if (mu0 && it === 0) {
+        const m0 = mu.reduce((a, b) => a + b, 0) / N;
+        for (let i = 0; i < N; i++) mu[i] -= m0;
+      }
+      break;
+    }
     if (res > prevRes * 1.2) damp = Math.max(0.25, damp * 0.5);
     prevRes = res;
     const delta = new Array(N);

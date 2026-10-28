@@ -647,4 +647,21 @@ check("calibrated abilities vs truth", muHat, mu, 5e-6);
         [-1.1145587159721093, 1.1145587159721093], 1e-300);
 }
 
+// #849: an exact N >= 3 mu0 broke out before the first update and came
+// back with the caller's shift; a perturbed one came back mean-zero
+{
+  const V = [[], [], []], D = [1, 1, 1], F = [[]], W = [1];
+  const t = winProbabilitiesFactor([-1, 0, 1], V, D, F, W, { points: 1001 }).p;
+  const o = { points: 1001, tol: 1e-12, nIter: 50, returnInfo: true };
+  for (const mu0 of [[9, 10, 11], [1e12 - 1, 1e12, 1e12 + 1]]) {
+    const r = abilitiesFromProbabilitiesFactor(t, V, D, F, W, { ...o, mu0 });
+    check(`exact shifted mu0 ${mu0[1]} returns the mean-zero exact start (#849)`,
+          [...r.mu, r.converged ? 0 : 1, r.iterations], [-1, 0, 1, 0, 1], 1e-300);
+  }
+  // a mean-zero start is unchanged (pinned from origin/main 3fa326ee)
+  check("centred mu0 unchanged (#849)",
+        abilitiesFromProbabilitiesFactor(t, V, D, F, W, { ...o, mu0: [-1.001, 0, 1.001] }).mu,
+        [-1.0000000000003233, 2.395494788021237e-13, 1.000000000000084], 1e-300);
+}
+
 process.exit(failures ? 1 : 0);
