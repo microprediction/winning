@@ -1,7 +1,7 @@
 // The classic state-price lattice calibration -- port of
 // winning/lattice.py + lattice_calibration.py, dead heats included.
 import { ndtr, npdf, interpClamped, mean, checkOpts, OPT_HINTS, asFiniteVector, rescaledTarget,
-         asIterations, isVector, maxOf, minOf } from "./core.mjs";
+         asIterations, isVector, maxOf, minOf, asCount } from "./core.mjs";
 
 /* Each exported call declares its own option keys; see checkOpts in
    core.mjs for why an options object needs this at all. */
@@ -550,6 +550,9 @@ const positiveFinite = (v, name) => {
 export function skewNormalDensity(L, unit, opts = {}) {
   checkOpts(opts, SKEW_NORMAL_DENSITY_OPTS, "skewNormalDensity", OPT_HINTS);
   const { loc = 0, scale = 1.0, a = 2.0 } = opts;
+  // a whole half-width the classic consumers accept: 2.5, true and "3"
+  // came back as length 6, 3 and 7 vectors (#868)
+  asCount(L, "L", MIN_CLASSIC_L, "skewNormalDensity");
   positiveFinite(unit, "unit");
   positiveFinite(scale, "scale");
   for (const [name, v] of [["loc", loc], ["a", a]])

@@ -36,3 +36,22 @@ test_that("disjoint runners still take the zero-price path (#794)", {
   }
   expect_lt(max(abs(ability_implied_state_prices(c(0, 1), d) - c(0.875, 0.125))), 1e-15)
 })
+
+# --- skew_normal_density's half-width (#868) --------------------------
+#
+# L went straight into seq(-L, L): 2.5 and 2 came back as length 6 and 5
+# vectors that every classic entry point refuses.
+
+test_that("skew_normal_density refuses a half-width the classic lattice cannot use (#868)", {
+  for (L in list(2.5, 2, 0, -3, TRUE, "3", NaN, Inf, NA_real_, c(3, 4), numeric(0)))
+    expect_error(skew_normal_density(L, 0.1), "whole number >= 3", info = deparse(L))
+})
+
+test_that("a whole half-width still builds the same density (#868)", {
+  d3 <- skew_normal_density(3, 0.1, a = 0)
+  expect_length(d3, 7)
+  expect_lt(abs(sum(d3) - 1), 1e-12)
+  expect_identical(skew_normal_density(3L, 0.1, a = 0), d3)
+  expect_length(state_prices_from_offsets(d3, c(0, 1)), 2)
+  expect_length(skew_normal_density(50, 0.1), 101)
+})
