@@ -93,6 +93,17 @@
   raw / t_
 }
 
+# One label per contestant. The kernels sort runners by label, so a short
+# cluster priced only the labelled runners (c(0.5, 0.5, 0, 0) for four
+# exchangeable ones) or died in rowsum with "incorrect length" (#792).
+.check_cluster <- function(cluster, n) {
+  if (length(cluster) != n) {
+    stop(sprintf("cluster must have one label per contestant; got %d for %d",
+                 length(cluster), n), call. = FALSE)
+  }
+  invisible(cluster)
+}
+
 .cluster_index <- function(cluster) {
   lv <- sort(unique(cluster))
   match(cluster, lv)                       # np.unique return_inverse
@@ -279,6 +290,7 @@
 block_race_probabilities <- function(mu, cluster, loading, D,
                                      points = 257, qa = 9) {
   mu <- .home(mu, D)                                         # (#477)
+  .check_cluster(cluster, length(mu))                        # (#792)
   # a scalar D is one variance per contestant, as at every boundary (#510)
   sd <- sqrt(.as_idio(D, length(mu), positive = TRUE))
   p <- .block_max(-mu, sd, cluster, loading, points, qa)
@@ -303,6 +315,7 @@ nested_race_probabilities <- function(mu, cluster, loading, D,
                                     points = points, qa = qa))
   }
   mu <- .home(mu, D)                                         # (#477)
+  .check_cluster(cluster, length(mu))                        # (#792)
   # the shared loading contract: (n, k), (k, n) or a length-n vector.
   # Transposing once and trusting the result let a 2x2 coupling at n = 4
   # recycle g %*% f across the field as a different loading (#469)
@@ -437,6 +450,7 @@ tree_race_probabilities <- function(mu, cluster, loading, D, parent,
   if (length(v) == 1L) v <- rep(v, length(mu))   # scalar = common (#780)
   lam <- as.numeric(strength)
   n <- length(m)
+  .check_cluster(cluster, n)                                 # (#792)
   inv <- .tree_leaf_index(cluster, leaves)            # (#372)
   nC <- max(inv)
   parent <- .validate_tree(parent, lam, nC)        # 0 = root (#517)
@@ -536,6 +550,7 @@ block_race_jacobian <- function(mu, cluster, loading, D,
                 "loadings only; rank-r tie densities are tracked work."))
   }
   mu <- .home(mu, D)                                         # (#477)
+  .check_cluster(cluster, length(mu))                        # (#792)
   m <- -mu
   sd <- sqrt(.as_idio(D, length(mu), positive = TRUE))
   # rank zero: no shared effect (#508)
@@ -613,6 +628,7 @@ nested_race_jacobian <- function(mu, cluster, loading, D, coupling = NULL,
                                points = points, qa = qa))
   }
   mu <- .home(mu, D)                                         # (#477)
+  .check_cluster(cluster, length(mu))                        # (#792)
   # the shared loading contract: (n, k), (k, n) or a length-n vector.
   # Transposing once and trusting the result let a 2x2 coupling at n = 4
   # recycle g %*% f across the field as a different loading (#469)
@@ -726,6 +742,7 @@ tree_race_jacobian <- function(mu, cluster, loading, D, parent, strength,
   if (length(v) == 1L) v <- rep(v, length(mu))   # scalar = common (#780)
   lam <- as.numeric(strength)
   n <- length(m)
+  .check_cluster(cluster, n)                                 # (#792)
   inv <- .tree_leaf_index(cluster, leaves)            # (#372)
   nC <- max(inv)
   parent <- .validate_tree(parent, lam, nC)        # 0 = root (#517)

@@ -661,7 +661,18 @@ export function structureCov(s) {
   const C = Array.from({ length: n }, (_, i) =>
     Array.from({ length: n }, (_, j) => (i === j ? D[i] : 0)));
   const dot = (a, b) => a.reduce((acc, v, k) => acc + v * b[k], 0);
+  // one label per contestant, as the pricing kernels' blockArgs demands:
+  // n comes from D, and a short cluster compared its missing labels as
+  // undefined === undefined -- a phantom block of the trailing runners
+  // (an overlong one was silently cut) (#792)
+  const checkCluster = c => {
+    if (!isVector(c) || c.length !== n)
+      throw new Error(
+        `structureCov: cluster must have one label per contestant; got ` +
+        `${isVector(c) ? c.length : typeof c} for ${n}`);
+  };
   const addBlocks = () => {
+    checkCluster(s.cluster);
     const L = asLoadings(s.loading, n, "loading");
     for (let i = 0; i < n; i++)
       for (let j = 0; j < n; j++)
@@ -690,6 +701,7 @@ export function structureCov(s) {
     // every shared factor silently gone -- and negative or string
     // labels threw `anc[...] is not iterable` (#306). Same remapper as
     // the kernels, imported rather than repeated.
+    checkCluster(s.cluster);                              // (#792)
     const cluster = treeCluster(s);                       // (#372)
     const anc = [];
     const nc = Math.max(...cluster) + 1;

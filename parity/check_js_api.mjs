@@ -3454,5 +3454,30 @@ rejects(C => demo.fitGrammar(C, 1, 0, { method: "ipaf", tol: 0 }),
            blocks.blockRaceProbabilities(mu, cl, rot(V), D, { nodes })) > 1e-6);
 }
 
+// --- structureCov needs one cluster label per contestant (#792)
+{
+  const S = structures, sc = demo.structureCov;
+  const eq = (A, B) => JSON.stringify(A) === JSON.stringify(B);
+  const price = s => () => races.raceProbabilities([0, 0.1, 0.2, 0.3], { structure: s });
+  // #792: one cluster label per contestant, short or overlong
+  for (const [name, cl] of [["short", [0, 1]], ["overlong", [0, 0, 1, 1, 1]]]) {
+    const bad = [S.Blocks(cl, [10, 10, 10, 10], [1, 1, 1, 1]),
+                 S.Nested(cl, [10, 10, 10, 10], [1, 1, 1, 1], [0, 0, 0, 0], 1),
+                 S.Tree(cl, [1, 1, 1, 1], [1, 1, 1, 1], [2, 2, -1], [0, 0, 1])];
+    for (const s of bad) {
+      rejects(sc, [s], `structureCov refuses a ${name} ${s.kind} cluster (#792)`,
+              "one label per contestant");
+      rejects(price(s), [], `and so does the ${s.kind} pricer (#792)`, "one label per contestant");
+    }
+  }
+  holds("structureCov Blocks with one label per contestant unchanged (#792)",
+        eq(sc(S.Blocks([0, 0, 1], [1, 2, 3], [1, 1, 1])), [[2, 2, 0], [2, 5, 0], [0, 0, 10]]));
+  holds("structureCov rank-two Blocks unchanged (#792)",
+        eq(sc(S.Blocks([0, 0, 1], [[1, 1], [2, 0], [3, 1]], [1, 1, 1])),
+           [[3, 2, 0], [2, 5, 0], [0, 0, 11]]));
+  holds("structureCov scalar-loading Blocks unchanged (#792)",
+        eq(sc(S.Blocks([0, 0, 1], 2, [1, 1, 1])), [[5, 4, 0], [4, 5, 0], [0, 0, 5]]));
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");

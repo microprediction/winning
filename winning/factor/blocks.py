@@ -443,6 +443,17 @@ def _one_cluster_gauge(cluster, loading, n):
     return _gauge_center(as_loadings(loading, n))
 
 
+def _check_cluster(cluster, n):
+    """One label per contestant. The kernels sort runners by label, so a
+    short cluster vector priced only the labelled runners and returned
+    [0.5, 0.5, 0, 0] for four exchangeable runners (or a misleading mass
+    error); an overlong one indexed past mu (#792)."""
+    size = np.size(cluster)
+    if size != n:
+        raise ValueError(f"cluster must have one label per contestant; got "
+                         f"{size} for {n}")
+
+
 def block_race_probabilities(mu, cluster, loading, D, points=257, qa=9):
     """P(i wins | min-wins) under one private factor per cluster.
 
@@ -451,6 +462,7 @@ def block_race_probabilities(mu, cluster, loading, D, points=257, qa=9):
     The unnormalized lattice mass is checked before normalization and a
     material defect raises rather than being normalized away."""
     mu = _home(mu, D)
+    _check_cluster(cluster, len(mu))                    # (#792)
     loading = _one_cluster_gauge(cluster, loading, len(mu))
     # one door for D: a scalar is the same variance for everyone (#84)
     raw = _block_max(-mu, np.sqrt(as_idio(D, len(mu), positive=True)),
@@ -466,6 +478,7 @@ def nested_race_probabilities(mu, cluster, loading, D, coupling=None,
         return block_race_probabilities(mu, cluster, loading, D,
                                         points=points, qa=qa)
     mu = np.asarray(mu, float)
+    _check_cluster(cluster, len(mu))                    # (#792)
     g = np.atleast_2d(np.asarray(coupling, float))
     if g.shape[0] != len(mu):
         g = g.T
@@ -514,6 +527,7 @@ def block_race_jacobian(mu, cluster, loading, D, points=257, qa=9):
     """
     mu = _home(mu, D)
     n = len(mu)
+    _check_cluster(cluster, n)           # (#792)
     V = as_loadings(loading, n)          # (n, rank), one ROW per entity
     V = _one_cluster_gauge(cluster, V, n)
     if V.shape[1] == 0:                  # rank zero: no shared effect (#508)
@@ -797,6 +811,7 @@ def tree_race_probabilities(mu, cluster, loading, D, parent, strength,
     sd = np.sqrt(as_idio(D, len(mu), positive=True))
     v = _scalar_loading(loading, "tree races", len(mu))
     cluster = np.asarray(cluster)
+    _check_cluster(cluster, len(mu))                 # (#792)
     parent = _as_parent(parent); lam = np.asarray(strength, float)
     n = len(m); nT = len(parent)
     _, inv = np.unique(cluster, return_inverse=True)
@@ -905,6 +920,7 @@ def tree_race_jacobian(mu, cluster, loading, D, parent, strength,
     sd = np.sqrt(as_idio(D, len(mu), positive=True))
     v = _scalar_loading(loading, "tree races", len(mu))
     cluster = np.asarray(cluster)
+    _check_cluster(cluster, len(mu))                 # (#792)
     parent = _as_parent(parent); lam = np.asarray(strength, float)
     n = len(m); nT = len(parent)
     _, inv = np.unique(cluster, return_inverse=True)

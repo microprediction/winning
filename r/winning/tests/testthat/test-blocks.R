@@ -259,3 +259,27 @@ test_that("rank-two block loadings are canonical per cluster (#787)", {
                     block_race_probabilities(mu, cl, cbind(v, 2 * v), D))),
             1e-14)
 })
+
+test_that("block, nested and tree races need one cluster label per contestant (#792)", {
+  mu <- c(0, 0.1, 0.2, 0.3); o <- rep(1, 4); z <- rep(0, 4)
+  for (cl in list(c(0, 1), c(0, 0, 1, 1, 1))) {
+    msg <- "one label per contestant"
+    expect_error(block_race_probabilities(mu, cl, z, o), msg)
+    expect_error(nested_race_probabilities(mu, cl, z, o, coupling = 0.3 * o), msg)
+    expect_error(nested_race_probabilities(mu, cl, z, o, coupling = z, gamma = 0), msg)
+    expect_error(block_race_jacobian(mu, cl, z, o), msg)
+    expect_error(nested_race_jacobian(mu, cl, z, o, coupling = 0.3 * o), msg)
+    expect_error(tree_race_probabilities(mu, cl, z, o, c(3, 3, 0), c(0, 0, 1)), msg)
+    expect_error(tree_race_jacobian(mu, cl, z, o, c(3, 3, 0), c(0, 0, 1)), msg)
+    expect_error(race_probabilities(mu, structure = Blocks(cl, z, o)), msg)
+    expect_error(race_probabilities(mu, structure =
+      Nested(cl, z, o, coupling = z, gamma = 0)), msg)
+  }
+  # the valid four-label spelling of that exchangeable race, and labels of
+  # any kind, one per contestant, are unchanged
+  expect_equal(block_race_probabilities(rep(0, 4), c(0, 0, 1, 1), z, o),
+               rep(0.25, 4), tolerance = 1e-12)
+  m <- c(-0.3, 0, 0.2, 0.5); L <- c(0.4, 0.2, 0.3, 0.5)
+  expect_identical(block_race_probabilities(m, c(0, 0, 1, 1), L, o),
+                   block_race_probabilities(m, c("x", "x", "y", "y"), L, o))
+})
