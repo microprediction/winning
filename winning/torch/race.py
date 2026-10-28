@@ -295,9 +295,17 @@ def _window_rows(mu, sd, mask, fam, delta):
         mk = torch.gather(m64, -1, kk)
         sk = torch.gather(s64, -1, kk)
         okk = torch.gather(mask, -1, kk)
-        prec = 1.0 / s64 ** 2 + 1.0 / sk ** 2
-        m_pair = (m64 / s64 ** 2 + mk / sk ** 2) / prec
-        pair = m_pair + qn * prec.rsqrt()
+        # the Gaussian product in units of the pair's wider sd, rounded up
+        # to a power of two: sd ** 2 in caller units overflowed or
+        # underflowed near 1e+-154 (NaN, or a 5-point repricing, #865).
+        # A power-of-two unit scales every step exactly, so ordinary
+        # inputs give the same bits as the caller-unit formula.
+        unit = torch.ldexp(torch.ones_like(s64),
+                           torch.frexp(torch.maximum(s64, sk)).exponent)
+        ws, wk = s64 / unit, sk / unit
+        prec = 1.0 / ws ** 2 + 1.0 / wk ** 2
+        m_pair = (m64 / ws ** 2 + mk / wk ** 2) / prec
+        pair = m_pair + qn * (unit * prec.rsqrt())
         own = m64 + s64 * q_hi
         hi_i = torch.where(okk, torch.minimum(own, pair), own)
     else:

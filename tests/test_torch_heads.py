@@ -1134,3 +1134,49 @@ def test_865_ordinary_lattices_never_reach_the_width_guard():
             for base in ("normal", "gumbel"):
                 x = wt.race_lattice(_t(mu), _t(sd), base=base)
                 assert float(x[-1] - x[0]) > 5.0 * sd.max(), (n, spread)
+
+# ------------- #865 (reopened): the pair window past sd**2 over/underflow
+@pytest.mark.parametrize("scale", [1e-154, 1e-160, 1e-170, 1e-300,
+                                   1.4e154, 1e160, 1e300])
+def test_865_pair_window_survives_sd_squared_over_and_underflow(scale):
+    # sd**2 in caller units overflowed or underflowed here: the pair
+    # product gave a 5-point repricing at 1e-154 and NaN at 1e-170 and
+    # 1.4e154. Every row is the same race as at scale 1.
+    mu = _t([0.0, 1.0])
+    s = torch.tensor(scale, dtype=F64)
+    want = [0.5 * math.erfc(-math.sqrt(0.5) / math.sqrt(2.0))]
+    want.append(1.0 - want[0])
+    got = wt.race_log_prob(mu * s, s).exp()
+    assert np.allclose(got.numpy(), want, rtol=0, atol=1e-12), (scale, got)
+    mu3, sd3 = _t([0.0, 0.7, 1.5]), _t([1.0, 0.6, 1.3])
+    for head in (lambda m, d: wt.ordered_prefix_log_prob(m, [1, 0], d),
+                 lambda m, d: wt.topk_log_prob(m, 2, d),
+                 lambda m, d: wt.race_log_prob(m, d, base="gumbel")):
+        ref, got = head(mu3, sd3), head(mu3 * s, sd3 * s)
+        assert torch.all(torch.isfinite(got))
+        assert float((got - ref).abs().max()) < 1e-12, scale
+
+
+def test_865_power_of_two_unit_leaves_ordinary_windows_bitwise():
+    # the pair is normalised by a power of two, which scales every step
+    # exactly: the window is the caller-unit formula's, bit for bit
+    from winning.torch.race import _Normal, _window_rows
+    rng = np.random.default_rng(8651)
+    for n in (2, 3, 8, 20):
+        mu = _t(rng.normal(size=(4, n)) * 2.0)
+        sd = _t(rng.uniform(0.3, 3.0, size=(4, n)))
+        mask = torch.ones(mu.shape, dtype=torch.bool)
+        lo, hi = _window_rows(mu, sd, mask, _Normal, 1e-12)
+        # the old caller-unit right edge
+        key = mu.clone()
+        two = torch.topk(key, 2, dim=-1, largest=False).indices
+        idx = torch.arange(n)[None, :]
+        kk = torch.where(idx == two[:, :1], two[:, 1:2], two[:, :1])
+        mk, sk = torch.gather(mu, -1, kk), torch.gather(sd, -1, kk)
+        prec = 1.0 / sd ** 2 + 1.0 / sk ** 2
+        m_pair = (mu / sd ** 2 + mk / sk ** 2) / prec
+        qn = -torch.special.ndtri(torch.tensor(1e-12, dtype=F64))
+        own = mu + sd * _Normal.upper_quantile(torch.tensor(1e-12, dtype=F64))
+        old = torch.minimum(own, m_pair + qn * prec.rsqrt()).max(-1).values
+        assert torch.equal(hi, torch.maximum(old, lo + sd.max(-1).values))
+
