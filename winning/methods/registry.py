@@ -12,6 +12,7 @@ import functools
 import numpy as np
 
 from ..shapes import as_idio, as_loadings
+from ..factor.races import _as_abilities
 
 METHODS = {}
 
@@ -39,7 +40,13 @@ def register(name):
     def deco(fn):
         @functools.wraps(fn)
         def wrapped(mu, V, D, *args, **kw):
-            n = len(np.asarray(mu, dtype=float))
+            mu = np.asarray(mu, dtype=float)
+            if mu.ndim != 1:
+                raise ValueError("mu must be a one-dimensional ability vector")
+            # Validate before the covariance bypass and every method shortcut.
+            # In particular, argmax can turn NaN into plausible certainty.
+            mu = _as_abilities(mu)
+            n = len(mu)
             # A method handed the covariance DIRECTLY has no loadings to
             # normalise, and forcing it to supply a factorization is what
             # #302 was: the caller factored, the method rebuilt, and the
