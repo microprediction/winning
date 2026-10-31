@@ -1128,6 +1128,22 @@ def _resolution(fn):
 _LARGE_DISPATCH_ENTRIES = 2e7
 
 
+def _base_kinks(fn):
+    """A base's declared kink locations as a tuple of floats, or ().
+
+    The lookups tested bool(getattr(base, "kinks", ())): a one-element
+    numpy array holding the Laplace kink at 0.0 is False, so the split
+    lattice never ran for it, and a longer array raised on its ambiguous
+    truth value (#907). The browser's baseKinks is the same door."""
+    k = getattr(fn, "kinks", None)
+    if k is None:
+        return ()
+    k = np.asarray(k, dtype=float).ravel()
+    if not np.all(np.isfinite(k)):
+        raise ValueError(f"base.kinks must be finite kink locations; got {k!r}")
+    return tuple(float(v) for v in k)
+
+
 def kink_lattice(x, M, sd, kinks):
     """Nodes and weights over the window of the uniform lattice x, split
     at every runner's kink and Gauss-Legendre on each piece. Used only
@@ -1787,7 +1803,7 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
     # (kink_lattice). The compiled kernel integrates on the uniform
     # lattice only, so the opt-in path stays in numpy; the default keeps
     # main's dispatch and arithmetic exactly.
-    kinks = getattr(fn, "kinks", ()) if kink_split else ()
+    kinks = _base_kinks(fn) if kink_split else ()
     if _HAVE_RUST and spec is not None and not kinks \
             and hasattr(_fastrace, "forward_and_slopes_base"):
         bid, prm = (spec, []) if isinstance(spec, int) else spec
@@ -2125,7 +2141,7 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
 
     _fn = BASES.get(base) if isinstance(base, str) else base
     split_slopes = (not temperature and not kink_split
-                    and bool(getattr(_fn, "kinks", ())))
+                    and bool(_base_kinks(_fn)))
 
     def _lattice(m):
         phat, sl = race_probabilities(m, V=V, D=D, F=F, W=W, base=base,
