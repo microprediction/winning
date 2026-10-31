@@ -406,6 +406,18 @@ function _check_choice(choice::AbstractVector, T::Integer, J::Integer)
     return out
 end
 
+"""Refuse NaN and +-Inf by name and index; shared by the exact
+multinomial-probit boundaries (#901)."""
+function _require_finite(A::AbstractArray, name::AbstractString, what::AbstractString)
+    for I in CartesianIndices(A)
+        isfinite(A[I]) || throw(ArgumentError(
+            name * string(Tuple(I)) * " = " * string(A[I]) * " is not finite; " *
+            what * " must be a finite number. A non-finite entry poisons the " *
+            "quadrature and the rank checks instead of meaning a deterministic limit"))
+    end
+    return A
+end
+
 """Idiosyncratic variances as a `Vector{Float64}` of length exactly J.
 An overlong `D` used to be accepted: the integrand reads only `D[1:J]`,
 but the sharpness dispatcher took `minimum` over ALL entries, so an
@@ -883,6 +895,10 @@ function choice_loglik_and_score(mu::AbstractMatrix, V::AbstractMatrix,
     size(V, 1) == J || throw(DimensionMismatch(
         "V must have one loading row per alternative: got " *
         string(size(V, 1)) * " rows for J = " * string(J)))
+    # the GHK engine refused a non-finite mu or V and the exact one
+    # returned NaN with zero loading scores (#901); the same contract
+    _require_finite(mu, "mu", "a utility")
+    _require_finite(V, "V", "a loading")
     Dv = _check_D(D, J)
     nodes === nothing || _check_nodes(nodes, size(V, 2))
     lp, dmu, GV = _choice_logprob_terms(mu, V, choice, Dv;
@@ -1101,6 +1117,9 @@ function MNProbit(X::AbstractArray{<:Real,3}, choice::AbstractVector;
         "the utility scale is fixed only for r <= J - 2 = " *
         string(rmax) * " (#201)"))
     Xf = Float64.(X)
+    # validate the raw design before the intercept columns and the rank
+    # check see it (#901)
+    _require_finite(Xf, "X", "a covariate")
     if intercepts
         Z = zeros(T, J, J - 1)
         for j in 2:J
@@ -1626,6 +1645,7 @@ design is already assembled. Anything else raises."""
 function predict_proba(m::MNProbit; X = nothing, normalize = true)
     Xf = X === nothing ? m.X : begin
         Xr = Float64.(X)
+        _require_finite(Xr, "X", "a covariate")                      # #901
         size(Xr, 2) == m.J || throw(DimensionMismatch(
             "X has " * string(size(Xr, 2)) * " alternatives; the model " *
             "was fitted on " * string(m.J)))

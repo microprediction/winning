@@ -8,8 +8,24 @@
 # Idiosyncratic variances: scalar (broadcast) or exactly n finite
 # entries; negative is never a variance; positive = TRUE (the lattice
 # kernels, which divide by the sd) also refuses an exact zero.
+# A per-coordinate argument is a plain vector: a matrix with the right
+# number of cells passed the length check and as.numeric flattened it
+# column-major, so a visually row-ordered 2 x 2 of bounds was priced as a
+# different four-coordinate rectangle (#903). Python refuses any shape but
+# (n,); the browser accepts one-dimensional arrays only.
+.refuse_matrix <- function(x, what) {
+  d <- dim(x)
+  if (!is.null(d) && length(d) >= 2L)
+    stop(sprintf(paste("%s must be a plain vector, not a %s array:",
+                       "as.numeric would read it column-major as a",
+                       "different vector"), what, paste(d, collapse = " x ")),
+         call. = FALSE)
+  invisible(x)
+}
+
 .as_idio <- function(D, n, positive = TRUE, name = "D") {
   if (is.null(D)) return(rep(1, n))
+  .refuse_matrix(D, name)
   A <- as.numeric(D)
   if (length(A) == 1L) A <- rep(A, n)
   if (length(A) != n)
