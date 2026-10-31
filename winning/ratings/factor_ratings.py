@@ -104,6 +104,8 @@ better, and predictions negate into the min-wins race engine.
 
 from __future__ import annotations
 
+from numbers import Integral, Real
+
 import numpy as np
 from scipy import sparse
 from scipy.optimize import minimize
@@ -129,10 +131,36 @@ _LATTICE_L = 4001
 # design assembly
 # ---------------------------------------------------------------------------
 
+def _index_labels(values, upper, name):
+    """Validate labels before coercion, retaining mixed-list Boolean types.
+
+    Exact integer-valued real numbers remain accepted for compatibility.
+    Strings, Booleans, complex values and fractional numbers are not labels.
+    Bounds are checked as Python integers before conversion to NumPy indices.
+    """
+    raw = np.asarray(values, dtype=object)
+    if raw.ndim != 1:
+        raise ValueError(f"{name} must be a one-dimensional sequence of indices")
+    labels = []
+    for value in raw:
+        if isinstance(value, (bool, np.bool_)):
+            raise ValueError(f"{name} must contain integer indices, not Booleans")
+        if isinstance(value, Integral):
+            label = int(value)
+        elif isinstance(value, Real) and np.isfinite(value) and value == int(value):
+            label = int(value)
+        else:
+            raise ValueError(f"{name} must contain finite integer-valued indices")
+        if label < 0 or label >= upper:
+            raise ValueError(f"{name} index out of range: expected 0..{upper - 1}")
+        labels.append(label)
+    return np.asarray(labels, dtype=int)
+
+
 def _finish_perm(order, K):
     """Row permutation putting the ordered rows first, best first, then
     the unranked rows (a partial order marginalises them exactly)."""
-    order = np.asarray(order, dtype=int).ravel()
+    order = _index_labels(order, K, "order")
     if order.size < 1 or order.size > K:
         raise ValueError("order must list between 1 and K distinct rows")
     if order.min() < 0 or order.max() >= K or len(set(order.tolist())) != order.size:
@@ -206,7 +234,7 @@ def _design_triplets(events, n_feat):
 
 
 def _factor_rows(subset, x, n_entities, n_cov):
-    subset = np.asarray(subset, dtype=int).ravel()
+    subset = _index_labels(subset, n_entities, "subset")
     K = subset.size
     if K == 0:
         raise ValueError("empty subset")
@@ -507,7 +535,9 @@ def fit_design_ratings(events, n_feat, ridge=1.0, weights=None, base="normal",
     scipy.sparse, one row per entrant; order lists row indices best
     first -- the full finishing order, a partial order (the unlisted
     rows are marginalised exactly), or a single row for winner-only
-    feedback. Sparse Z is the intended form at population scale, not
+    feedback. Labels must be a one-dimensional sequence of integer indices;
+    exact integer-valued floats are accepted, but Booleans and strings are not.
+    Sparse Z is the intended form at population scale, not
     merely accepted: every event's rows are assembled into one CSR
     design, so memory goes as contests x non-zeros rather than
     contests x parameters, and a dense design is simply
@@ -616,7 +646,9 @@ def fit_factor_ratings(events, n_entities, n_cov, ridge=1.0, weights=None,
     in 0..n_entities-1; order lists positions into subset, best first
     (full, partial, or winner-only, as in fit_design_ratings); x is the
     contest's covariate vector (n_cov,), or (K, n_cov) when it varies
-    per entrant. Convention: x[0] = 1 is the level, the remaining
+    per entrant. Subset and order must be one-dimensional integer-index
+    sequences (exact integer-valued floats accepted, Booleans/strings rejected).
+    Convention: x[0] = 1 is the level, the remaining
     entries are conditions (flags or measurements) whose coefficients
     are offsets from it.
 
