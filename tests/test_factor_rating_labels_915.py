@@ -61,3 +61,26 @@ def test_valid_labels_preserve_partial_orders_and_outputs(dtype, order):
     np.testing.assert_array_equal(fr.fit_design_ratings([(Z, ranking)], 3, n_iter=2), fr.fit_design_ratings([(Z, order)], 3, n_iter=2))
     np.testing.assert_array_equal(subset, subset_before)
     np.testing.assert_array_equal(ranking, order_before)
+
+
+@pytest.mark.parametrize('call', SUBSET_CALLS + ORDER_CALLS)
+@pytest.mark.parametrize('mask', [[False, True, False], True])
+def test_masked_labels_are_refused_before_array_coercion(call, mask):
+    labels = np.ma.array([0, 1, 2], mask=mask)
+    before = labels.copy()
+    with pytest.raises(ValueError, match="masked"):
+        call(labels)
+    np.testing.assert_array_equal(labels.data, before.data)
+    np.testing.assert_array_equal(labels.mask, before.mask)
+
+
+@pytest.mark.parametrize('call', SUBSET_CALLS + ORDER_CALLS)
+@pytest.mark.parametrize('mask', [np.ma.nomask, [False, False, False]])
+def test_unmasked_masked_arrays_preserve_valid_outputs(call, mask):
+    labels = np.ma.array([0, 1, 2], mask=mask)
+    actual, expected = call(labels), call([0, 1, 2])
+    if hasattr(actual, 'toarray'):
+        actual, expected = actual.toarray(), expected.toarray()
+    np.testing.assert_array_equal(actual, expected)
+    np.testing.assert_array_equal(labels.data, [0, 1, 2])
+    assert not np.ma.getmaskarray(labels).any()

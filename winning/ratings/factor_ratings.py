@@ -138,6 +138,8 @@ def _index_labels(values, upper, name):
     Strings, Booleans, complex values and fractional numbers are not labels.
     Bounds are checked as Python integers before conversion to NumPy indices.
     """
+    if np.ma.isMaskedArray(values) and np.ma.getmaskarray(values).any():
+        raise ValueError(f"{name} must not contain masked indices")
     raw = np.asarray(values, dtype=object)
     if raw.ndim != 1:
         raise ValueError(f"{name} must be a one-dimensional sequence of indices")
