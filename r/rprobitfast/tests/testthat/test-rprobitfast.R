@@ -568,3 +568,19 @@ test_that("an ordinary binary row keeps its closed form (#720)", {
     -0.061993707824538072, -0.013377277258228982, -0.035424975899736047,
     0.013377277258228982, 0.035424975899736047), tolerance = 1e-14)
 })
+
+test_that("a non-finite covariate is refused by name, not misread as unidentified (#901)", {
+  set.seed(901)
+  J <- 3; Tn <- 6
+  alt <- rep(1:J, Tn)
+  df <- data.frame(id = rep(1:Tn, each = J), alt = alt,
+                   chosen = as.integer(sequence(rep(J, Tn)) == rep(c(1, 2, 3, 1, 2, 3), each = J)),
+                   price = rnorm(Tn * J))
+  for (x in c(NA_real_, NaN, Inf, -Inf)) {
+    d <- df; d$price[5] <- x
+    expect_error(rprobit_fast(d, "price", r = 0L, Qf = 3L, Qz = 3L, maxit = 1L),
+                 "covariate price is not finite at row 5")
+  }
+  expect_silent(fit <- rprobit_fast(df, "price", r = 0L, Qf = 3L, Qz = 3L, maxit = 2L))
+  expect_true(is.finite(fit$coefficients["price"]))
+})
