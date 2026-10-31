@@ -2355,7 +2355,9 @@ rejects(structures.cutLinkage, [[[0, 1, 0.1, 2], [0, 3, 0.2, 3]], 3, 1],
 
 // --- classic: the ability forward takes the scratch sentinel (#662);
 // statePricesFromOffsets still refuses it (#438). Reference values are
-// python's ability_implied_state_prices on the same inputs.
+// python's ability_implied_state_prices on the same inputs, regenerated
+// when the inverse began iterating to 1e-9 instead of three sweeps (#904):
+// the round trip was [0.6666650774147869, 0.33333492258521313, 0] before.
 {
   const maxAbs = (a, b) => Math.max(...a.map((x, i) => Math.abs(x - b[i])));
   const d = classic.skewNormalDensity(15, 0.2, { a: 0 });
@@ -2363,7 +2365,7 @@ rejects(structures.cutLinkage, [[[0, 1, 0.1, 2], [0, 3, 0.2, 3]], 3, 1],
     const a = classic.dividendImpliedAbility([2, 4, scratch], d);
     accepts(`dividends [2, 4, ${scratch}] round-trip through abilityImpliedStatePrices (#662)`,
             () => classic.abilityImpliedStatePrices(a, d),
-            p => p[2] === 0 && maxAbs(p, [0.6666650774147869, 0.33333492258521313, 0]) < 1e-12,
+            p => p[2] === 0 && maxAbs(p, [0.6666666665428762, 0.3333333334571237, 0]) < 1e-12,
             p => String(p));
   }
   accepts("one live runner and a scratch price exactly [1, 0] (#662)",
