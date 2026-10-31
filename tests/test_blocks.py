@@ -685,11 +685,16 @@ def test_nested_gamma_sign_structured_871():
 
 
 def test_nested_positive_gamma_is_unchanged_871():
-    """Ordinary inputs near #871: gamma > 0 keeps main's values (e2525dda)."""
+    """Ordinary inputs near #871: gamma > 0 pins the default. The values
+    moved once, when the rank-3+ coupling became canonical (#911): the
+    six-runner rank-12 coupling centres to rank five, and the cloud is
+    laid in that basis. Before #911 they were [0.2490212363933028,
+    0.15427418618453928, 0.29221022531631824, 0.07794352382629406,
+    0.16267235313672598, 0.06387847514281957] (e2525dda)."""
     from winning.factor.blocks import nested_race_probabilities
     mu, cl, ld, D, G = _sign_fixture_871(12)
     p = nested_race_probabilities(mu, cl, ld, D, coupling=G, gamma=1.0,
                                   qf=2, points=65)
-    assert np.abs(p - [0.2490212363933028, 0.15427418618453928,
-                       0.29221022531631824, 0.07794352382629406,
-                       0.16267235313672598, 0.06387847514281957]).max() < 1e-14
+    assert np.abs(p - [0.22002851716672195, 0.12831689287613743,
+                       0.32802314723151815, 0.11267039682221439,
+                       0.1602533122312017, 0.05070773367220642]).max() < 1e-14

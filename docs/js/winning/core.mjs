@@ -218,6 +218,38 @@ export function asTolerance(tol, where, name = "tol") {
    python. */
 export const isVector = x => Array.isArray(x) || (ArrayBuffer.isView(x) && !(x instanceof DataView));
 
+/* Callable-base metadata vectors, through the same door as every other
+   numeric input: a plain Array OR a typed array of finite numbers.
+   Array.isArray alone read a Float64Array([25, 8]) span as "no span" and
+   fell back to [12, 12], truncating a rare mode's integrand so a 0.005
+   win price came back 5e-324; a Float64Array([0]) kink list was read as
+   a smooth base and the #267 split-lattice repair never ran (#907).
+   Absent metadata is null; present-but-malformed metadata throws here,
+   before any grid is built, rather than becoming a silent fallback. */
+export function baseSpan(fn, where = "base.span") {
+  const s = typeof fn === "function" ? fn.span : undefined;
+  if (s === undefined || s === null) return null;
+  if (!isVector(s) || s.length !== 2)
+    throw new Error(`${where} must be [left, right], two positive finite numbers of standard ` +
+      `units; got ${isVector(s) ? `length ${s.length}` : typeof s}`);
+  const out = [Number(s[0]), Number(s[1])];
+  for (const v of out)
+    if (!Number.isFinite(v) || !(v > 0))
+      throw new Error(`${where} must be [left, right], two positive finite numbers; got ${v}`);
+  return out;
+}
+export function baseKinks(fn, where = "base.kinks") {
+  const k = typeof fn === "function" ? fn.kinks : undefined;
+  if (k === undefined || k === null) return null;
+  if (!isVector(k))
+    throw new Error(`${where} must be an array of finite kink locations in standard units; got ${typeof k}`);
+  const out = Array.from(k, Number);
+  for (let i = 0; i < out.length; i++)
+    if (!Number.isFinite(out[i]))
+      throw new Error(`${where}[${i}] must be a finite kink location; got ${k[i]}`);
+  return out.length ? out : null;
+}
+
 const AS_FINITE_VECTOR_OPTS = new Set(["allowEmpty"]);
 export function asFiniteVector(x, where, what = "entry", opts = {}) {
   checkOpts(opts, AS_FINITE_VECTOR_OPTS, "asFiniteVector");

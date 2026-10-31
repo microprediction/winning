@@ -1,6 +1,6 @@
 // The general race: min-wins, normal/gumbel bases, winner-bulk lattice,
 // adaptive factor quadrature. Port of winning/factor/races.py.
-import { TINY, ndtr, logndtr, npdf, hermiteNodes, mean, checkOpts, OPT_HINTS, asLoadings, asIdio, gaugeCenter, firstPrimes, asFactorNodes, asWeights, asFactorLaw, asAbilities, asFiniteVector, asIterations, asTolerance, asCount, aitkenTrial, applyFloor, canonicalBasis, asPoints, kinkLattice } from "./core.mjs";
+import { TINY, ndtr, logndtr, npdf, hermiteNodes, mean, checkOpts, OPT_HINTS, asLoadings, asIdio, gaugeCenter, firstPrimes, asFactorNodes, asWeights, asFactorLaw, asAbilities, asFiniteVector, asIterations, asTolerance, asCount, aitkenTrial, applyFloor, canonicalBasis, asPoints, kinkLattice, baseSpan, baseKinks } from "./core.mjs";
 
 const EULER = 0.5772156649015329;
 
@@ -424,9 +424,9 @@ function setup(mu, V, D, F, W, base) {
   baseResolution(fn);          // malformed metadata fails here, not mid-grid
   checkTails(fn);
   // a callable base may declare its own span, as python's
-  // getattr(base, "span", (12, 12)) (#106)
+  // getattr(base, "span", (12, 12)) (#106); plain or typed (#907)
   const span = typeof base === "function"
-    ? (Array.isArray(base.span) ? base.span : [12, 12])
+    ? (baseSpan(base) || [12, 12])
     : (SPANS[base] || [12, 12]);
   return { mu, V, D, F, W, fn, left: span[0], right: span[1] };
 }
@@ -505,7 +505,8 @@ function bulkWindow(Mall, sd, points, delta, fn = null) {
     return x0;
   };
   let pad = 2 * smax;
-  if (fn && Array.isArray(fn.span)) pad = Math.max(pad, 0.25 * Math.max(...fn.span) * smax);
+  const declared = baseSpan(fn);                                  // plain or typed (#907)
+  if (declared) pad = Math.max(pad, 0.25 * Math.max(...declared) * smax);
   const windowAt = d => {
     const step0 = Math.max(9 * smax, 1e-12);
     const lo0 = bracket(minOf(muLo) - 9 * smax, step0, x => G(x, muLo) <= d, -1);
@@ -827,10 +828,17 @@ function pairMixtureGap(target, proj, w, d0, d1, g0, h) {
   let g = g0, lo = -Infinity, hi = Infinity;
   for (let it = 0; it < 200; it++) {
     const u = proj.map(s => sign * (g - s) / sd);
-    let p = 0;
-    for (let q = 0; q < u.length; q++) p += w[q] * ndtr(u[q]);
-    let logp, ratio;
-    if (p > 1e-250) {
+    let a = 0;
+    for (let q = 0; q < u.length; q++) a += w[q] * ndtr(u[q]);
+    let logp, ratio, p = a;
+    if (a > 1e-250) {
+      // the NORMALIZED share, both tails accumulated in pairMixture's
+      // order, so the objective is bitwise the map certified against: the
+      // raw sum differed in the last bit and on a sharp plateau one ulp
+      // was a root chased to a gap of 2e48 (#902)
+      let b = 0;
+      for (let q = 0; q < u.length; q++) b += w[q] * ndtr(-u[q]);
+      p = a / (a + b);
       logp = Math.log(p);
       let d = 0;
       for (let q = 0; q < u.length; q++) d += w[q] * Math.exp(-0.5 * u[q] * u[q]);
@@ -1203,7 +1211,7 @@ function solveRace(target, floored, { V, D, F, W, base, points, nIter, tol,
   let iters = 0;
   let cached = null;  // forward of an accepted Aitken trial (#583)
   const fnBase = typeof base === "function" ? base : BASES[base];
-  const kinked = !!(fnBase && Array.isArray(fnBase.kinks) && fnBase.kinks.length);
+  const kinked = !!baseKinks(fnBase);                             // plain or typed (#907)
   const sweepForward = m => {
     let { p: praw, slopes: sl } = raceProbabilities(m, { V, D, F, W, base, points, returnSlopes: true });
     // a kinked base: the slope from the split lattice, the value from the
