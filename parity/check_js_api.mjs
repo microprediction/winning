@@ -2473,6 +2473,39 @@ accepts("raceProbabilities takes delta=1e-3 (#445)",
            [0.3010448211736288, 0.21615827747634736, 0.15439283696956393, 0.3284040643804598]) < 1e-14);
 }
 
+// --- custom block nodes describe Y = mu + loading.f + eps (#909).
+// Expand independent cluster rules into their Cartesian-product factor law;
+// this oracle exercises the ordinary factor grammar, not block internals.
+{
+  const md = (a, b) => Math.max(...a.map((x, i) => Math.abs(x - b[i])));
+  const mu = [0, 0, 0], cl = [0, 1, 2], L = [2, 0, -2], D = [1, 1, 1];
+  for (const f of [1, -1]) {
+    const rule = { nodes: [[f]], w: [1] };
+    const before = JSON.stringify(rule);
+    holds(`deterministic block node ${f} adds loading.f to mu (#909)`,
+          md(blocks.blockRaceProbabilities(mu, cl, L, D, { nodes: rule }),
+             races.raceProbabilities(mu.map((x, i) => x + L[i] * f), { D })) < 1e-13);
+    holds("custom node input is not mutated (#909)", JSON.stringify(rule) === before);
+  }
+  const m = [.2, -.1, .4, 0], c = [0, 0, 1, 1], d = [1, .8, 1.2, .9];
+  for (const loading of [[[.7], [-.2], [.4], [.9]],
+                         [[.7, -.1], [-.2, .3], [.4, .6], [.9, -.4]]]) {
+    const r = loading[0].length;
+    for (const sign of [1, -1]) {
+      const F0 = [[-1.3, .4], [.2, -.8], [1.8, .7]].map(row => row.slice(0, r).map(v => sign * v));
+      const w = [.2, .3, .5], F = [], W = [];
+      for (let a = 0; a < F0.length; a++) for (let b = 0; b < F0.length; b++) {
+        F.push([...F0[a], ...F0[b]]); W.push(w[a] * w[b]);
+      }
+      const V = loading.map((row, i) => c[i] === 0 ? [...row, ...new Array(r).fill(0)]
+                                                               : [...new Array(r).fill(0), ...row]);
+      holds(`asymmetric rank-${r} block rule sign ${sign} matches product factor law (#909)`,
+            md(blocks.blockRaceProbabilities(m, c, loading, d, { nodes: { nodes: F0, w } }),
+               races.raceProbabilities(m, { V, D: d, F, W })) < 1e-12);
+    }
+  }
+}
+
 // --- Nested gamma and -gamma are the same Gaussian law, at every coupling
 // rank: the rank-3+ Halton rule is not symmetric under f -> -f (#871)
 {
