@@ -692,6 +692,22 @@
 # (observation, alternative) order; a column is aliased when its
 # contrast residual on the earlier kept columns is below tol of its own
 # contrast norm (Gram scale).
+# Refuse NA, NaN and +-Inf in the design by column and row before the
+# rank check and the optimiser see them (#901).
+.check_finite_design <- function(X, names) {
+  bad <- which(!is.finite(X), arr.ind = TRUE)
+  if (nrow(bad)) {
+    nm <- if (length(names) >= bad[1, 2]) names[bad[1, 2]] else bad[1, 2]
+    stop(sprintf(paste0("covariate %s is not finite at row %d (%s); %d of %d ",
+                        "design entries are not. A non-finite entry poisons ",
+                        "the contrast rank check instead of meaning a ",
+                        "deterministic limit"),
+                 as.character(nm), bad[1, 1], as.character(X[bad[1, 1], bad[1, 2]]),
+                 nrow(bad), length(X)), call. = FALSE)
+  }
+  invisible(X)
+}
+
 .check_identified <- function(X, Tn, J, tol = 1e-10) {
   p <- ncol(X)
   if (p == 0L || J < 2L) return(invisible(NULL))
@@ -860,6 +876,9 @@ mlogit_fast <- function(formula, data, r = NULL, Qf = 7L, Qz = NULL,
   r <- .check_rank(r, J)
   cm <- .covariate_matrix(formula, data)
   Xcov <- cm$X[ord, , drop = FALSE]
+  # a non-finite covariate poisoned the contrast Gram matrix and
+  # .check_identified reported a finite flat ridge for it (#901)
+  .check_finite_design(Xcov, colnames(Xcov))
   off <- if (is.null(cm$offset)) NULL else cm$offset[ord]
   if (attr(terms(formula), "intercept") == 1L) {
     Xint <- matrix(0, nrow(Xcov), J - 1L)

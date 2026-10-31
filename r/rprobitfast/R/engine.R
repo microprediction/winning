@@ -692,6 +692,22 @@
 # (observation, alternative) order; a column is aliased when its
 # contrast residual on the earlier kept columns is below tol of its own
 # contrast norm (Gram scale).
+# Refuse NA, NaN and +-Inf in the design by column and row before the
+# rank check and the optimiser see them (#901).
+.check_finite_design <- function(X, names) {
+  bad <- which(!is.finite(X), arr.ind = TRUE)
+  if (nrow(bad)) {
+    nm <- if (length(names) >= bad[1, 2]) names[bad[1, 2]] else bad[1, 2]
+    stop(sprintf(paste0("covariate %s is not finite at row %d (%s); %d of %d ",
+                        "design entries are not. A non-finite entry poisons ",
+                        "the contrast rank check instead of meaning a ",
+                        "deterministic limit"),
+                 as.character(nm), bad[1, 1], as.character(X[bad[1, 1], bad[1, 2]]),
+                 nrow(bad), length(X)), call. = FALSE)
+  }
+  invisible(X)
+}
+
 .check_identified <- function(X, Tn, J, tol = 1e-10) {
   p <- ncol(X)
   if (p == 0L || J < 2L) return(invisible(NULL))
