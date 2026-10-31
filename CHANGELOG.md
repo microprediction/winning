@@ -2,6 +2,45 @@
 
 ## Unreleased
 
+## 1.7.0 (2026-10-31)
+
+Everything since 1.2.0: the v1.3.0 to v1.6.0 tags were cut without a
+changelog heading, so their entries are listed here.
+
+- `winning.classic`: the longshot adjustment acts on normalized
+  probabilities; it was treating them as decimal odds and adding one,
+  so two price lists for the same book priced differently (#918).
+- `winning.classic`: the Gaussian copula's `rho` is a correlation in
+  [0, 1), so the conditional CDF is `sqrt(rho) z` on `sqrt(1 - rho)`;
+  it was being used as a loading. Non-finite or out-of-range values are
+  refused (#910).
+- `winning.classic`: `solve_for_implied_offsets` iterates to
+  `CALIBRATION_TOL = 1e-9` (budget `CALIBRATION_MAX_ITER = 100`) and
+  returns the best iterate when it stalls, instead of three fixed
+  sweeps that left an atomic law 1.27 points off its target; the browser
+  and R ports do the same and the parity vectors and R goldens were
+  regenerated (#904).
+- Nested coupling of rank three and above is priced in a canonical
+  factor basis, so a column sign flip, a rotation or a common shock of
+  the coupling is the same race in Python as it already was in the
+  browser (#911).
+- The pandas adapters write results back by row position, so a frame
+  with a duplicated index no longer gets rows cross-assigned (#908).
+- The fast MVN CDF of a zero-dimensional problem is the empty product,
+  one, in `winning.fastmvn` and the vendored `fastmvn` (#905).
+- Ratings labels (`order`, `subset`) are validated before the integer
+  cast: bools, strings, NaN, inf and fractional floats are refused
+  rather than silently truncated (#915).
+- The multinomial probit refuses non-finite designs and means in Python,
+  Julia and R rather than reporting a flat ridge for them (#901).
+- `GMRFExtremes.argmax_marginals` validates `resolution_tol` (#906).
+- The R and Julia ports refuse a matrix where a per-coordinate vector is
+  expected instead of flattening it (#903).
+- The browser's span and kink metadata accept typed arrays, and Python
+  reads kink metadata off numpy arrays (#907).
+- The pair-mixture inverse solves the normalized two-runner map; its
+  direct branch was minimising an unnormalized gap (#902).
+
 - `winning.certified`: win probabilities of the independent race as
   Arb balls that provably contain the answer, for the normal, Gumbel,
   logistic and Laplace bases. `certified_race_probabilities` integrates
