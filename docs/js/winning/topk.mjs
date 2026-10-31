@@ -7,7 +7,7 @@
 import { TINY, hermite1, solve, checkOpts, OPT_HINTS, asLoadings, asIdio,
          asAbilities, asFiniteVector, asIterations, asTolerance,
          jacobiSweeps, rescaledTarget, applyFloor, gaugeCenter, asPoints,
-         kinkLattice } from "./core.mjs";
+         kinkLattice, baseKinks } from "./core.mjs";
 import { BASES, _factorNodeRule, baseResolution, checkTails,
          lowerCdf, translatedHome, invNormalRational } from "./races.mjs";
 
@@ -367,7 +367,7 @@ export function dyadicPoints(need) {
    the node weights and dx is 1, so every `sum * wt` then `* dx` below is
    the weighted sum; on the default lattice wt is 1 and nothing moves. */
 function kinksOf(fn) {
-  return fn && Array.isArray(fn.kinks) && fn.kinks.length ? fn.kinks : null;
+  return baseKinks(fn);              // a plain or typed finite vector, or null (#907)
 }
 
 function topkGrid(mu, sd, k, fn, points, delta = 1e-12, split = false) {
@@ -377,8 +377,9 @@ function topkGrid(mu, sd, k, fn, points, delta = 1e-12, split = false) {
   let dx = (hi - lo) / (points - 1);
   for (let t = 0; t < points; t++) x[t] = lo + t * dx;
   let w = null;
-  if (split && kinksOf(fn)) {
-    const kl = kinkLattice(x, mu, sd, fn.kinks);
+  const kinks = split ? kinksOf(fn) : null;
+  if (kinks) {
+    const kl = kinkLattice(x, mu, sd, kinks);
     x = kl.xs; w = kl.ws; dx = 1;
   }
   const g = baseGrid(fn, x, mu, sd);

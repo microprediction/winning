@@ -487,7 +487,7 @@ def _rescale_extreme_rows(V, D, mu, lo, up):
     m = np.sqrt(D)
     if V.shape[1]:
         m = np.maximum(m, np.abs(V).max(axis=1))
-    if m.max() < 2.0 ** 400 and m.min() > 2.0 ** -400:
+    if m.size == 0 or (m.max() < 2.0 ** 400 and m.min() > 2.0 ** -400):
         return V, D, mu, lo, up
     e = np.frexp(m)[1]
     big = (m > 0) & (np.abs(e) > 400)
@@ -499,6 +499,12 @@ def _rescale_extreme_rows(V, D, mu, lo, up):
 
 
 def _structured(lo, up, mu, V, D):
+    if len(D) == 0:
+        # the zero-dimensional rectangle holds its one empty tuple: the
+        # empty product, 1, as the R and Julia ports return. The rescaler
+        # took max() of an empty row scale and raised (#905). This is the
+        # field dimension n = 0, not #68's rank-zero loading at n > 0.
+        return 1.0, "factor"
     V, D, mu, lo, up = _rescale_extreme_rows(V, D, mu, lo, up)
     var = (V ** 2).sum(axis=1) + D
     keep, done = _drop_constants(var, mu, lo, up)

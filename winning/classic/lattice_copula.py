@@ -7,19 +7,35 @@ from winning.classic.scipyinclusion import using_scipy
 if using_scipy:
     from scipy.integrate import quad_vec
 
-    def safe_cond_cdf(c,rho,z):
+    def check_rho(rho: float) -> float:
+        """ rho is the pairwise (equi)correlation of the contestants' Gaussian scores.
+
+            The copula is the one-factor construction X_i = sqrt(rho) Z + sqrt(1-rho) eps_i,
+            so Corr(X_i, X_j) = rho. It cannot represent a negative equicorrelation
+            and rho = 1 is the degenerate common score, so 0 <= rho < 1 is required.
+            rho itself used to be the loading, which made the realised correlation
+            rho**2 and left rho and -rho indistinguishable (#910).
+        """
+        rho = float(rho)
+        if not (math.isfinite(rho) and 0.0 <= rho < 1.0):
+            raise ValueError(f"rho is the contestants' equicorrelation and must satisfy 0 <= rho < 1, got {rho!r}")
+        return rho
+
+    def safe_cond_cdf(c, rho, z):
         if c<1e-6:
             return c
         elif c>1-1e-6:
             return c
         else:
-            return normcdf(   ( invnormcdf( c ) - rho*z )/math.sqrt(1-rho*rho))
+            return normcdf(   ( invnormcdf( c ) - math.sqrt(rho)*z )/math.sqrt(1-rho))
 
     def gaussian_copula_conditional_cdf( cdf, rho:float, z:float ):
         """
-            Condition a densities' cdf on common factor
+            Condition a densities' cdf on the common factor z
+            :param rho  equicorrelation of the contestants, 0 <= rho < 1 (see check_rho)
         """
-        if abs(rho)<1e-6:
+        rho = check_rho(rho)
+        if rho<1e-12:
             return [ c for c in cdf ]
         else:
             return [ safe_cond_cdf(c=c,rho=rho,z=z) for c in cdf ]
@@ -28,9 +44,11 @@ if using_scipy:
     def gaussian_copula_functional(densities, rho, f):
         """
         :param densities:  [ [float] ]   performance densities
+        :param rho:        equicorrelation of the contestants' performances, 0 <= rho < 1
         :param f:          Some linear functional acting on a density collection
         :return:
         """
+        rho = check_rho(rho)
         cdfs = [ pdf_to_cdf( pdf ) for pdf in densities ]
 
         def conditional_functional(p):
@@ -44,7 +62,7 @@ if using_scipy:
     def gaussian_copula_win(densities, rho:float):
         """
             Rank 1 probabilities
-            :param rho is gaussian correlation
+            :param rho  pairwise Gaussian correlation of the performances, 0 <= rho < 1
         """
 
         def conditional_win(ds):
@@ -56,7 +74,7 @@ if using_scipy:
     def gaussian_copula_five(densities, rho:float):
         """
         :param densities:
-        :param rho: gaussian correlation
+        :param rho: pairwise Gaussian correlation of the performances, 0 <= rho < 1
         :returns:  [ [first probs] ... [fifth probs] ]
         """
         assert len(densities)==5

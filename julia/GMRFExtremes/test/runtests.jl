@@ -450,7 +450,18 @@ end
         c = GaussMarkovChain([0.0, d], 1.0, [1.0], [s])
         @test_throws ErrorException argmax_marginals(c)
         @test_throws ErrorException argmax_marginals(c; points = 1600)
+        # an invalid tolerance is refused, not taken as "no refusal":
+        # Inf passed every err and `true` was the tolerance 1.0, both
+        # returning [0.5, 0.5] for a pair whose order is certain (#906)
+        for bad in (Inf, NaN, -1e-3, true, false)
+            @test_throws ArgumentError argmax_marginals(c; resolution_tol = bad)
+        end
     end
+    # a legal override still works: zero refuses the drifted pair, and a
+    # tolerance above the measured misassignment lets the pass run
+    c0 = GaussMarkovChain([0.0, 0.05], 1.0, [1.0], [0.05])
+    @test_throws ErrorException argmax_marginals(c0; resolution_tol = 0.0)
+    @test sum(argmax_marginals(c0; resolution_tol = 1.0, points = 1600)) ≈ 1 atol = 1e-6
     # refused at the default lattice, answered (correctly) once raised
     c = GaussMarkovChain([0.0, 0.05], 1.0, [1.0], [0.05])
     @test_throws ErrorException argmax_marginals(c)
