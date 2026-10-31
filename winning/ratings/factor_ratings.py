@@ -111,7 +111,7 @@ from scipy.special import log_ndtr
 
 from .nway import _base_rows, _order_pass_batch
 from .tuning import select
-from ._checks import require_distinct
+from ._checks import require_distinct, as_labels
 
 _LOG_SQRT_2PI = 0.5 * np.log(2.0 * np.pi)
 _WORK_BUDGET = 4_000_000        # floats per (K, chunk, L) lattice work array
@@ -132,7 +132,7 @@ _LATTICE_L = 4001
 def _finish_perm(order, K):
     """Row permutation putting the ordered rows first, best first, then
     the unranked rows (a partial order marginalises them exactly)."""
-    order = np.asarray(order, dtype=int).ravel()
+    order = as_labels(order, "order")                            # #915
     if order.size < 1 or order.size > K:
         raise ValueError("order must list between 1 and K distinct rows")
     if order.min() < 0 or order.max() >= K or len(set(order.tolist())) != order.size:
@@ -206,7 +206,7 @@ def _design_triplets(events, n_feat):
 
 
 def _factor_rows(subset, x, n_entities, n_cov):
-    subset = np.asarray(subset, dtype=int).ravel()
+    subset = as_labels(subset, "subset")                        # #915
     K = subset.size
     if K == 0:
         raise ValueError("empty subset")
