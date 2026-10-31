@@ -46,7 +46,8 @@ def test_duplicate_labels_calibrate_row_by_row_and_keep_the_index(index):
     q2 = add_ability_implied_state_price_to_dataframe(issue, "ability", "race", DENSITY, "q", STD_UNIT)
     np.testing.assert_allclose(q2["q"].to_numpy(), [0.760158, 0.239842, 0.983015, 0.016985], atol=1e-6)
     mu2 = add_centered_ability_to_dataframe(issue, "p", "race", DENSITY, STD_UNIT, "mu")
-    np.testing.assert_allclose(mu2["mu"].to_numpy(), [0.179342, -0.179342, 0.596095, -0.596095], atol=1e-6)
+    # the inverse runs to CALIBRATION_TOL since #904; three sweeps gave 0.596095
+    np.testing.assert_allclose(mu2["mu"].to_numpy(), [0.179342, -0.179342, 0.596096, -0.596096], atol=1e-6)
 
 
 def test_the_answers_move_with_the_rows_not_the_labels():
