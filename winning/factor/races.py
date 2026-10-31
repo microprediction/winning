@@ -2207,9 +2207,18 @@ def _pair_mixture_gap(target, dV, d0, d1, F, W, g0, h):
     g, lo, hi = float(g0), -np.inf, np.inf
     for _ in range(200):
         u = sign * (g - s) / sd
-        p = float(Wn @ ndtr(u))
-        if p > 1e-250:
-            # the direct sums, half the cost of the log domain
+        a = float(Wn @ ndtr(u))
+        if a > 1e-250:
+            # The direct sums, half the cost of the log domain. The share
+            # is the NORMALIZED one, a / (a + b) with both tails summed as
+            # _pair_mixture sums them, so this objective is bitwise the map
+            # the caller certifies against: the raw sum a differs from it
+            # in the last bit, and on a sharp mixture plateau, where the
+            # derivative is ~0, one ulp was a root the solver chased to a
+            # gap of 2e48, failed certification, and the generic sweeps
+            # returned a share of 0.067 for a target of 0.246 (#902).
+            b = float(Wn @ ndtr(-u))
+            p = a / (a + b)
             logp = float(np.log(p))
             ratio = float(Wn @ np.exp(-0.5 * u * u)) / np.sqrt(2.0 * np.pi) / p
         else:

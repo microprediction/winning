@@ -827,10 +827,17 @@ function pairMixtureGap(target, proj, w, d0, d1, g0, h) {
   let g = g0, lo = -Infinity, hi = Infinity;
   for (let it = 0; it < 200; it++) {
     const u = proj.map(s => sign * (g - s) / sd);
-    let p = 0;
-    for (let q = 0; q < u.length; q++) p += w[q] * ndtr(u[q]);
-    let logp, ratio;
-    if (p > 1e-250) {
+    let a = 0;
+    for (let q = 0; q < u.length; q++) a += w[q] * ndtr(u[q]);
+    let logp, ratio, p = a;
+    if (a > 1e-250) {
+      // the NORMALIZED share, both tails accumulated in pairMixture's
+      // order, so the objective is bitwise the map certified against: the
+      // raw sum differed in the last bit and on a sharp plateau one ulp
+      // was a root chased to a gap of 2e48 (#902)
+      let b = 0;
+      for (let q = 0; q < u.length; q++) b += w[q] * ndtr(-u[q]);
+      p = a / (a + b);
       logp = Math.log(p);
       let d = 0;
       for (let q = 0; q < u.length; q++) d += w[q] * Math.exp(-0.5 * u[q] * u[q]);
