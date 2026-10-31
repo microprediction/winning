@@ -90,6 +90,15 @@ def skew_normal_place_pricing(dividends, n_samples=N_SAMPLES, longshot_expon:flo
 def longshot_adjusted_dividends(dividends,longshot_expon=1.17):
     """ Use power law to approximately unwind longshot effect
         Obviously this is market dependent
+
+        :param  dividends       [ float ] decimal prices, as everywhere in winning.classic
+        :param  longshot_expon  the power applied to each live decimal dividend before
+                                renormalisation, so exponent one returns the normalised book.
+
+        The power was applied to o + 1, a conversion from bookmaker (net) odds to
+        decimal dividends that the callers had already made. Exponent one then added
+        one to every decimal dividend, which moved a 2.0 favourite to 3.0 while barely
+        touching a 100.0 longshot, and made the answer depend on the overround (#918).
     """
     # A scratched entrant -- a +inf, zero or negative dividend, which
     # prices_from_dividends maps to an exact zero -- stays scratched (+inf).
@@ -100,7 +109,7 @@ def longshot_adjusted_dividends(dividends,longshot_expon=1.17):
         return o is not None and not (isinstance(o, float) and math.isnan(o)) and (o <= 0 or o == math.inf)
 
     mask = [scratched(o) for o in dividends]
-    adjusted = [1.0 if m else (o + 1.0) ** (longshot_expon) for m, o in zip(mask, dividends)]
+    adjusted = [1.0 if m else o ** longshot_expon for m, o in zip(mask, dividends)]
     if all(mask):
         return [math.inf for _ in dividends]
     live = normalize_dividends([a for m, a in zip(mask, adjusted) if not m])
