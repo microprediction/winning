@@ -38,7 +38,7 @@ lower is better}
 once the exact reprice of the current field is within \code{tol} of every
 target, or when two successive steps fail to reduce the error, and returns
 the best iterate it assessed}
-\item{tol}{stopping tolerance on the maximum price error (default 1e-6),
+\item{tol}{stopping tolerance on the maximum price error (default 1e-9),
 finite and positive}
 }
 \value{

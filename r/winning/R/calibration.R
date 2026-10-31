@@ -52,7 +52,7 @@ dividends_from_prices <- function(prices, multiplicity = 1.0) {
 #'   once the exact reprice of the current field is within `tol` of every
 #'   target, or when two successive steps fail to reduce the error, and
 #'   returns the best iterate it assessed
-#' @param tol stopping tolerance on the maximum price error (default 1e-6),
+#' @param tol stopping tolerance on the maximum price error (default 1e-9),
 #'   finite and positive
 #' @return numeric offsets in lattice units (lower is better)
 #' @export
@@ -168,7 +168,7 @@ solve_for_implied_offsets <- function(prices, density,
 # offset drifted along a plateau for the whole budget. python's
 # CALIBRATION_MAX_ITER / CALIBRATION_TOL and the same rule.
 CALIBRATION_MAX_ITER <- 100L
-CALIBRATION_TOL <- 1e-6
+CALIBRATION_TOL <- 1e-9
 
 # a calibration whose own reprice misses its target by more than this is
 # reported: the target is outside what the lattice represents or n_iter

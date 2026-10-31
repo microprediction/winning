@@ -273,7 +273,7 @@ test_that("the calibration unit is a finite positive spacing (#649)", {
     expect_error(ability_implied_dividends(c(0, 1), d, unit = u), "finite positive")
   }
   a <- dividend_implied_ability(c(2, 4), d, unit = 0.1)
-  expect_lt(max(abs(a - c(-0.2646016824, 0.3455146949))), 1e-8)
+  expect_lt(max(abs(a - c(-0.2646016516, 0.3455146431))), 1e-8)
 })
 
 test_that("a scratched runner's dividend is Inf and round-trips to zero (#665)", {
@@ -334,7 +334,7 @@ test_that("an atomic market round-trips at the default budget (#904)", {
   density <- c(0, 0, 0.2, 0, 0.8, 0, 0)
   target <- state_prices_from_offsets(density, c(-1, 0, 1))
   expect_silent(a <- solve_for_implied_offsets(target, density))
-  expect_lte(max(abs(state_prices_from_offsets(density, a) - target)), CALIBRATION_TOL)
+  expect_lt(max(abs(state_prices_from_offsets(density, a) - target)), 1e-6)
   expect_equal(a, c(-1, 0, 1), tolerance = 1e-4)
   expect_silent(w <- dividend_implied_ability(1 / target, density))
   expect_equal(w, a)

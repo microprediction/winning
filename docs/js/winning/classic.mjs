@@ -20,7 +20,7 @@ const SOLVE_FOR_IMPLIED_OFFSETS_OPTS = new Set(["offsetSamples", "guess", "nIter
    steps as the budget allowed. python's CALIBRATION_MAX_ITER /
    CALIBRATION_TOL and the same rule. */
 export const CALIBRATION_MAX_ITER = 100;
-export const CALIBRATION_TOL = 1e-6;
+export const CALIBRATION_TOL = 1e-9;
 
 /* The interpolation table is built BY MAPPING over offsetSamples, and
    read back with interpClamped, whose xp must ascend. Descending
