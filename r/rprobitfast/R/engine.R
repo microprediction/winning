@@ -693,7 +693,7 @@
 # contrast residual on the earlier kept columns is below tol of its own
 # contrast norm (Gram scale).
 # Refuse NA, NaN and +-Inf in the design by column and row before the
-# rank check and the optimiser see them (#901); mlogitfast has the same.
+# rank check and the optimiser see them (#901).
 .check_finite_design <- function(X, names) {
   bad <- which(!is.finite(X), arr.ind = TRUE)
   if (nrow(bad)) {
