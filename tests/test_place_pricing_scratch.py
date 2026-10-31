@@ -95,6 +95,7 @@ def test_calibration_positive_unit_golden():
     from winning.classic.lattice_calibration import dividend_implied_ability
     d = skew_normal_density(50, 0.1, a=0)
     a = dividend_implied_ability([2, 4], d, unit=0.1)
-    np.testing.assert_allclose(a, [-0.2646016516, 0.3455146431], atol=1e-8)
+    # the converged inverse; the three-sweep iterate was [-0.2646016516, 0.3455146431] (#904)
+    np.testing.assert_allclose(a, [-0.2646016824, 0.3455146949], atol=1e-8)
     from winning.classic.lattice import state_prices_from_offsets
     np.testing.assert_allclose(state_prices_from_offsets(d, [x / 0.1 for x in a]), [2 / 3, 1 / 3], atol=1e-8)

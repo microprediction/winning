@@ -273,7 +273,7 @@ test_that("the calibration unit is a finite positive spacing (#649)", {
     expect_error(ability_implied_dividends(c(0, 1), d, unit = u), "finite positive")
   }
   a <- dividend_implied_ability(c(2, 4), d, unit = 0.1)
-  expect_lt(max(abs(a - c(-0.2646016516, 0.3455146431))), 1e-8)
+  expect_lt(max(abs(a - c(-0.2646016824, 0.3455146949))), 1e-8)
 })
 
 test_that("a scratched runner's dividend is Inf and round-trips to zero (#665)", {
@@ -326,4 +326,23 @@ test_that("max_depth is a whole number >= 0 (#775)", {
                       c(0.73784245296, 0.193474399289, 0.059003267863, 0.009679879888))), 1e-11)
   expect_identical(ability_implied_state_prices(ab, dens),
                    ability_implied_state_prices(ab, dens, max_depth = 3L))
+})
+
+test_that("an atomic market round-trips at the default budget (#904)", {
+  # a two-atom law at L=3: three sweeps left the forward's own target
+  # 1.27 points off; the iteration now runs to CALIBRATION_TOL
+  density <- c(0, 0, 0.2, 0, 0.8, 0, 0)
+  target <- state_prices_from_offsets(density, c(-1, 0, 1))
+  expect_silent(a <- solve_for_implied_offsets(target, density))
+  expect_lte(max(abs(state_prices_from_offsets(density, a) - target)), CALIBRATION_TOL)
+  expect_equal(a, c(-1, 0, 1), tolerance = 1e-4)
+  expect_silent(w <- dividend_implied_ability(1 / target, density))
+  expect_equal(w, a)
+  # the budget is honoured when asked for: three sweeps is the old answer
+  expect_warning(short <- dividend_implied_ability(1 / target, density, n_iter = 3),
+                 "did not reach the target")
+  expect_equal(max(abs(state_prices_from_offsets(density, short) - target)),
+               0.012728827747, tolerance = 1e-8)
+  expect_error(solve_for_implied_offsets(target, density, tol = 0), "tol")
+  expect_error(dividend_implied_ability(1 / target, density, tol = NA_real_), "tol")
 })

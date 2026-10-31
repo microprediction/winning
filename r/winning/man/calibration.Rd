@@ -6,16 +6,19 @@
 \alias{solve_for_implied_offsets}
 \title{The horse race problem: ability from win probabilities, and back}
 \usage{
-dividend_implied_ability(dividends, density, nan_value = 2000, unit = 1.0)
+dividend_implied_ability(dividends, density, nan_value = 2000, unit = 1.0,
+  n_iter = CALIBRATION_MAX_ITER, tol = CALIBRATION_TOL)
 
-state_price_implied_ability(prices, density, unit = 1.0)
+state_price_implied_ability(prices, density, unit = 1.0,
+  n_iter = CALIBRATION_MAX_ITER, tol = CALIBRATION_TOL)
 
 ability_implied_state_prices(ability, density, unit = 1.0, max_depth = 3L)
 
 ability_implied_dividends(ability, density, unit = 1.0)
 
 solve_for_implied_offsets(prices, density, offset_samples = NULL,
-  implied_offsets_guess = NULL, n_iter = 3)
+  implied_offsets_guess = NULL, n_iter = CALIBRATION_MAX_ITER,
+  tol = CALIBRATION_TOL)
 }
 \arguments{
 \item{dividends}{numeric decimal prices (Australian style), \code{NA} allowed}
@@ -31,7 +34,12 @@ lower is better}
 \item{offset_samples}{descending offsets for the interpolation table
 (default: every representable offset, L-2 down to -(L-2))}
 \item{implied_offsets_guess}{starting offsets, one per price (default zeros)}
-\item{n_iter}{fixed-point iterations (default 3)}
+\item{n_iter}{iteration budget (default 100); the iteration stops early
+once the exact reprice of the current field is within \code{tol} of every
+target, or when two successive steps fail to reduce the error, and returns
+the best iterate it assessed}
+\item{tol}{stopping tolerance on the maximum price error (default 1e-6),
+finite and positive}
 }
 \value{
 The \code{*_implied_ability} functions return numeric abilities (lower is
