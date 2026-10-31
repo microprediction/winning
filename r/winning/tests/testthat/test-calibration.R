@@ -327,3 +327,13 @@ test_that("max_depth is a whole number >= 0 (#775)", {
   expect_identical(ability_implied_state_prices(ab, dens),
                    ability_implied_state_prices(ab, dens, max_depth = 3L))
 })
+
+
+test_that("classic densities and prices must be plain vectors (#903)", {
+  atoms <- c(0.40, 0.00, 0.00, 0.10, 0.05, 0.05, 0.10, 0.10, 0.20)
+  dmat <- matrix(atoms, nrow = 3, byrow = TRUE)
+  expect_error(state_prices_from_offsets(dmat, c(-2, 0, 2)), "plain vector, not a 3 x 3")
+  expect_error(solve_for_implied_offsets(matrix(c(0.6, 0.3, 0.1), 1), atoms), "plain vector")
+  ref <- state_prices_from_offsets(atoms, c(-2, 0, 2))
+  expect_equal(state_prices_from_offsets(array(atoms), c(-2, 0, 2)), ref)
+})

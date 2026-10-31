@@ -590,3 +590,19 @@ test_that("a tolerance tighter than the fast rule goes to mvtnorm (#173)", {
     expect_identical(p, fast)
   }
 })
+
+
+test_that("a same-length matrix is refused, not flattened column-major (#903)", {
+  mu <- c(0, 0.5, -0.5, 1); D <- c(1, 0.25, 4, 1); V <- matrix(0, 4, 1)
+  u_vec <- c(0, 1, 2, 3)
+  u_mat <- matrix(u_vec, nrow = 2, byrow = TRUE)     # visually [0 1; 2 3], flattens to 0 2 1 3
+  exact <- prod(pnorm(c(0, 1, 1.25, 2)))
+  expect_lt(abs(pmvnorm_fast(upper = u_vec, mean = mu, V = V, D = D) - exact), 1e-10)
+  expect_error(pmvnorm_fast(upper = u_mat, mean = mu, V = V, D = D), "plain vector, not a 2 x 2")
+  expect_error(pmvnorm_fast(lower = u_mat, mean = mu, V = V, D = D), "plain vector")
+  expect_error(pmvnorm_fast(upper = u_vec, mean = matrix(mu, 2), V = V, D = D), "plain vector")
+  expect_error(pmvnorm_fast(upper = u_vec, mean = mu, V = V, D = matrix(D, 2)), "plain vector")
+  # scalar and singleton shorthands, and a 1-d array, are still vectors
+  expect_true(is.finite(pmvnorm_fast(upper = 0, mean = mu, V = V, D = D)))
+  expect_true(is.finite(pmvnorm_fast(upper = array(u_vec), mean = mu, V = V, D = D)))
+})
