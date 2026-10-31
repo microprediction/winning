@@ -308,8 +308,17 @@ end
 # and the browser all refuse. Found by the cross-port divergence
 # scan. Shared by the winner race and every top-k/rank entry point,
 # which used to collect(D) themselves and failed on a scalar (#485).
+# A per-coordinate argument is a vector (or a tuple or range): a matrix
+# with the right number of cells passed the length check and was consumed
+# by linear, column-major indexing, so a visually row-ordered 2 x 2 of
+# bounds was priced as a different four-coordinate rectangle (#903).
+# Python refuses any shape but (n,); the browser accepts one-dimensional
+# arrays only.
 function _as_idio(D, n::Integer; name = "D")
     D === nothing && return ones(n)
+    (D isa AbstractArray && ndims(D) != 1) && throw(ArgumentError(
+        name * " must be a vector, not a " * join(string.(size(D)), " x ") *
+        " array: linear indexing would read it column-major as a different vector"))
     Dv = D isa Number ? [Float64(D)] : Float64.(vec(collect(D)))
     length(Dv) == 1 && (Dv = fill(Dv[1], n))
     length(Dv) == n || throw(ArgumentError(

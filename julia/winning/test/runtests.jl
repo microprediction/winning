@@ -701,3 +701,13 @@ end
     @test_throws BoundsError winning._jacobi_sweeps([0.0, 0.0], bug, 1.0, 1.0,
                                                     1, 1e-8)
 end
+
+
+@testset "a matrix D is refused, not read column-major (#903)" begin
+    mu = [-2.0, -0.2, 0.4, 1.4]
+    Dmat = [1.0 9.0; 4.0 16.0]            # linear indexing reads 1 4 9 16
+    @test_throws ArgumentError race_probabilities(mu; D = Dmat)
+    a = race_probabilities(mu; D = [1.0, 9.0, 4.0, 16.0], points = 1025)
+    b = race_probabilities(mu; D = [1.0, 4.0, 9.0, 16.0], points = 1025)
+    @test maximum(abs.(a .- b)) > 0.05  # the two readings differ by nine points
+end
