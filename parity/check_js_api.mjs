@@ -3796,5 +3796,63 @@ rejects(C => demo.fitGrammar(C, 1, 0, { method: "ipaf", tol: 0 }),
           "do not support window");
 }
 
+// --- callable log tails must reach the Jacobian, as in the forward (#952)
+{
+  const rawNormal = z => [core.ndtr(-z), core.npdf(z), -z * core.npdf(z)];
+  rawNormal.logSf = z => core.logndtr(-z);
+  rawNormal.span = [8, 8];
+  const mu = [-1, 0, 1, 30];
+  const opts = { D: [1, 1, 1, 1], base: rawNormal,
+                 points: 2001, window: "span" };
+  const finite = a => a.flat().every(Number.isFinite);
+  const close = (a, b, tol) => a.length === b.length &&
+    a.flat().every((v, k) => Number.isFinite(v) &&
+      Number.isFinite(b.flat()[k]) && Math.abs(v - b.flat()[k]) <= tol);
+  const p = races.raceProbabilities(mu, opts);
+  const J = polish.raceJacobian(mu, opts);
+  const named = polish.raceJacobian(mu, { ...opts, base: "normal" });
+  holds("raw callable and named normal price the same span (#952)",
+        close(p, races.raceProbabilities(mu, { ...opts, base: "normal" }), 0));
+  holds("raw callable wide-span Jacobian is finite (#952)", finite(J));
+  holds("raw callable wide-span Jacobian matches named normal (#952)", close(J, named, 1e-12));
+  const h = 1e-5;
+  const fd = Array.from({ length: mu.length }, () => []);
+  for (let j = 0; j < mu.length; j++) {
+    const plus = mu.slice(), minus = mu.slice();
+    plus[j] += h; minus[j] -= h;
+    const pp = races.raceProbabilities(plus, opts);
+    const pm = races.raceProbabilities(minus, opts);
+    for (let i = 0; i < mu.length; i++) fd[i][j] = (pp[i] - pm[i]) / (2 * h);
+  }
+  holds("raw callable Jacobian differentiates public forward (#952)", close(J, fd, 1e-9));
+  holds("callable Jacobian ordinary block survives remote runner (#952)",
+        close(J.slice(0, 3).map(r => r.slice(0, 3)),
+          polish.raceJacobian(mu.slice(0, 3), { ...opts, D: [1, 1, 1] }), 1e-12));
+  holds("callable Jacobian row sums preserve translation (#952)",
+        J.every(r => Number.isFinite(r.reduce((a, b) => a + b, 0)) &&
+          Math.abs(r.reduce((a, b) => a + b, 0)) < 1e-14));
+  // A downstream linear-constraint gradient A*J must remain useful,
+  // rather than merely accepting a normalized, finite price vector.
+  const a = [1, -0.5, 0.25, 0];
+  const aj = matrix => mu.map((_, j) => a.reduce((s, v, i) => s + v * matrix[i][j], 0));
+  holds("callable constraint gradient agrees with forward differences (#952)", close(aj(J), aj(fd), 1e-9));
+  // More than one underflowing survival at the same lattice point and a
+  // small explicit factor rule exercise both independent and factor paths.
+  const factor = { ...opts, V: [[0.2], [-0.1], [0.3], [-0.4]],
+                   F: [[-1], [1]], W: [0.5, 0.5] };
+  const jf = polish.raceJacobian(mu, factor);
+  holds("callable factor-law Jacobian is finite (#952)", finite(jf));
+  holds("callable factor-law Jacobian matches named normal (#952)",
+        close(jf, polish.raceJacobian(mu, { ...factor, base: "normal" }), 1e-12));
+  // In ordinary windows the rule is inert, including callables which
+  // provide no log-tail metadata at all.
+  const plain = z => rawNormal(z);
+  plain.span = [8, 8];
+  const ordinary = { D: [1, 1, 1], points: 501, window: "bulk" };
+  holds("ordinary callable without logSf retains its Jacobian (#952)",
+        close(polish.raceJacobian([-1, 0, 1], { ...ordinary, base: plain }),
+              polish.raceJacobian([-1, 0, 1], { ...ordinary, base: rawNormal }), 0));
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");
