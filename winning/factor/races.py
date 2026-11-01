@@ -2252,10 +2252,8 @@ def _pair_mixture_gap(target, dV, d0, d1, F, W, g0, h):
             lo = g
         # d f / d g = sum_w phi(u) / (sd p_small) = ratio / sd > 0
         gn = g - f * sd / ratio if ratio > 0.0 else np.nan
-        if abs(f) < 1e-8 and lo < gn < hi:
-            # quadratic convergence: from a relative error of 1e-8 the
-            # step lands at rounding, and the caller certifies it
-            return float(gn)
+        # Evaluate the next proposal in the loop even when f is tiny: a
+        # near-zero plateau derivative can make it worse, not quadratic (#954).
         # While one side is open a Newton step is capped at h too: on a
         # mixture plateau the ratio is ~1e-66 and the uncapped step
         # (-6.7e64) set a bracket end bisection never came back from (#830).
