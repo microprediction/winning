@@ -7,6 +7,8 @@ max-wins arena interface."""
 
 from __future__ import annotations
 
+from numbers import Integral
+
 import numpy as np
 from scipy.special import log_ndtr, ndtr, ndtri
 
@@ -520,6 +522,24 @@ def _without_common_shift(C):
     return B
 
 
+def _as_fit_rank(value, name):
+    """A scalar count, never a negative slice endpoint (#958)."""
+    message = f"{name} must be a non-negative integer; got {value!r}"
+    if np.ma.is_masked(value) or isinstance(value, (bool, np.bool_)):
+        raise ValueError(message)
+    if isinstance(value, Integral):
+        rank = int(value)  # preserve large integers; the field caps the rank
+    else:
+        v = np.asarray(value)
+        if (v.ndim != 0 or v.dtype.kind not in "iuf"
+                or not np.isfinite(v) or v != np.floor(v)):
+            raise ValueError(message)
+        rank = int(v)
+    if rank < 0:
+        raise ValueError(message)
+    return rank
+
+
 def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
                    blocks=None, nodes_log2: int = 11,
                    seed: int = 0, return_report: bool = False):
@@ -538,6 +558,9 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
     honest. Works on covariances; correlation matrices are the special
     case with unit diagonal.
 
+    k and m: non-negative integer counts (integer-valued real scalars are
+    accepted). Counts above the field size are capped as before.
+
     blocks: None (a count chosen from n), an integer count for stage (2)'s
     clustering, or a length-n integer label array giving the block
     membership directly -- for entrants whose families are known (siblings
@@ -554,6 +577,8 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
     from scipy.cluster.hierarchy import fcluster, linkage
     from scipy.spatial.distance import squareform
 
+    k = _as_fit_rank(k, "k")
+    m = _as_fit_rank(m, "m")
     C = _validate_covariance(C)
     # a common shift cancels from every contrast: fit the representative
     # without it, so C and C + a 11' are fitted identically (#465)
