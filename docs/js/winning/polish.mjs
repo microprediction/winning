@@ -137,7 +137,8 @@ function raceJacobianExplicit(mu, V, D, base, points, F0 = null, W0 = null,
         const [S, f] = fn(z);
         // Match the forward's log-tail metadata when direct survival
         // underflows: -Infinity - -Infinity poisoned ordinary rows (#952).
-        li[t] = S <= 1e-300 && fn.logSf
+        // Keep named-base arithmetic unchanged in this callable-only fix.
+        li[t] = typeof base === "function" && S <= 1e-300 && fn.logSf
           ? Math.max(fn.logSf(z), -1e300) || -1e300 : Math.log(S);
         fi[t] = Math.log(Math.max(f / sd[i], 1e-300));
         L[t] += li[t];
