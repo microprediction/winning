@@ -366,3 +366,15 @@ test_that("a one-live book validates n_iter and tol before returning (#924)", {
   expect_equal(dividend_implied_ability(2, d), 0)
   expect_equal(state_price_implied_ability(c(1, 0), d, n_iter = 5L, tol = 1e-6), c(0, Inf))
 })
+
+test_that("a two-step rise in the miss is not a plateau (#923)", {
+  # the #904 rule stopped after two iterates failed to beat the best miss;
+  # this atomic market rises at iterations 21-22 and then converges
+  atoms <- numeric(31)
+  atoms[c(2, 18, 23, 26, 28, 30) + 1] <- c(0.10, 0.05, 0.30, 0.05, 0.45, 0.05)
+  target <- state_prices_from_offsets(atoms, c(5.5, 1.0, -7.0, 6.0))
+  expect_silent(a <- solve_for_implied_offsets(target, atoms, n_iter = 100))
+  expect_lte(max(abs(state_prices_from_offsets(atoms, a) - target)), 1e-6)   # was 2.17e-4
+  expect_silent(w <- dividend_implied_ability(1 / target, atoms))
+  expect_lte(max(abs(state_prices_from_offsets(atoms, w) - target)), 1e-6)
+})
