@@ -12,7 +12,7 @@
 
 \title{\textbf{Think Before Rescaling Probabilities to Unity:\\Evidence from Thirty-Nine Tests of Linear\\versus Gaussian Renormalization}}
 \author{Peter Cotton}
-\date{This version: 30 October 2026}
+\date{First version: August 12, 2026. This version: November 2, 2026.}
 
 \begin{document}
 \maketitle
@@ -282,10 +282,10 @@ twenty of the thirty-nine comparisons have. The tone, Getty and Townsend rows re
 three or more, so no $q_{ij}$ exists; the news, ballot and Wikipedia rows have no matched pair on
 fixed alternatives. Netflix draws on five separate PrefLib files of three pairs each, and
 combining them requires calibrating each on its own and pooling the fitted numerator and
-denominator, not pooling raw shares: an earlier version of this figure pooled the shares
-directly, which mixed five unrelated three-film comparisons into one and put Netflix off the
-scale at $r = 6.07$. Corrected, it sits at $r = 1.20$, $[0.92, 1.52]$, indistinguishable from the
-Gaussian point at this sample size. The ratio is ill-conditioned wherever the Case V slope is
+denominator, not pooling raw shares. Pooling the shares directly would mix five unrelated
+three-film comparisons into one and put Netflix off the scale at $r = 6.07$. Calibrated file by
+file, it sits at $r = 1.20$, $[0.92, 1.52]$, indistinguishable from the Gaussian point at this
+sample size. The ratio is ill-conditioned wherever the Case V slope is
 small, so the extremes of this axis remain its least certain points generally. This statistic is
 not proper, so refer also to Table~\ref{tab:scoreboard}, which does not order the populations
 the same way.}
@@ -312,7 +312,7 @@ evidence that shrinkage would otherwise inflate the gain. These two null frequen
 read as diagnostics under a fixed-calibration null, not as measuring the calibration uncertainty
 that the refit nulls elsewhere in the paper do.
 
-\begin{table}[!t]
+\begin{table}[!tbp]
 \centering
 \small
 \begin{tabular}{llrrl}
@@ -413,7 +413,7 @@ Table~\ref{tab:scoreboard} and nothing more. Table~\ref{tab:bysource} gives one 
 one primary specification each, and a verdict that turns on whether the resampling interval
 excludes zero rather than on the sign of a point estimate.
 
-\begin{table}[ht]
+\begin{table}[htbp]
 \centering
 \footnotesize
 \setlength{\tabcolsep}{4pt}
@@ -467,12 +467,11 @@ an interval from them are in the repository.}
 of $[-.0037, +.0180]$, which is the gradient discussed in Section~\ref{sec:more}.}
 \footnotetext[6]{The interval excludes zero and the gain is negligible. Third-party candidates
 carry almost no mass, so the two maps agree to within a rounding error whatever the truth.}
+\footnotetext[7]{Where a source has more than one file or item at the same design, every file
+or item is calibrated and scored on its own and the scores are pooled at the observation level.
+None is singled out, since picking one would invite choosing the file with the larger gain.}
 \footnotetext[8]{Sports participation sits exactly on its shrinkage null, frequency $0.513$, so
 its gain carries no evidence about the restriction map and it is excluded from every claim.}
-\footnotetext[7]{Where a source has more than one file or item at the same design, that is what
-we report: every file or item, calibrated and scored on its own, then pooled at the observation
-level. An earlier version of this table picked one, and in three of three cases the one with the
-larger gain, without stating why.}
 
 The picture is the same as the row count gives, with the magnitudes smaller and the losses
 concentrated. Linear renormalization is ahead in exactly one source where the interval settles
@@ -834,7 +833,7 @@ in an orthonormal contrast basis $Q$ that $Q^{\top}\operatorname{Cov}(\varepsilo
 theorem motivates Gaussian random utility in general, and independence across alternatives
 is a further restriction, adopted here because it is the parameter-free member of the class.
 
-\begin{table}[ht]
+\begin{table}[htbp]
 \centering
 \small
 \begin{tabular}{rrrrr}
@@ -978,7 +977,7 @@ Subjects who may defer are reported alongside the forced-choice subgroup, for wh
 deferral coding enters. Of the $373$ subjects, $364$ record at least one usable choice from a
 non-singleton menu and enter the analysis.
 
-\begin{table}[ht]
+\begin{table}[htbp]
 \centering
 \small
 \begin{tabular}{lrrrrrr}
@@ -1027,7 +1026,7 @@ offered. Their Experiment 2 repeats this with six symbols.
 Calibration uses that observer's full-menu row for that dominant item alone, and the
 two-alternative cells on the same observer and item are then predicted and scored.
 
-\begin{table}[ht]
+\begin{table}[htbp]
 \centering
 \small
 \begin{tabular}{lrrrrr}
@@ -1139,7 +1138,7 @@ position, so layout is uncontrolled; and readership and page content move betwee
 with the link set. This row is a transport comparison on conditional transition shares rather
 than an observed withdrawal.
 
-\begin{table}[ht]
+\begin{table}[htbp]
 \centering
 \small
 \begin{tabular}{lrrrrr}
@@ -1157,7 +1156,7 @@ Wikipedia links & 3{,}544 pages & $-0.0001$ & $-0.0002$ & $+0.0001$ & $.005$ \\
 \caption{Held-out loss differences on populations where restriction is observed rather
 than read off a ranking. Excess is the gain net of what a renormalizing population
 produces on the same menus. The lottery rows are the same participants under three cost
-frames; ballot units are matched state pairs; Wikipedia units are pages whose destination set shrank; One row, Wikipedia, has a
+frames; ballot units are matched state pairs; Wikipedia units are pages whose destination set shrank. One row, Wikipedia, has a
 negative raw gain and a positive excess, which means Gaussian renormalization loses in absolute
 terms while still departing from the axiom in the direction of contraction.}
 \label{tab:more}
@@ -1215,7 +1214,7 @@ General Social Survey items, and dots and puzzles are companion tasks.
 The protocol matches Section~\ref{sec:menus} with respondents in place of subjects, and
 the outcome for a subset is the respondent's highest-ranked member of it.
 
-\begin{table}[ht]
+\begin{table}[htbp]
 \centering
 \small
 \begin{tabular}{lrrrrrl}
@@ -1257,7 +1256,7 @@ The pipeline makes two choices that the maps themselves do not. Shares are smoot
 add-$\alpha$ with $\alpha = 1/2$, and the aggregate weights every subset of size two or more
 equally. Both are conventions rather than results, so both are varied.
 
-\begin{table}[ht]
+\begin{table}[htbp]
 \centering
 \small
 \begin{tabular}{lrrrcrrr}
@@ -1319,7 +1318,7 @@ The second choice is the weighting across menu sizes, and the three weightings o
 Table~\ref{tab:conventions} are three summaries of one curve. Table~\ref{tab:sizevector}
 gives the curve itself.
 
-\begin{table}[ht]
+\begin{table}[htbp]
 \centering
 \footnotesize
 \setlength{\tabcolsep}{4pt}
@@ -1432,7 +1431,7 @@ Averaged over outcomes the difference between the two maps is small. Scoring eac
 prediction by the rank the chosen item held in the full-menu shares, pooled over the four
 ten-item collections, shows what the average is made of.
 
-\begin{table}[ht]
+\begin{table}[htbp]
 \centering
 \small
 \setlength{\tabcolsep}{4pt}
@@ -1486,7 +1485,7 @@ P(\mathrm{rank}(i) = 2) = \int \varphi(x - a_i)
 \label{eq:second}
 \end{equation}
 
-\begin{table}[ht]
+\begin{table}[htbp]
 \centering
 \small
 \begin{tabular}{lrrrrr}
@@ -1543,7 +1542,7 @@ which is the Plackett--Luce ranking law; for $K \ge 4$ this is a particular join
 consistent with those subset marginals rather than the only one, so the null is
 specifically a Plackett--Luce ranking null.
 
-\begin{table}[ht]
+\begin{table}[htbp]
 \centering
 \small
 \begin{tabular}{lrrrr}
@@ -1638,7 +1637,7 @@ cells Gaussian renormalization wins by $+0.0272$ nats, and by $+0.0110$ on the r
 in the menu, cell bootstrap $[+0.0021, +0.0224]$. It loses one of the three conditions, and not
 at random.
 
-\begin{table}[ht]
+\begin{table}[htbp]
 \centering
 \small
 \begin{tabular}{lrrr}
@@ -2022,7 +2021,7 @@ or deposited, a fetched access route, and a usability verdict, negatives include
 response set over shared alternatives, are not scored above, and could therefore still change
 the answer.
 
-\begin{table}[ht]
+\begin{table}[htbp]
 \centering
 \small
 \begin{tabular}{llll}
