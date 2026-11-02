@@ -80,12 +80,13 @@ confusion at issue.
 
 The same rescaling question arises for a race: a horse scratches, and the exacta and trifecta
 odds on the field must be recomputed. There it is not controversial, because a generative
-model already answers it. Finishing times have a distribution, scratching a horse means
-conditioning that distribution on one fewer competitor, and the new odds follow by
-recomputing the race under that distribution rather than by rescaling the old odds at all. The
+model already answers it. Finishing times have a joint distribution, and scratching a horse
+removes its time from the race. Nothing is conditioned on: the survivors' times keep the law
+they had, with the scratched horse's coordinate integrated out, and the new odds follow by
+re-running the race among the survivors rather than by rescaling the old odds at all. The
 case this paper is about has no such generative story to fall back on: a market share, or the
 popularity of an item on a menu, is a revealed preference, not the output of a distribution
-whose conditioning is already understood, which is exactly why the choice of renormalization
+whose behaviour under removal is already understood, which is exactly why the choice of renormalization
 is a live, controversial modelling decision here and not there.
 
 When a menu item is removed, quite a lot of machinery exists for carefully estimating the
