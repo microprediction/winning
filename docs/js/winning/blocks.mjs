@@ -487,10 +487,11 @@ export function pairFactor(mu, s) {
     return row;
   });
   if (s.kind === "Nested") {
-    asGamma(s.gamma, "nestedRaceProbabilities");
-    if (s.coupling != null && s.gamma !== 0) {
+    // Match the general Nested forward and structureCov: only omission defaults.
+    const gamma = asGamma(s.gamma === undefined ? 1 : s.gamma, "nestedRaceProbabilities");
+    if (s.coupling != null && gamma !== 0) {
       const g = canonicalCoupling(asLoadings(s.coupling, 2, "coupling"));
-      g.forEach((gi, i) => { for (const v of gi) V[i].push(s.gamma * v); });
+      g.forEach((gi, i) => { for (const v of gi) V[i].push(gamma * v); });
     }
   }
   return { V, D: a.D };

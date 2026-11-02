@@ -3796,5 +3796,40 @@ rejects(C => demo.fitGrammar(C, 1, 0, { method: "ipaf", tol: 0 }),
           "do not support window");
 }
 
+// --- the pair shortcut shares Nested's omitted gamma=1 default (#897)
+{
+  const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const s = { kind: "Nested", cluster: [0, 1], loading: [0.4, 0.4],
+              D: [1, 1], coupling: [0.6, -0.6] };
+  const mu = [0, 0.2], target = [0.54, 0.46];
+  for (const coupling of [s.coupling, null]) {
+    const omitted = { ...s, coupling }, explicit = { ...omitted, gamma: 1 };
+    accepts(`pair omitted gamma equals explicit 1, coupling=${coupling} (#897)`,
+            () => races.raceProbabilities(mu, { structure: omitted }),
+            p => eq(p, races.raceProbabilities(mu, { structure: explicit })));
+    accepts(`pair omitted gamma inverse reprices, coupling=${coupling} (#897)`, () => {
+      const fit = races.abilitiesFromRace(target, { structure: omitted, returnInfo: true });
+      const back = races.raceProbabilities(fit.mu, { structure: omitted });
+      return fit.converged && Math.max(...back.map((p, i) =>
+        Math.abs(Math.log(p) - Math.log(target[i])))) < 1e-8;
+    }, ok => ok);
+    holds(`pair covariance omitted gamma equals 1, coupling=${coupling} (#897)`,
+          eq(demo.structureCov(omitted), demo.structureCov(explicit)));
+    for (const gamma of [null, false, true, "1", NaN, Infinity, -Infinity])
+      rejects(races.raceProbabilities, [mu, { structure: { ...omitted, gamma } }],
+              `pair rejects explicit gamma ${String(gamma)}, coupling=${coupling} (#897)`,
+              "gamma must be a finite number");
+  }
+  const s3 = { kind: "Nested", cluster: [0, 1, 2], loading: [0.4, 0.4, 0.4],
+               D: [1, 1, 1], coupling: [0.6, -0.6, -0.6] };
+  accepts("three-runner omitted gamma remains explicit 1 (#897)",
+          () => races.raceProbabilities([0, 0.2, 0.4], { structure: s3 }),
+          p => eq(p, races.raceProbabilities([0, 0.2, 0.4], { structure: { ...s3, gamma: 1 } })));
+  // The default really uses the coupling, not the independent/Blocks law.
+  holds("pair gamma=1 differs from gamma=0 (#897)",
+        Math.abs(races.raceProbabilities(mu, { structure: { ...s, gamma: 1 } })[0]
+               - races.raceProbabilities(mu, { structure: { ...s, gamma: 0 } })[0]) > 1e-3);
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");
