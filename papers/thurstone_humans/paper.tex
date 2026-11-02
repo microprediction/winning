@@ -27,8 +27,8 @@
 \begin{abstract}
 \noindent Re-scaling a probability vector when an item is withdrawn or masked out is one of the
 great unconscious modelling acts. When the support shrinks because something was learned about a
-fixed experiment, re-scaling is the conditional law. When somebody instead intervenes on what may
-be chosen, the old vector does not determine the new one, and re-scaling amounts to assuming
+fixed experiment, rescaling is the conditional law. When somebody instead intervenes on what may
+be chosen, the old vector does not determine the new one, and rescaling amounts to assuming
 Gumbel noise in an additive random-utility model\footnotemark[1]. A Gaussian is an equally
 canonical, equally tuning-free choice. We race this \emph{Gaussian renormalization} against linear
 renormalization on thirty-nine held-out comparisons, re-litigating the constant-ratio rule versus
@@ -39,18 +39,18 @@ fourteen sources against one. Differences are small: a median of $0.004$ nats.
 \footnotetext[1]{The Gumbel construction is due to Holman and Marley
 \cite{lucesuppes1965,holman1974}; the uniqueness is Yellott's \cite{yellott1977}.}
 
-\section{A two horse race between zero parameter choice models}
+\section{A two-horse race between zero-parameter choice models}
 \label{sec:problem}
 
 Suppose a probability vector is presented, as with a collection of de-vigged bookmaker odds for a
 horse race, or the output of a calibrated probabilistic machine learning model. Suppose next that
 the set changes. Perhaps a horse is scratched, a product is delisted, or a primary candidate
 drops out of a race. Alternatively a response option in a survey may be disallowed, or a token
-masked out of a softmax. These are quite different situations with their own nuances, but in each
+masked out of a softmax. The situations differ, but in each
 case a probability vector has to be transported from the original support to a smaller one. The
 natural question arises: what are the probabilities over what remains?
 
-The question is only open in some of them, and the arithmetic does not tell you which. Suppose the
+The question is only open in some of them, and the arithmetic does not say which. Suppose the
 probability vector describes a fixed experiment and we learn that the outcome fell in $T$. Then
 $p_i / \sum_{j \in T} p_j$ is the conditional law by definition, and there is nothing to choose.
 Masking a fixed softmax and rescaling the survivors performs that same arithmetic on a score
@@ -63,10 +63,10 @@ What is left is the case this paper is about. Somebody intervenes on the feasibl
 is scratched, the option is disallowed, the action is removed, and the experiment that generates
 the choice is not the one that generated the shares. The old vector does not determine the new
 one, and any answer is a modelling assumption. The same masking arithmetic is often applied here
-too, and there it is a modelling choice rather than a theorem.
+too, as one such assumption.
 
 Writing $Y(S)$ for what a chooser facing menu $S$ selects, and $P_S(i) = \Pr\{Y(S) = i\}$ for the
-share it produces, the four separate:
+share it produces, the four operations separate:
 \begin{center}
 \small
 \begin{tabular}{lll}
@@ -154,7 +154,7 @@ linear renormalization is often tacit. The tacit assumption is not harmless: Xu 
 exactly this assumption, since the reward models it fits inherit Independence of Irrelevant
 Alternatives from the same constant-ratio rule discussed below.
 
-Each competitor in this two horse race is elementary and, not surprisingly, has assumed many
+Each competitor in this two-horse race is elementary and, not surprisingly, has assumed many
 names. We treat them as synonyms. We equate proportional renormalization, linear renormalization,
 the ratio rule, Clarke's constant-ratio rule, and masking a softmax and rescaling the survivors.
 All denote Equation~\eqref{eq:luce} applied to a subset, and we write linear renormalization
