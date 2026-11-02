@@ -90,7 +90,9 @@
       the same own-log-slope diagonal the production sweep uses. First
       version to converge at all, and on the easy case it reaches a
       residual an order of magnitude tighter than the diagonal iteration
-      &mdash; at roughly sixty times the wall clock:</p>
+      &mdash; in the historical run below, at roughly sixty times the wall clock.
+      That run mixed a 257-point forward lattice with a 3,001-point JVP
+      lattice; it is not a matched-resolution solver comparison:</p>
       <table class="cmp">
         <tr><th>\(n=200\), easy case</th><th>time</th><th>residual</th><th>result</th></tr>
         <tr><td>damped diagonal iteration</td><td class="num">0.5s</td><td class="num">9.2e-9</td><td>converged</td></tr>
@@ -111,10 +113,13 @@
       with field size across the exp23 variants?</p>
 
       <h3>Does the ratio move with field size?</h3>
-      <p>A CG iteration and a sweep don't cost the same one pass.
-      Measured directly at \(n=200\), one IBP-form JVP takes
-      <span class="num">11.5</span>&times; as long as one forward pass
-      with slopes. Measured across \(n=200\) to \(n=12{,}800\):</p>
+      <p><strong>Resolution correction:</strong> the historical timings below
+      compared a 257-point forward pass with a 3,001-point IBP JVP.
+      The lattice-size ratio alone is 11.68. These numbers do not establish
+      an intrinsic 11.5&ndash;11.9&times; JVP overhead at fixed resolution.
+      See <a href="https://github.com/microprediction/winning/issues/960">#960</a>.
+      The benchmark now passes the same explicit <code>points</code> to both
+      operations; timings depend on the machine and backend.</p>
       <table class="cmp">
         <tr><th>\(n\)</th><th>forward pass</th><th>JVP (ibp)</th><th>ratio</th></tr>
         <tr><td class="num">200</td><td class="num">128.7 ms</td><td class="num">1479.7 ms</td><td class="num">11.5&times;</td></tr>
@@ -122,9 +127,10 @@
         <tr><td class="num">3,200</td><td class="num">2038.4 ms</td><td class="num">23684.3 ms</td><td class="num">11.6&times;</td></tr>
         <tr><td class="num">12,800</td><td class="num">8122.5 ms</td><td class="num">96357.1 ms</td><td class="num">11.9&times;</td></tr>
       </table>
-      <p>Both operations are \(O(n)\) at fixed \(L\), and the ratio
-      between them is flat across a 64&times; range in \(n\). The per-call
-      cost gap doesn't close with field size.</p>
+      <p>Both operations are \(O(n)\) at fixed \(L\), but this table did
+      not hold \(L\) equal between them. A matched-resolution field-size
+      and end-to-end solver rerun is needed before drawing a new wall-clock
+      verdict; equal resolution also does not establish equal numerical accuracy.</p>
       <p>The sweep count doesn't move either, at least on the easy
       problem. Production Jacobi's iteration count, same problem family,
       same tolerance:</p>
@@ -136,7 +142,7 @@
       correlation structure comes from a rank-2 factor model, so the
       tie-density graph's effective diameter doesn't grow with \(n\), and
       neither does the sweep count needed to converge.</p>
-      <p>What isn't flat is the hybrid solver itself. At \(n=200\) it
+      <p>In the same historical mixed-resolution experiment, the hybrid solver itself was not flat. At \(n=200\) it
       converges in <span class="num">8</span> Newton steps and
       <span class="num">15</span> total JVPs. Run unmodified on the same
       easy problem at \(n=3{,}200\) &mdash; same 10-Newton-step,
@@ -146,7 +152,7 @@
       <span class="num">1e-8</span> tolerance. Wall clock at that size:
       production Jacobi <span class="num">46.8</span>s, the hybrid
       <span class="num">515.6</span>s and still short of tolerance. The
-      gap doesn't narrow going from \(n=200\) to \(n=3{,}200\); it widens.</p>
+      historical timing gap alone does not isolate solver cost from resolution.</p>
       <p>Whether that is the outer Newton step count genuinely growing
       with \(n\), or the trust-region and step-acceptance constants in
       <code>run_newton_cg3.py</code> being tuned for \(n=200\) and not
