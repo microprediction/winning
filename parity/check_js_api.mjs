@@ -2411,6 +2411,11 @@ rejects(structures.cutLinkage, [[[0, 1, 0.1, 2], [0, 3, 0.2, 3]], 3, 1],
   rejects(classic.abilityImpliedStatePrices, [[0, "1"], d], "abilityImpliedStatePrices refuses a string (#662)", "not a number");
   rejects(classic.abilityImpliedStatePrices, [[0, 1], d, { unti: 1 }], "abilityImpliedStatePrices refuses a misspelt option (#662)", "unknown option 'unti'");
   rejects(classic.abilityImpliedStatePrices, [[0, 1], d, { unit: 0 }], "abilityImpliedStatePrices refuses unit 0 (#662)", "finite positive");
+  // a one-live book returns before the inverse runs, and took nIter 0 and tol 0 (#924)
+  rejects(classic.dividendImpliedAbility, [[2.0], d, { nIter: 0 }], "dividendImpliedAbility refuses nIter 0 on one live runner (#924)", "nIter");
+  rejects(classic.dividendImpliedAbility, [[2.0], d, { tol: 0 }], "dividendImpliedAbility refuses tol 0 on one live runner (#924)", "tol");
+  accepts("one live runner with valid controls is still [0] (#924)",
+          () => classic.dividendImpliedAbility([2.0], d, { nIter: 5, tol: 1e-6 }), p => p.length === 1 && p[0] === 0);
 }
 
 // --- classic: skewNormalDensity's domain (#509) and option typos (#561)

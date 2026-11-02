@@ -78,6 +78,17 @@ def _check_unit(unit, where):
         raise ValueError(where + ': unit must be a finite positive number; got ' + repr(unit))
 
 
+def _check_budget(nIter, tol):
+    """ The inverse's iteration budget and stopping tolerance; returns tol
+    as a float. nIter is a loop bound: zero or negative skipped every step
+    and returned the warm start as a calibration -- a tied race for an
+    asymmetric target (#543); the browser has refused these since #401. """
+    if isinstance(nIter, bool) or not isinstance(nIter, (int, np.integer)) or nIter < 1:
+        raise ValueError('nIter must be a positive integer number of iterations; got ' + repr(nIter)
+                         + '. A zero or negative budget skips the solve and returns the warm start.')
+    return as_tolerance(tol)
+
+
 def _check_max_depth(max_depth, where):
     """ max_depth is a recursion budget: a whole number >= 0, as the
     browser port requires. The recursion stops only on max_depth == 0, so
@@ -108,6 +119,9 @@ def state_price_implied_ability(prices, density, unit=1.0, nIter=CALIBRATION_MAX
     # User should supply the lattice unit if they wish ability to be commensurate with some lattice
     # width that was assumed when generating the density
     _check_unit(unit, 'state_price_implied_ability')
+    # validated here too: a book with one live runner returns before the
+    # inverse runs, and accepted nIter=0 or tol=0 there (#924)
+    _check_budget(nIter, tol)
     p = as_classic_prices(prices)
     live = [i for i, x in enumerate(p) if x > 0]
     ability = [float('inf')] * len(p)
@@ -219,8 +233,8 @@ def normalize_dividends(dividends):
 
 def solve_for_implied_offsets(prices, density, offset_samples=None,
                               implied_offsets_guess=None,
-                              nIter=CALIBRATION_MAX_ITER, tol=CALIBRATION_TOL,
-                              verbose=False, visualize=False):
+                              nIter=CALIBRATION_MAX_ITER, verbose=False,
+                              visualize=False, *, tol=CALIBRATION_TOL):
     """
     This is the main routine.
 
@@ -233,6 +247,8 @@ def solve_for_implied_offsets(prices, density, offset_samples=None,
                          when two successive steps fail to reduce the error; the best
                          iterate assessed is returned.
         tol              Stopping tolerance on the maximum price error; finite and positive.
+                         Keyword-only, so verbose and visualize keep their 1.6.0
+                         positions (#924).
         verbose, visualize   Per-iteration diagnostics. Requesting either
                          runs the pure-Python iteration even when the
                          compiled kernel is installed (same answer).
@@ -241,13 +257,7 @@ def solve_for_implied_offsets(prices, density, offset_samples=None,
 
     density = as_classic_density(density)
     prices = as_classic_prices(prices)
-    # a loop bound: zero or negative skipped every step and returned the
-    # warm start as a calibration -- a tied race for an asymmetric target
-    # (#543); the browser has refused these since #401
-    if isinstance(nIter, bool) or not isinstance(nIter, (int, np.integer)) or nIter < 1:
-        raise ValueError('nIter must be a positive integer number of iterations; got ' + repr(nIter)
-                         + '. A zero or negative budget skips the solve and returns the warm start.')
-    tol = as_tolerance(tol)
+    tol = _check_budget(nIter, tol)
     L = implied_L(density)
     core = None
     if offset_samples is None:

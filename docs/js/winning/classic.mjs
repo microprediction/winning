@@ -648,6 +648,10 @@ export function dividendImpliedAbility(dividends, density, opts = {}) {
   // NaN/Infinity returned non-finite abilities (#649)
   if (typeof unit !== "number" || !Number.isFinite(unit) || !(unit > 0))
     throw new Error(`dividendImpliedAbility: unit must be a finite positive number; got ${unit}`);
+  // validated here too: a book with one live runner returns before the
+  // inverse runs, and accepted nIter 0 or tol 0 there (#924)
+  asIterations(nIter, "dividendImpliedAbility");
+  asTolerance(tol, "dividendImpliedAbility");
   const p = asClassicPrices(pricesFromDividends(dividends, nanValue));
   const live = [];
   p.forEach((x, i) => { if (x > 0) live.push(i); });

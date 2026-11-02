@@ -63,14 +63,7 @@ solve_for_implied_offsets <- function(prices, density,
                                       tol = CALIBRATION_TOL) {
   density <- as_classic_density(density)
   prices <- as_classic_prices(prices)
-  tol <- .as_tolerance(tol)
-  # a loop bound: zero or negative skipped every step and returned the
-  # warm start as a calibration (#543); the browser refuses these too
-  if (length(n_iter) != 1L || !is.numeric(n_iter) || !is.finite(n_iter) ||
-      n_iter < 1 || n_iter != round(n_iter))
-    stop("n_iter must be a positive integer number of iterations; got ",
-         deparse(n_iter), ". A zero or negative budget skips the solve and ",
-         "returns the warm start.", call. = FALSE)
+  tol <- .check_budget(n_iter, tol)
   L <- implied_L(density)
   core <- NULL
   if (is.null(offset_samples)) {
@@ -186,6 +179,19 @@ CALIBRATION_WARN_TOL <- 1e-3
   invisible(miss)
 }
 
+# the inverse's iteration budget and stopping tolerance; returns tol. A
+# zero or negative n_iter skipped every step and returned the warm start
+# as a calibration (#543); the browser refuses these too
+.check_budget <- function(n_iter, tol) {
+  tol <- .as_tolerance(tol)
+  if (length(n_iter) != 1L || !is.numeric(n_iter) || !is.finite(n_iter) ||
+      n_iter < 1 || n_iter != round(n_iter))
+    stop("n_iter must be a positive integer number of iterations; got ",
+         deparse(n_iter), ". A zero or negative budget skips the solve and ",
+         "returns the warm start.", call. = FALSE)
+  tol
+}
+
 .check_unit <- function(unit, where) {
   # the lattice spacing is finite and positive: a negative one reversed
   # every ability, zero tied the field, NaN/Inf gave non-finite (#649)
@@ -219,6 +225,9 @@ state_price_implied_ability <- function(prices, density, unit = 1.0,
                                         n_iter = CALIBRATION_MAX_ITER,
                                         tol = CALIBRATION_TOL) {
   .check_unit(unit, "state_price_implied_ability")
+  # validated here too: a book with one live runner returns before the
+  # inverse runs, and accepted n_iter = 0 or tol = 0 there (#924)
+  .check_budget(n_iter, tol)
   # A zero price -- a scratched runner, or the zero, negative or infinite
   # dividend prices_from_dividends maps to 0 -- is not calibrated: its
   # ability is Inf (lower is better, so it never wins;

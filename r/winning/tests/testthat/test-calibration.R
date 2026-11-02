@@ -355,3 +355,14 @@ test_that("an atomic market round-trips at the default budget (#904)", {
   expect_error(solve_for_implied_offsets(target, density, tol = 0), "tol")
   expect_error(dividend_implied_ability(1 / target, density, tol = NA_real_), "tol")
 })
+
+test_that("a one-live book validates n_iter and tol before returning (#924)", {
+  # the singleton return ran before the inverse, so n_iter = 0 and tol = 0
+  # were accepted there
+  d <- skew_normal_density(20, 0.1)
+  expect_error(dividend_implied_ability(2, d, n_iter = 0), "n_iter")
+  expect_error(dividend_implied_ability(2, d, tol = 0), "tol")
+  expect_error(state_price_implied_ability(c(1, 0), d, n_iter = 0), "n_iter")
+  expect_equal(dividend_implied_ability(2, d), 0)
+  expect_equal(state_price_implied_ability(c(1, 0), d, n_iter = 5L, tol = 1e-6), c(0, Inf))
+})
