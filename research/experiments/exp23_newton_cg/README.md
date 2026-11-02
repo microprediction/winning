@@ -5,6 +5,36 @@ damped-Jacobi (own-slope) iteration? Three formulations, in order of
 increasing fairness to Newton, then a fourth round checking whether the
 n=200 verdict holds as field size grows.
 
+## Resolution correction (#960)
+
+The tables below are **historical mixed-resolution results**, not reruns:
+rounds 3 and 4 used `race_probabilities(points=257)` versus
+`jacobian_vector_product(points=3001)`. The 11.5–11.9x per-pass ratio
+therefore does not measure intrinsic JVP overhead at fixed lattice size.
+The round-3 60x solver timing also includes this resolution premium.
+
+The corrected scripts use an explicit shared `points=257` by default;
+`part1_per_call_cost(points=3001)` and `trial(..., points=3001)` provide
+higher-resolution controls. This only changes research experiments, not
+library defaults. Equal point counts do not establish equal accuracy:
+the IBP continuum surrogate and finite-grid forward can still differ.
+The historical convergence observations remain observations of the old
+configuration. A full matched-resolution field-size/solver rerun is still
+needed; do not infer a new solver verdict from the small control below.
+
+Independent control on revision `13c09bfd`, Linux x86_64, Python 3.12.14,
+NumPy 2.3.5, SciPy 1.17.0, Rust disabled, one BLAS thread: issue #960's
+seeded rank-2 `n=20` fixture, 145 Hermite nodes, one warmup and median of
+five alternating forward/JVP measurements per configuration:
+
+| forward points | JVP points | forward | JVP | ratio |
+|---|---|---|---|---|
+| 257 | 257 | 25.90 ms | 35.42 ms | 1.37x |
+| 3001 | 3001 | 325.12 ms | 346.97 ms | 1.07x |
+| 257 | 3001 | 18.41 ms | 320.38 ms | 17.41x |
+
+These are machine-specific measurements, not universal overhead constants.
+
 ## Round 1 (`run_newton_cg.py`): hobbled, loses badly
 
 Plain UNpreconditioned CG (an earlier docstring claimed Jacobi
@@ -56,12 +86,9 @@ million. Measured, n=200 to n=12,800:
 | 3,200 | 2038.4 ms | 23684.3 ms | 11.6x | 23 |
 | 12,800 | 8122.5 ms | 96357.1 ms | 11.9x | 23 |
 
-An IBP-form JVP costs 11.5-11.9x a forward pass, not "about one" as the
-verdict below used to say -- that was asserted, not measured. The ratio
-is flat across a 64x range in n. So is Jacobi's own sweep count: this
-correlation structure comes from a rank-2 factor model, so the
-tie-density graph's effective diameter doesn't grow with n, and neither
-does the sweep count needed to converge.
+The historical ratio was flat across this range in n, but the two
+operations used different lattice resolutions. Jacobi's sweep count was
+also approximately flat on this rank-2 problem family.
 
 Run unmodified at n=3,200 -- same 10-Newton-step, 5-inner-CG budget that
 converges cleanly at n=200 (8 Newton steps, 15 JVPs) -- the round 3
@@ -79,10 +106,10 @@ converge before field size is the limiting factor.
 
 The formulation fixes are real: round 3 is the first Krylov variant to
 converge at all, and on the easy problem it reaches an order of
-magnitude tighter residual than Jacobi -- at sixty times the wall clock,
-because each IBP JVP costs roughly twelve forward passes' worth of work
-(round 4, measured) and the easy problem needed fifteen of those in
-total. On the strongly correlated problem, where a coordinated step
+magnitude tighter residual than Jacobi in the historical configuration.
+Its sixty-fold wall-clock gap cannot be attributed to intrinsic JVP cost:
+that comparison used different lattice resolutions (see correction above).
+On the strongly correlated problem, where a coordinated step
 should pay, BOTH methods currently fail: Jacobi stalls at 1.1e-4 against
 its iteration cap, and the hybrid runs away despite the accept-test (the
 Jacobi fallback itself oscillates there). So the promising target

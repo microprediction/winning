@@ -12,6 +12,10 @@ residual-proportional trust clip; accept a step only if the true forward
 log residual improves, else halve, else fall back to one production
 Jacobi sweep. Warm start: four production Jacobi sweeps.
 
+The experiment passes one explicit points budget to target generation,
+production inversion, forward checks and IBP JVPs. Historical tables used
+mixed resolutions; see README.md and #960. Library defaults are unchanged.
+
 Run: python run_newton_cg3.py
 """
 import sys, time
@@ -22,8 +26,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from winning.factor.races import race_probabilities, abilities_from_race
 from winning.factor.core import jacobian_vector_product, hermite_nodes
 
-def forward(mu, V, D, F, W):
-    return race_probabilities(mu, V=V, D=D, F=F, W=W, return_slopes=True)
+def forward(mu, V, D, F, W, points=257):
+    return race_probabilities(mu, V=V, D=D, F=F, W=W, points=points, return_slopes=True)
 
 def jacobi_sweep(mu, p, slope, logt, alpha=1.0):
     r = np.log(np.maximum(p, 1e-300)) - logt
@@ -32,17 +36,17 @@ def jacobi_sweep(mu, p, slope, logt, alpha=1.0):
     mu = mu - np.clip(alpha * r / d, -lim, lim)
     return mu - mu.mean()
 
-def hybrid(target, V, D, F, W, tol=1e-8, warm=4, max_newton=10, max_cg=5):
+def hybrid(target, V, D, F, W, tol=1e-8, warm=4, max_newton=10, max_cg=5, points=257):
     n = len(target)
     logt = np.log(target)
     mu = -(logt - logt.mean()) / 2.0
     n_fwd = n_jvp = 0
     # warm start: production sweeps
     for _ in range(warm):
-        p, slope = forward(mu, V, D, F, W); n_fwd += 1
+        p, slope = forward(mu, V, D, F, W, points=points); n_fwd += 1
         mu = jacobi_sweep(mu, p, slope, logt)
     for it in range(max_newton):
-        p, slope = forward(mu, V, D, F, W); n_fwd += 1
+        p, slope = forward(mu, V, D, F, W, points=points); n_fwd += 1
         g = np.log(np.maximum(p, 1e-300)) - logt
         res = np.abs(g).max()
         if res < tol:
@@ -58,7 +62,7 @@ def hybrid(target, V, D, F, W, tol=1e-8, warm=4, max_newton=10, max_cg=5):
         for _ in range(max_cg):
             dm = d / sqrt_p
             Ad = -jacobian_vector_product(mu, V, D, F, W, dm,
-                                          form="ibp") / sqrt_p
+                                          points=points, form="ibp") / sqrt_p
             Ad = Ad - (Ad @ sqrt_p) * sqrt_p
             n_jvp += 1
             denom = d @ Ad
@@ -79,28 +83,28 @@ def hybrid(target, V, D, F, W, tol=1e-8, warm=4, max_newton=10, max_cg=5):
         for step in (1.0, 0.5):
             mu_try = mu + step * delta
             mu_try -= mu_try.mean()
-            p2, s2 = forward(mu_try, V, D, F, W); n_fwd += 1
+            p2, s2 = forward(mu_try, V, D, F, W, points=points); n_fwd += 1
             res2 = np.abs(np.log(np.maximum(p2, 1e-300)) - logt).max()
             if res2 < res:
                 mu, accepted = mu_try, True
                 break
         if not accepted:
             mu = jacobi_sweep(mu, p, slope, logt)
-    p, _ = forward(mu, V, D, F, W)
+    p, _ = forward(mu, V, D, F, W, points=points)
     res = np.abs(np.log(np.maximum(p, 1e-300)) - logt).max()
     return mu, dict(newton=max_newton, fwd=n_fwd, jvp=n_jvp,
                     residual=res, converged=res < tol)
 
-def trial(name, mu0, V, D, F, W):
-    p_target = race_probabilities(mu0, V=V, D=D, F=F, W=W)
+def trial(name, mu0, V, D, F, W, points=257):
+    p_target = race_probabilities(mu0, V=V, D=D, F=F, W=W, points=points)
     t0 = time.perf_counter()
     _, info = abilities_from_race(p_target, V=V, D=D, F=F, W=W,
-                                  return_info=True, tol=1e-8)
+                                  return_info=True, tol=1e-8, points=points)
     tj = time.perf_counter() - t0
     t0 = time.perf_counter()
-    _, h = hybrid(p_target, V, D, F, W)
+    _, h = hybrid(p_target, V, D, F, W, points=points)
     th = time.perf_counter() - t0
-    print(f"{name:24s} jacobi {tj:6.1f}s it={info['iterations']:2d} "
+    print(f"{name:24s} points={points} jacobi {tj:6.1f}s it={info['iterations']:2d} "
           f"res={info['max_log_residual']:.1e} | hybrid {th:6.1f}s "
           f"newton={h['newton']} jvp={h['jvp']} res={h['residual']:.1e} "
           f"conv={h['converged']}")
