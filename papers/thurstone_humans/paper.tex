@@ -50,18 +50,19 @@ masked out of a softmax. The situations differ, but in each
 case a probability vector has to be transported from the original support to a smaller one. The
 natural question arises: what are the probabilities over what remains?
 
-The question is only open in some of them, and the arithmetic does not say which. Suppose the
+Occasionally there is a definitive answer. Suppose the
 probability vector describes a fixed experiment and we learn that the outcome fell in $T$. Then
 $p_i / \sum_{j \in T} p_j$ is the conditional law by definition, and there is nothing to choose.
 Masking a fixed softmax and rescaling the survivors performs that same arithmetic on a score
 vector, so wherever the target really is the conditional law, that operation is right by
-construction and this paper does not bear on it. A third case is a model that recomputes its
-scores with the permitted set as an input; its output is not a transport of the old vector at
-all, and neither map below describes it.
+construction and we will not consider it further.
 
-What is left is the case this paper is about. Somebody intervenes on the feasible set. The horse
-is scratched, the option is disallowed, the action is removed, and the experiment that generates
-the choice is not the one that generated the shares. The old vector does not determine the new
+However, linear renormalization of probabilities is very often the default in the much more
+general setting where a transport is needed: the obvious choice is reached for, little thought
+goes into its justification, and empirical results might not support it after the fact. In that
+setting somebody intervenes on the feasible set. The horse is scratched, the option is
+disallowed, or the action is removed, and the experiment that generates the choice is no longer
+the one that generated the original shares. In general the old vector does not determine the new
 one, and any answer is a modelling assumption. The same masking arithmetic is often applied here
 too, as one such assumption.
 
@@ -89,12 +90,21 @@ A race shows the intervention plainly. When a horse scratches, the win, exacta a
 odds on the field must be recomputed. Finishing times have a joint distribution, and scratching
 a horse removes its time from the race. Nothing is conditioned on: the survivors' times keep the
 law they had, with the scratched horse's coordinate integrated out, and the new odds follow by
-re-running the race among the survivors. That does not settle the answer, because re-running the
-race requires a law for the performances, and under independent Gumbel performances re-running
-the race is exactly linear renormalization. A race supplies a physical story for the
-latent draws. A market share, or the popularity of an item on a menu, is a revealed preference
-with no such story behind it, which is why the choice of renormalization is usually made by
-reflex.
+re-running the race among the survivors. That alone is insufficient information to settle the
+answer.
+
+Re-running the race requires a law for the performances, and that law might be decided upon
+implicitly, even unwittingly: under independent Gumbel performances re-running the race is
+exactly linear renormalization. A race, however, supplies a physical story for the latent draws,
+and under that story Gumbel performances might not be the most natural a priori choice. Here the
+convenience of proportionate scaling of probability can lure the modeller into a possibly
+unnatural choice. This is so well appreciated that we will not dwell on it.
+
+In contrast, a market share, or the popularity of an item on a menu, is a revealed preference
+with no such story behind it. There the choice of renormalization, made by reflex, might be
+equally misleading yet not so plainly contradicted by any obvious generative model, unless one
+is given to thinking that the mechanism of choice inside our brains might itself be a race of
+sorts.
 
 When a menu item is removed, quite a lot of machinery exists for carefully estimating the
 probabilities that should be ascribed to the reduced menu. Depending on the data available,
@@ -102,10 +112,12 @@ probit models or other tools can be brought to bear. Those need restricted-menu 
 selection and tuning, and comparing them with the instinctive act of rescaling probability would
 be unfair to both. The comparison here is between defaults that need none of that.
 
-There is one alternative response that is slightly more involved analytically but not
+To emphasize this last point, the scope of our inquiry is limited to a single competitor to
+linear renormalization. There is one alternative response that is only slightly more involved
+analytically but not
 methodologically complicated. It is the Gaussian special case of Thurstone's Case V family, and
 we argue for its place as a tuning-free default renormalization to set against the linear one.
-Both stand on equal footing philosophically.
+Both stand on equal footing philosophically. How should we choose between them?
 
 Nothing has been observed about the smaller menu, so the answer must come from an assumption
 about how the original shares arose. The standard rescaling assumption is stated by Luce's axiom
@@ -141,8 +153,15 @@ P(X_i > X_j) = \Phi\!\left(\frac{a_i - a_j}{\sqrt{2}}\right).
 \label{eq:pair}
 \end{equation}
 
-Our limited goal is a practical comparison of linear renormalization and Gaussian
-renormalization. Linear renormalization holds the ratios of the shares fixed and Gaussian
+We content ourselves with this practical comparison of out-of-the-box linear renormalization and
+Gaussian renormalization, without being sidetracked by, and without minimizing, the fact that
+they are merely two points in a family that is itself a gateway to many modelling possibilities:
+the beginning of the modelling process, not the end by any means. Our justification for holding
+only a two-horse match race lies in the ubiquity of linear renormalization of probability. In
+short, two horses are better than one, and we present evidence that the less popular horse might
+in fact be the more reliable.
+
+This race is a fair one. Linear renormalization holds the ratios of the shares fixed and Gaussian
 renormalization holds the latent locations fixed. Neither carries a parameter fitted to the data
 being predicted, which is the sense in which both are free of tuning; the pipeline around them
 does use one shared convention, the continuity correction $\alpha = 1/2$, and
