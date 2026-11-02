@@ -63,7 +63,7 @@ What is left is the case this paper is about. Somebody intervenes on the feasibl
 is scratched, the option is disallowed, the action is removed, and the experiment that generates
 the choice is not the one that generated the shares. The old vector does not determine the new
 one, and any answer is a modelling assumption. The same masking arithmetic is often applied here
-too, and that is where it stops being a theorem and starts being a choice.
+too, and there it is a modelling choice rather than a theorem.
 
 Writing $Y(S)$ for what a chooser facing menu $S$ selects, and $P_S(i) = \Pr\{Y(S) = i\}$ for the
 share it produces, the four separate:
@@ -91,18 +91,16 @@ a horse removes its time from the race. Nothing is conditioned on: the survivors
 law they had, with the scratched horse's coordinate integrated out, and the new odds follow by
 re-running the race among the survivors. That does not settle the answer, because re-running the
 race requires a law for the performances, and under independent Gumbel performances re-running
-the race is exactly linear renormalization. What a race supplies is a physical story for the
+the race is exactly linear renormalization. A race supplies a physical story for the
 latent draws. A market share, or the popularity of an item on a menu, is a revealed preference
 with no such story behind it, which is why the choice of renormalization is usually made by
 reflex.
 
 When a menu item is removed, quite a lot of machinery exists for carefully estimating the
 probabilities that should be ascribed to the reduced menu. Depending on the data available,
-probit models or other tools can be brought to bear. That is outside the scope of the present
-discussion, because wielding statistical machinery together with careful modelling, parameter
-selection and cross-validation can evolve into an entire enterprise, and it is often unreasonable
-to compare that to the trivial, instinctive act of rescaling probability. That reflex cannot be
-challenged by an invitation to treat every occasion for its use as a new data science project.
+probit models or other tools can be brought to bear. Those need restricted-menu data, model
+selection and tuning, and comparing them with the instinctive act of rescaling probability would
+be unfair to both. The comparison here is between defaults that need none of that.
 
 There is one alternative response that is slightly more involved analytically but not
 methodologically complicated. It is the Gaussian special case of Thurstone's Case V family, and
@@ -179,8 +177,7 @@ direction of their disagreement exact.
 
 Figure~\ref{fig:line} and Table~\ref{tab:scoreboard} give the full result before the
 populations behind them are introduced one by one in Sections~\ref{sec:prior}
-and~\ref{sec:empirical}; a study name met here for the first time, such as Getty or Wills, is
-defined there.
+and~\ref{sec:empirical}.
 
 The figure asks where each population falls between the two kinds of renormalization, on a scale
 where linear renormalization is one point and Gaussian renormalization another. Of the twenty it
@@ -193,14 +190,9 @@ and so might be classified separately. The figure is suggestive rather than deci
 statistic it plots is not a proper scoring rule and its ratio is unstable where the Case V slope
 is small.
 
-The table is the defensible version of the same comparison. It gives no support to the notion
-that linear renormalization has a natural advantage, or to the special place it occupies in
-practice. Thirty-nine comparisons have full-menu shares that
-calibrate both maps and restricted-menu choices. The score is held-out log loss.
-
-Another caveat: rows are comparisons. Several reuse the same subjects or source study, so they are
-not to be considered independent tests of the same hypothesis. Section~\ref{sec:empirical} goes
-into complete detail on the protocol, the datasets and the null.
+Table~\ref{tab:scoreboard} scores by held-out log loss the thirty-nine comparisons that have
+full-menu shares to calibrate both maps and restricted-menu choices to score them. It gives
+linear renormalization no natural advantage.
 
 \begin{figure}[H]
 \centering
@@ -283,20 +275,19 @@ formally in Section~\ref{sec:mixture} (Table~\ref{tab:mixture}), fitted here on 
 renormalization is at $r = 0$ by construction and Gaussian renormalization at $r = 1$. Filled
 circles are
 restricted menus the observer actually faced, open circles are ranking-induced. Most populations
-lie beyond $r = 1$: choice contracts by more than Case V predicts, so as a general observation
-the Gaussian point tends not to be far enough along the family. A collection appears when a
-restricted pairwise share $q_{ij}$ exists on the alternatives that calibrated the map, which
-twenty of the thirty-nine comparisons have. The tone, Getty and Townsend rows restrict to sets of
-three or more, so no $q_{ij}$ exists; the news, ballot and Wikipedia rows have no matched pair on
-fixed alternatives. Netflix draws on five separate PrefLib files of three pairs each, and
+lie beyond $r = 1$: choice contracts by more than Case V predicts. A population appears when a
+restricted pairwise share $q_{ij}$ exists on the alternatives that calibrated the map. The tone,
+Getty and Townsend rows and the eight- and four-way line restrictions restrict to sets of three or
+more, so no $q_{ij}$ exists; the news, ballot and Wikipedia rows have no matched pair on fixed
+alternatives. Each consumer experiment is plotted once, all subjects, and the gambles once, at
+high arithmetic cost, which leaves twenty populations. Netflix draws on five separate PrefLib files of three pairs each, and
 combining them requires calibrating each on its own and pooling the fitted numerator and
 denominator, not pooling raw shares. Pooling the shares directly would mix five unrelated
 three-film comparisons into one and put Netflix off the scale at $r = 6.07$. Calibrated file by
 file, it sits at $r = 1.20$, $[0.92, 1.52]$, indistinguishable from the Gaussian point at this
 sample size. The ratio is ill-conditioned wherever the Case V slope is
-small, so the extremes of this axis remain its least certain points generally. This statistic is
-not proper, so refer also to Table~\ref{tab:scoreboard}, which does not order the populations
-the same way.}
+small, so the extremes of this axis are its least certain points. The statistic is not a proper
+score, and Table~\ref{tab:scoreboard} orders the populations differently.}
 \label{fig:line}
 \end{figure}
 
@@ -383,7 +374,7 @@ than a measured frequency.}
 associated publication, so it is cited by its public repository rather than by author. See the
 data section.}
 
-Gaussian renormalization performs strongly. It has the lower held-out log loss in thirty of the
+Gaussian renormalization has the lower held-out log loss in thirty of the
 thirty-nine rows. That count is a description of this table and not an estimate of any rate,
 because the rows are not independent and the families contribute unequal numbers of
 them.\setcounter{footnote}{3}\footnote{As a finer point, the collections were assembled by searching for restriction data.
@@ -479,7 +470,7 @@ carry almost no mass, so the two maps agree to within a rounding error whatever 
 or item is calibrated and scored on its own and the scores are pooled at the observation level.
 None is singled out, since picking one would invite choosing the file with the larger gain.}
 \footnotetext[8]{Sports participation sits exactly on its shrinkage null, frequency $0.513$, so
-its gain carries no evidence about the restriction map and it is excluded from every claim.}
+its gain carries no evidence about the restriction map and it receives no verdict.}
 
 Counting by source gives the same picture as counting rows. Linear renormalization is ahead in
 exactly one source where the interval settles it, the unpublished twelve-line data, and it has
@@ -495,7 +486,7 @@ to one of a fixed set of responses. Then the response list is reduced and the sa
 repeated. Each row of the resulting confusion matrix is the response distribution for one
 stimulus, and the rule predicts the reduced matrix from the full one.
 
-Clarke \cite{clarke1957} had listeners identify consonant-vowel syllables heard against noise, and obtained three
+In the first of three experiments, Clarke \cite{clarke1957} had listeners identify consonant-vowel syllables heard against noise, and obtained three
 six-by-six master matrices together with six three-by-three submatrices drawn from them. Clarke
 and Anderson \cite{clarkeanderson1957} repeated the test on a ten-item set using naive rather
 than practised listeners, so that practice could be considered as a possible confound.
@@ -539,7 +530,9 @@ Three findings recur across those studies. The rule is a fair first approximatio
 concentrating the withdrawn mass onto whichever survivor most resembles the removed alternative
 rather than spreading it proportionally. Townsend and Landon attribute that to Debreu's
 similarity objection, and Rouder brackets the same failure from the other side, finding real
-behaviour better than a guessing correction predicts. And every claim of conformity that was later
+behaviour better than a guessing correction predicts.
+
+Every claim of conformity that was later
 retested with a test that had power was overturned. Holloway's 1971 reanalysis found a dependency his
 earlier analysis had not \cite{holloway1970,holloway1971}, and Morgan's likelihood-ratio test rejected the rule on
 both of the datasets he applied it to, Clarke's and Egan's \cite{egan1957,morgan1974}.
@@ -610,9 +603,7 @@ V is a model somebody proposed and defended. Linear renormalization is the
 Gumbel-noise member of the same class, and it is not adopted because anyone argues that choice
 errors are double exponential. It is adopted because dividing by a smaller total is the obvious
 thing to do. Nothing in a masked softmax expresses a belief about extreme-value noise. The
-incumbent therefore holds its position by default rather than by argument, and the question below
-is not whether a challenger can overturn a defended position but whether the default was ever the
-right place to stand.}
+incumbent therefore holds its position by default rather than by argument.}
 
 Kempton and Burrell \cite{kemptonburrell2025} quantify a consequence of per-step
 renormalization in language-model decoding: because top-$k$, nucleus and temperature sampling
@@ -626,9 +617,7 @@ number, because any common scale is absorbed exactly by the fitted locations and
 prediction. We call a quantity of that sort a \emph{gauge}. Both maps are calibrated
 to the same $|S|-1$ free shares and neither sees any observation from a smaller menu. Both are
 \emph{representative-agent} maps, treating the population as one chooser with one set of
-worths or locations and transporting its shares from $S$ to $T$. A fitted Plackett--Luce
-likelihood \cite{plackett1975} uses the whole ranking and a fitted Bradley--Terry model
-\cite{bradley1952} uses the pairwise outcomes directly; neither is estimated here.
+worths or locations and transporting its shares from $S$ to $T$.
 
 The direction of the disagreement is a theorem, and it holds for noise laws other than
 the Gaussian. Let $f$ and $F$ be the density and distribution of the common noise, independent and
@@ -699,8 +688,8 @@ shape distinguishes them. Give every alternative a location, add a draw from the
 density to each, and take the highest: the winning probabilities are Equation~\eqref{eq:luce},
 and restricting the field renormalizes the shares proportionally. Do the same with the
 right-hand density and the shares contract instead. Renormalization is therefore a race too,
-run with a noise law that is asymmetric and long-tailed to the right. We
-withhold our opinion as to which is the more \emph{a priori} reasonable.}
+run with a noise law that is asymmetric and long-tailed to the right. Neither shape is privileged
+\emph{a priori}.}
 \label{fig:noise}
 \end{figure}
 
@@ -717,10 +706,9 @@ renormalization.
 A deep network is not committed to the axiom in the way that matters here. Any single
 positive vector over a fixed vocabulary is trivially in the independent additive random-utility
 class: Gumbel noise with $a_i = \log p_i$ generates it exactly, which is the same construction
-behind linear renormalization itself. What a network's depth buys is not escape from that class
-one vector at a time, but freedom \emph{across} contexts: nothing forces the family of vectors
-it produces for different inputs to be the restrictions of one shared, context-independent noise
-law. That freedom is real, and it is also beside the point at inference time. Once a context is
+behind linear renormalization itself. Depth lets the vectors a network produces for different
+inputs differ in ways that no single context-independent noise law explains. That does not matter
+at inference time. Once a context is
 fixed, so is the logit vector, and masking and rescaling it leaves every surviving ratio exactly
 as it was, which is Equation~\eqref{eq:luce} on the restricted set, however that vector was
 produced and however deep the network that produced it.
@@ -947,7 +935,7 @@ Gaussian map costs nothing to apply. And a generative null is available.
 Contraction of a noisily
 estimated share vector lowers log loss whether or not the axiom fails, so every raw gain below is
 accompanied by the gain a population obeying the axiom exactly would produce on the same menus,
-its centred excess, and a null frequency. The excess is a diagnostic centred on that particular
+the \emph{excess} of the observed gain over that null median, and a null frequency. The excess is a diagnostic centred on that particular
 fitted null, not an estimate of a model-free structural effect: under a non-Luce population there
 is no reason for the null's bias to match the alternative's. Section~\ref{sec:null} details the
 construction.
@@ -1054,8 +1042,8 @@ sampling noise in what it predicts; all three null frequencies are at the $0.005
 \label{tab:after}
 \end{table}
 
-The six-symbol gain is the larger of the two arms. The same pairs were also run \emph{announced in advance}, so the
-observer can aim attention at them. That arm was not analysed by the original authors and is
+The six-symbol gain is the larger of the two arms. The four-colour pairs were also run
+\emph{announced in advance}, so the observer can aim attention at them. That arm was not analysed by the original authors and is
 recovered here from the trial files. There the advantage falls by about three quarters, from
 $+0.0147$ to $+0.0038$, though its interval, $[+0.0006, +0.0072]$, still excludes
 zero. Accuracy rises from $0.780$ to $0.850$, linear renormalization becomes close to exactly
@@ -1076,7 +1064,7 @@ that the correction runs toward contraction while bounding what either default c
 Utochkin, Azarov and Grigorev \cite{utochkin2025} supply the same structure in memory. An
 observer sees a studied photograph among three foils, or the same target against one named
 foil, with the same images in both arms. Gaussian renormalization wins by $+0.0037$ per cell over $360$
-nested cells, interval $[+0.0027, +0.0049]$, the tightest in the paper. The contraction is
+nested cells, interval $[+0.0027, +0.0049]$. The contraction is
 the same size against a foil from the target's own category as against a foil from another,
 which matters in Section~\ref{sec:boundary}: category membership is not what breaks
 independence.
@@ -1094,7 +1082,7 @@ transaction-level baskets, which the release does not contain.
 
 Aguiar, Boccardi, Kashaev and Kim \cite{aguiar2023} observe choices from all thirty-one
 non-empty subsets of five lotteries with a default always available, so menus run from two
-to six alternatives, in a cross-section giving at most two disjoint menus per person. It is a hard case by the
+to six alternatives, in a cross-section giving each person at most two disjoint menus within each condition. It is a hard case by the
 authors' own analysis, since they report that random utility cannot explain the population behaviour
 while a logit attention model survives.
 
@@ -1104,14 +1092,15 @@ over the null rises with that requirement, from $-0.0012$ to $+0.0045$ to $+0.00
 the full-menu shares flatten alongside it, the largest falling from $0.357$ to $0.257$
 against a six-alternative maximum entropy of $1.792$.
 
-We read the gradient as consistent with the mechanism rather than as instability, though
+We read the gradient as consistent with the taste-heterogeneity mechanism of
+Section~\ref{sec:mixture} rather than as instability, though
 increased random responding, attention failure or a change in what subjects consider would
 produce the same ordering. Because the same people supply all three conditions, the
 comparison is within subject: whatever tracks arithmetic cost is not a difference in who was
 recruited. The lotteries were designed so that different risk preferences justify different
 choices at every cost level, so no condition, including the one-operation frame, has a single
-correct answer to converge on. What changes with cost is how much calculation separates a
-stated preference from the choice made under it. At one operation the calculation is close to
+correct answer to converge on. Cost changes how much calculation separates a stated preference
+from the choice made under it. At one operation the calculation is close to
 immediate, and shares concentrate on whichever lottery it favours. At five operations the
 calculation is no longer one most people complete unaided, so more of what is observed is
 noise around it. A model of preference under noise should do more work where that noise is
@@ -1130,7 +1119,7 @@ one slate is frequently a subset of another, so click shares on the larger slate
 both maps and the choices made on the nested smaller one score them. Of $153{,}727$
 impressions, $846$ slates recur ten or more times and yield $6{,}135$ nested pairs, of which the first
 $6{,}000$ are scored. Because
-those pairs are drawn from a few hundred slates and overlap heavily, the interval below
+those pairs are drawn from several hundred slates and overlap heavily, the interval below
 resamples slates rather than pairs.
 
 Wikipedia links supply editorial removal, in the weakest form of observation used here. The
@@ -1169,8 +1158,8 @@ terms while still departing from the axiom in the direction of contraction.}
 \label{tab:more}
 \end{table}
 
-The news result is the largest in this table, about five times the next, on the only menus in the paper
-that were recorded at the moment of choice. Its weakness is assignment: the slates are chosen
+The news result is the largest in this table, about five times the next, on the only ecological
+menus in the paper that were recorded at the moment of choice. Its weakness is assignment: the slates are chosen
 by a recommender, so a slate's composition is correlated with what the system expects readers
 to want, and a smaller slate may reach a different readership than the larger one. Both maps
 inherit that identically and the null runs on the same slates. That does not make the
@@ -1250,8 +1239,7 @@ renormalization is lower and the interval excludes zero in every one of the elev
 Occupational prestige is scorable here only because the shared smoothing removes a zero training
 cell. Sports participation, below the line, also has an interval excluding zero, but
 Section~\ref{sec:null} shows its gain is entirely shrinkage: the exclusion is not evidence
-against the constant-ratio rule for this collection, and it is excluded from every claim about
-the rule. Intervals resample respondents and refit the whole pipeline inside every
+against the constant-ratio rule for this collection, and it receives no verdict. Intervals resample respondents and refit the whole pipeline inside every
 replicate, calibration and both maps and all subsets, so they carry calibration uncertainty;
 two thousand replicates for every collection.}
 \label{tab:heldout}
@@ -1350,7 +1338,8 @@ Puzzles & $+.0015$ & $-.0000$ & $-.0000$ & & & & & & \\
 The last entry in each row is zero to the precision of the pipeline, since nothing has been
 removed. Ten collections fall monotonically in $|T|$. Occupational prestige and sports
 participation do not: prestige peaks at $|T| = 4$ with $+0.0549$, roughly twice its pairwise
-figure, which is why pairs-only weighting understates it while overstating everything else.
+figure, which is why pairs-only weighting understates it while overstating every other
+collection except Netflix.
 Reproduced by \texttt{python estimand.py}.}
 \label{tab:sizevector}
 \end{table}
@@ -1379,8 +1368,8 @@ matrices per subject, which is why the dataset is still usable forty-four years 
 Its calibration is clean. Calibration row and target row come from the \emph{same subject} in
 different blocks, as in the colour and symbol arms of Section~\ref{sec:after}, so
 there is no population-heterogeneity confound of the kind every ranking collection carries,
-and the aggregation argument of Section~\ref{sec:mixture} is not available as an
-explanation of any gain found here.
+and the aggregation argument of Section~\ref{sec:mixture} is not available in its
+between-person form as an explanation of any gain found here.
 
 Two rows are dropped because the published table prints cells that cannot be reconciled with
 their own totals. Over the remaining $38$ restricted rows and $9{,}120$ held-out trials, linear
@@ -1398,8 +1387,9 @@ are structurally symmetric, so the difference between them is not attributable t
 The row-level output shows the limit of a parameter-free correction. For subject
 one, stimulus $A$, subset $\{A,E,X\}$, the observed, renormalized and raced shares are
 $0.621 / 0.672 / 0.635$ on $A$, $0.217 / 0.129 / 0.149$ on $E$ and $0.163 / 0.199 / 0.216$
-on $X$. Gaussian renormalization corrects the favourite downward and the near-substitute upward, both in the
-right direction and the second far too little, and moves the dissimilar letter the wrong way.
+on $X$. Gaussian renormalization moves the favourite down and the near-substitute up. Both
+corrections have the right sign, but the near-substitute moves far too little, and the dissimilar
+letter moves the wrong way.
 It wins because the dominant terms improve.
 
 Townsend and Landon diagnosed their residual as
@@ -1457,8 +1447,8 @@ collections, so they dot to the aggregate of $+0.0043$, which the script asserts
 Gaussian renormalization pays $0.061$ nats whenever the favourite wins, which happens $17$ per
 cent of the time, and collects $0.171$ when the tenth-ranked item wins, which happens $4$ per
 cent of the time. That is what a contraction does: it moves probability off the favourite and onto the
-tail, buying insurance against upsets and paying a premium on every favourite win. Three
-earlier observations follow. The aggregate gain is small because large rare wins net against
+tail, buying insurance against upsets and paying a premium on every favourite win. That accounts
+for three results above. The aggregate gain is small because large rare wins net against
 small frequent losses. The ballot result is negligible because third-party candidates are the
 tail and there is almost no tail mass to collect. And the effect is largest on news slates,
 where readers spread widely over the displayed set.
@@ -1518,10 +1508,9 @@ cent of that error, overshooting slightly on Sushi. The sequential Gaussian rule
 
 This is the pattern reported for the Harville formula in racing place markets, favourites
 over-priced and outsiders under-priced, appearing in survey rankings of sushi, jokes,
-child-rearing values and political goals. It is the most useful result here for a
-practitioner, because it is a large, replicable, signed error in the default rather than a
-small average edge, and because Harville's rule is exactly what the Luce model prescribes rather
-than a shortcut somebody chose. Case V removes most of it on Jester file 1, $82$ per cent, and
+child-rearing values and political goals. For a practitioner it matters more than the average
+gains: the error is large, replicable and signed, and Harville's rule is exactly what the Luce
+model prescribes rather than a shortcut somebody chose. Case V removes most of it on Jester file 1, $82$ per cent, and
 around two fifths on GSS job values and socialization, $43$ and $41$ per cent; on Sushi it removes
 all of it and is the wrong sign there by $0.009$. What produces the remainder on political goals,
 where $0.161$ of the $0.195$ survives, is not identified; the obvious candidate is that a single
@@ -1572,24 +1561,24 @@ Netflix & $+0.0018$ & $-0.0016$ & $+0.0033$ & $0.0005$ \\
 Sports participation & $+0.0050$ & $+0.0051$ & $-0.0001$ & $0.513$ \\
 \bottomrule
 \end{tabular}
-\caption{The same gain when the axiom holds by construction. Two thousand replicates per row.
-The frequency is $(b+1)/(B+1)$ for $b$ exceedances of the observed gain, so $0.0005$ is the
-floor $1/2001$ reached when no replicate matched it. The diagnostic is the excess of the observed gain over the null median; the null
+\caption{The same gain when the axiom holds by construction. Two thousand replicates per ranking
+row and two hundred for the menu rows. The frequency is $(b+1)/(B+1)$ for $b$ exceedances of the
+observed gain, so $0.0005$ is the floor $1/2001$ reached when no ranking replicate matched it. The diagnostic is the excess of the observed gain over the null median; the null
 probabilities are indicative rather than exact tests, and for the menu rows they are
-optimistic, because the null redraws each subject's thirty-one choices independently given
+optimistic, because the null redraws each subject's choices independently given
 the aggregate worths and so omits the within-subject dependence that the bootstrap
-intervals of Table~\ref{tab:menus} do preserve. Wherever shares rest on more than about two thousand observations the null is
-negative, because contraction is then a bias rather than useful insurance, so comparing
-an observed gain with zero understates it.}
+intervals of Table~\ref{tab:menus} do preserve. Every null median except sports participation's is
+negative, because contraction of well-estimated shares is a bias rather than useful insurance,
+so comparing an observed gain with zero understates it.}
 \label{tab:null}
 \end{table}
 
 The shrinkage mechanism is real and it accounts for the entire gain in the smallest
-dataset. Sports participation, with $130$ respondents, sits exactly on its null and is
-excluded from every claim here. Everywhere else the mechanism runs against Gaussian renormalization, and
+dataset. Sports participation, with $130$ respondents, sits exactly on its null and
+receives no verdict. Everywhere else the mechanism runs against Gaussian renormalization, and
 the excess over the null exceeds the raw gain in every remaining collection. The menu
 experiment, the one collection in this table that observes menu choice directly, clears the null
-on both readings.
+for both the forced-choice and the all-subject samples.
 
 \subsection{Boundary conditions}
 \label{sec:boundary}
@@ -1609,9 +1598,11 @@ listeners name one of ten pure tones, and ran the same tones with the middle eig
 middle six labels, so the label sets nest over physically identical stimuli. Calibrating on
 the ten-label row and predicting the restricted rows, linear renormalization wins all four
 conditions, by $0.0132$ and $0.0051$ nats at narrow spacing and $0.0172$ and $0.0041$ at wide. One row of the wide
-ten-to-eight condition is excluded: it contains an exact zero, which has to be floored, and two
-independently written calibrators disagree on the resulting location by enough to move that
-condition's gain. The other fifteen rows agree between them to $10^{-4}$. The mechanism is visible in the matrices, which are strongly banded: a tone is
+ten-to-eight condition is excluded: it contains an exact zero, and the location after flooring
+is unstable enough to move that condition's gain. The other fifteen ten-to-eight rows agree
+between two independently written calibrators to $10^{-4}$.
+
+The mechanism is visible in the matrices, which are strongly banded: a tone is
 confused almost entirely with its immediate neighbours, so the alternatives are
 near-substitutes by construction and removing the outer labels returns their mass to
 neighbours rather than proportionally. The loss is larger at six labels, where more of the
@@ -1625,12 +1616,12 @@ predicts Guilty at $54.9$ per cent against an observed $38$, and after deliberat
 against $31$. Both defaults fail, because the ordering \emph{reverses}: Guilty leads Not
 guilty with three verdicts and trails it with two. Contraction moves odds toward one and
 never crosses over, so Gaussian renormalization fails here too, and only slightly less. Neither
-map can produce a reversal. Boissonnet and Ghersengorin \cite{boissonnet2025} axiomatize a
-choice model identified from reversals of this kind, and it is the theoretical account this row
-calls for. Not proven is a near substitute for Not guilty, so deleting it returns its mass to that neighbour rather than
-proportionally, which is Debreu's objection in a courtroom, on a fixed stimulus. Townsend and
-Landon's diagnosis \cite{townsendlandon1982} is the same one: their rule fails on the subset
-containing similar letters and holds on the subset that does not.
+map can produce a reversal.
+
+Not proven is a near substitute for Not guilty, so deleting it returns its mass to that
+neighbour rather than proportionally, which is Debreu's objection in a courtroom, on a fixed
+stimulus. Boissonnet and Ghersengorin \cite{boissonnet2025} axiomatize a choice model identified
+from reversals of this kind, and it is the theoretical account this row calls for.
 
 \paragraph{The same boundary inside one experiment.} Getty, Swets, Swets and Green
 \cite{getty1979} had three observers identify eight complex sounds with all eight responses
@@ -1692,19 +1683,19 @@ and after.
 Over $1{,}296$ cells and $49$ subjects, linear renormalization predicts better in every split.
 The gain is $-0.0134$ overall with a subject bootstrap of $[-0.0176, -0.0103]$, and by size of
 the surviving menu it is $-0.0056$ at eight, $-0.0089$ at four and $-0.0322$ at two, so the
-loss grows as more of the continuum is cut away. This is the largest disagreement in the paper
-running against Gaussian renormalization.
+loss grows as more of the continuum is cut away. The twelve-to-two restriction is the largest
+single loss for Gaussian renormalization in the paper.
 
-It is also the boundary rule's own prediction. Line length is the unidimensional continuum of
-the absolute-identification literature, and the rule was fixed in a circulated draft before
-this data was obtained. Together with the tone matrices and the Getty condition whose survivors
+The dependence diagnostic of Section~\ref{sec:diagnostics} predicted this loss. Line length is
+the unidimensional continuum of the absolute-identification literature, and the diagnostic was
+written down before this data was obtained. Together with the tone matrices and the Getty condition whose survivors
 are mutual confusions, it is the third collection of that kind and the third loss.
 
 \paragraph{Induced values on a continuum.} Duffy and Smith \cite{duffysmith2025} pay subjects
 to select the longest of between two and six grey lines. Value is induced and one-dimensional by
 construction, which the authors make the point of the design: ``objects are valued according to
 only a single attribute with a continuous measure and we can observe whether the choice was
-optimal''. The boundary rule therefore predicts linear renormalization, and that is what their
+optimal''. The dependence diagnostic therefore predicts linear renormalization, and that is what their
 data gives.
 
 Their lengths are redrawn on every trial, so there are no fixed alternatives carrying stable
@@ -1732,12 +1723,12 @@ near-zero differences rather than evidence.
 
 Figure~\ref{fig:line} shows the same division on one axis. The collections nearest linear
 renormalization are the line continuum and the high-cost gambles; the collections furthest past
-Gaussian renormalization are categories, colours, symbols and consumer goods.
+Gaussian renormalization are categories, colours, symbols, political goals and consumer goods.
 
 \subsection{Two false explanations of the failures}
 \label{sec:notculprit}
 
-\paragraph{A continuum is not the culprit.} Let a noisy scalar percept $s$ arrive and give
+\paragraph{A continuum is not the culprit.} Let the stimulus fix a scalar percept $s$, and give
 response label $i$, positioned at $x_i$ on the same physical dimension, the utility
 $U_i = -c\,(s - x_i)^2 + \varepsilon_i$ with $\varepsilon_i$ independent standard normal.
 Neighbouring labels are more confusable than distant ones and the confusion matrix is strongly
@@ -1747,7 +1738,9 @@ wrong. With $c = 1/2$ and labels at $-2,\dots,2$, removing the second and fourth
 favourite share of $0.866$ at $s=0$; Gaussian renormalization returns it exactly and linear
 renormalization returns $0.924$. Replace the Gaussian errors with independent Gumbels and the
 verdict reverses exactly, with the same one-dimensional geometry and the same banding. Dimension
-does not identify the noise law.
+does not identify the noise law. If instead $s$ varies from trial to trial, every label shares
+that variation and the contest is no longer independent; that is the dependence of
+Section~\ref{sec:diagnostics}.
 
 \paragraph{Near-substitution does not fix the sign.} Take full-menu shares
 $p = (0.50, 0.30, 0.20)$ and let the last fifth of the population rank $C \succ B \succ A$, so
@@ -1758,16 +1751,15 @@ loss, $0.7210$ against $0.7254$. Now change only that fifth to $C \succ A \succ 
 shares are unchanged and the perfect substitute is still there, but the truth becomes $0.70$ and
 linear renormalization is the better of the two, $0.6233$ against $0.6261$. The same share vector
 and the same statement that a removed alternative has a near-substitute admit opposite answers.
-What decides it is where the displaced mass goes: toward a lower-share survivor the odds contract
+The deciding factor is where the displaced mass goes: toward a lower-share survivor the odds contract
 and Gaussian renormalization gains, toward the favourite they expand and it loses.
 
 \subsection{Three diagnostics}
 \label{sec:diagnostics}
 
 So the pattern in the failures is not a rule about what kind of thing the alternatives are.
-What the failures do supply is three heuristic checks on the assumptions, of different logical
-types. They are offered as a way of reading the collections above, not as conditions anyone has
-established. Only the line-length collection was scored after they were written down.
+The failures do suggest three heuristic checks on the assumptions, of different logical types.
+Only the line-length collection was scored after they were written down.
 
 \emph{Dependence.} A shared percept, local substitution, clustered tastes or a common shock makes
 the covariance materially non-isotropic on the contrast subspace, and independent Case V is then
@@ -1806,10 +1798,11 @@ The practical recommendation is narrow, and Section~\ref{sec:boundary} makes it 
 When a probability vector is transported to a smaller support, Gaussian renormalization should be
 tried alongside linear renormalization rather than passed over.
 
-Four questions bear on whether the independence the Gaussian contest assumes is tenable. They are
-heuristics and nothing more. They were not derived, they are not necessary or sufficient for
-either map to win, they were formed partly from the same collections that now illustrate them,
-and Section~\ref{sec:notculprit} constructs populations where the first two point the wrong way.
+Four questions bear on whether the independence the Gaussian contest assumes is tenable. The
+first two split the dependence check of Section~\ref{sec:diagnostics} in two, and the third and
+fourth are its transport-failure and low-leverage checks. They are heuristics, neither necessary
+nor sufficient for either map to win, formed partly from the collections they describe, and
+Section~\ref{sec:notculprit} constructs populations where the first two point the wrong way.
 None is settled by the share vector alone. Distinct unordered items, such as goods, articles,
 jokes or occupations, usually answer no to all four, which is a rule of thumb about where the two
 maps have separated in our data rather than a statement about where they must.
@@ -1837,8 +1830,8 @@ A confusion matrix bears on the first two, which is the diagnostic Townsend and 
 makes it numerical. It does not settle the first outright: Section~\ref{sec:notculprit}
 constructs an independent Case V model, with ordinary per-stimulus locations and no covariance
 at all, whose confusion matrix bands exactly like a dependent one. Banding is consistent with
-dependence and does not by itself identify it. What the matrix does supply is much richer
-information than a share vector, and for goods, news articles, candidates, jokes and occupations
+dependence and does not by itself identify it. The matrix does supply much richer information
+than a share vector, and for goods, news articles, candidates, jokes and occupations
 no such matrix exists. There the
 questions have to be answered from the feature geometry or the semantics of the alternatives,
 and cannot be read off the shares.
@@ -1853,8 +1846,9 @@ probabilities for a fixed location vector, the forward direction, is one pass ov
 following the lattice algorithm of \cite{cotton2021}; inverting from shares to locations solves
 for that vector by repeated forward passes, immediate at the field sizes here, twelve
 alternatives at most. The restricted predictions are then one-dimensional quadrature on the same
-grid. The method is designed for and tested at much larger fields \cite{cotton2021}. So the
-recommendation needs no additional restricted-menu observations and no appreciable additional
+grid. The method is designed for and tested at much larger fields \cite{cotton2021}.
+
+The recommendation needs no additional restricted-menu observations and no appreciable additional
 computation, although the boundary conditions of Section~\ref{sec:boundary} require structural
 information about similarity, ordering or task geometry that the shares do not contain. Away from
 those conditions Gaussian renormalization had the lower loss on every row examined here. At them
@@ -1874,8 +1868,8 @@ satisfy the axiom in aggregate, which is why mixed logit is useful and why its
 probabilities are integrals over logit probabilities rather than logit probabilities
 \cite{mcfaddentrain2000}. Aggregate failure of the axiom is therefore not evidence that
 individuals violate it. Heterogeneous Luce choosers can reproduce aggregate contraction, and
-Section~\ref{sec:mixture} exhibits a class in which they do. What
-is rejected is a representative-agent map.
+Section~\ref{sec:mixture} exhibits a class in which they do. The tables reject a
+representative-agent map.
 
 The experiment compares two restriction maps, not two fitted likelihoods. A fitted
 Plackett--Luce model \cite{plackett1975} uses the whole ranking and a fitted Bradley--Terry
@@ -1884,7 +1878,7 @@ paired-comparison likelihoods are therefore outside what these tables measure.
 
 The score is a sum of marginal scores for top-item-within-subset outcomes. It is proper
 for those marginals and not for the ranking distribution. With $K = 4$ the scored
-marginals carry at most $17$ degrees of freedom against $23$ for a distribution over
+marginals carry at most $14$ degrees of freedom, $17$ with the calibration menu, against $23$ for a distribution over
 rankings, so distinct ranking laws can agree on everything scored here.
 
 The independent-noise family nests Luce at the Gumbel law, so it excludes no Luce population.
@@ -1917,15 +1911,9 @@ against the ubiquitous linear rescaling of probability. The question is not conf
 goods; it arises wherever a probability vector is moved to a smaller support, which includes
 masked softmax vocabularies, scratched fields, delisted catalogues and disallowed response sets.
 
-Four operations run together under that heading. Conditioning a fixed categorical law on
-$Y(S) \in T$ gives $p_i / \sum_{j \in T} p_j$ by definition, and masking a fixed softmax and
-rescaling is the same arithmetic on a score vector, so in both of those the linear transport is a
-theorem and there is nothing to choose. When a model recomputes its scores with the permitted set
-as an input, the result is not a transport of the old vector at all, and neither map describes it.
-The question belongs to the remaining case, where the feasible set is intervened upon, the
-experiment that generates the choice changes, and the original shares do not determine the new
-ones. A masked softmax is the arithmetic of conditioning and the question of intervention,
-because the mask frequently stands for an intervention that nobody modelled.
+Linear renormalization is a theorem when the support shrinks by conditioning and a modelling
+choice when the feasible set is intervened on; only the second case is at issue. A mask often
+encodes an intervention while performing the arithmetic of conditioning.
 
 Three things are established by the tables. Gaussian renormalization has the lower held-out log
 loss in thirty of the thirty-nine comparisons. Counting by source instead, which is the right
@@ -1944,8 +1932,8 @@ observation exists to fit one.
 
 Section~\ref{sec:boundary} lists three conditions under which Gaussian renormalization should
 not be expected to help: the alternatives are dependent, the task changes when an option is
-withdrawn, or too little mass is withdrawn for the choice to matter. We have not established
-these. They are heuristics. None of them can be determined from a share vector alone. A confusion
+withdrawn, or too little mass is withdrawn for the choice to matter. They are heuristics, and
+none of them can be determined from a share vector alone. A confusion
 matrix bears on the first when one is available, though banding alone does not identify
 dependence, since an independent model with the right locations produces it too
 (Section~\ref{sec:notculprit}); otherwise the judgement is made from the alternatives themselves
@@ -1956,10 +1944,10 @@ finishing second. A comparison over complete rankings is left to future work.
 
 Theory does not decide between the two maps. Both are zero-parameter members of one family, and
 nothing about a masked softmax expresses a belief that choice errors are double exponential. The
-evidence assembled here does not decide it either, in the sense of installing a new default. What
-it does show is that the second reflex is worth having. It costs one inversion, it fits nothing,
-and in thirty of thirty-nine comparisons it forecast the withheld choices better than the reflex
-everybody already uses. Consider it alongside the first.
+evidence assembled here does not install a new default either. It supports computing Gaussian
+renormalization alongside linear renormalization. It costs one inversion, it fits nothing, and in
+thirty of thirty-nine comparisons it forecast the withheld choices better than the reflex
+everybody already uses.
 
 \section*{Data and code}
 
@@ -2001,7 +1989,7 @@ Two storage conventions must be told apart when reproducing this. BayesMallows,
 ConsRank and PerMallows store ranks, so element $j$ holds the rank of alternative $j$,
 while PLMIX stores orderings, so the first element names the favourite. Reading one as
 the other transposes the data silently and raises no error. We established which is
-which by cross-validation: the political goals data ships in two of these packages and
+which by cross-checking: the political goals data ships in two of these packages and
 they agree only when each is read under its own convention.
 
 \appendix
@@ -2025,7 +2013,7 @@ the answer.
 \toprule
 Source & Domain & Restriction & Status \\
 \midrule
-Clarke \cite{clarke1957} & speech in noise & $8 \to 4$, $6 \to 3$ & library access \\
+Clarke \cite{clarke1957} & speech in noise & $6 \to 3$, two more & library access \\
 Pollack and Decker \cite{pollackdecker1960} & consonants & $8 \to 4$, three sets & not scoreable\footnotemark[10] \\
 Hodge and Pollack \cite{hodgepollack1962} & auditory, unidimensional & nested & library access \\
 Lacouture et al.\ \cite{lacouture1998} & line lengths & nested & library access \\
