@@ -948,7 +948,13 @@ function diffProblem(mu, C, i, where) {
   // pair here makes C and C' yield the same contrast -- and therefore the
   // same price -- instead of differing by several percentage points (#726
   // residual).
-  const csym = (p, q) => 0.5 * (C[p][q] + C[q][p]);
+  const csym = (p, q) => {
+    const x = C[p][q], y = C[q][p], sum = x + y;
+    // Keep ordinary (including subnormal) rounding unchanged. Finite,
+    // same-sign entries can overflow their sum even when their average
+    // and the race contrast are representable (#726).
+    return Number.isFinite(sum) ? 0.5 * sum : 0.5 * x + 0.5 * y;
+  };
   const S = new Float64Array((n - 1) * (n - 1));
   const idx = [];
   for (let j = 0; j < n; j++) if (j !== i) idx.push(j);

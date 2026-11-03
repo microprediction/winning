@@ -2944,6 +2944,31 @@ accepts("dividendImpliedAbility keeps the favourite first at unit 0.1 (#649)",
         `C-S ${maxDiff(ghkC, ghkS).toExponential(2)}, Ct-S ${maxDiff(ghkCt, ghkS).toExponential(2)}`);
 }
 
+
+{
+  // #726 overflow residual: the accepted covariance has a finite contrast,
+  // but adding equal 1e308 entries before halving made both dense arms NaN.
+  // In a pair both arms are exact, so this is an analytic check, not MC.
+  for (const H of [5e307, 1e308, 1.5e308]) {
+    const diagonal = H + 4e292;
+    const variance = 2 * (diagonal - H);
+    const C = [[diagonal, H], [H, diagonal]];
+    const mu = [0, Math.sqrt(variance)];
+    accepts(`large common-mode C is valid at ${H} (#726)`,
+            () => demo.validateCovariance(C), v => v.flat().every(Number.isFinite));
+    for (const i of [0, 1]) {
+      const expected = core.ndtr(i === 0 ? 1 : -1);
+      const prep = demo.ghkPrepareOne(mu, C, i);
+      holds(`GHK finite exact contrast at ${H}, runner ${i} (#726)`,
+            Number.isFinite(prep.L[0]) && Math.abs(prep.L[0] / Math.sqrt(variance) - 1) < 1e-14);
+      holds(`GHK analytic pair at ${H}, runner ${i} (#726)`,
+            Math.abs(demo.ghkSampleOne(prep, 1, demo.rng(7)) - expected) < 1e-14);
+      holds(`Mendell-Elston analytic pair at ${H}, runner ${i} (#726)`,
+            Math.abs(demo.mendellElstonOne(mu, C, i) - expected) < 1e-14);
+    }
+  }
+}
+
 {
   // one global 1e-8 * max|dist| tolerance let an unrelated 1e12 distance
   // hide a -1 distance, a 1 vs 100 asymmetry and a diagonal of 1 (#721)
