@@ -25,6 +25,15 @@ prices_from_dividends <- function(dividends, nan_value = 2000) {
   d <- ifelse(is.na(dividends), nan_value, dividends)
   p <- ifelse(d <= 0, 0, 1 / d)
   s <- sum(p)
+  if (!is.finite(s)) {
+    # finite dividends whose reciprocals overflow -- c(1e-320, 2e-320) --
+    # are the same book read against the smallest, every ratio at most
+    # one; 1/d first gave Inf / Inf = NaN (#881). Ordinary books never
+    # reach here.
+    dmin <- min(d[d > 0])
+    p <- ifelse(d <= 0, 0, dmin / d)
+    s <- sum(p)
+  }
   if (s > 0) p / s else p
 }
 
