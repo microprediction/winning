@@ -2416,6 +2416,8 @@ def _jacobi_sweeps(mu, forward, scale, alpha, n_iter, tol):
                 prev_step = None
         elif prev is not None and penalty < 1.0:
             penalty = min(1.0, penalty / 0.75)
+        # the last sweep's own contraction, for the Aitken gate below
+        prev_max = prev[3] if prev is not None else np.inf
         prev = (mu, resid, dlogp, resid_max, resid_rms)
         alpha = alpha_base * penalty
         lim = np.minimum(2.0, 10.0 * np.abs(resid)) * scale
@@ -2432,7 +2434,8 @@ def _jacobi_sweeps(mu, forward, scale, alpha, n_iter, tol):
                     lam = 1.0 - (1.0 - rho) / alpha
                     alpha_base = float(np.clip(2.0 / (2.0 - lam), 0.1, 1.0))
                 elif (cos > 0.999 and 0.5 < ratio < 0.999
-                      and resid_max > 1e3 * tol):
+                      and resid_max > 1e3 * tol
+                      and abs(resid_max / prev_max - ratio) <= AITKEN_AGREE):
                     trial = _aitken_trial(mu, step, ratio, scale, forward,
                                           resid_max)
                     if trial is not None:   # sum the geometric tail
@@ -2466,6 +2469,17 @@ def _jacobi_sweeps(mu, forward, scale, alpha, n_iter, tol):
         else:
             resid_max = float(r_end)
     return mu, resid_max < tol, resid_max, iters
+
+
+# Aitken sums a geometric tail, which exists only while the residual shrinks
+# by the same factor as the step. When the plain sweeps are converging
+# FASTER than the step ratio says -- the superlinear finish after a
+# plateau -- the extrapolation overshoots: on #956's exact target trials
+# fired at residual/step ratios 0.60/0.86 and 0.63/0.88, each raised the
+# residual 2-9x, and the inverse ended 13.6 off where the plain sweeps
+# converge in 60. The dense near-unidentified fields of #178, which need
+# the trial, agree to within 0.11.
+AITKEN_AGREE = 0.15
 
 
 def _aitken_trial(mu, step, ratio, scale, forward, resid_max):
