@@ -2193,6 +2193,62 @@ for (const c of [1e-8, 100]) {
       }
 }
 
+// --- exported normal callable is the named law at derivative/polish doors (#912)
+{
+  const mu = [-0.8, -0.2, 0.3, 0.9];
+  const cl = [0, 0, 1, 1], ld = [0.5, 0.2, 0.4, 0.1], D = [0.8, 0.9, 0.7, 1.0];
+  const grammars = [
+    structures.Blocks(cl, ld, D),
+    structures.Nested(cl, ld, D, [0.3, 0.1, 0.4, -0.2], 0.5),
+    structures.Tree(cl, ld, D, [2, 2, -1], [0, 0, 0.3]),
+    structures.Independent(D),
+    structures.Factor(ld.map(v => [v]), D),
+  ];
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  for (const structure of grammars) {
+    const o = { structure, points: 257 };
+    const J = polish.raceJacobian(mu, { ...o, base: "normal" });
+    accepts(`${structure.kind} callable normal Jacobian equals named law (#912)`,
+      () => polish.raceJacobian(mu, { ...o, base: races.BASES.normal }),
+      actual => same(actual, J));
+    const po = { ...o, mu0: mu, nameCaps: structure.kind === "Nested" || structure.kind === "Tree" ? 0.8 : 0.35, fdFallback: false };
+    const named = polish.polishRace({ ...po, base: "normal" });
+    accepts(`${structure.kind} callable normal polish equals converged named law (#912)`,
+      () => polish.polishRace({ ...po, base: races.BASES.normal }),
+      actual => named.info.converged && actual.info.converged && same(actual, named));
+    if (["Blocks", "Nested", "Tree"].includes(structure.kind)) {
+      // Identity only: neither another law nor a user-defined normal wrapper
+      // is silently reclassified as the supported named Gaussian grammar.
+      for (const base of ["logistic", races.BASES.logistic, x => races.BASES.normal(x)]) {
+        rejects(polish.raceJacobian, [mu, { ...o, base }],
+          `${structure.kind} Jacobian still rejects unsupported base (#912)`, "support base");
+        rejects(polish.polishRace, [{ ...po, base }],
+          `${structure.kind} polish still rejects unsupported base (#912)`, "support base");
+      }
+    }
+  }
+  // Exercise the structured pair shortcut and polish's p0 inverse closure.
+  const pair = [-0.8, 0.8], d = [1, 1], l = [0.5, 0.5];
+  for (const structure of [
+    structures.Blocks([0, 1], l, d),
+    structures.Nested([0, 1], l, d, [0.3, 0.3], 0.5),
+    structures.Tree([0, 1], l, d, [2, 2, -1], [0, 0, 0.3]),
+    structures.Independent(d), structures.Factor(l.map(v => [v]), d),
+  ]) {
+    const o = { structure, points: 257 };
+    const namedJ = polish.raceJacobian(pair, { ...o, base: "normal" });
+    accepts(`${structure.kind} pair callable normal uses named Jacobian (#912)`,
+      () => polish.raceJacobian(pair, { ...o, base: races.BASES.normal }),
+      actual => same(actual, namedJ));
+    const p0 = [0.5, 0.5];
+    const po = { ...o, p0, nameCaps: [0.4, NaN], fdFallback: false };
+    const named = polish.polishRace({ ...po, base: "normal" });
+    accepts(`${structure.kind} p0 callable normal polish equals named law (#912)`,
+      () => polish.polishRace({ ...po, base: races.BASES.normal }),
+      actual => named.info.converged && actual.info.converged && same(actual, named));
+  }
+}
+
 // --- a structured Jacobian refuses a base its forward refuses (#89)
 for (const s of [structures.Blocks([0, 0, 1], 0.8, 0.2),
                  structures.Tree([0, 0, 1], 0.8, 0.2, [2, 2, -1], [0, 0, 0.5])])
@@ -2947,6 +3003,58 @@ accepts("dividendImpliedAbility keeps the favourite first at unit 0.1 (#649)",
   holds("GHK: C and C' match the symmetrized covariance (#726)",
         Math.max(maxDiff(ghkC, ghkS), maxDiff(ghkCt, ghkS)) < 5e-3,
         `C-S ${maxDiff(ghkC, ghkS).toExponential(2)}, Ct-S ${maxDiff(ghkCt, ghkS).toExponential(2)}`);
+}
+
+
+{
+  // #726 overflow residual: the accepted covariance has a finite contrast,
+  // but adding equal 1e308 entries before halving made both dense arms NaN.
+  // In a pair both arms are exact, so this is an analytic check, not MC.
+  for (const H of [5e307, 1e308, 1.5e308]) {
+    const diagonal = H + 4e292;
+    const variance = 2 * (diagonal - H);
+    const C = [[diagonal, H], [H, diagonal]];
+    const mu = [0, Math.sqrt(variance)];
+    accepts(`large common-mode C is valid at ${H} (#726)`,
+            () => demo.validateCovariance(C), v => v.flat().every(Number.isFinite));
+    for (const i of [0, 1]) {
+      const expected = core.ndtr(i === 0 ? 1 : -1);
+      const prep = demo.ghkPrepareOne(mu, C, i);
+      holds(`GHK finite exact contrast at ${H}, runner ${i} (#726)`,
+            Number.isFinite(prep.L[0]) && Math.abs(prep.L[0] / Math.sqrt(variance) - 1) < 1e-14);
+      holds(`GHK analytic pair at ${H}, runner ${i} (#726)`,
+            Math.abs(demo.ghkSampleOne(prep, 1, demo.rng(7)) - expected) < 1e-14);
+      holds(`Mendell-Elston analytic pair at ${H}, runner ${i} (#726)`,
+            Math.abs(demo.mendellElstonOne(mu, C, i) - expected) < 1e-14);
+    }
+  }
+}
+
+{
+  // #726 contrast residual: C is the covariance of (A, 0.8A+B, 0.8A-B) with
+  // var A = 1.7e308, var B = 0.3e308. Its contrasts are representable
+  // (diagonal 3.68e307), but Cjk - Cji - Cik summed left to right reached
+  // -Infinity before Cii. A race is invariant to a common power-of-two
+  // rescaling of C (with mu = 0), so the scaled C is the oracle.
+  const C = [[1.7e308, 1.36e308, 1.36e308], [1.36e308, 1.388e308, 0.788e308],
+             [1.36e308, 0.788e308, 1.388e308]];
+  const s = 2 ** -1020;
+  const Cs = C.map(r => r.map(v => v * s));
+  const mu = [0, 0, 0];
+  for (const i of [0, 1, 2]) {
+    const me = demo.mendellElstonOne(mu, C, i), ref = demo.mendellElstonOne(mu, Cs, i);
+    holds(`Mendell-Elston prices a near-overflow contrast, runner ${i} (#726)`,
+          Number.isFinite(me) && Math.abs(me - ref) < 1e-14, `${me} vs ${ref}`);
+    const prep = demo.ghkPrepareOne(mu, C, i), prepS = demo.ghkPrepareOne(mu, Cs, i);
+    const g = demo.ghkSampleOne(prep, 2000, demo.rng(11));
+    const gS = demo.ghkSampleOne(prepS, 2000, demo.rng(11));
+    holds(`GHK prices a near-overflow contrast, runner ${i} (#726)`,
+          Number.isFinite(g) && Math.abs(g - gS) <= 1e-13 * Math.abs(gS), `${g} vs ${gS}`);
+  }
+  const L = demo.raceFactor(C), Ls = demo.raceFactor(Cs);
+  holds("raceFactor factors a near-overflow contrast (#726)",
+        L.flat().every((v, k) => Number.isFinite(v) &&
+          Math.abs(v * 2 ** -510 - Ls.flat()[k]) <= 1e-14 * Math.abs(Ls.flat()[k]) + 1e-300));
 }
 
 {
@@ -3810,6 +3918,100 @@ rejects(C => demo.fitGrammar(C, 1, 0, { method: "ipaf", tol: 0 }),
   rejects(polish.raceJacobian, [mu, { structure: blk, window: "span" }],
           "the block Jacobian refuses window as the block forward does (#821)",
           "do not support window");
+}
+
+// --- callable log tails must reach the Jacobian, as in the forward (#952)
+{
+  const rawNormal = z => [core.ndtr(-z), core.npdf(z), -z * core.npdf(z)];
+  rawNormal.logSf = z => core.logndtr(-z);
+  rawNormal.span = [8, 8];
+  const mu = [-1, 0, 1, 30];
+  const opts = { D: [1, 1, 1, 1], base: rawNormal,
+                 points: 2001, window: "span" };
+  const finite = a => a.flat().every(Number.isFinite);
+  const close = (a, b, tol) => a.length === b.length &&
+    a.flat().every((v, k) => Number.isFinite(v) &&
+      Number.isFinite(b.flat()[k]) && Math.abs(v - b.flat()[k]) <= tol);
+  const p = races.raceProbabilities(mu, opts);
+  const J = polish.raceJacobian(mu, opts);
+  const named = polish.raceJacobian(mu, { ...opts, base: "normal" });
+  holds("raw callable and named normal price the same span (#952)",
+        close(p, races.raceProbabilities(mu, { ...opts, base: "normal" }), 0));
+  holds("raw callable wide-span Jacobian is finite (#952)", finite(J));
+  holds("raw callable wide-span Jacobian matches named normal (#952)", close(J, named, 1e-12));
+  const h = 1e-5;
+  const fd = Array.from({ length: mu.length }, () => []);
+  for (let j = 0; j < mu.length; j++) {
+    const plus = mu.slice(), minus = mu.slice();
+    plus[j] += h; minus[j] -= h;
+    const pp = races.raceProbabilities(plus, opts);
+    const pm = races.raceProbabilities(minus, opts);
+    for (let i = 0; i < mu.length; i++) fd[i][j] = (pp[i] - pm[i]) / (2 * h);
+  }
+  holds("raw callable Jacobian differentiates public forward (#952)", close(J, fd, 1e-9));
+  holds("callable Jacobian ordinary block survives remote runner (#952)",
+        close(J.slice(0, 3).map(r => r.slice(0, 3)),
+          polish.raceJacobian(mu.slice(0, 3), { ...opts, D: [1, 1, 1] }), 1e-12));
+  holds("callable Jacobian row sums preserve translation (#952)",
+        J.every(r => Number.isFinite(r.reduce((a, b) => a + b, 0)) &&
+          Math.abs(r.reduce((a, b) => a + b, 0)) < 1e-14));
+  // A downstream linear-constraint gradient A*J must remain useful,
+  // rather than merely accepting a normalized, finite price vector.
+  const a = [1, -0.5, 0.25, 0];
+  const aj = matrix => mu.map((_, j) => a.reduce((s, v, i) => s + v * matrix[i][j], 0));
+  holds("callable constraint gradient agrees with forward differences (#952)", close(aj(J), aj(fd), 1e-9));
+  // More than one underflowing survival at the same lattice point and a
+  // small explicit factor rule exercise both independent and factor paths.
+  const factor = { ...opts, V: [[0.2], [-0.1], [0.3], [-0.4]],
+                   F: [[-1], [1]], W: [0.5, 0.5] };
+  const jf = polish.raceJacobian(mu, factor);
+  holds("callable factor-law Jacobian is finite (#952)", finite(jf));
+  holds("callable factor-law Jacobian matches named normal (#952)",
+        close(jf, polish.raceJacobian(mu, { ...factor, base: "normal" }), 1e-12));
+  // In ordinary windows the rule is inert, including callables which
+  // provide no log-tail metadata at all.
+  const plain = z => rawNormal(z);
+  plain.span = [8, 8];
+  const ordinary = { D: [1, 1, 1], points: 501, window: "bulk" };
+  holds("ordinary callable without logSf retains its Jacobian (#952)",
+        close(polish.raceJacobian([-1, 0, 1], { ...ordinary, base: plain }),
+              polish.raceJacobian([-1, 0, 1], { ...ordinary, base: rawNormal }), 0));
+}
+
+// --- a compact-support callable: zero density stays zero, and the
+// leave-one-out survival is summed, not subtracted, at the sentinel (#952)
+{
+  const c = 7, tail = core.ndtr(-c), mass = 1 - 2 * tail;
+  const sd = Math.sqrt(1 - 2 * c * core.npdf(c) / mass);
+  const base = z => {
+    const u = z * sd;
+    if (u <= -c) return [1, 0, 0];
+    if (u >= c) return [0, 0, 0];
+    const f = sd * core.npdf(u) / mass;
+    return [(core.ndtr(-u) - tail) / mass, f, -u * sd * f];
+  };
+  base.logSf = z => Math.log(base(z)[0]);
+  const opts = { base, points: 2001, window: "span" };
+  const mu = [-15, 0, 1];
+  // the first runner's support is disjoint from the others': it always wins
+  const p = races.raceProbabilities(mu, opts);
+  holds("compact callable: the disjoint runner always wins (#952)",
+        p[0] === 1 && p[1] === 0 && p[2] === 0);
+  const J = polish.raceJacobian(mu, opts);
+  holds("compact callable: a fixed winner has a zero Jacobian (#952)",
+        J.flat().every(v => Number.isFinite(v) && Math.abs(v) < 1e-12),
+        () => JSON.stringify(J));
+  // the overlapping pair keeps its derivative, against the forward
+  const h = 1e-5, mu2 = [0, 1];
+  const J2 = polish.raceJacobian(mu2, opts);
+  const fd = [0, 1].map(j => {
+    const a = mu2.slice(), b = mu2.slice(); a[j] += h; b[j] -= h;
+    const pa = races.raceProbabilities(a, opts), pb = races.raceProbabilities(b, opts);
+    return [0, 1].map(i => (pa[i] - pb[i]) / (2 * h));
+  });
+  holds("compact callable: an overlapping pair still differentiates its forward (#952)",
+        [0, 1].every(i => [0, 1].every(j => Math.abs(J2[i][j] - fd[j][i]) < 1e-7)),
+        () => JSON.stringify([J2, fd]));
 }
 
 // --- the Nested/Tree inverse preconditions each runner by its own slope,
