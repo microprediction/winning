@@ -716,6 +716,32 @@ def _as_abilities(mu):
     return mu
 
 
+def _check_caller_rule(F, W, V):
+    """A caller's factor rule against the loadings it integrates, before
+    any backend dispatch: a short W or a wrong-rank F used to reach the
+    compiled kernel and come back as an index PanicException, or as a late
+    matmul ValueError on the pure path (#75). Shared with the inverse, which
+    read a flat F through as_factor_law and certified a rule the forward
+    then refused (#970). Returns F as a float array."""
+    F = np.asarray(F, dtype=float)
+    if F.ndim != 2:
+        raise ValueError(
+            f"F must be a 2-D (nodes, rank) array; got shape {F.shape}")
+    W_arr = np.asarray(W, dtype=float)
+    if W_arr.ndim != 1:
+        raise ValueError(
+            f"W must be a 1-D weight vector; got shape {W_arr.shape}")
+    if F.shape[1] != V.shape[1]:
+        raise ValueError(
+            f"F has {F.shape[1]} factor columns but V has rank "
+            f"{V.shape[1]}; F is (nodes, rank)")
+    if F.shape[0] != W_arr.shape[0]:
+        raise ValueError(
+            f"F has {F.shape[0]} nodes but W has {W_arr.shape[0]} "
+            "weights; they must match one-to-one")
+    return F
+
+
 def _setup(mu, V, D, F, W, base):
     caller_rule = F is not None
     mu = _as_abilities(mu)
@@ -754,26 +780,7 @@ def _setup(mu, V, D, F, W, base):
                 "supply both F (factor nodes) and W (their weights), or "
                 f"neither; got only {'F' if W is None else 'W'}")
         if F is not None:
-            # A supplied rule is checked before any backend dispatch: a
-            # short W or a wrong-rank F used to reach the compiled kernel
-            # and come back as an index PanicException, or as a late
-            # matmul ValueError on the pure path (#75).
-            F = np.asarray(F, dtype=float)
-            if F.ndim != 2:
-                raise ValueError(
-                    f"F must be a 2-D (nodes, rank) array; got shape {F.shape}")
-            W_arr = np.asarray(W, dtype=float)
-            if W_arr.ndim != 1:
-                raise ValueError(
-                    f"W must be a 1-D weight vector; got shape {W_arr.shape}")
-            if F.shape[1] != V.shape[1]:
-                raise ValueError(
-                    f"F has {F.shape[1]} factor columns but V has rank "
-                    f"{V.shape[1]}; F is (nodes, rank)")
-            if F.shape[0] != W_arr.shape[0]:
-                raise ValueError(
-                    f"F has {F.shape[0]} nodes but W has {W_arr.shape[0]} "
-                    "weights; they must match one-to-one")
+            F = _check_caller_rule(F, W, V)
         if F is None or W is None:
             # adaptive order: when idiosyncratic noise is small relative
             # to the loadings, the conditional race is nearly
@@ -2025,6 +2032,10 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
     _Vn = np.zeros((n_t, 1)) if V is None else as_loadings(V, n_t)
     _Vc = _gauge_center(_Vn)                       # scale-safe (#471)
     if V is not None and nodes_given:
+        # the forward's shape and rank contract first: a flat F was read by
+        # as_factor_law, solved and certified at residual 0, and the
+        # public forward then refused the same rule (#970)
+        _check_caller_rule(F, W, _Vn)
         # the law the forward prices: _setup's as_factor_law, which also
         # drops negligible caller nodes. Kept, a 1e-15 node the forward
         # never sees was solved and certified at residual 0 while the
