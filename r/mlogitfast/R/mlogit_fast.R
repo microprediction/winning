@@ -485,7 +485,9 @@
                  length(choice)), call. = FALSE)
   nb <- ncol(X)
   beta <- theta[seq_len(nb)]
-  wfree <- theta[-seq_len(nb)]
+  # a tail slice: theta[-seq_len(0)] is EMPTY, so a zero-column mean
+  # design dropped every loading (#949)
+  wfree <- theta[nb + seq_len(length(theta) - nb)]
   V <- matrix(0, J, r)
   k <- 1L
   fill <- list()
@@ -887,10 +889,10 @@ mlogit_fast <- function(formula, data, r = NULL, Qf = 7L, Qz = NULL,
     colnames(X) <- c(paste0("(Intercept):", levels(alt_f)[2:J]),
                      colnames(Xcov))
   } else {
-    # `0 +` / `- 1` drops the alternative-specific intercepts (#472)
-    if (!ncol(Xcov))
-      stop("the formula has no covariates and no intercepts to fit",
-           call. = FALSE)
+    # `0 +` / `- 1` drops the alternative-specific intercepts (#472). A
+    # zero-column mean design is still a model: with r > 0 the covariance
+    # loadings remain to fit, and at r = 0 it is the parameter-free
+    # equal-choice null, as in the python reference and julia (#495, #949)
     X <- Xcov
   }
   .check_identified(X, Tn, J)
@@ -919,15 +921,21 @@ mlogit_fast <- function(formula, data, r = NULL, Qf = 7L, Qz = NULL,
                           offset = off)
     memo$out$grad
   }
-  fit <- optim(theta0, fn, gr, method = "BFGS",
-               control = list(maxit = maxit, reltol = 1e-8))
+  # nothing to optimize: evaluate the null rather than hand BFGS an empty
+  # vector (#949)
+  fit <- if (nb + nw == 0L)
+    list(par = numeric(0), value = fn(numeric(0)), convergence = 0L)
+  else optim(theta0, fn, gr, method = "BFGS",
+             control = list(maxit = maxit, reltol = 1e-8))
   sep <- .separation_direction(X, choice, J)
   if (!is.null(sep) && !length(unchosen)) .warn_separated(sep)
   P <- .raw_probabilities(fit$par, X, J, r, nodes, nodes_sharp, off)
   secs <- as.numeric(difftime(Sys.time(), t0, units = "secs"))
   beta <- fit$par[seq_len(nb)]
   names(beta) <- colnames(X)
-  out <- .loading_labels(fit$par[-seq_len(nb)], J, r, levels(alt_f))
+  # an explicit tail: par[-seq_len(0)] is par[-integer(0)], which is EMPTY,
+  # so a covariance-only fit lost every loading (#949)
+  out <- .loading_labels(fit$par[nb + seq_len(nw)], J, r, levels(alt_f))
   structure(list(coefficients = beta,
                  covariance_par = out$par,
                  loadings = out$V,
