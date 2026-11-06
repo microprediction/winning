@@ -40,13 +40,13 @@ def register(name):
     def deco(fn):
         @functools.wraps(fn)
         def wrapped(mu, V, D, *args, **kw):
-            mu = np.asarray(mu, dtype=float)
-            if mu.ndim != 1:
+            # Validate before the covariance bypass and every method shortcut
+            # (argmax can turn NaN into plausible certainty), on a checked
+            # copy: a registered method still receives the caller's own mu,
+            # a tuple stays a tuple, as on the base (#914).
+            if np.ndim(mu) != 1:
                 raise ValueError("mu must be a one-dimensional ability vector")
-            # Validate before the covariance bypass and every method shortcut.
-            # In particular, argmax can turn NaN into plausible certainty.
-            mu = _as_abilities(mu)
-            n = len(mu)
+            n = len(_as_abilities(mu))
             # A method handed the covariance DIRECTLY has no loadings to
             # normalise, and forcing it to supply a factorization is what
             # #302 was: the caller factored, the method rebuilt, and the

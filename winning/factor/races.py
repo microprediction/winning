@@ -702,8 +702,19 @@ def _as_abilities(mu):
     straight to the lattice. A NaN or inf there came back as NaN
     probabilities that sum to nothing, silently. R and julia already
     refused it, which is how the cross-port divergence scan found it. The
-    closed-form Luce helpers share this door (#799)."""
-    mu = np.asarray(mu, dtype=float)
+    closed-form Luce helpers share this door (#799).
+
+    Checked BEFORE the float conversion, which strips what it cannot hold:
+    a masked entry kept its payload and a complex ability lost its
+    imaginary part, so both priced as some other finite field (#914)."""
+    if np.ma.isMaskedArray(mu) and np.ma.getmaskarray(mu).any():
+        raise ValueError("mu has a masked (missing) ability; an ability is a "
+                         "finite location on the performance scale")
+    if np.iscomplexobj(mu):
+        raise ValueError("mu is complex; an ability is a real location on "
+                         "the performance scale")
+    mu = np.asarray(np.ma.getdata(mu) if np.ma.isMaskedArray(mu) else mu,
+                    dtype=float)
     n = len(mu)
     if n == 0:
         raise ValueError("mu is empty; a race needs at least one contestant")
