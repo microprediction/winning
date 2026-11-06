@@ -509,11 +509,14 @@ def tune_block_rho(contests: Sequence[dict], rho_grid=(0.0, 0.1, 0.25, 0.4, 0.6)
     if beta2_grid is None:
         evidence = np.asarray([walk(rho, {}) for rho in rho_grid])
         best = int(np.argmax(evidence))
+        axis = list(dict.fromkeys(rho_grid))
         _, report = select({r: -e for r, e in zip(rho_grid, evidence)},
-                           "rho", order=list(dict.fromkeys(rho_grid)))
+                           "rho", order=axis)
+        # edges of the unique axis select judged, not of the raw grid: a
+        # repeated endpoint made argmax an interior index (#883)
         return {"rho_grid": rho_grid, "beta2_grid": None, "evidence": evidence,
                 "rho": rho_grid[best], "beta2": float(params.get("beta2", 1.0)),
-                "at_edge": best in (0, len(rho_grid) - 1),
+                "at_edge": rho_grid[best] in (axis[0], axis[-1]),
                 "inert": report.inert, "report": report}
     if "beta2" in params:
         raise ValueError("pass beta2 through beta2_grid, not params, when sweeping both")
@@ -523,4 +526,6 @@ def tune_block_rho(contests: Sequence[dict], rho_grid=(0.0, 0.1, 0.25, 0.4, 0.6)
     i, j = np.unravel_index(int(np.argmax(evidence)), evidence.shape)
     return {"rho_grid": rho_grid, "beta2_grid": beta2_grid, "evidence": evidence,
             "rho": rho_grid[i], "beta2": beta2_grid[j],
-            "at_edge": i in (0, len(rho_grid) - 1) or j in (0, len(beta2_grid) - 1)}
+            # by value, so a repeated endpoint is still an edge (#883)
+            "at_edge": (rho_grid[i] in (rho_grid[0], rho_grid[-1])
+                        or beta2_grid[j] in (beta2_grid[0], beta2_grid[-1]))}
