@@ -14,6 +14,7 @@ normalize <- function(p) p / sum(p)
 #' @return numeric probabilities summing to one
 #' @export
 prices_from_dividends <- function(dividends, nan_value = 2000) {
+  .refuse_matrix(dividends, "dividends")                          # (#903)
   # Only a MISSING quote -- NA or NaN -- becomes nan_value. A
   # non-positive dividend, and -Inf with it, is worth nothing and prices
   # at 0; +Inf prices at 1/Inf = 0 on its own. This divided by the
@@ -33,6 +34,7 @@ prices_from_dividends <- function(dividends, nan_value = 2000) {
 #' @return numeric dividends
 #' @export
 dividends_from_prices <- function(prices, multiplicity = 1.0) {
+  .refuse_matrix(prices, "prices")                                # (#903)
   p <- normalize(prices)
   ifelse(!is.na(p) & p > 0, 1 / (multiplicity * p), NA_real_)
 }
@@ -262,6 +264,7 @@ dividend_implied_ability <- function(dividends, density,
 #' @export
 ability_implied_state_prices <- function(ability, density, unit = 1.0,
                                          max_depth = 3L) {
+  .refuse_matrix(ability, "ability")                              # (#903)
   .check_unit(unit, "ability_implied_state_prices")
   .check_max_depth(max_depth, "ability_implied_state_prices")
   # the reference's full extended handling, not just centring: a runner
@@ -435,5 +438,6 @@ ability_implied_state_prices <- function(ability, density, unit = 1.0,
 #' @return numeric dividends (inverse state prices)
 #' @export
 ability_implied_dividends <- function(ability, density, unit = 1.0) {
+  .refuse_matrix(ability, "ability")                              # (#903)
   1 / ability_implied_state_prices(ability, density, unit = unit)
 }
