@@ -741,6 +741,8 @@ end
     end
     # and the vector form still prices
     @test sum(race_probabilities(vec(permutedims(M)))) ≈ 1.0 atol = 1e-9
+end
+
 @testset "the top-k inverse refines a failing lattice (#943)" begin
     mu = [-0.10455761128105223, 0.10455761128105223]
     D = [0.8967612229487083, 0.021331877150829952]
