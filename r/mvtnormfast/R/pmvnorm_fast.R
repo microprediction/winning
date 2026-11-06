@@ -469,7 +469,23 @@ factorize_covariance <- function(sigma, max_rank = 6L, tol = 1e-11,
 # `upper` did the same (#285). The python reference validates through
 # as_idio/as_loadings and julia fails on unequal lengths; only this
 # port guessed.
+# A per-coordinate argument is a plain vector: a matrix with the right
+# number of cells passed the length check and as.numeric flattened it
+# column-major, so a visually row-ordered 2 x 2 of bounds was priced as a
+# different four-coordinate rectangle (#903). Python refuses any shape but
+# (n,); the browser accepts one-dimensional arrays only.
+.refuse_matrix <- function(x, what) {
+  d <- dim(x)
+  if (!is.null(d) && length(d) >= 2L)
+    stop(sprintf(paste("%s must be a plain vector, not a %s array:",
+                       "as.numeric would read it column-major as a",
+                       "different vector"), what, paste(d, collapse = " x ")),
+         call. = FALSE)
+  invisible(x)
+}
+
 .as_len <- function(x, n, what, finite = TRUE, nonneg = FALSE) {
+  .refuse_matrix(x, what)
   x <- as.numeric(x)
   if (length(x) == 1L) x <- rep(x, n)
   if (length(x) != n)

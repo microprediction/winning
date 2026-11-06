@@ -17,6 +17,7 @@
 MIN_CLASSIC_L <- 3L
 
 as_classic_density <- function(density, where = "density") {
+  .refuse_matrix(density, where)                                 # (#903)
   d <- as.numeric(density)
   n <- length(d)
   if (n == 0) stop(where, " must be a nonempty vector of lattice atoms")
@@ -43,6 +44,7 @@ as_classic_density <- function(density, where = "density") {
 # Target prices carry only relative mass (#377): finite, nonnegative,
 # positive total; normalised.
 as_classic_prices <- function(prices, where = "prices") {
+  .refuse_matrix(prices, where)                                  # (#903)
   p <- as.numeric(prices)
   if (length(p) == 0) stop(where, " must be a nonempty vector")
   if (!all(is.finite(p))) stop(where, " has a non-finite entry")

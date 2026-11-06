@@ -956,3 +956,33 @@ end
                          D = [1.0, 0.8, 1.2], r_draws = 500, seed = 4) for k in 1:3]
     @test p ≈ [0.3024763216964466, 0.44220641389309157, 0.2534662469683096] rtol = 1e-13
 end
+
+@testset "non-finite utilities, loadings and designs are refused (#901)" begin
+    # the exact engine returned NaN with zero loading scores where GHK
+    # already threw; the constructor and predict_proba take a design
+    # the rank check would otherwise misread as a finite flat ridge
+    for x in (NaN, Inf, -Inf)
+        mu = zeros(2, 3); mu[2, 3] = x
+        @test_throws ArgumentError MultinomialProbit.choice_loglik_and_score(
+            mu, zeros(3, 1), [1, 1])
+        Vb = zeros(3, 1); Vb[1, 1] = x
+        @test_throws ArgumentError MultinomialProbit.choice_loglik_and_score(
+            zeros(2, 3), Vb, [1, 1])
+        @test_throws ArgumentError MultinomialProbit.choice_loglik_and_score(
+            zeros(2, 3), zeros(3, 1), [1, 1]; D = [1.0, x, 1.0])
+        Xb = copy(X); Xb[1, 1, 1] = x
+        err = try MNProbit(Xb, choice; intercepts = false, r = 0); nothing
+              catch e; e end
+        @test err isa ArgumentError
+        @test occursin("X(1, 1, 1)", sprint(showerror, err))
+        @test !occursin("identified", sprint(showerror, err))
+        m = MNProbit(X, choice; intercepts = false, r = 0)
+        fit!(m; maxiter = 3)
+        Xn = copy(X); Xn[2, 2, 1] = x
+        @test_throws ArgumentError predict_proba(m; X = Xn)
+    end
+    # the finite control
+    ll, _, _ = MultinomialProbit.choice_loglik_and_score(
+        [0.2 -0.1 0.4; 1.0 0.0 -1.0], [0.3; -0.2; 0.1;;], [3, 1])
+    @test isfinite(ll)
+end

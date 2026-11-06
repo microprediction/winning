@@ -510,3 +510,20 @@ end
         @test abs(p - ex) < 2e-3
     end
 end
+
+
+@testset "a same-length matrix is refused, not read column-major (#903)" begin
+    mu = [0.0, 0.5, -0.5, 1.0]; D = [1.0, 0.25, 4.0, 1.0]; V = zeros(4, 1)
+    u_vec = [0.0, 1.0, 2.0, 3.0]
+    u_mat = [0.0 1.0; 2.0 3.0]            # linear indexing reads 0 2 1 3
+    exact = prod(FactorMvNormalCDF.ndtr.([0.0, 1.0, 1.25, 2.0]))
+    @test abs(mvn_cdf_fast(upper = u_vec, mean = mu, V = V, D = D) - exact) < 1e-10
+    @test_throws ArgumentError mvn_cdf_fast(upper = u_mat, mean = mu, V = V, D = D)
+    @test_throws ArgumentError mvn_cdf_fast(lower = u_mat, mean = mu, V = V, D = D)
+    @test_throws ArgumentError mvn_cdf_fast(upper = u_vec, mean = reshape(mu, 2, 2), V = V, D = D)
+    @test_throws ArgumentError mvn_cdf_fast(upper = u_vec, mean = mu, V = V, D = reshape(D, 2, 2))
+    # scalars, tuples and ranges are still per-coordinate vectors
+    @test isfinite(mvn_cdf_fast(upper = 0.0, mean = mu, V = V, D = D))
+    @test mvn_cdf_fast(upper = (0.0, 1.0, 2.0, 3.0), mean = mu, V = V, D = D) ==
+          mvn_cdf_fast(upper = u_vec, mean = mu, V = V, D = D)
+end

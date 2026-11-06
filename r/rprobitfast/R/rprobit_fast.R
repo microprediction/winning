@@ -64,6 +64,9 @@ rprobit_fast <- function(df, covariates, r = NULL, Qf = 7L, Qz = NULL,
   choice <- .choices_by_id(ids, alt, df$chosen, levels(id_f))
   r <- .check_rank(r, J)
   Xcov <- as.matrix(df[, covariates, drop = FALSE])
+  # a non-finite covariate poisoned the contrast Gram matrix and
+  # .check_identified reported a finite flat ridge for it (#901)
+  .check_finite_design(Xcov, covariates)
   Xint <- matrix(0, nrow(Xcov), J - 1L)
   for (j in 2:J) Xint[alt == j, j - 1L] <- 1
   X <- cbind(Xint, Xcov)

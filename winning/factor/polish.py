@@ -23,7 +23,7 @@ from __future__ import annotations
 import numpy as np
 
 from .races import (race_probabilities, abilities_from_race, _setup,
-                    forward_grid, kink_lattice)
+                    forward_grid, kink_lattice, _base_kinks)
 
 
 def _raw_and_derivative(mu, V, D, F, W, fn, sd, x, dx, rows=None,
@@ -63,7 +63,7 @@ def _raw_and_derivative(mu, V, D, F, W, fn, sd, x, dx, rows=None,
     # kink_split (opt-in): a kinked base integrates on its split lattice,
     # exactly as the forward map does (races.kink_lattice); dx becomes
     # weights. Off, this is main's uniform rectangle sum, bit for bit.
-    kinks = getattr(fn, "kinks", ()) if kink_split else ()
+    kinks = _base_kinks(fn) if kink_split else ()
     for q in range(len(F)):
         if kinks:
             xq, w = kink_lattice(x, M_all[q], sd, kinks)

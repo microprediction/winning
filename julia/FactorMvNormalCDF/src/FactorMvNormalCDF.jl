@@ -333,9 +333,18 @@ to every coordinate (`np.broadcast_to`); the R port does the same with
 `mvn_cdf_fast(V=V, D=D, upper=0.0)` threw before evaluating anything, on
 both the structured and the delegated dense path (#184).
 """
+# A per-coordinate argument is a vector (or a tuple or range): a matrix
+# with the right number of cells passed the length check and was consumed
+# by linear, column-major indexing, so a visually row-ordered 2 x 2 of
+# bounds was priced as a different four-coordinate rectangle (#903).
+# Python refuses any shape but (n,); the browser accepts one-dimensional
+# arrays only.
 function _bound_vector(x, default::Float64, n::Int, name::AbstractString)
     x === nothing && return fill(default, n)
     x isa Number && return fill(Float64(x), n)
+    (x isa AbstractArray && ndims(x) != 1) && throw(ArgumentError(
+        "$name must be a vector, not a $(join(size(x), " x ")) array: linear " *
+        "indexing would read it column-major as a different vector"))
     v = Float64.(collect(x))
     length(v) == 1 && return fill(v[1], n)
     length(v) == n || throw(ArgumentError(

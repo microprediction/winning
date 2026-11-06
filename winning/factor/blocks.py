@@ -482,6 +482,7 @@ def nested_race_probabilities(mu, cluster, loading, D, coupling=None,
     g = np.atleast_2d(np.asarray(coupling, float))
     if g.shape[0] != len(mu):
         g = g.T
+    g = _canonical_coupling(g)                          # (#911)
     if g.shape[1] == 1:
         fn, fw = roots_hermitenorm(qf)
         fn = fn.reshape(-1, 1); fw = fw / fw.sum()
@@ -498,6 +499,33 @@ def nested_race_probabilities(mu, cluster, loading, D, coupling=None,
         p += fw[q] * _block_max(-(muv + _coupled_shift(g, gamma, fn[q])),
                                 sdv, cluster, loading, points, qa)
     return _checked_mass(p, "nested race")
+
+
+def _canonical_coupling(g):
+    """A rank-3+ nested coupling in a basis fixed by its covariance alone.
+
+    The global factor is one N(0, I) draw, so g -> g Q (Q orthogonal) and
+    a column sign flip are the same race, and g -> g + 1 c' adds the same
+    shock c'f to everyone, which cancels from every contrast. The rank-3+
+    scrambled-Sobol rule is a fixed cloud and is invariant under none of
+    those maps: flipping one column of a rank-three coupling moved a
+    winner share by 12 bp while the browser, which canonicalizes, was
+    bit-identical (#911). Centre first (#698: canonicalizing the raw
+    Gram matrix let the common shock rotate the cloud), then rotate into
+    the eigenbasis of g'g with factor.core's sign rule (#745), and drop
+    null directions (norm <= 1e-12 of the largest), so a centred
+    coupling of rank below three takes the Gauss-Hermite rules. Rank one
+    and two stay in the caller's axes, as the browser's canonicalCoupling
+    leaves them. What this cannot fix, as with every canonical basis
+    here: a rotation inside a repeated singular value of g, which the
+    fixed cloud still sees (docs/notes/cov-determinism.md)."""
+    if g.shape[1] < 3:
+        return g
+    from .core import _canonical_factor_basis, _gauge_center
+    C = _canonical_factor_basis(_gauge_center(g))
+    norm = np.linalg.norm(C, axis=0)
+    C = C[:, (norm > 1e-12 * norm.max()) & (norm > 0)]
+    return C if C.shape[1] else np.zeros((g.shape[0], 1))
 
 
 def _coupled_shift(g, gamma, node):
@@ -1045,6 +1073,7 @@ def nested_race_jacobian(mu, cluster, loading, D, coupling=None, gamma=1.0,
     g = np.atleast_2d(np.asarray(coupling, float))
     if g.shape[0] != len(mu):
         g = g.T
+    g = _canonical_coupling(g)                          # (#911)
     if g.shape[1] == 1:
         nodes = fn.reshape(-1, 1); w = fw
     else:

@@ -10,6 +10,19 @@ except ImportError:
     using_pandas = False
 
 if using_pandas:
+    import numpy as np
+
+    def _by_group_positions(df, by):
+        """(positions, rows) per group, by ROW POSITION, so a frame whose
+        index repeats labels calibrates row by row and keeps its index.
+        Writing the group's answers back with vals.loc[sub.index] expanded a
+        duplicated label to every row carrying it and raised on the length
+        mismatch, so a legal non-unique index failed where a reset one
+        passed (#908). A row whose group label is missing is left NaN, as
+        groupby drops it."""
+        for _, pos in df.groupby(by, sort=False).indices.items():
+            yield pos, df.iloc[pos]
+
 
     def add_ability_implied_state_price_to_dataframe(df, ability_col, by: str, density, new_col: str, unit: float):
         """
@@ -26,10 +39,10 @@ if using_pandas:
         # excludes the grouping column from frames passed to apply, which
         # breaks any later groupby on the returned frame.
         df = df.copy()
-        vals = pd.Series(index=df.index, dtype=float)
-        for _, sub in df.groupby(by, sort=False):
+        vals = np.full(len(df), np.nan)
+        for pos, sub in _by_group_positions(df, by):
             p = ability_implied_state_prices(ability=sub[ability_col], density=density, unit=unit)
-            vals.loc[sub.index] = normalize(p)
+            vals[pos] = normalize(p)
         df[new_col] = vals
         return df
 
@@ -52,9 +65,9 @@ if using_pandas:
             return [xi - mx for xi in x]
 
         df = df.copy()
-        vals = pd.Series(index=df.index, dtype=float)
-        for _, sub in df.groupby(by, sort=False):
-            vals.loc[sub.index] = center(state_price_implied_ability(prices=sub[prob_col].values, density=density, unit=unit))
+        vals = np.full(len(df), np.nan)
+        for pos, sub in _by_group_positions(df, by):
+            vals[pos] = center(state_price_implied_ability(prices=sub[prob_col].values, density=density, unit=unit))
         df[new_col] = vals
         return df
 

@@ -355,3 +355,16 @@ test_that("a refused final reprice returns the last priced iterate", {
   q2 <- top_k_probabilities(c(-0.6, -0.1, 0.2, 0.5), 2)
   expect_true(abilities_from_topk(q2, 2, return_info = TRUE)$converged)
 })
+
+
+test_that("a matrix D is refused, not flattened column-major (#903)", {
+  mu <- c(-2.0, -0.2, 0.4, 1.4)
+  Dmat <- matrix(c(1, 9, 4, 16), nrow = 2, byrow = TRUE)   # visually [1 9; 4 16]
+  expect_error(race_probabilities(mu, D = Dmat), "plain vector, not a 2 x 2")
+  expect_error(abilities_from_race(c(0.4, 0.3, 0.2, 0.1), D = Dmat), "plain vector")
+  # the two readings differ by nine points, so silence hid a real change
+  a <- race_probabilities(mu, D = c(1, 9, 4, 16), points = 1025)
+  b <- race_probabilities(mu, D = c(1, 4, 9, 16), points = 1025)
+  expect_gt(max(abs(a - b)), 0.05)
+  expect_equal(race_probabilities(mu, D = array(c(1, 9, 4, 16)), points = 1025), a)
+})
