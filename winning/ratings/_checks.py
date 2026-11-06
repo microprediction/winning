@@ -48,3 +48,57 @@ def require_distinct(ids, name="runners"):
                 f"{name} repeats {r!r} at positions {seen[r]} and {pos}; "
                 f"the entities in one contest must be distinct")
         seen[r] = pos
+
+
+def as_labels(labels, name):
+    """Categorical labels (entity indices, finishing positions) as an int
+    array, validated BEFORE any integer cast.
+
+    np.asarray(labels, dtype=int) turned 0.9 into 0, 2.8 into 2, True into
+    1 and "2" into 2, so a fractional, Boolean or string label was silently
+    redirected to a different entity or finisher and the fit, likelihood,
+    design and prediction came back finite and plausible for a model the
+    caller never specified (#915). Labels are names, not quantities: a
+    whole number is accepted whether spelled as an int or an exactly
+    integral float (2 and 2.0 are the same label, as a float column read
+    from a frame is), and anything else -- a fraction, a Boolean, a
+    string, None, NaN or inf -- is refused. Range and distinctness are
+    the caller's checks, as before; see concentration_matrix (#671) for
+    the same rule in the polish grammar.
+    """
+    # a masked entry is a missing label: np.asarray keeps its payload and
+    # silently selects whatever entity it holds (#928). Checked before any
+    # conversion; a masked array with nothing masked is its data.
+    if np.ma.isMaskedArray(labels) and np.ma.getmaskarray(labels).any():
+        raise ValueError(f"{name} has a masked (missing) label; a label "
+                         f"names an entity and cannot be missing")
+    if np.ma.isMaskedArray(labels):
+        labels = np.ma.getdata(labels)
+    raw = np.asarray(labels, dtype=object)
+    if raw.ndim > 1:
+        raise ValueError(f"{name} must be a flat list of whole-number labels; "
+                         f"got shape {raw.shape}")
+    out = np.empty(raw.size, dtype=int)
+    for pos, v in enumerate(raw.ravel()):
+        if isinstance(v, (bool, np.bool_)):
+            ok = False
+        elif isinstance(v, (int, np.integer)):
+            ok = True
+        elif isinstance(v, (float, np.floating)):
+            ok = bool(np.isfinite(v)) and float(v) == int(v)
+        else:
+            ok = False
+        if not ok:
+            raise ValueError(
+                f"{name} must be whole-number labels (entity indices or "
+                f"positions); got {v!r} at position {pos}. A fractional, "
+                f"Boolean or string label would be cast to a different "
+                f"label silently")
+        iv = int(v)
+        # a whole number past the integer type is out of every range: say
+        # so, rather than leak an OverflowError from the assignment
+        if not np.iinfo(int).min <= iv <= np.iinfo(int).max:
+            raise ValueError(f"{name} label at position {pos} is out of "
+                             f"range for an entity index")
+        out[pos] = iv
+    return out

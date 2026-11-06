@@ -49,7 +49,7 @@ from ..shapes import (as_factor_law, as_idio, as_loadings, as_nonnegative,
 
 
 from .races import (_jacobi_sweeps, BASES, _resolution, kink_lattice,
-                    _lower_cdf, _tail_fn, _translated_home)
+                    _lower_cdf, _tail_fn, _translated_home, _base_kinks)
 from .blocks import TINY, roots_hermitenorm
 
 from ..rustconfig import load_fastrace
@@ -445,7 +445,7 @@ def _reflected(base_rows):
 def _kinks(base_rows, kink_split):
     """The base's kink offsets when the split lattice is asked for, else
     (). Smooth bases have none, so kink_split=True is a no-op for them."""
-    return tuple(getattr(base_rows, "kinks", ())) if kink_split else ()
+    return _base_kinks(base_rows) if kink_split else ()
 
 
 def _split_nodes(lo, hi, points, mu, sd, kinks):
@@ -1364,7 +1364,7 @@ def abilities_from_topk(q, k, V=None, D=None, base="normal", points=513,
     _top2 = float(np.sort(target)[-2:].sum()) if (k == 1 and n > 2) else 1.0
     alpha = 0.7 if (n == 2 or (k == 1 and _top2 > 0.8)) else 1.0
 
-    split_slopes = bool(getattr(base_rows, "kinks", ())) and not kink_split
+    split_slopes = bool(_base_kinks(base_rows)) and not kink_split
 
     def _with_slopes(m):
         qj, sj = _topk_with_slopes(m, sd, k, base_rows, points,
@@ -1602,7 +1602,7 @@ def _loc_scale_once(q1, k1, q2, k2, D0, mu0, base, points, n_iter, tol,
     sqr = float(np.sqrt(ridge))
     base_rows = BASES[base] if not callable(base) else base
     # the Jacobians of a kinked base always come from the split lattice
-    jac_split = kink_split or bool(getattr(base_rows, "kinks", ()))
+    jac_split = kink_split or bool(_base_kinks(base_rows))
 
     def logits(m, s):
         qh1 = top_k_probabilities(m, k1, D=s ** 2, base=base, points=points,
@@ -1950,7 +1950,7 @@ def _rank_marginal_once(p, r, mu0, D, base, points, n_iter, tol,
           else np.asarray(mu0, dtype=float) - np.mean(mu0))
 
     is_n = base == "normal"
-    kinked = bool(getattr(base_rows, "kinks", ()))
+    kinked = bool(_base_kinks(base_rows))
     split_jac = kinked and not kink_split
 
     def _model(m, jac=True):

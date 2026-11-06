@@ -2355,7 +2355,9 @@ rejects(structures.cutLinkage, [[[0, 1, 0.1, 2], [0, 3, 0.2, 3]], 3, 1],
 
 // --- classic: the ability forward takes the scratch sentinel (#662);
 // statePricesFromOffsets still refuses it (#438). Reference values are
-// python's ability_implied_state_prices on the same inputs.
+// python's ability_implied_state_prices on the same inputs, regenerated
+// when the inverse began iterating to 1e-9 instead of three sweeps (#904):
+// the round trip was [0.6666650774147869, 0.33333492258521313, 0] before.
 {
   const maxAbs = (a, b) => Math.max(...a.map((x, i) => Math.abs(x - b[i])));
   const d = classic.skewNormalDensity(15, 0.2, { a: 0 });
@@ -2363,7 +2365,7 @@ rejects(structures.cutLinkage, [[[0, 1, 0.1, 2], [0, 3, 0.2, 3]], 3, 1],
     const a = classic.dividendImpliedAbility([2, 4, scratch], d);
     accepts(`dividends [2, 4, ${scratch}] round-trip through abilityImpliedStatePrices (#662)`,
             () => classic.abilityImpliedStatePrices(a, d),
-            p => p[2] === 0 && maxAbs(p, [0.6666650774147869, 0.33333492258521313, 0]) < 1e-12,
+            p => p[2] === 0 && maxAbs(p, [0.6666666665428762, 0.3333333334571237, 0]) < 1e-12,
             p => String(p));
   }
   accepts("one live runner and a scratch price exactly [1, 0] (#662)",
@@ -2409,6 +2411,11 @@ rejects(structures.cutLinkage, [[[0, 1, 0.1, 2], [0, 3, 0.2, 3]], 3, 1],
   rejects(classic.abilityImpliedStatePrices, [[0, "1"], d], "abilityImpliedStatePrices refuses a string (#662)", "not a number");
   rejects(classic.abilityImpliedStatePrices, [[0, 1], d, { unti: 1 }], "abilityImpliedStatePrices refuses a misspelt option (#662)", "unknown option 'unti'");
   rejects(classic.abilityImpliedStatePrices, [[0, 1], d, { unit: 0 }], "abilityImpliedStatePrices refuses unit 0 (#662)", "finite positive");
+  // a one-live book returns before the inverse runs, and took nIter 0 and tol 0 (#924)
+  rejects(classic.dividendImpliedAbility, [[2.0], d, { nIter: 0 }], "dividendImpliedAbility refuses nIter 0 on one live runner (#924)", "nIter");
+  rejects(classic.dividendImpliedAbility, [[2.0], d, { tol: 0 }], "dividendImpliedAbility refuses tol 0 on one live runner (#924)", "tol");
+  accepts("one live runner with valid controls is still [0] (#924)",
+          () => classic.dividendImpliedAbility([2.0], d, { nIter: 5, tol: 1e-6 }), p => p.length === 1 && p[0] === 0);
 }
 
 // --- classic: skewNormalDensity's domain (#509) and option typos (#561)

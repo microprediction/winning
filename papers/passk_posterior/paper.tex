@@ -18,8 +18,7 @@
 \title{\textbf{A Posterior Predictive for Pass@$k$}\\[0.4em]
 \large Established Empirical Bayes, Measured on Released Rollouts}
 \author{Peter Cotton}
-\date{\normalsize First version: September 2, 2026. This version:
-September 28, 2026.}
+\date{\normalsize First version: September 2, 2026. This version: October 31, 2026.}
 
 \begin{document}
 \maketitle
@@ -32,9 +31,7 @@ was flagged by \citet{chen2021}, the population-level fix by a
 fitted difficulty prior is published \citep{kazdan2025}, and the
 per-prompt posterior predictive measured here is precisely the
 estimator of \citet{verine2026}, who condition on each task's count
-and average the posterior predictions. This note is an independent
-evaluation of that estimator, on released rollout records with a
-genuinely extrapolative design:
+and average the posterior predictions. The evaluation here is independent of theirs, on released rollout records with a genuinely extrapolative design:
 two training attempts per prompt, six held out, nine thousand
 prompts. The plug-in understates the aggregate pass@6 by seventeen
 points and, used as a reachability screen at the threshold a
@@ -67,8 +64,7 @@ $1-\binom{n-c}{k}/\binom{n}{k}$ with $c$ the correct count, is
 unbiased for the per-prompt coverage, and unbiasedness for $k \le n$
 is as much as frequentist estimation can ask. It is not the same as
 optimal prediction: a decision scored by log loss or Brier score is
-a different objective, and the distinction matters below. The device
-this note measures arises when a coverage number is wanted at depth
+a different objective, and the distinction matters below. The device measured here arises when a coverage number is wanted at depth
 $k$ from an estimate $\hat p = s/m$: evaluate the formula at the
 point estimate and report $1-(1-\hat p)^k$: the plug-in, in the
 terminology of \citet{verine2026}, who call it the naive plug-in
@@ -79,7 +75,7 @@ $f_{16}(p):=1-(1-p)^{16}$''; their pass@1 estimates rest on at least
 sixteen samples per problem per evaluation seed across three seeds
 (their Appendix D.3), so theirs is an instance of the plug-in
 transformation at substantial sampling depth rather than
-extrapolation beyond it, a distinction this note keeps. The
+extrapolation beyond it, a distinction kept throughout. The
 structural point transfers to their setting; the magnitudes measured
 here do not.
 
@@ -89,15 +85,15 @@ population-level repair by a fitted difficulty prior has been
 published: \citet{kazdan2025} fit a beta prior by marginal maximum
 likelihood and report the prior expectation of coverage, with
 zero-success problems handled by prior mass rather than declared
-impossible. The per-prompt posterior predictive is also published:
+impossible. 
+
+The per-prompt posterior predictive is also published:
 \citet{verine2026} write ``we therefore use the posterior
 predictive pass@$k$ for each task and average across tasks,'' derive
 the beta-function-ratio form of the estimator, and additionally
 supply zero-one inflated priors and a theorem ordering population
 pass@$k$ at fixed pass@1. Public evaluation code implements the
-beta-binomial version as well. This note claims no new estimator.
-What it adds is an independent evaluation on new data, under a
-design that actually extrapolates and scores per prompt: how large
+beta-binomial version as well. The estimator is theirs. The evaluation is new: on new data, under a design that actually extrapolates and scores per prompt, it measures how large
 the plug-in's defects are against held-out batches, how much of the
 repair is plain shrinkage versus posterior integration, whether a
 fixed prior suffices, where the fitted models are and are not
@@ -113,19 +109,19 @@ power laws, computing per-problem pass rates by the combinatorial
 estimator. \citet{schaeffer2025} explain those power laws through
 the heavy-tailed distribution of per-problem success probabilities,
 fitting a three-parameter Kumaraswamy law to per-problem point
-estimates and forecasting coverage through the integral that defines
-aggregate pass@$k$. \citet{kazdan2025} fit a beta difficulty prior
+estimates and forecasting coverage through the integral that defines aggregate pass@$k$.
+
+\citet{kazdan2025} fit a beta difficulty prior
 by marginal maximum likelihood and report aggregate coverage as the
 prior expectation of $1-(1-p)^k$, with a budget-allocation
-application. \citet{verine2026} supply the estimator this note
-evaluates: binomial counts under a shared beta difficulty prior
+application. \citet{verine2026} supply the estimator evaluated here: binomial counts under a shared beta difficulty prior
 fitted by marginal maximum likelihood, the posterior updated with
 each task's count, the posterior expectation of future pass@$k$
 taken per task and averaged. Their beta-function ratio is
 algebraically the rising-factorial ratio below, and they distinguish
 the prior expectation of coverage from the average of posterior
 predictions, the same distinction Proposition~\ref{prop:bayes}'s
-cautions require. They go further than this note in two respects,
+cautions require. They go further in two respects,
 zero-one inflated priors and an ordering theorem for population
 pass@$k$ at fixed pass@1. \citet{yang2026} apply the same
 held-out design to a different question, whether a post-training
@@ -136,8 +132,8 @@ the same prompts. Their confidence bands stay within $k \le n$,
 where the unbiased estimator exists, and extrapolation beyond it
 adopts the fit of \citet{kazdan2025}, so the plug-in defect measured
 here enters their extrapolation stage and not their bands.
-Elsewhere in the
-evaluation literature, \citet{hariri2025} replace pass@$k$ reporting
+
+Elsewhere in the evaluation literature, \citet{hariri2025} replace pass@$k$ reporting
 with Bayesian credible intervals at the model level, and
 \citet{miller2024} bring frequentist standard errors to eval
 reporting. \citet{malladi2026} supply the motivating diagnostic;
@@ -211,7 +207,9 @@ $\mathbb{E}\,\hat p = p$. Jensen's inequality gives
 $\mathbb{E}\,\varphi(\hat p) \ge \varphi(\mathbb{E}\,\hat p)
 = (1-p)^k$, and the inequality is strict whenever $\hat p$ is
 nondegenerate, which is exactly $p \in (0,1)$. Negating and adding
-one reverses the inequality into the display. At $k=1$, $\varphi$ is
+one reverses the inequality into the display.
+
+At $k=1$, $\varphi$ is
 affine and Jensen holds with equality. The aggregate statement
 follows by integrating the pointwise inequality against $G$ and
 taking expectations over the counts.

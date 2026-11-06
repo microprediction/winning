@@ -609,6 +609,19 @@ def check_choice(choice, T, J):
     return choice.astype(int, copy=False)
 
 
+def _require_finite(A, name, what):
+    """Refuse NaN and +-inf by name and index; shared by the exact
+    multinomial-probit boundaries (#901)."""
+    bad = np.argwhere(~np.isfinite(A))
+    if bad.size:
+        idx = tuple(int(i) for i in bad[0])
+        raise ValueError(
+            f"{name}{list(idx)} = {float(A[idx])!r} is not finite; {what} must be "
+            f"a finite number, and {bad.shape[0]} of {A.size} entries are not. "
+            "A non-finite entry poisons the quadrature and the rank checks "
+            "instead of meaning a deterministic limit")
+
+
 def choice_loglik_and_score(mu, V, choice, D=None, Qf=7, Qz=None):
     """Log-likelihood of observed argmax choices, with analytic score.
 
@@ -643,6 +656,11 @@ def choice_loglik_and_score(mu, V, choice, D=None, Qf=7, Qz=None):
     """
     mu = np.asarray(mu, dtype=float)
     T, J = mu.shape
+    # A non-finite utility is not a deterministic limit here: at J >= 3
+    # it returned a NaN log-likelihood with NaN mu-scores and exactly
+    # zero loading scores, and an optimiser took those as a flat
+    # direction (#901). V and D meet the same rule in their own doors.
+    _require_finite(mu, "mu", "a utility")
     # Every observation must be accounted for. The loop below walks the
     # LEGAL labels and gathers the rows matching each, so a row whose
     # choice is outside 0..J-1 is never visited: it contributed nothing

@@ -3,6 +3,7 @@ import numpy as np
 import pytest
 
 from winning.ratings import factor_ratings as fr
+from winning.ratings._checks import as_labels
 
 B = np.array([[2.0], [-1.0], [0.5]])
 Z = np.eye(3)
@@ -10,7 +11,7 @@ BAD = [
     [0.9, 1, 2], [False, 1, 2], [np.bool_(False), 1, 2],
     ['0', '1', '2'], [0, 1, np.nan], [0, 1, np.inf],
     [0, 1, -np.inf], [0, 1, -1], [0, 1, 3], [0, 1, 1],
-    [0, 1, 10**100], [0, 1, 2+0j], [[0, 1, 2]], 0, [],
+    [0, 1, 10**100], [0, 1, 2+0j], [[0, 1, 2]], [],
 ]
 SUBSET_CALLS = [
     lambda ids: fr.factor_design(ids, [1.0], 3, 1),
@@ -84,3 +85,14 @@ def test_unmasked_masked_arrays_preserve_valid_outputs(call, mask):
     np.testing.assert_array_equal(actual, expected)
     np.testing.assert_array_equal(labels.data, [0, 1, 2])
     assert not np.ma.getmaskarray(labels).any()
+
+
+def test_a_scalar_label_selects_one_entity():
+    # kept from main on purpose: a scalar is one label, not a malformed list
+    np.testing.assert_array_equal(fr.factor_abilities(B, 1, [1.0]), B[[1], 0])
+
+
+@pytest.mark.parametrize('big', [10**100, -10**100, 2**63])
+def test_an_oversized_label_is_a_range_error_not_an_overflow(big):
+    with pytest.raises(ValueError, match="out of range"):
+        as_labels([0, big], "subset")

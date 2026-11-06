@@ -797,6 +797,17 @@ probability, so the common location drops out, and a mean of 2^50 no
 longer collapses adjacent cells into one (#657)."""
 function argmax_marginals(c::GaussMarkovChain; points = 300,
                           resolution_tol = ARGMAX_RESOLUTION_TOL)
+    # the refusal below is `err <= resolution_tol`: Inf passed every err,
+    # and Bool <: Real so `true` was the tolerance 1.0, which switched the
+    # #432 refusal off and returned the 50/50 split it exists to prevent
+    # (#906). The same rule as chain_from_precision's tol.
+    (resolution_tol isa Real && !(resolution_tol isa Bool) &&
+     isfinite(resolution_tol) && resolution_tol >= 0) ||
+        throw(ArgumentError("resolution_tol must be a finite, nonnegative " *
+                            "number; got " * repr(resolution_tol) *
+                            ". It bounds the probability the half-cell tie " *
+                            "rule may misassign; Inf or a Bool would disable " *
+                            "the resolution refusal (#432)"))
     n = length(c)
     _, e = _unit_scaled(c)                # in units of 2^e (#363)
     # scale, then subtract: [1e308, -1e308] overflowed to -Inf (#657)
