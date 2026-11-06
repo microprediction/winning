@@ -37,3 +37,27 @@ def test_large_integer_rank_still_clips_to_field_size():
     actual = fit_covariance(C, k=10**100, m=10**100, nodes_log2=3)
     for a, b in zip(actual, expected):
         np.testing.assert_array_equal(a, b)
+
+
+@pytest.mark.parametrize("name", ["k", "m"])
+@pytest.mark.parametrize("value", [np.timedelta64(1, "ns"), np.timedelta64(1, "D"),
+                                   np.datetime64("2026-01-01")])
+def test_temporal_scalars_are_not_counts(name, value):
+    # numpy registers timedelta64 as Integral: 1 ns became rank 1 and 1 D
+    # leaked a TypeError, so the contract depended on the time unit
+    kw = dict(k=1, m=0)
+    kw[name] = value
+    with pytest.raises(ValueError, match=rf'{name}.*non-negative.*integer'):
+        fit_covariance(np.eye(3), nodes_log2=3, **kw)
+
+
+@pytest.mark.parametrize("name", ["k", "m"])
+def test_huge_ranks_clip_and_huge_negatives_refuse_without_formatting(name):
+    big = 10 ** 5000          # past Python's default int-to-str digit limit
+    kw = dict(k=1, m=0)
+    kw[name] = big
+    V, D, F, W = fit_covariance(np.eye(3), nodes_log2=3, **kw)
+    assert np.isfinite(D).all()
+    kw[name] = -big
+    with pytest.raises(ValueError, match=rf'{name}.*non-negative.*integer'):
+        fit_covariance(np.eye(3), nodes_log2=3, **kw)

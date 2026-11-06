@@ -524,19 +524,27 @@ def _without_common_shift(C):
 
 def _as_fit_rank(value, name):
     """A scalar count, never a negative slice endpoint (#958)."""
-    message = f"{name} must be a non-negative integer; got {value!r}"
-    if np.ma.is_masked(value) or isinstance(value, (bool, np.bool_)):
-        raise ValueError(message)
+    def refuse():
+        # built only on refusal: formatting a 5000-digit int that would
+        # clip to the field's rank trips Python's int-to-str digit limit
+        return ValueError(f"{name} must be a non-negative integer; got "
+                          f"{type(value).__name__}")
+    # numpy registers timedelta64 as an Integral: a duration is not a count
+    # whatever its unit (1 ns became rank 1; 1 D leaked a TypeError)
+    if (np.ma.is_masked(value) or isinstance(value, (bool, np.bool_))
+            or isinstance(value, (np.timedelta64, np.datetime64))):
+        raise refuse()
     if isinstance(value, Integral):
         rank = int(value)  # preserve large integers; the field caps the rank
     else:
         v = np.asarray(value)
         if (v.ndim != 0 or v.dtype.kind not in "iuf"
                 or not np.isfinite(v) or v != np.floor(v)):
-            raise ValueError(message)
+            raise refuse()
         rank = int(v)
     if rank < 0:
-        raise ValueError(message)
+        raise ValueError(f"{name} must be a non-negative integer; got a "
+                         "negative one")
     return rank
 
 
