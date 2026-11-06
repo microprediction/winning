@@ -378,3 +378,11 @@ test_that("a two-step rise in the miss is not a plateau (#923)", {
   expect_silent(w <- dividend_implied_ability(1 / target, atoms))
   expect_lte(max(abs(state_prices_from_offsets(atoms, w) - target)), 1e-6)
 })
+
+test_that("finite dividends whose reciprocals overflow price the relative book (#881)", {
+  expect_equal(prices_from_dividends(c(1e-320, 2e-320)), c(2, 1) / 3, tolerance = 1e-12)
+  expect_equal(prices_from_dividends(c(1e-320, 0, -1, Inf)), c(1, 0, 0, 0))
+  # ordinary books keep their arithmetic
+  d <- c(2.5, 3.3, 5, 10)
+  expect_identical(prices_from_dividends(d), (1 / d) / sum(1 / d))
+})
