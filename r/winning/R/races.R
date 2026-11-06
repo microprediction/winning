@@ -254,6 +254,7 @@ attr(.base_laplace, "log_sf") <- function(z) {
 }
 
 .race_setup <- function(mu, V, D, F, W, base) {
+  .refuse_matrix(mu, "mu")                                       # (#903)
   mu <- as.numeric(mu)
   n <- length(mu)
   # One idiosyncratic variance per contestant, or a scalar broadcast on
@@ -581,6 +582,8 @@ attr(.base_laplace, "log_sf") <- function(z) {
     } else if (!is.null(prev) && penalty < 1) {
       penalty <- min(1, penalty / 0.75)
     }
+    # the last sweep's own contraction, for the Aitken gate below (#956)
+    prev_max <- if (is.null(prev)) Inf else prev$rmax
     prev <- list(mu = mu, resid = resid, dlogp = dlogp, rmax = rmax, rrms = rrms)
     alpha <- alpha_base * penalty
     # residual-proportional step cap in the field's scale: a near-certain
@@ -602,7 +605,8 @@ attr(.base_laplace, "log_sf") <- function(z) {
           lam <- 1 - (1 - rho) / alpha
           alpha_base <- min(max(2 / (2 - lam), 0.1), 1)
         } else if (cosn > 0.999 && ratio > 0.5 && ratio < 0.999 &&
-                   rmax > 1e3 * tol) {
+                   rmax > 1e3 * tol &&
+                   abs(rmax / prev_max - ratio) <= AITKEN_AGREE) {
           # collinear steps decaying geometrically: sum the tail (Aitken),
           # as a capped, repriced trial (#583, matching python)
           trial <- .aitken_trial(mu, step, ratio, scale, forward, rmax)
@@ -646,6 +650,13 @@ attr(.base_laplace, "log_sf") <- function(z) {
 # norm at twice the field scale (never below the ordinary step) and
 # repriced; NULL -- take the ordinary step -- when the forward errors, is
 # non-finite, or its max residual grows tenfold.
+# Aitken sums a geometric tail, which exists only while the residual
+# shrinks by the same factor as the step; when the plain sweeps converge
+# faster than the step ratio says (the superlinear finish after a plateau)
+# the extrapolation overshoots, and #956's exact target ended 13.6 off.
+# python's races.AITKEN_AGREE.
+AITKEN_AGREE <- 0.15
+
 .aitken_trial <- function(mu, step, ratio, scale, forward, rmax) {
   jump <- step / (1 - ratio)
   big <- max(abs(jump))
@@ -898,6 +909,7 @@ abilities_from_race <- function(p, V = NULL, D = NULL, F = NULL, W = NULL,
     }
     V <- fit$V; D <- fit$D; F <- fit$F; W <- fit$W
   }
+  .refuse_matrix(p, "p")                                         # (#903)
   target <- as.numeric(p)
   # finite BEFORE the sign test: NaN slips past `<= 0` (#110). And
   # before the structure= dispatch, so every grammar shares one target

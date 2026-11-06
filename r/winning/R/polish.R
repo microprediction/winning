@@ -62,6 +62,21 @@ race_jacobian <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
                                 leaves = structure$leaves))
     stop("race_jacobian: structure ", cls, " not yet supported")
   }
+  # The race is unchanged when abilities, loadings and sds are scaled by a
+  # common c, and J scales by 1/c; the kernel caps its log-domain factors,
+  # so at a unit of 1e-18 a tied race's off-diagonal came back 0.47 of the
+  # exact value and at 1e-100 zero (#870, as python and the browser). Far
+  # from unit scale the field is moved there by an exact power of two.
+  if (!is.null(D) && is.numeric(D) && length(D) && all(is.finite(D)) && all(D >= 0)) {
+    sd_max <- sqrt(max(D))
+    if (sd_max > 0 && (sd_max < 2^-30 || sd_max > 2^30)) {
+      cc <- 2^round(log2(sd_max))
+      Vs <- if (is.null(V)) NULL else V / cc
+      return(race_jacobian(mu / cc, V = Vs, D = D / cc^2, F = F, W = W,
+                           base = base, points = points, window = window,
+                           delta = delta) / cc)
+    }
+  }
   st <- .race_setup(mu, V, D, F, W, base)
   n <- length(st$mu)
   sd <- sqrt(st$D)
@@ -183,6 +198,8 @@ polish_race <- function(p0 = NULL, mu0 = NULL, V = NULL, D = NULL,
                         F = NULL, W = NULL, base = "normal", points = 257,
                         name_caps = NULL, groups = NULL, A = NULL, b = NULL,
                         tol = 1e-9, max_iter = 60, structure = NULL) {
+  .refuse_matrix(p0, "p0")                                        # (#903)
+  .refuse_matrix(mu0, "mu0")                                      # (#903)
   if (!is.null(structure)) {
     forward <- function(m) race_probabilities(m, structure = structure,
                                               points = points)

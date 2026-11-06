@@ -11,9 +11,11 @@ import { blockRaceJacobian, nestedRaceJacobian, treeRaceJacobian, treeCluster,
 
 export function raceJacobian(mu, opts = {}) {
   checkOpts(opts, RACE_JACOBIAN_OPTS, "raceJacobian", OPT_HINTS);
-  const { V = null, D = null, F = null, W = null, base = "normal",
+  const { V = null, D = null, F = null, W = null, base: base0 = "normal",
           points = 501, structure = null, qa = 9, qf = 15,
           window: win = "bulk", delta = 1e-12 } = opts;
+  // Same exported-callable identity rule as the forward and inverse (#912).
+  const base = base0 === BASES.normal ? "normal" : base0;
   // the forward's lattice controls, validated as the forward validates
   // them: they were refused as unknown options, so the browser could
   // price a race on a chosen window or tail budget and only
@@ -81,8 +83,28 @@ const POLISH_RACE_OPTS = new Set(["V", "D", "F", "W", "base", "points", "structu
    non-Gaussian factor and could not differentiate or polish it -- the
    returned Jacobian was the derivative of a different model (#209).
    Used verbatim, exactly as the forward's setup() uses them. */
+/* The race is unchanged when abilities, loadings and sds are scaled by a
+   common c, and its Jacobian scales by 1/c. The kernel below caps each
+   log-domain factor at 40, so at a unit of 1e-18 the factor log(1/sd) = 41
+   hit the cap and a tied race's off-diagonal came back 53% small (1e-20:
+   5339x small) while the forward stayed exact (#870). Far from unit scale
+   the field is moved to it by an exact power of two and the derivative
+   moved back; ordinary fields take the kernel as before, bit for bit. */
 function raceJacobianExplicit(mu, V, D, base, points, F0 = null, W0 = null,
                               win = "bulk", delta = 1e-12) {
+  const sdMax = Math.sqrt(Math.max(...D));
+  if (!(sdMax > 0) || !Number.isFinite(sdMax) || (sdMax >= 2 ** -30 && sdMax <= 2 ** 30))
+    return raceJacobianUnit(mu, V, D, base, points, F0, W0, win, delta);
+  const c = 2 ** Math.round(Math.log2(sdMax));
+  const n = mu.length;
+  const Vs = V == null ? V : asLoadings(V, n).map(row => row.map(v => v / c));
+  const J = raceJacobianUnit(mu.map(v => v / c), Vs, D.map(v => v / c / c), base,
+                             points, F0, W0, win, delta);
+  return J.map(row => row.map(v => v / c));
+}
+
+function raceJacobianUnit(mu, V, D, base, points, F0 = null, W0 = null,
+                          win = "bulk", delta = 1e-12) {
   const n = mu.length;
   const sd = D.map(Math.sqrt);
   // The independent default is the EMPTY node (no coordinates), not the
@@ -130,13 +152,26 @@ function raceJacobianExplicit(mu, V, D, base, points, F0 = null, W0 = null,
     const Mq = Mall[q], wq = W[q];
     const L = new Array(P).fill(0);
     const logS = [], logf = [];
+    const callable = typeof base === "function";
+    // a lattice point where some survival sits at the -1e300 sentinel: there
+    // L - logS[i] cancels the sentinel and every other runner's term with it
+    const sentinel = new Array(P).fill(false);
     for (let i = 0; i < n; i++) {
       const li = new Array(P), fi = new Array(P);
       for (let t = 0; t < P; t++) {
         const z = (x[t] - Mq[i]) / sd[i];
         const [S, f] = fn(z);
-        li[t] = Math.log(S);
-        fi[t] = Math.log(Math.max(f / sd[i], 1e-300));
+        // Match the forward's log-tail metadata when direct survival
+        // underflows: -Infinity - -Infinity poisoned ordinary rows (#952).
+        // Keep named-base arithmetic unchanged in this callable-only fix.
+        li[t] = callable && S <= 1e-300 && fn.logSf
+          ? Math.max(fn.logSf(z), -1e300) || -1e300 : Math.log(S);
+        if (callable && li[t] <= -1e299) sentinel[t] = true;
+        // a callable with compact support has exactly zero density off it;
+        // flooring that at 1e-300 and dividing by a sentinel survival gave a
+        // fixed-winner race a 4.5e7 Jacobian entry. Zero stays zero.
+        fi[t] = callable && f === 0 ? -Infinity
+          : Math.log(Math.max(f / sd[i], 1e-300));
         L[t] += li[t];
       }
       logS.push(li); logf.push(fi);
@@ -145,7 +180,14 @@ function raceJacobianExplicit(mu, V, D, base, points, F0 = null, W0 = null,
     for (let i = 0; i < n; i++) {
       const p1 = new Array(P), p2 = new Array(P);
       for (let t = 0; t < P; t++) {
-        p1[t] = Math.exp(Math.min(Math.max(logf[i][t] + L[t] - logS[i][t], -745), 40));
+        if (logf[i][t] === -Infinity) { p1[t] = 0; p2[t] = 0; continue; }
+        // leave-one-out by summation where subtraction would cancel (#952)
+        let others = L[t] - logS[i][t];
+        if (sentinel[t]) {
+          others = 0;
+          for (let j = 0; j < n; j++) if (j !== i) others += logS[j][t];
+        }
+        p1[t] = Math.exp(Math.min(Math.max(logf[i][t] + others, -745), 40));
         p2[t] = Math.exp(Math.min(Math.max(logf[i][t] - logS[i][t], -745), 40));
       }
       P1.push(p1); P2.push(p2);
@@ -279,9 +321,11 @@ function bfgsMin(x0, obj, grad, maxit = 80) {
 export function polishRace(opts = {}) {
   checkOpts(opts, POLISH_RACE_OPTS, "polishRace", OPT_HINTS);
   const { p0 = null, mu0: mu0In = null, V = null, D = null, F = null,
-          W = null, base = "normal",
+          W = null, base: base0 = "normal",
           points = 257, nameCaps = null, groups = null,
           structure = null, fdFallback = true } = opts;
+  // Keep the forward, inverse and derivative closures on the same law (#912).
+  const base = base0 === BASES.normal ? "normal" : base0;
   let { A = null, b = null } = opts;
   // F/W must reach the forward, the jacobian AND the inverse that makes
   // mu0. Polishing under a different factor law than the one the caller

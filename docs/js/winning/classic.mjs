@@ -632,12 +632,19 @@ export function pricesFromDividends(dividends, nanValue = 2000) {
   // (#329)
   if (!isVector(dividends))
     throw new Error(`dividends must be an array; got ${typeof dividends}`);
-  const p = Array.from(dividends).map(x => {
-    const v = (x === null || x === undefined || Number.isNaN(x))
-      ? nanValue : Number(x);
-    return v <= 0 ? 0 : 1 / v;
-  });
-  const s = p.reduce((a, b) => a + b, 0);
+  const vals = Array.from(dividends).map(x =>
+    (x === null || x === undefined || Number.isNaN(x)) ? nanValue : Number(x));
+  let p = vals.map(v => v <= 0 ? 0 : 1 / v);
+  let s = p.reduce((a, b) => a + b, 0);
+  if (!Number.isFinite(s)) {
+    // finite dividends whose reciprocals overflow -- [1e-320, 2e-320] --
+    // are the same book read against the smallest, every ratio at most
+    // one; 1/x first gave Infinity / Infinity = NaN (#881). Ordinary
+    // books never reach here.
+    const dmin = Math.min(...vals.filter(v => v > 0));
+    p = vals.map(v => v <= 0 ? 0 : dmin / v);
+    s = p.reduce((a, b) => a + b, 0);
+  }
   return s > 0 ? p.map(v => v / s) : p;
 }
 

@@ -702,8 +702,19 @@ def _as_abilities(mu):
     straight to the lattice. A NaN or inf there came back as NaN
     probabilities that sum to nothing, silently. R and julia already
     refused it, which is how the cross-port divergence scan found it. The
-    closed-form Luce helpers share this door (#799)."""
-    mu = np.asarray(mu, dtype=float)
+    closed-form Luce helpers share this door (#799).
+
+    Checked BEFORE the float conversion, which strips what it cannot hold:
+    a masked entry kept its payload and a complex ability lost its
+    imaginary part, so both priced as some other finite field (#914)."""
+    if np.ma.isMaskedArray(mu) and np.ma.getmaskarray(mu).any():
+        raise ValueError("mu has a masked (missing) ability; an ability is a "
+                         "finite location on the performance scale")
+    if np.iscomplexobj(mu):
+        raise ValueError("mu is complex; an ability is a real location on "
+                         "the performance scale")
+    mu = np.asarray(np.ma.getdata(mu) if np.ma.isMaskedArray(mu) else mu,
+                    dtype=float)
     n = len(mu)
     if n == 0:
         raise ValueError("mu is empty; a race needs at least one contestant")
@@ -714,6 +725,32 @@ def _as_abilities(mu):
             f"({bad.size} of {n} are); an ability is a finite location on "
             "the performance scale")
     return mu
+
+
+def _check_caller_rule(F, W, V):
+    """A caller's factor rule against the loadings it integrates, before
+    any backend dispatch: a short W or a wrong-rank F used to reach the
+    compiled kernel and come back as an index PanicException, or as a late
+    matmul ValueError on the pure path (#75). Shared with the inverse, which
+    read a flat F through as_factor_law and certified a rule the forward
+    then refused (#970). Returns F as a float array."""
+    F = np.asarray(F, dtype=float)
+    if F.ndim != 2:
+        raise ValueError(
+            f"F must be a 2-D (nodes, rank) array; got shape {F.shape}")
+    W_arr = np.asarray(W, dtype=float)
+    if W_arr.ndim != 1:
+        raise ValueError(
+            f"W must be a 1-D weight vector; got shape {W_arr.shape}")
+    if F.shape[1] != V.shape[1]:
+        raise ValueError(
+            f"F has {F.shape[1]} factor columns but V has rank "
+            f"{V.shape[1]}; F is (nodes, rank)")
+    if F.shape[0] != W_arr.shape[0]:
+        raise ValueError(
+            f"F has {F.shape[0]} nodes but W has {W_arr.shape[0]} "
+            "weights; they must match one-to-one")
+    return F
 
 
 def _setup(mu, V, D, F, W, base):
@@ -754,26 +791,7 @@ def _setup(mu, V, D, F, W, base):
                 "supply both F (factor nodes) and W (their weights), or "
                 f"neither; got only {'F' if W is None else 'W'}")
         if F is not None:
-            # A supplied rule is checked before any backend dispatch: a
-            # short W or a wrong-rank F used to reach the compiled kernel
-            # and come back as an index PanicException, or as a late
-            # matmul ValueError on the pure path (#75).
-            F = np.asarray(F, dtype=float)
-            if F.ndim != 2:
-                raise ValueError(
-                    f"F must be a 2-D (nodes, rank) array; got shape {F.shape}")
-            W_arr = np.asarray(W, dtype=float)
-            if W_arr.ndim != 1:
-                raise ValueError(
-                    f"W must be a 1-D weight vector; got shape {W_arr.shape}")
-            if F.shape[1] != V.shape[1]:
-                raise ValueError(
-                    f"F has {F.shape[1]} factor columns but V has rank "
-                    f"{V.shape[1]}; F is (nodes, rank)")
-            if F.shape[0] != W_arr.shape[0]:
-                raise ValueError(
-                    f"F has {F.shape[0]} nodes but W has {W_arr.shape[0]} "
-                    "weights; they must match one-to-one")
+            F = _check_caller_rule(F, W, V)
         if F is None or W is None:
             # adaptive order: when idiosyncratic noise is small relative
             # to the loadings, the conditional race is nearly
@@ -2025,6 +2043,10 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
     _Vn = np.zeros((n_t, 1)) if V is None else as_loadings(V, n_t)
     _Vc = _gauge_center(_Vn)                       # scale-safe (#471)
     if V is not None and nodes_given:
+        # the forward's shape and rank contract first: a flat F was read by
+        # as_factor_law, solved and certified at residual 0, and the
+        # public forward then refused the same rule (#970)
+        _check_caller_rule(F, W, _Vn)
         # the law the forward prices: _setup's as_factor_law, which also
         # drops negligible caller nodes. Kept, a 1e-15 node the forward
         # never sees was solved and certified at residual 0 while the
@@ -2254,10 +2276,8 @@ def _pair_mixture_gap(target, dV, d0, d1, F, W, g0, h):
             lo = g
         # d f / d g = sum_w phi(u) / (sd p_small) = ratio / sd > 0
         gn = g - f * sd / ratio if ratio > 0.0 else np.nan
-        if abs(f) < 1e-8 and lo < gn < hi:
-            # quadratic convergence: from a relative error of 1e-8 the
-            # step lands at rounding, and the caller certifies it
-            return float(gn)
+        # Evaluate the next proposal in the loop even when f is tiny: a
+        # near-zero plateau derivative can make it worse, not quadratic (#954).
         # While one side is open a Newton step is capped at h too: on a
         # mixture plateau the ratio is ~1e-66 and the uncapped step
         # (-6.7e64) set a bracket end bisection never came back from (#830).
@@ -2416,6 +2436,8 @@ def _jacobi_sweeps(mu, forward, scale, alpha, n_iter, tol):
                 prev_step = None
         elif prev is not None and penalty < 1.0:
             penalty = min(1.0, penalty / 0.75)
+        # the last sweep's own contraction, for the Aitken gate below
+        prev_max = prev[3] if prev is not None else np.inf
         prev = (mu, resid, dlogp, resid_max, resid_rms)
         alpha = alpha_base * penalty
         lim = np.minimum(2.0, 10.0 * np.abs(resid)) * scale
@@ -2432,7 +2454,8 @@ def _jacobi_sweeps(mu, forward, scale, alpha, n_iter, tol):
                     lam = 1.0 - (1.0 - rho) / alpha
                     alpha_base = float(np.clip(2.0 / (2.0 - lam), 0.1, 1.0))
                 elif (cos > 0.999 and 0.5 < ratio < 0.999
-                      and resid_max > 1e3 * tol):
+                      and resid_max > 1e3 * tol
+                      and abs(resid_max / prev_max - ratio) <= AITKEN_AGREE):
                     trial = _aitken_trial(mu, step, ratio, scale, forward,
                                           resid_max)
                     if trial is not None:   # sum the geometric tail
@@ -2466,6 +2489,17 @@ def _jacobi_sweeps(mu, forward, scale, alpha, n_iter, tol):
         else:
             resid_max = float(r_end)
     return mu, resid_max < tol, resid_max, iters
+
+
+# Aitken sums a geometric tail, which exists only while the residual shrinks
+# by the same factor as the step. When the plain sweeps are converging
+# FASTER than the step ratio says -- the superlinear finish after a
+# plateau -- the extrapolation overshoots: on #956's exact target trials
+# fired at residual/step ratios 0.60/0.86 and 0.63/0.88, each raised the
+# residual 2-9x, and the inverse ended 13.6 off where the plain sweeps
+# converge in 60. The dense near-unidentified fields of #178, which need
+# the trial, agree to within 0.11.
+AITKEN_AGREE = 0.15
 
 
 def _aitken_trial(mu, step, ratio, scale, forward, resid_max):
