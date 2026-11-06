@@ -80,10 +80,10 @@ PLATEAU_TRUTH = [-0.3870526359606288, -3.8859224668266945, -0.5618939753478802,
                  -6.990429141603045, 0.6690584211927497]            # the #842 fixture
 
 
-def test_a_plateau_stops_after_two_stalled_steps_and_returns_the_best_iterate(monkeypatch):
+def test_a_persistent_plateau_returns_the_first_best_iterate(monkeypatch):
     # the straggler is priced at exactly zero where its target is 1.86e-6:
-    # the miss cannot fall below the target, the table has no gradient
-    # there, and the offset drifted for the whole budget. The numpy spec
+    # the miss stays pinned at the target for this fixture, even while
+    # the offset moves. The numpy spec
     # path, which CI runs: a fastrace built before the #842 interpolation
     # fix walks a different path on this fixture.
     import winning.classic.lattice_calibration as lc
