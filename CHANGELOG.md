@@ -4,7 +4,7 @@
 
 - Browser `blockRaceProbabilities` with caller-supplied factor nodes
   (`nodes`) adds `loading * f` to each runner, as the grammar
-  `Y = mu + loading * f + eps` states; they priced the reflected factor
+  `Y = mu + loading * f + eps` states; it priced the reflected factor
   law, which moves asymmetric rules by up to 0.92 of a share. Callers who
   reflected their nodes to compensate must remove that reflection.
   Automatic node rules are unchanged (#909).
