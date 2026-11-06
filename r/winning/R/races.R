@@ -48,6 +48,10 @@
 # the split lattice there (.kink_lattice, #267); the forward is unchanged
 attr(.base_laplace, "kinks") <- 0
 
+# python's races.KINK_MAX_ORDER: the largest single Gauss rule a kink-split
+# piece uses (#835)
+KINK_MAX_ORDER <- 512L
+
 # Gauss-Legendre nodes and weights on [-1, 1] (Golub-Welsch), cached
 .LEGENDRE <- new.env(parent = emptyenv())
 .legendre <- function(m) {
@@ -93,9 +97,18 @@ attr(.base_laplace, "kinks") <- 0
   cnt <- pmax(4L, as.integer(round(L * eff / sum(eff))))
   xs <- numeric(0); ws <- numeric(0)
   for (j in seq_len(P)) {
-    gl <- .legendre(cnt[j])
-    mid <- 0.5 * (hi[j] + lo[j]); half <- 0.5 * (hi[j] - lo[j])
-    xs <- c(xs, mid + half * gl$t); ws <- c(ws, half * gl$w)
+    # a piece above KINK_MAX_ORDER is split into k equal panels of
+    # ceiling(m / k) nodes: the dense eigen rule is O(m^3), and a large
+    # points= gave one piece thousands of nodes (#835). At or below the cap
+    # nothing changes. As python's kink_lattice and the browser.
+    k <- ceiling(cnt[j] / KINK_MAX_ORDER); m <- ceiling(cnt[j] / k)
+    gl <- .legendre(m)
+    for (s in seq_len(k)) {
+      pl <- if (s == 1) lo[j] else lo[j] + (hi[j] - lo[j]) * (s - 1) / k
+      ph <- if (s == k) hi[j] else lo[j] + (hi[j] - lo[j]) * s / k
+      mid <- 0.5 * (ph + pl); half <- 0.5 * (ph - pl)
+      xs <- c(xs, mid + half * gl$t); ws <- c(ws, half * gl$w)
+    }
   }
   list(x = xs, w = ws)
 }
