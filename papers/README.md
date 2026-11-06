@@ -10,8 +10,8 @@ an underscore are not manuscripts. Sources live here rather than under
 |---|---|---|
 | [`factor-probit-transform`](factor-probit-transform) | Scalable Share Calibration for Factor Multinomial Probit Models | |
 | [`passk_posterior`](passk_posterior) | A Posterior Predictive for Pass@k | Experiment in `research/cavity_calculus/exp2_passk/` (run_passk2.py). |
-| [`win_nodes`](win_nodes) | Win Nodes for Bayes Nets: exact order-statistic queries on Gaussian graphical models | Numbers trace to `research/tridiagonal/` and `julia/GMRFExtremes/`. |
-| [`exact_pom`](exact_pom) | Deterministic Probabilities for Thompson Sampling and Entropy Search | Experiments in `research/rs_crn/`; quote-verified sources in `research/rs_crn/NOTES.md`. |
+| [`win_nodes`](win_nodes) | Win Nodes for Structured Gaussian Bayes Nets Admitting Deterministic Order-Statistic Queries | Merged paper (2026-11): factor and chain win nodes, CRN and bandit posteriors, stopping, bandit and tennis applications. arXiv kit in `win_nodes/arxiv/`. Numbers trace to `research/tridiagonal/`, `research/rs_crn/` and `julia/GMRFExtremes/`. |
+| [`exact_pom`](exact_pom) | Deterministic Probabilities for Thompson Sampling and Entropy Search | **Merged into `win_nodes` (2026-11).** Kept for the record. Experiments in `research/rs_crn/`; quote-verified sources in `research/rs_crn/NOTES.md`. |
 | [`general_inversion`](general_inversion) | Scalable Inversion of Contests with Correlated Performances, Including Softmax and Multinomial Probit | [arXiv:2609.01133](https://arxiv.org/abs/2609.01133); SSRN doi:10.2139/ssrn.7307363. Claim-to-script manifest in `CLAIMS.md`; tables pinned at tag `paper-r1`. |
 | [`thurstone_humans`](thurstone_humans) | `paper.tex`: Softmax Masking Is a Choice Model … ; `paper_long.tex`: Thurstone is the Model of Choice | |
 | [`machine_preference`](machine_preference) | Choice-Set Restriction in Machines and People | |

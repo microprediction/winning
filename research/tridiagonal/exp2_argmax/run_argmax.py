@@ -17,33 +17,17 @@ import os
 
 import numpy as np
 from scipy.stats import norm
+import sys
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+from chain_argmax import ar1_argmax
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 
-def argmax_probs(phi, n, L=240):
-    g = 6.0
-    s = np.linspace(-g, g, L)
-    ds = s[1] - s[0]
-    sd = np.sqrt(1.0 - phi ** 2)
-    T = norm.pdf((s[None, :] - phi * s[:, None]) / sd) / sd * ds
-    p0 = norm.pdf(s)                       # stationary marginal
-    P = np.zeros(n)
-    for mi, m in enumerate(s):
-        mask = s < m
-        # survival of a constrained right-chain of length k, from X=m
-        surv = np.empty(n)                 # surv[k] = P(next k all < m)
-        surv[0] = 1.0
-        msg = norm.pdf((s - phi * m) / sd) / sd * ds * mask  # X_{t+1}
-        surv[1] = msg.sum() if n > 1 else 1.0
-        for k in range(2, n):
-            msg = (msg @ T) * mask
-            surv[k] = msg.sum()
-        w = p0[mi] * ds
-        for t in range(n):                 # 0-indexed
-            P[t] += w * surv[t] * surv[n - 1 - t]
-    return P
-
+def argmax_probs(phi, n, L=800):
+    # corrected lattice: cell-integrated transitions, half-weight tie
+    # cell, no renormalisation (see ../chain_argmax.py)
+    return ar1_argmax(phi, n, L=L)
 
 def mc_argmax(phi, n, m=400000, seed=0):
     rng = np.random.default_rng(seed)
@@ -75,8 +59,8 @@ if __name__ == "__main__":
           "  positive correlation pushes the max to the ENDPOINTS --\n"
           "  interior points are squeezed by correlated-high neighbors\n"
           "  on both sides. A stationary Kalman filter gives identical\n"
-          "  marginals everywhere and cannot see this. Sum < 1 is grid\n"
-          "  mass loss (tighten L); the ends/mid RATIO matches MC.")
+          "  marginals everywhere and cannot see this.\n"
+          "  sum(exact) < 1 by the lattice error only.")
     with open(os.path.join(HERE, "results.json"), "w") as f:
         json.dump(results, f, indent=2)
     print("wrote results.json")
