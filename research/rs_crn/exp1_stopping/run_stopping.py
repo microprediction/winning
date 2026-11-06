@@ -65,7 +65,9 @@ N_MAX = 400         # replicate budget
 REPS = 200          # experiment replications per configuration
 CERT_EVERY = 50     # Monte Carlo certification cadence (per config)
 MC_CERT = 200_000
-RNG = np.random.default_rng(20260901)
+# One fixed seed per regime (was hash((kind, c)), which is randomized per
+# process by PYTHONHASHSEED and so not reproducible).
+SEEDS = {"independent": 20261101, "aligned": 20261102, "opposed": 20261103}
 
 
 def make_config(kind, c):
@@ -209,6 +211,9 @@ def run_config(kind, c, rng):
         summary[r] = dict(
             mean_n=float(stopped.mean()),
             censored=int((~dec).sum()),
+            stopped=int(dec.sum()),
+            mean_n_stopped=(float(stopped[dec].mean()) if dec.any()
+                            else None),
             pcs=float(corr[dec].mean()) if dec.any() else None,
             tv_median=(float(np.median(out[r]["tv_vs_exact"]))
                        if out[r]["tv_vs_exact"] else 0.0),
@@ -217,6 +222,38 @@ def run_config(kind, c, rng):
         )
     summary["mc_certificate_worst_tv"] = float(cert_worst)
     return summary
+
+
+def provenance(seeds):
+    """Commit, package source/version, numpy/scipy versions and seeds."""
+    import subprocess
+    import platform
+    import scipy
+    import winning
+    root = os.path.abspath(os.path.join(os.path.dirname(__file__),
+                                        "..", "..", ".."))
+    try:
+        commit = subprocess.check_output(
+            ["git", "-C", root, "rev-parse", "HEAD"], text=True).strip()
+        dirty = subprocess.check_output(
+            ["git", "-C", root, "status", "--porcelain", "--",
+             os.path.dirname(os.path.abspath(__file__)), "winning"],
+            text=True).strip()
+    except Exception as e:                       # pragma: no cover
+        commit, dirty = f"unavailable: {e}", ""
+    return dict(
+        git_commit=commit,
+        uncommitted_changes_in_script_dir_or_package=dirty.splitlines(),
+        winning_source=os.path.dirname(os.path.abspath(winning.__file__)),
+        winning_version=getattr(winning, "__version__", None),
+        winning_imported_from_worktree=os.path.abspath(
+            winning.__file__).startswith(root + os.sep),
+        numpy=np.__version__,
+        scipy=scipy.__version__,
+        python=platform.python_version(),
+        seeds=seeds,
+        script=os.path.basename(__file__),
+    )
 
 
 def sanity():
@@ -230,11 +267,22 @@ def sanity():
 
 
 if __name__ == "__main__":
+    import argparse
+    import time
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--only", default=None,
+                    help="run a single regime (reproducibility checks)")
+    ap.add_argument("--out", default=os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "results.json"))
+    args = ap.parse_args()
+    t0 = time.time()
     sanity()
-    results = {}
+    results = {"provenance": provenance(SEEDS)}
     for kind, c in [("independent", 0.0), ("aligned", 0.6),
                     ("opposed", 0.6)]:
-        rng = np.random.default_rng(hash((kind, int(c * 100))) % 2 ** 31)
+        if args.only and kind != args.only:
+            continue
+        rng = np.random.default_rng(SEEDS[kind])
         results[f"{kind}_c{c}"] = run_config(kind, c, rng)
         s = results[f"{kind}_c{c}"]
         print(f"[{kind} c={c}] cert TV {s['mc_certificate_worst_tv']:.4f}")
@@ -244,7 +292,7 @@ if __name__ == "__main__":
                   f"PCS {row['pcs'] if row['pcs'] is not None else 'NA'}  "
                   f"censored {row['censored']:3d}  "
                   f"TV med/p90 {row['tv_median']:.3f}/{row['tv_p90']:.3f}")
-    with open(os.path.join(os.path.dirname(__file__), "results.json"),
-              "w") as f:
+    results["provenance"]["wall_seconds"] = round(time.time() - t0, 1)
+    with open(args.out, "w") as f:
         json.dump(results, f, indent=2)
-    print("wrote results.json")
+    print(f"total {time.time() - t0:.0f}s; wrote {args.out}")

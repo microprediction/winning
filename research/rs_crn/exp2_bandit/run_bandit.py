@@ -53,7 +53,9 @@ T = 200
 REPS = 100
 SIGMA_N = 1.0
 GAP_EVERY = 10
-RNG_GLOBAL = np.random.default_rng(20260902)
+# One fixed seed per regime (was hash((kind, 99)), which is randomized per
+# process by PYTHONHASHSEED and so not reproducible).
+SEEDS = {"independent": 20261111, "clusters": 20261112}
 
 
 def make_prior(kind, c):
@@ -112,6 +114,7 @@ def run_config(kind, c, rng):
     V, d0 = make_prior(kind, c)
     policies = ("ts", "exact", "vbos", "flite")
     regret = {p: np.zeros(T) for p in policies}
+    rep_regret = {p: [] for p in policies}     # cumulative, per replication
     tv = {p: {} for p in policies}
     ident = {p: [] for p in policies}
     shortfall = {p: [] for p in policies}
@@ -123,6 +126,7 @@ def run_config(kind, c, rng):
         for pol in policies:
             counts = np.zeros(N)
             sums = np.zeros(N)
+            rep_cum = 0.0
             for t in range(T):
                 m, W, d = posterior(V, d0, counts, sums)
                 sd = np.sqrt(d + (W ** 2).sum(1))
@@ -158,8 +162,10 @@ def run_config(kind, c, rng):
                         cert_worst = max(cert_worst, 0.5 * np.abs(
                             counts_mc - p_ex).sum())
                 regret[pol][t] += best_val - theta[a]
+                rep_cum += best_val - theta[a]
                 counts[a] += 1
                 sums[a] += theta[a] + rng.normal(0, SIGMA_N)
+            rep_regret[pol].append(float(rep_cum))
             m, W, d = posterior(V, d0, counts, sums)
             rec = int(m.argmax())
             ident[pol].append(int(rec == int(theta.argmax())))
@@ -168,20 +174,76 @@ def run_config(kind, c, rng):
     for p in policies:
         out[p] = dict(
             cum_regret=float(regret[p].sum() / REPS),
+            cum_regret_per_rep=rep_regret[p],
             ident=float(np.mean(ident[p])),
             shortfall=float(np.mean(shortfall[p])),
             tv_by_t={str(t): float(np.mean(v))
                      for t, v in sorted(tv[p].items())} if tv[p] else {},
         )
     out["mc_certificate_worst_tv"] = float(cert_worst)
+    # Paired comparisons vs Thompson: theta is shared within a replication
+    # (each policy then draws its own noise from the common stream).
+    ts = np.array(rep_regret["ts"])
+    out["paired_vs_ts"] = {}
+    for p in ("exact", "vbos", "flite"):
+        diff = np.array(rep_regret[p]) - ts
+        mean = float(diff.mean())
+        half = float(1.96 * diff.std(ddof=1) / np.sqrt(len(diff)))
+        out["paired_vs_ts"][p] = dict(
+            mean_diff=mean, ci95=[mean - half, mean + half],
+            sd_diff=float(diff.std(ddof=1)), reps=int(len(diff)),
+            pct_of_ts=100.0 * mean / float(ts.mean()),
+            pct_ci95=[100.0 * (mean - half) / float(ts.mean()),
+                      100.0 * (mean + half) / float(ts.mean())])
     return out
 
 
+def provenance(seeds):
+    """Commit, package source/version, numpy/scipy versions and seeds."""
+    import subprocess
+    import platform
+    import scipy
+    import winning
+    root = os.path.abspath(os.path.join(os.path.dirname(__file__),
+                                        "..", "..", ".."))
+    try:
+        commit = subprocess.check_output(
+            ["git", "-C", root, "rev-parse", "HEAD"], text=True).strip()
+        dirty = subprocess.check_output(
+            ["git", "-C", root, "status", "--porcelain", "--",
+             os.path.dirname(os.path.abspath(__file__)), "winning"],
+            text=True).strip()
+    except Exception as e:                       # pragma: no cover
+        commit, dirty = f"unavailable: {e}", ""
+    return dict(
+        git_commit=commit,
+        uncommitted_changes_in_script_dir_or_package=dirty.splitlines(),
+        winning_source=os.path.dirname(os.path.abspath(winning.__file__)),
+        winning_version=getattr(winning, "__version__", None),
+        winning_imported_from_worktree=os.path.abspath(
+            winning.__file__).startswith(root + os.sep),
+        numpy=np.__version__,
+        scipy=scipy.__version__,
+        python=platform.python_version(),
+        seeds=seeds,
+        script=os.path.basename(__file__),
+    )
+
+
 if __name__ == "__main__":
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--only", default=None,
+                    help="run a single regime (reproducibility checks)")
+    ap.add_argument("--out", default=os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "results.json"))
+    args = ap.parse_args()
     t0 = time.time()
-    results = {}
+    results = {"provenance": provenance(SEEDS)}
     for kind, c in (("independent", 0.0), ("clusters", 0.75)):
-        rng = np.random.default_rng(hash((kind, 99)) % 2 ** 31)
+        if args.only and kind != args.only:
+            continue
+        rng = np.random.default_rng(SEEDS[kind])
         results[f"{kind}"] = run_config(kind, c, rng)
         r = results[f"{kind}"]
         print(f"[{kind} c={c}] cert TV {r['mc_certificate_worst_tv']:.4f}")
@@ -194,8 +256,13 @@ if __name__ == "__main__":
             print(f"  {p:6s} regret {row['cum_regret']:7.2f}  "
                   f"ident {row['ident']:.3f}  "
                   f"shortfall {row['shortfall']:.4f}{tvtxt}")
+        for p, q in r["paired_vs_ts"].items():
+            print(f"  {p:6s} - ts  {q['mean_diff']:+7.2f} "
+                  f"[{q['ci95'][0]:+.2f}, {q['ci95'][1]:+.2f}]  "
+                  f"{q['pct_of_ts']:+.1f}% "
+                  f"[{q['pct_ci95'][0]:+.1f}, {q['pct_ci95'][1]:+.1f}]")
+    results["provenance"]["wall_seconds"] = round(time.time() - t0, 1)
     print(f"total {time.time() - t0:.0f}s")
-    with open(os.path.join(os.path.dirname(__file__), "results.json"),
-              "w") as fj:
+    with open(args.out, "w") as fj:
         json.dump(results, fj, indent=2)
-    print("wrote results.json")
+    print(f"wrote {args.out}")
