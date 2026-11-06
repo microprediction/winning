@@ -63,3 +63,57 @@ def test_a_ratio_that_does_not_coarsen_is_refused(bad):
     # exact prices at zero (review of #983)
     with pytest.raises(ValueError, match="unit_ratio"):
         price(D, FIELDS[0], unit_ratio=bad)
+
+
+def _trace(monkeypatch, field, ratio):
+    import winning.classic.lattice as lat
+    calls = []
+    orig_e, orig_c = lat.state_prices_from_extended_offsets, lat._state_prices_from_clustered_offsets
+
+    def spy_e(density, offsets, max_depth=3, unit_ratio=3):
+        calls.append(("extended", bool(np.array_equal(density, D)), list(offsets), unit_ratio))
+        return orig_e(density, offsets, max_depth=max_depth, unit_ratio=unit_ratio)
+
+    def spy_c(density, offsets, fast_ndxs, unit_ratio, max_depth):
+        calls.append(("clustered", len(offsets), len(fast_ndxs), max_depth, unit_ratio))
+        return orig_c(density=density, offsets=offsets, fast_ndxs=fast_ndxs,
+                      unit_ratio=unit_ratio, max_depth=max_depth)
+    monkeypatch.setattr(lat, "state_prices_from_extended_offsets", spy_e)
+    monkeypatch.setattr(lat, "_state_prices_from_clustered_offsets", spy_c)
+    out = np.asarray(lat.state_prices_from_extended_offsets(D, field, unit_ratio=ratio))
+    return out, calls
+
+
+@pytest.mark.parametrize("ratio", [2, 4])
+def test_both_cluster_recursions_run_on_the_dilated_and_base_lattices(monkeypatch, ratio):
+    # a split with slow and fast both non-empty and depth left recurses
+    # into the slow group on the dilated density and the fast group on the
+    # base one; every one of those calls must carry the ratio
+    _, calls = _trace(monkeypatch, [-20, -2, 2], ratio)
+    splits = [c for c in calls if c[0] == "clustered" and 0 < c[2] < c[1] and c[3] > 0]
+    assert splits, calls
+    base = {c[1] for c in calls if c[0] == "extended"}
+    assert base == {True, False}, calls   # base and dilated densities both priced
+    assert all(c[-1] == ratio for c in calls)
+
+
+@pytest.mark.parametrize("ratio", [2, 4])
+def test_a_finite_bad_runner_is_removed_at_the_requested_ratio(monkeypatch, ratio):
+    p = np.asarray(price(D, [-20, -2, 2], unit_ratio=ratio))
+    q, calls = _trace(monkeypatch, [-20, -2, 2, 200], ratio)
+    # the 200 is rewritten as +inf and the field priced again
+    assert any(c[0] == "extended" and c[2][-1] == float("inf") for c in calls[1:]), calls
+    assert all(c[-1] == ratio for c in calls)
+    assert q[-1] == 0.0
+    np.testing.assert_allclose(q[:-1], p, atol=1e-15)
+
+
+def test_ratio_sensitive_prices_are_pinned():
+    # ratio 3 and 4 agree with the R port to 1e-8. Ratio 2 does not: the
+    # ports decide "hanging" differently at that dilation (#1006), so it
+    # is pinned only as differing from the default above.
+    for ratio, want in [(3, [0.99870245, 0.00097081, 0.00032674]),
+                        (4, [0.99803399, 0.00147217, 0.00049385])]:
+        for field in ([-20, -2, 2], [-20, -2, 2, float("inf")], [-20, -2, 2, 200]):
+            got = np.asarray(price(D, field, unit_ratio=ratio))[:3]
+            np.testing.assert_allclose(got, want, atol=1e-8)
