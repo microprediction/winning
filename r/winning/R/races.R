@@ -254,6 +254,7 @@ attr(.base_laplace, "log_sf") <- function(z) {
 }
 
 .race_setup <- function(mu, V, D, F, W, base) {
+  .refuse_matrix(mu, "mu")                                       # (#903)
   mu <- as.numeric(mu)
   n <- length(mu)
   # One idiosyncratic variance per contestant, or a scalar broadcast on
@@ -898,6 +899,7 @@ abilities_from_race <- function(p, V = NULL, D = NULL, F = NULL, W = NULL,
     }
     V <- fit$V; D <- fit$D; F <- fit$F; W <- fit$W
   }
+  .refuse_matrix(p, "p")                                         # (#903)
   target <- as.numeric(p)
   # finite BEFORE the sign test: NaN slips past `<= 0` (#110). And
   # before the structure= dispatch, so every grammar shares one target

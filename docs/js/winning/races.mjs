@@ -1,6 +1,6 @@
 // The general race: min-wins, normal/gumbel bases, winner-bulk lattice,
 // adaptive factor quadrature. Port of winning/factor/races.py.
-import { TINY, ndtr, logndtr, npdf, hermiteNodes, mean, checkOpts, OPT_HINTS, asLoadings, asIdio, gaugeCenter, firstPrimes, asFactorNodes, asWeights, asFactorLaw, asAbilities, asFiniteVector, asIterations, asTolerance, asCount, aitkenTrial, applyFloor, canonicalBasis, asPoints, kinkLattice, baseSpan, baseKinks } from "./core.mjs";
+import { TINY, ndtr, logndtr, npdf, hermiteNodes, mean, checkOpts, OPT_HINTS, asLoadings, asIdio, gaugeCenter, firstPrimes, asFactorLaw, asAbilities, asFiniteVector, asIterations, asTolerance, asCount, aitkenTrial, applyFloor, canonicalBasis, asPoints, kinkLattice, baseSpan, baseKinks } from "./core.mjs";
 
 const EULER = 0.5772156649015329;
 
@@ -854,8 +854,8 @@ function pairMixtureGap(target, proj, w, d0, d1, g0, h) {
     if (!Number.isFinite(f)) return null;
     if (f > 0) hi = g; else lo = g;
     let gn = ratio > 0 ? g - f * sd / ratio : NaN;
-    // quadratic convergence: from 1e-8 the step lands at rounding
-    if (Math.abs(f) < 1e-8 && lo < gn && gn < hi) return gn;
+    // Evaluate the next proposal in the loop even when f is tiny: a
+    // near-zero plateau derivative can make it worse, not quadratic (#954).
     // while one side is open a Newton step is capped at h too: on a
     // mixture plateau the ratio is ~1e-66 and the uncapped step
     // (-6.7e64) set a bracket end bisection never came back from (#830)
@@ -1134,8 +1134,10 @@ function solveRace(target, floored, { V, D, F, W, base, points, nIter, tol,
     // every moment below came out NaN -- surfacing, once mu was checked
     // for finiteness, as "mu[0] = NaN" rather than as the bad weights
     // the caller actually passed.
-    const Fv = asFactorNodes(F, r, "F");
-    const Wq = asWeights(W, Fv.length, "W");
+    // ... and, as factorRule does for the forward, with negligible nodes
+    // dropped: kept, they were solved and certified here while the
+    // forward never priced them (#941)
+    const { F: Fv, W: Wq } = asFactorLaw(F, W, r, "F", "W");
     Fm = Array.from({ length: r }, (_, c) => Fv.reduce((acc, f, q) => acc + Wq[q] * f[c], 0));
     CovF = Array.from({ length: r }, (_, a) => Array.from({ length: r }, (_, b) =>
       Fv.reduce((acc, f, q) => acc + Wq[q] * (f[a] - Fm[a]) * (f[b] - Fm[b]), 0)));
@@ -1167,8 +1169,7 @@ function solveRace(target, floored, { V, D, F, W, base, points, nIter, tol,
     // the forward prices the exact mixture over the caller's nodes
     // (#742): invert THAT map by a monotone 1-D solve from this start
     if (V != null && F != null) {
-      const Fv = asFactorNodes(F, r, "F");
-      const Wq = asWeights(W, Fv.length, "W");
+      const { F: Fv, W: Wq } = asFactorLaw(F, W, r, "F", "W");   // (#941)
       const proj = Fv.map(fq => fq.reduce((acc, x, c) => acc + x * (Vc[0][c] - Vc[1][c]), 0));
       const gs = pairMixtureGap(target, proj, Wq, Dn[0], Dn[1], gap, sdD);
       if (gs !== null && Number.isFinite(gs)) {

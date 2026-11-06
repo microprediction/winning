@@ -136,6 +136,7 @@
 # field. R recycled a 2n mu0 against n targets and returned 2n abilities
 # (#554). Finite, exactly n entries, then centred.
 .as_warm_start <- function(mu0, n, name = "mu0") {
+  .refuse_matrix(mu0, name)                                       # (#903)
   m <- suppressWarnings(as.numeric(mu0))
   if (length(m) != n)
     stop(sprintf("%s has %d entries for %d runners", name, length(m), n),
