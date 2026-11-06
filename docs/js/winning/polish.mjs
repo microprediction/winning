@@ -11,9 +11,11 @@ import { blockRaceJacobian, nestedRaceJacobian, treeRaceJacobian, treeCluster,
 
 export function raceJacobian(mu, opts = {}) {
   checkOpts(opts, RACE_JACOBIAN_OPTS, "raceJacobian", OPT_HINTS);
-  const { V = null, D = null, F = null, W = null, base = "normal",
+  const { V = null, D = null, F = null, W = null, base: base0 = "normal",
           points = 501, structure = null, qa = 9, qf = 15,
           window: win = "bulk", delta = 1e-12 } = opts;
+  // Same exported-callable identity rule as the forward and inverse (#912).
+  const base = base0 === BASES.normal ? "normal" : base0;
   // the forward's lattice controls, validated as the forward validates
   // them: they were refused as unknown options, so the browser could
   // price a race on a chosen window or tail budget and only
@@ -279,9 +281,11 @@ function bfgsMin(x0, obj, grad, maxit = 80) {
 export function polishRace(opts = {}) {
   checkOpts(opts, POLISH_RACE_OPTS, "polishRace", OPT_HINTS);
   const { p0 = null, mu0: mu0In = null, V = null, D = null, F = null,
-          W = null, base = "normal",
+          W = null, base: base0 = "normal",
           points = 257, nameCaps = null, groups = null,
           structure = null, fdFallback = true } = opts;
+  // Keep the forward, inverse and derivative closures on the same law (#912).
+  const base = base0 === BASES.normal ? "normal" : base0;
   let { A = null, b = null } = opts;
   // F/W must reach the forward, the jacobian AND the inverse that makes
   // mu0. Polishing under a different factor law than the one the caller

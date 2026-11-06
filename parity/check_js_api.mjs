@@ -2193,6 +2193,62 @@ for (const c of [1e-8, 100]) {
       }
 }
 
+// --- exported normal callable is the named law at derivative/polish doors (#912)
+{
+  const mu = [-0.8, -0.2, 0.3, 0.9];
+  const cl = [0, 0, 1, 1], ld = [0.5, 0.2, 0.4, 0.1], D = [0.8, 0.9, 0.7, 1.0];
+  const grammars = [
+    structures.Blocks(cl, ld, D),
+    structures.Nested(cl, ld, D, [0.3, 0.1, 0.4, -0.2], 0.5),
+    structures.Tree(cl, ld, D, [2, 2, -1], [0, 0, 0.3]),
+    structures.Independent(D),
+    structures.Factor(ld.map(v => [v]), D),
+  ];
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  for (const structure of grammars) {
+    const o = { structure, points: 257 };
+    const J = polish.raceJacobian(mu, { ...o, base: "normal" });
+    accepts(`${structure.kind} callable normal Jacobian equals named law (#912)`,
+      () => polish.raceJacobian(mu, { ...o, base: races.BASES.normal }),
+      actual => same(actual, J));
+    const po = { ...o, mu0: mu, nameCaps: structure.kind === "Nested" || structure.kind === "Tree" ? 0.8 : 0.35, fdFallback: false };
+    const named = polish.polishRace({ ...po, base: "normal" });
+    accepts(`${structure.kind} callable normal polish equals converged named law (#912)`,
+      () => polish.polishRace({ ...po, base: races.BASES.normal }),
+      actual => named.info.converged && actual.info.converged && same(actual, named));
+    if (["Blocks", "Nested", "Tree"].includes(structure.kind)) {
+      // Identity only: neither another law nor a user-defined normal wrapper
+      // is silently reclassified as the supported named Gaussian grammar.
+      for (const base of ["logistic", races.BASES.logistic, x => races.BASES.normal(x)]) {
+        rejects(polish.raceJacobian, [mu, { ...o, base }],
+          `${structure.kind} Jacobian still rejects unsupported base (#912)`, "support base");
+        rejects(polish.polishRace, [{ ...po, base }],
+          `${structure.kind} polish still rejects unsupported base (#912)`, "support base");
+      }
+    }
+  }
+  // Exercise the structured pair shortcut and polish's p0 inverse closure.
+  const pair = [-0.8, 0.8], d = [1, 1], l = [0.5, 0.5];
+  for (const structure of [
+    structures.Blocks([0, 1], l, d),
+    structures.Nested([0, 1], l, d, [0.3, 0.3], 0.5),
+    structures.Tree([0, 1], l, d, [2, 2, -1], [0, 0, 0.3]),
+    structures.Independent(d), structures.Factor(l.map(v => [v]), d),
+  ]) {
+    const o = { structure, points: 257 };
+    const namedJ = polish.raceJacobian(pair, { ...o, base: "normal" });
+    accepts(`${structure.kind} pair callable normal uses named Jacobian (#912)`,
+      () => polish.raceJacobian(pair, { ...o, base: races.BASES.normal }),
+      actual => same(actual, namedJ));
+    const p0 = [0.5, 0.5];
+    const po = { ...o, p0, nameCaps: [0.4, NaN], fdFallback: false };
+    const named = polish.polishRace({ ...po, base: "normal" });
+    accepts(`${structure.kind} p0 callable normal polish equals named law (#912)`,
+      () => polish.polishRace({ ...po, base: races.BASES.normal }),
+      actual => named.info.converged && actual.info.converged && same(actual, named));
+  }
+}
+
 // --- a structured Jacobian refuses a base its forward refuses (#89)
 for (const s of [structures.Blocks([0, 0, 1], 0.8, 0.2),
                  structures.Tree([0, 0, 1], 0.8, 0.2, [2, 2, -1], [0, 0, 0.5])])
