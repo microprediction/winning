@@ -125,6 +125,48 @@ def test_819_rank_factor_path_is_refined():
     assert np.array_equal(P, P2049)
 
 
+def _assert_rank_inverse_reprices(target, repriced):
+    log_target = np.log(target / target.sum())
+    log_reprice = np.log(repriced / repriced.sum())
+    assert np.abs(log_target - log_reprice).max() < 1e-8
+
+
+@pytest.mark.parametrize("r", [2, 5])
+def test_259_rank_inverse_uses_refined_forward(r):
+    mu = np.asarray(MU_819)
+    mu = mu - mu.mean()
+    kw = dict(D=D_800, base="laplace", points=513)
+    target = T.rank_probabilities(mu, **kw)[:, r - 1]
+    for shift in (0.0, np.array([0.03, -0.01, 0.0, -0.02, 0.0])):
+        fit, info = T.abilities_from_rank_marginal(
+            target, r, mu0=mu + shift, return_info=True, **kw)
+        assert info["converged"]
+        if not np.any(shift):
+            assert info["iterations"] == 1
+            np.testing.assert_allclose(fit, mu, rtol=0, atol=1e-14)
+        _assert_rank_inverse_reprices(target, T.rank_probabilities(fit, **kw)[:, r - 1])
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_259_browser_rank_inverse_uses_refined_forward():
+    got = _node(f"""
+import {{ rankProbabilities, abilitiesFromRankMarginal }} from {MOD};
+const mu = {json.dumps(MU_819)}, D = {json.dumps(D_800)};
+const kw = {{ D, base: "laplace", points: 513 }};
+const r = 5;
+const target = rankProbabilities(mu, kw).map(row => row[r - 1]);
+const mu0 = mu.map((v, i) => v + [0.03, -0.01, 0, -0.02, 0][i]);
+const exact = abilitiesFromRankMarginal(target, r, {{ ...kw, mu0: mu, returnInfo: true }});
+const fit = abilitiesFromRankMarginal(target, r, {{ ...kw, mu0, returnInfo: true }});
+const repriced = rankProbabilities(fit.mu, kw).map(row => row[r - 1]);
+console.log(JSON.stringify({{ target, exact, fit, repriced }}));
+""")
+    assert got["exact"]["info"]["converged"]
+    assert got["exact"]["info"]["iterations"] == 1
+    assert got["fit"]["info"]["converged"]
+    _assert_rank_inverse_reprices(np.asarray(got["target"]), np.asarray(got["repriced"]))
+
+
 def test_819_unresolved_rank_field_stays_bounded():
     with pytest.raises(RuntimeError,
                        match="refined from points=257 to 1025"):
