@@ -325,6 +325,37 @@ def polish_race(p0=None, mu0=None, V=None, D=None, F=None, W=None,
                 else:
                     hi_t = mid
             start = lo_t * mu0
+        else:
+            # A floor above 1/n makes the uniform race infeasible too, and
+            # the saturated start came back as the answer, not converged
+            # (#840). Walk from the uniform race along the direction the
+            # violated rows ask for -- near uniform dp/dmu is -c times the
+            # centring projection, so lowering A_k p moves mu along the
+            # centred A_k -- to the first feasible point. The browser's
+            # polishRace does the same.
+            p_u = p_of(np.zeros(n))
+            d = np.zeros(n)
+            for k in np.flatnonzero(A0 @ p_u > b0):
+                row = A0[k] - A0[k].mean()
+                d += row / (np.linalg.norm(row) or 1.0)
+            if np.any(d != 0.0):
+                def feasible_d(t):
+                    return (b0 - A0 @ p_of(t * d)).min() >= 0.0
+                hi_t, found = 1.0, False
+                for _ in range(60):
+                    if feasible_d(hi_t):
+                        found = True
+                        break
+                    hi_t *= 2.0
+                if found:
+                    lo_t = 0.0
+                    for _ in range(60):
+                        mid = 0.5 * (lo_t + hi_t)
+                        if feasible_d(mid):
+                            hi_t = mid
+                        else:
+                            lo_t = mid
+                    start = hi_t * d
     res = minimize(lambda m: 0.5 * np.sum((m - mu0) ** 2), start,
                    jac=lambda m: m - mu0, method="SLSQP",
                    constraints=[
