@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Browser block races with caller-supplied factor nodes (`F`/`W` on a
+  `Blocks` structure) add `loading * f` to each runner, as the grammar
+  `Y = mu + loading * f + eps` states; they priced the reflected factor
+  law, which moves asymmetric rules by up to 0.92 of a share. Callers who
+  reflected their nodes to compensate must remove that reflection.
+  Automatic node rules are unchanged (#909).
+
 ## 1.7.0 (2026-10-31)
 
 Everything since 1.2.0: the v1.3.0 to v1.6.0 tags were cut without a
