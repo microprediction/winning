@@ -373,6 +373,11 @@ ability_implied_state_prices <- function(ability, density, unit = 1.0,
 .state_prices_from_extended_offsets <- function(density, offsets,
                                                max_depth = 3L,
                                                unit_ratio = 3) {
+  # a dilation must coarsen: at or below 1 it contracts, and once the ratio
+  # reaches every recursion (#899) the clustered prices degenerate
+  if (!is.numeric(unit_ratio) || length(unit_ratio) != 1L || !is.finite(unit_ratio) ||
+      !(unit_ratio > 1))
+    stop("unit_ratio must be a finite number above 1", call. = FALSE)
   offsets <- as.numeric(offsets)
   n <- length(offsets)
   if (anyNA(offsets)) stop("offsets must not be NA", call. = FALSE)

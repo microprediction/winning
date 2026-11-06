@@ -396,3 +396,30 @@ test_that("the classic recursion keeps a non-default unit_ratio (#899)", {
     expect_equal(q[-length(q)], p, tolerance = 1e-15)
   }
 })
+
+test_that("every recursive classic call receives the requested unit_ratio (#899)", {
+  # the scratch comparison passes if both sides drop the ratio downstream;
+  # record the ratio each recursion actually receives (review of #983)
+  d <- skew_normal_density(L = 15, unit = 0.2, scale = 1, a = 1.5)
+  orig_e <- winning:::.state_prices_from_extended_offsets
+  orig_c <- winning:::.clustered_state_prices
+  for (ratio in c(2, 4)) {
+    seen <- numeric(0)
+    testthat::local_mocked_bindings(
+      .state_prices_from_extended_offsets = function(density, offsets, max_depth = 3L, unit_ratio = 3) {
+        seen <<- c(seen, unit_ratio); orig_e(density, offsets, max_depth, unit_ratio)
+      },
+      .clustered_state_prices = function(density, offsets, fast, unit_ratio, max_depth) {
+        seen <<- c(seen, unit_ratio); orig_c(density, offsets, fast, unit_ratio, max_depth)
+      })
+    winning:::.state_prices_from_extended_offsets(d, c(-20, -2, 2, Inf), 3L, ratio)
+    expect_gt(length(seen), 3)
+    expect_true(all(seen == ratio))
+  }
+})
+
+test_that("a unit_ratio that does not coarsen is refused (#899)", {
+  d <- skew_normal_density(L = 15, unit = 0.2, scale = 1, a = 1.5)
+  for (bad in list(1, 0.6, -2, NaN, Inf, c(2, 3)))
+    expect_error(winning:::.state_prices_from_extended_offsets(d, c(-20, -2, 2), 3L, bad), "unit_ratio")
+})

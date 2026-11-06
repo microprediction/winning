@@ -703,9 +703,16 @@ def state_prices_from_extended_offsets(density, offsets, max_depth=3, unit_ratio
     :param offsets:
     :param max_depth: specifies the max number of times to call recursively, not counting
                             the recusion calls that merely get rid of float('inf') or float('-inf')
+    :param unit_ratio: the dilation the clustered approximation coarsens by, a
+                       finite number above 1. It reaches every recursion (#899),
+                       and a ratio at or below 1 contracts instead of coarsening:
+                       at 0.6 two runners with positive exact prices came back 0.
     :return:
     """
     density = as_classic_density(density)
+    if (isinstance(unit_ratio, (bool, np.bool_)) or not isinstance(unit_ratio, (int, float, np.integer, np.floating))
+            or not math.isfinite(unit_ratio) or not unit_ratio > 1):
+        raise ValueError(f"unit_ratio must be a finite number above 1; got {unit_ratio!r}")
     # First get rid of float('inf')
     n = len(offsets)
     if n==1:
