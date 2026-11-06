@@ -143,6 +143,27 @@ end
     end
 end
 
+@testset "top-k normalizes loadings before centering" begin
+    mu = [0.0, 1.0]
+    V = reshape([-1.0, 1.0], 2, 1)
+    # X₂ - X₁ has mean 1 and variance 1 + 1 + (1 - (-1))².
+    expected = winning.ndtr(1 / sqrt(6.0))
+    for qa in (nothing, 41)
+        p = top_k_probabilities(mu, 1; V = V, D = 1.0, qa = qa, points = 2049)
+        @test abs(p[1] - expected) < 2e-5
+        @test top_k_probabilities(mu, 1; V = transpose(V), D = 1.0,
+                                  qa = qa, points = 2049) == p
+        @test top_k_probabilities(mu, 1; V = 0.5, qa = qa) ==
+              top_k_probabilities(mu, 1; V = fill(0.5, 2), qa = qa)
+    end
+
+    mu4 = [-0.4, 0.0, 0.1, 0.3]
+    V4 = reshape([-1.0, 0.3, 0.2, 0.5], 4, 1)
+    @test top_k_probabilities(mu4, 2; V = transpose(V4)) ==
+          top_k_probabilities(mu4, 2; V = V4)
+    @test_throws ArgumentError top_k_probabilities(mu, 1; V = [0.5], qa = 15)
+end
+
 @testset "zero-rank loadings reach top-k" begin
     # _topk_factor_nodes special-cased rank 1 and sent every other rank
     # through the rank-2 tensor, so an (n, 0) matrix was integrated over
