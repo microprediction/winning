@@ -16,8 +16,9 @@ _fastrace, _RUST_OK, _HAVE_RUST = load_fastrace('classic_exact_calibrate')
 
 # The inverse iterates until its own exact reprice is within
 # CALIBRATION_TOL of every target, or CALIBRATION_MAX_ITER steps have run,
-# or two successive steps miss by the best miss again, to a relative
-# CALIBRATION_PLATEAU_RTOL (a plateau); it returns the best iterate it
+# or two successive steps leave the offsets where they were and miss by
+# the best miss again, to a relative CALIBRATION_PLATEAU_RTOL (a plateau,
+# #968); it returns the best iterate it
 # assessed. The budget was a fixed three sweeps: ordinary books
 # reach 1e-4 to 1e-7 in three and keep gaining a factor of 30 to 100 per
 # step, so 1e-9 costs them two to five more (a tolerance of 1e-6 stopped
@@ -315,7 +316,7 @@ def solve_for_implied_offsets(prices, density, offset_samples=None,
     # bounds the steps. The browser and R ports apply the same rule, so
     # the ports still agree.
     target = np.asarray(prices, dtype=float)
-    best = {'offsets': None, 'miss': np.inf, 'stalls': 0}
+    best = {'offsets': None, 'miss': np.inf, 'stalls': 0, 'last': None}
 
     def assess(offsets, current):
         miss = float(np.max(np.abs(np.asarray(current, dtype=float) - target))) if target.size else 0.0
@@ -324,7 +325,18 @@ def solve_for_implied_offsets(prices, density, offset_samples=None,
         # resets the count. Counting every non-improvement stopped an
         # atomic market at 2.2e-4 during a two-step rise it recovered
         # from to reach 9.4e-9 (#923).
-        flat = math.isfinite(best['miss']) and abs(miss - best['miss']) <= CALIBRATION_PLATEAU_RTOL * best['miss']
+        # A flat miss is a plateau only where the update has stopped moving
+        # the offsets: a runner priced at exactly zero pins the miss while
+        # its offset still travels toward positive mass, and a three-runner
+        # book stopped there 1.8e-3 off where the iteration reaches 1e-9
+        # (#968). A straggler the lattice can never price drifts to the
+        # budget instead, and the best iterate is still the one returned.
+        offsets = np.asarray(offsets, dtype=float)
+        moved = best['last'] is None or float(np.max(np.abs(offsets - best['last']), initial=0.0)) > \
+            1e-12 * (1.0 + float(np.max(np.abs(offsets), initial=0.0)))
+        best['last'] = offsets.copy()
+        flat = (not moved and math.isfinite(best['miss'])
+                and abs(miss - best['miss']) <= CALIBRATION_PLATEAU_RTOL * best['miss'])
         if miss < best['miss']:
             best['offsets'], best['miss'] = np.array(offsets, dtype=float), miss
         best['stalls'] = best['stalls'] + 1 if flat else 0

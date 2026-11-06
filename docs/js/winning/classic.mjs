@@ -507,14 +507,26 @@ export function solveForImpliedOffsets(prices, density, opts = {}) {
   // Each iterate is assessed by its exact reprice before the next step:
   // stop once the best miss is within tol, or two successive iterates
   // miss by the best miss again (a plateau), and return the best iterate.
-  let best = null, bestMiss = Infinity, stalls = 0;
+  let best = null, bestMiss = Infinity, stalls = 0, last = null;
   const assess = (field, current) => {
     let miss = 0;
     for (let i = 0; i < prices.length; i++) miss = Math.max(miss, Math.abs(current[i] - prices[i]));
+    // a flat miss is a plateau only where the update has stopped moving
+    // the field: a runner priced at exactly zero pins the miss while its
+    // offset still travels toward positive mass, and a three-runner book
+    // stopped 1.8e-3 off where the iteration reaches 1e-9 (#968)
+    let step = 0, size = 0;
+    for (let i = 0; i < field.length; i++) {
+      size = Math.max(size, Math.abs(field[i]));
+      if (last) step = Math.max(step, Math.abs(field[i] - last[i]));
+    }
+    const moved = !last || step > 1e-12 * (1 + size);
+    last = field.slice();
     // a stall is a miss equal to the best to within
     // CALIBRATION_PLATEAU_RTOL; a rise or a real gain resets the count, so
     // an atomic market climbing for two steps runs on to converge (#923)
-    const flat = Number.isFinite(bestMiss) && Math.abs(miss - bestMiss) <= CALIBRATION_PLATEAU_RTOL * bestMiss;
+    const flat = !moved && Number.isFinite(bestMiss) &&
+      Math.abs(miss - bestMiss) <= CALIBRATION_PLATEAU_RTOL * bestMiss;
     if (miss < bestMiss) { best = field.slice(); bestMiss = miss; }
     stalls = flat ? stalls + 1 : 0;
     return bestMiss <= tol || stalls >= 2;
