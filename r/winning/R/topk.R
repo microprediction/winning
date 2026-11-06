@@ -611,6 +611,7 @@ rank_probabilities <- function(mu, D = NULL, base = "normal",
 }
 
 .validated_topk_target <- function(q, k, n, target_floor) {
+  .refuse_matrix(q, "target")                                    # (#903)
   target <- as.numeric(q)
   if (length(target) != n)
     stop(sprintf("target has %d entries for %d runners", length(target), n))
@@ -805,6 +806,9 @@ loc_scale_from_topk_pair <- function(q1, k1, q2, k2, D0 = NULL,
                                      base = "normal", points = 513,
                                      n_iter = 60, tol = 1e-8, ridge = 0,
                                      mu0 = NULL, return_info = FALSE) {
+  .refuse_matrix(q1, "q1")                                        # (#903)
+  .refuse_matrix(q2, "q2")                                        # (#903)
+  .refuse_matrix(mu0, "mu0")                                      # (#903)
   # the cold start (no D0, no mu0) can stall far from an exact board;
   # only then, one retry from a scale-informed D0 (#781), as python
   once <- function(d, m)
