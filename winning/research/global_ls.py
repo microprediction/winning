@@ -44,12 +44,12 @@ class GlobalLSCalibrator:
         prices_arr = np.asarray(prices, dtype=float)
         scales_arr = None if scales is None else _validated_scales(scales, len(prices_arr))
         # Ensure lookup curves exist at least once (the 2-D solve below builds its own)
-        if (
-            scales_arr is None
-            and (calibrator.lookup_curve_1d_prices is None)
-            and (not calibrator.lookup_curves_2d_prices)
-        ):
-            calibrator.solve_from_prices(prices_arr)
+        if scales_arr is None and calibrator.lookup_curve_1d_prices is None:
+            if not calibrator.lookup_curves_2d_prices:
+                calibrator.solve_from_prices(prices_arr)
+            else:
+                # a scaled race came first and built no 1-D curve (#880)
+                calibrator.rebuild_curves_from_field_1d([0.0] * len(prices_arr))
         # Precompute local raw locs once for this race, using this race's own
         # scales (which also builds the 2-D curves the slope weights read).
         local_locs = np.array(
