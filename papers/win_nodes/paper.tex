@@ -820,17 +820,17 @@ target.
 \toprule
 regime & rule & mean replicates & realized PCS & censored of 200 \\
 \midrule
-independent & win node & 141.2 & 0.970 & 35 \\
-            & F-LITE & 207.0 & 0.985 & 65 \\
-            & VBOS  & 271.5 & 1.000 & 102 \\
+independent & win node & 126.5 & 0.971 & 29 \\
+            & F-LITE & 188.7 & 1.000 & 57 \\
+            & VBOS  & 252.9 & 1.000 & 88 \\
 \addlinespace
-aligned     & win node & \phantom{0}69.7 & 0.958 & \phantom{0}9 \\
-            & F-LITE & 175.6 & 1.000 & 60 \\
-            & VBOS  & 240.1 & 1.000 & 91 \\
+aligned     & win node & \phantom{0}81.2 & 0.973 & 17 \\
+            & F-LITE & 175.2 & 1.000 & 53 \\
+            & VBOS  & 236.7 & 1.000 & 90 \\
 \addlinespace
-opposed     & win node & 106.3 & 0.944 & 21 \\
-            & F-LITE & 171.7 & 0.979 & 57 \\
-            & VBOS  & 239.0 & 0.991 & 88 \\
+opposed     & win node & 122.7 & 0.970 & 33 \\
+            & F-LITE & 188.6 & 0.993 & 64 \\
+            & VBOS  & 244.2 & 1.000 & 92 \\
 \bottomrule
 \end{tabular}
 \caption{Stopping at nominal $95\%$ confidence. Each regime has 200
@@ -842,29 +842,29 @@ best system. The stopped runs differ by rule.}
 \end{table}
 
 In Table~\ref{tab:stopping}, every rule's realized PCS among its
-stopped runs is at or above nominal, within binomial noise. The win
-node rule's $0.944$ in the opposed regime has 179 stopped runs and a
-standard error of $0.016$.
+stopped runs is above nominal. The lowest, the win node rule's
+$0.970$ in the opposed regime, has 167 stopped runs and a standard
+error of $0.013$.
 
 At this common nominal threshold and budget, the two marginal rules
-used $1.5$ to $3.4$ times the capped mean replicates of the win node
+used $1.5$ to $2.9$ times the capped mean replicates of the win node
 rule, and hit the budget far more often. The gap is largest in the
-aligned regime, where the win node rule stops after $69.7$ replicates
-on average, against $175.6$ and $240.1$, and stops in 191 of 200
-runs, against 140 and 109. The thresholds are nominal and not
+aligned regime, where the win node rule stops after $81.2$ replicates
+on average, against $175.2$ and $236.7$, and stops in 183 of 200
+runs, against 147 and 110. The thresholds are nominal and not
 calibrated to a common PCS, so these ratios compare spend at a common
 threshold. They do not compare spend at a matched true error.
 
 The marginal estimates are far from the computed probabilities along
 the way. Before stopping in the aligned regime, F-LITE is at median
-total-variation distance $0.123$ from them, with ninetieth percentile
-$0.174$, and the VBOS policy is at $0.141$, with ninetieth percentile
-$0.206$. In the independent regime the distances are $0.063$ and
-$0.096$, because F-LITE's threshold step is biased even for an
+total-variation distance $0.116$ from them, with ninetieth percentile
+$0.174$, and the VBOS policy is at $0.133$, with ninetieth percentile
+$0.207$. In the independent regime the distances are $0.063$ and
+$0.095$, because F-LITE's threshold step is biased even for an
 independent posterior and the VBOS policy departs from $p$ by design.
 At the experiment's Monte Carlo checks, using $2\times10^5$ draws at
-sixteen posteriors, the largest total-variation distance of the
-computed probabilities was $0.0042$, which is the noise of the check.
+twelve posteriors, the largest total-variation distance of the
+computed probabilities was $0.0026$, which is the noise of the check.
 
 \subsection{A bandit with correlated arms}
 \label{sec:bandit}
