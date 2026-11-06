@@ -127,7 +127,24 @@ def race_jacobian(mu, V=None, D=None, F=None, W=None, base="normal",
     lattice race_probabilities(..., kink_split=True) integrates on for a
     kinked base (laplace, exponential power with beta < 2); see there.
     False, or a smooth base, is the uniform lattice unchanged.
+
+    The race is unchanged when abilities, loadings and sds are scaled by a
+    common c, and J scales by 1/c. Far from unit scale (an sd outside
+    [2^-30, 2^30]) the field is moved there by an exact power of two and
+    J moved back: at a unit of 1e-18 a tied race's off-diagonal came back
+    0.82 of the exact value, and 19x it at 1e-20 (#870). Ordinary fields
+    are untouched.
     """
+    if D is not None:
+        Dv = np.asarray(D, dtype=float)
+        sd_max = float(np.sqrt(np.max(Dv))) if Dv.size else 1.0
+        if np.isfinite(sd_max) and sd_max > 0 and not (2.0 ** -30 <= sd_max <= 2.0 ** 30):
+            c = 2.0 ** round(np.log2(sd_max))
+            J = race_jacobian(np.asarray(mu, dtype=float) / c,
+                              None if V is None else np.asarray(V, dtype=float) / c,
+                              Dv / c / c, F, W, base=base, points=points,
+                              window=window, delta=delta, kink_split=kink_split)
+            return J / c
     if (isinstance(base, str) and base == "normal" and np.size(mu) == 2):
         # the forward prices a normal pair in closed form (one Gaussian
         # contrast), so its Jacobian is the closed form's: the lattice

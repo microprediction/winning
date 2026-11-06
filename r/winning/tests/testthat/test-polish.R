@@ -120,3 +120,17 @@ test_that("race_jacobian without window/delta is unchanged (#821)", {
                    race_jacobian(mu, D = D, points = 101, window = NULL,
                                  delta = NULL))
 })
+
+test_that("the race Jacobian scales as 1/c at any unit (#870)", {
+  ex <- 1 / (4 * sqrt(pi))
+  for (s in c(1, 1e-18, 1e-20, 1e-100, 1e100)) {
+    J <- race_jacobian(c(0, 0, 0), D = rep(s * s, 3), points = 501)
+    expect_equal(s * J[1, 2], ex, tolerance = 1e-12)
+  }
+  V <- matrix(c(0.3, -0.2, 0.5)); mu <- c(0.1, -0.3, 0.2); D <- c(1, 1.5, 0.7)
+  J1 <- race_jacobian(mu, V = V, D = D, points = 501)
+  for (cc in c(1e-19, 1e40)) {
+    Jc <- race_jacobian(mu * cc, V = V * cc, D = D * cc^2, points = 501)
+    expect_lt(max(abs(J1 - cc * Jc)) / max(abs(J1)), 1e-12)
+  }
+})
