@@ -92,7 +92,7 @@
       residual an order of magnitude tighter than the diagonal iteration
       &mdash; in the historical run below, at roughly sixty times the wall clock.
       That run mixed a 257-point forward lattice with a 3,001-point JVP
-      lattice; it is not a matched-resolution solver comparison:</p>
+      lattice; it is not an equal-budget solver comparison:</p>
       <table class="cmp">
         <tr><th>\(n=200\), easy case</th><th>time</th><th>residual</th><th>result</th></tr>
         <tr><td>damped diagonal iteration</td><td class="num">0.5s</td><td class="num">9.2e-9</td><td>converged</td></tr>
@@ -118,8 +118,10 @@
       The lattice-size ratio alone is 11.68. These numbers do not establish
       an intrinsic 11.5&ndash;11.9&times; JVP overhead at fixed resolution.
       See <a href="https://github.com/microprediction/winning/issues/960">#960</a>.
-      The benchmark now passes the same explicit <code>points</code> to both
-      operations; timings depend on the machine and backend.</p>
+      The benchmark now gives both operations an <em>equal point budget</em>
+      (the same requested <code>points</code>); the lattices they realize
+      still differ, so it logs each one's node count, grid length and spacing.
+      Timings depend on the machine and backend.</p>
       <table class="cmp">
         <tr><th>\(n\)</th><th>forward pass</th><th>JVP (ibp)</th><th>ratio</th></tr>
         <tr><td class="num">200</td><td class="num">128.7 ms</td><td class="num">1479.7 ms</td><td class="num">11.5&times;</td></tr>
@@ -128,7 +130,7 @@
         <tr><td class="num">12,800</td><td class="num">8122.5 ms</td><td class="num">96357.1 ms</td><td class="num">11.9&times;</td></tr>
       </table>
       <p>Both operations are \(O(n)\) at fixed \(L\), but this table did
-      not hold \(L\) equal between them. A matched-resolution field-size
+      not hold \(L\) equal between them. An equal-budget field-size
       and end-to-end solver rerun is needed before drawing a new wall-clock
       verdict; equal resolution also does not establish equal numerical accuracy.</p>
       <p>The sweep count doesn't move either, at least on the easy

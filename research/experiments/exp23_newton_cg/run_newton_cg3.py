@@ -12,8 +12,9 @@ residual-proportional trust clip; accept a step only if the true forward
 log residual improves, else halve, else fall back to one production
 Jacobi sweep. Warm start: four production Jacobi sweeps.
 
-The experiment passes one explicit points budget to target generation,
-production inversion, forward checks and IBP JVPs. Historical tables used
+The experiment passes one equal point budget (the same requested `points`) to target generation,
+production inversion, forward checks and IBP JVPs; the lattices realized
+from it still differ between the forward and the JVP. Historical tables used
 mixed resolutions; see README.md and #960. Library defaults are unchanged.
 
 Run: python run_newton_cg3.py

@@ -13,13 +13,20 @@ rounds 3 and 4 used `race_probabilities(points=257)` versus
 therefore does not measure intrinsic JVP overhead at fixed lattice size.
 The round-3 60x solver timing also includes this resolution premium.
 
-The corrected scripts use an explicit shared `points=257` by default;
+The corrected scripts give both operations an equal point budget,
+`points=257` by default. That is the same *requested* resolution, not the same
+lattice: on `easy_problem(200)` with Rust disabled the forward's bulk grid is
+`[-17.7083, 1.9176]` at spacing 0.07666 and the IBP JVP's span is
+`[-18.0406, 16.3110]` at spacing 0.13419, both over 145 factor nodes, and the
+forward can refine past the request for other fields. Timing lines therefore
+log node count, grid length and spacing for each;
 `part1_per_call_cost(points=3001)` and `trial(..., points=3001)` provide
 higher-resolution controls. This only changes research experiments, not
 library defaults. Equal point counts do not establish equal accuracy:
 the IBP continuum surrogate and finite-grid forward can still differ.
 The historical convergence observations remain observations of the old
-configuration. A full matched-resolution field-size/solver rerun is still
+configuration. A full field-size/solver rerun that separates API cost at an equal point
+budget from kernel cost on one shared grid is still
 needed; do not infer a new solver verdict from the small control below.
 
 Independent control on revision `13c09bfd`, Linux x86_64, Python 3.12.14,
