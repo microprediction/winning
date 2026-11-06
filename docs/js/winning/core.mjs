@@ -428,8 +428,8 @@ export function asWeights(W, nNodes, where = "W") {
 
 /* A quadrature rule with its null nodes removed -- python's
    shapes.as_factor_law. Nodes of weight zero, and the lightest nodes
-   whose COMBINED relative mass is at most 1e-15, change no share at
-   double precision, but every lattice sizes its window from all the
+   whose COMBINED relative mass is at most 1e-15, have tiny absolute
+   mass, but every lattice sizes its window from all the
    nodes it is handed: a zero (or 1e-300) atom at f = 1000 widened the
    window until the real density spikes fell between lattice points
    (0.69 against 0.54 on one share), and padded block nodes threw
@@ -440,9 +440,15 @@ export function asFactorLaw(F, W, rank, whereF = "F", whereW = "W") {
   const order = Wn.map((_, q) => q).sort((a, b) => Wn[a] - Wn[b] || a - b);
   const drop = new Array(Wn.length).fill(false);
   let cum = 0;
-  for (const q of order) {
+  for (let i = 0; i < order.length; i++) {
+    const q = order[i];
     cum += Wn[q];
-    if (cum > 1e-15) break;
+    if (cum > 1e-15) {
+      // Keep the entire equal-weight group if it straddles the cutoff.
+      for (let j = i - 1; j >= 0 && Wn[order[j]] === Wn[q]; j--)
+        drop[order[j]] = false;
+      break;
+    }
     drop[q] = true;
   }
   if (!drop.some(Boolean)) return { F: Fv, W: Wn };

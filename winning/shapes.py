@@ -212,8 +212,9 @@ def as_factor_law(F, W, name="W", negligible=True):
     W goes through as_weights (finite, non-negative, positive total,
     relative). F must carry one row per weight. Nodes of weight exactly
     zero -- and the lightest nodes whose combined relative mass is at
-    most 1e-15 -- are then DROPPED: they are no-ops for the result, but every
-    lattice sizes its window from all the nodes it is handed, so a
+    most 1e-15 -- are then dropped. A group with equal weight is dropped
+    only if the whole group fits within that budget. A lattice sizes its
+    window from all the nodes it is handed, so a
     zero-mass atom at f = +-100 widened the window until each positive-
     mass density spike fell between lattice points and the core's
     recovery path priced a different law (#416: 0.46 on one share).
@@ -234,11 +235,14 @@ def as_factor_law(F, W, name="W", negligible=True):
     # though its own contribution to every share is below 1e-300. The
     # lightest nodes whose COMBINED relative mass is at most _NEGLIGIBLE
     # are dropped; that bounds the change to every normalised share by
-    # the same amount, under double-precision resolution of the result.
+    # the same absolute amount, which can still matter for tiny shares.
     if negligible and len(W) > 1:
         o = np.argsort(W, kind="stable")
-        light = np.cumsum(W[o]) <= _NEGLIGIBLE * W.sum()
-        keep[o[light]] = False
+        ordered = W[o]
+        cut = np.searchsorted(np.cumsum(ordered), _NEGLIGIBLE * W.sum(), side="right")
+        if 0 < cut < len(ordered) and ordered[cut - 1] == ordered[cut]:
+            cut = np.searchsorted(ordered, ordered[cut], side="left")
+        keep[o[:cut]] = False
     if not keep.all():
         F, W = F[keep], W[keep]
         W = W / W.sum()
