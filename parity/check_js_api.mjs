@@ -3005,6 +3005,58 @@ accepts("dividendImpliedAbility keeps the favourite first at unit 0.1 (#649)",
         `C-S ${maxDiff(ghkC, ghkS).toExponential(2)}, Ct-S ${maxDiff(ghkCt, ghkS).toExponential(2)}`);
 }
 
+
+{
+  // #726 overflow residual: the accepted covariance has a finite contrast,
+  // but adding equal 1e308 entries before halving made both dense arms NaN.
+  // In a pair both arms are exact, so this is an analytic check, not MC.
+  for (const H of [5e307, 1e308, 1.5e308]) {
+    const diagonal = H + 4e292;
+    const variance = 2 * (diagonal - H);
+    const C = [[diagonal, H], [H, diagonal]];
+    const mu = [0, Math.sqrt(variance)];
+    accepts(`large common-mode C is valid at ${H} (#726)`,
+            () => demo.validateCovariance(C), v => v.flat().every(Number.isFinite));
+    for (const i of [0, 1]) {
+      const expected = core.ndtr(i === 0 ? 1 : -1);
+      const prep = demo.ghkPrepareOne(mu, C, i);
+      holds(`GHK finite exact contrast at ${H}, runner ${i} (#726)`,
+            Number.isFinite(prep.L[0]) && Math.abs(prep.L[0] / Math.sqrt(variance) - 1) < 1e-14);
+      holds(`GHK analytic pair at ${H}, runner ${i} (#726)`,
+            Math.abs(demo.ghkSampleOne(prep, 1, demo.rng(7)) - expected) < 1e-14);
+      holds(`Mendell-Elston analytic pair at ${H}, runner ${i} (#726)`,
+            Math.abs(demo.mendellElstonOne(mu, C, i) - expected) < 1e-14);
+    }
+  }
+}
+
+{
+  // #726 contrast residual: C is the covariance of (A, 0.8A+B, 0.8A-B) with
+  // var A = 1.7e308, var B = 0.3e308. Its contrasts are representable
+  // (diagonal 3.68e307), but Cjk - Cji - Cik summed left to right reached
+  // -Infinity before Cii. A race is invariant to a common power-of-two
+  // rescaling of C (with mu = 0), so the scaled C is the oracle.
+  const C = [[1.7e308, 1.36e308, 1.36e308], [1.36e308, 1.388e308, 0.788e308],
+             [1.36e308, 0.788e308, 1.388e308]];
+  const s = 2 ** -1020;
+  const Cs = C.map(r => r.map(v => v * s));
+  const mu = [0, 0, 0];
+  for (const i of [0, 1, 2]) {
+    const me = demo.mendellElstonOne(mu, C, i), ref = demo.mendellElstonOne(mu, Cs, i);
+    holds(`Mendell-Elston prices a near-overflow contrast, runner ${i} (#726)`,
+          Number.isFinite(me) && Math.abs(me - ref) < 1e-14, `${me} vs ${ref}`);
+    const prep = demo.ghkPrepareOne(mu, C, i), prepS = demo.ghkPrepareOne(mu, Cs, i);
+    const g = demo.ghkSampleOne(prep, 2000, demo.rng(11));
+    const gS = demo.ghkSampleOne(prepS, 2000, demo.rng(11));
+    holds(`GHK prices a near-overflow contrast, runner ${i} (#726)`,
+          Number.isFinite(g) && Math.abs(g - gS) <= 1e-13 * Math.abs(gS), `${g} vs ${gS}`);
+  }
+  const L = demo.raceFactor(C), Ls = demo.raceFactor(Cs);
+  holds("raceFactor factors a near-overflow contrast (#726)",
+        L.flat().every((v, k) => Number.isFinite(v) &&
+          Math.abs(v * 2 ** -510 - Ls.flat()[k]) <= 1e-14 * Math.abs(Ls.flat()[k]) + 1e-300));
+}
+
 {
   // one global 1e-8 * max|dist| tolerance let an unrelated 1e12 distance
   // hide a -1 distance, a 1 vs 100 asymmetry and a diagonal of 1 (#721)
