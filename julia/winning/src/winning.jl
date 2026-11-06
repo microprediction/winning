@@ -756,6 +756,8 @@ function _jacobi_sweeps(mu, forward, scale, alpha, n_iter, tol)
         elseif prev !== nothing && penalty < 1.0
             penalty = min(1.0, penalty / 0.75)
         end
+        # the last sweep's own contraction, for the Aitken gate below (#956)
+        prev_max = prev === nothing ? Inf : prev[4]
         prev = (mu, resid, dres, resid_max, resid_rms)
         a = alpha_base * penalty
         lim = min.(2.0, 10.0 .* abs.(resid)) .* scale
@@ -773,7 +775,8 @@ function _jacobi_sweeps(mu, forward, scale, alpha, n_iter, tol)
                     lam = 1.0 - (1.0 - rho) / a
                     alpha_base = clamp(2.0 / (2.0 - lam), 0.1, 1.0)
                 elseif cosn > 0.999 && 0.5 < ratio < 0.999 &&
-                       resid_max > 1e3 * tol
+                       resid_max > 1e3 * tol &&
+                       abs(resid_max / prev_max - ratio) <= AITKEN_AGREE
                     trial = _aitken_trial(mu, step, ratio, scale, forward,
                                           resid_max)
                     if trial !== nothing      # sum the geometric tail
@@ -816,6 +819,13 @@ function _jacobi_sweeps(mu, forward, scale, alpha, n_iter, tol)
     end
     return mu, resid_max < tol, resid_max, iters
 end
+
+# Aitken sums a geometric tail, which exists only while the residual
+# shrinks by the same factor as the step; when the plain sweeps converge
+# faster than the step ratio says (the superlinear finish after a plateau)
+# the extrapolation overshoots, and #956's exact target ended 13.6 off.
+# python's races.AITKEN_AGREE.
+const AITKEN_AGREE = 0.15
 
 """The Aitken-extrapolated iterate as a bounded, checked trial (#583),
 python's `races._aitken_trial`: the summed tail capped in the max norm at
