@@ -1094,7 +1094,7 @@ def fit_tree(C, parent, k: int = 0, max_n: int = 2000):
 _CONTRAST_WARN = 1.0
 
 
-def _worst_contrast_ratio(C, R, cap_n=4000):
+def _worst_contrast_ratio(C, R, block_rows=128):
     """max over pairs of |contrast residual| / contrast variance.
 
     A Frobenius or max-entry residual normalized by the average variance
@@ -1106,25 +1106,25 @@ def _worst_contrast_ratio(C, R, cap_n=4000):
     residual where choices actually live, pair by pair:
     (e_i - e_j)' R (e_i - e_j) over (e_i - e_j)' C (e_i - e_j).
 
-    O(n^2) memory, so past cap_n it restricts to the cap_n smallest
-    variances, which is where dangerous pairs live (a tiny difference
-    variance needs both variances small or correlation near one, and the
-    former dominates in practice).
+    Scan every pair in row blocks to bound temporary memory. A pair
+    with high marginal variances can still have a tiny contrast variance
+    when its correlation is close to one.
     """
     n = len(C)
-    if n > cap_n:
-        idx = np.argsort(np.diag(C))[:cap_n]
-        C = C[np.ix_(idx, idx)]
-        R = R[np.ix_(idx, idx)]
-        n = cap_n
     dC = np.diag(C)
-    varC = dC[:, None] + dC[None, :] - 2.0 * C
     dR = np.diag(R)
-    varR = np.abs(dR[:, None] + dR[None, :] - 2.0 * R)
     tiny = 1e-12 * max(float(dC.mean()), 1e-300)
-    np.fill_diagonal(varR, 0.0)
-    ratio = varR / np.maximum(varC, tiny)
-    return float(ratio.max())
+    worst = 0.0
+    for start in range(0, n, block_rows):
+        stop = min(start + block_rows, n)
+        varC = dC[start:stop, None] + dC[None, :] - 2.0 * C[start:stop]
+        varR = dR[start:stop, None] + dR[None, :] - 2.0 * R[start:stop]
+        np.abs(varR, out=varR)
+        varR[np.arange(stop - start), np.arange(start, stop)] = 0.0
+        np.maximum(varC, tiny, out=varC)
+        varR /= varC
+        worst = np.maximum(worst, varR.max())
+    return float(worst)
 
 
 def _as_count(x, name, minimum):
