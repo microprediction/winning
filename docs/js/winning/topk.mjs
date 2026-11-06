@@ -705,7 +705,10 @@ function topkJacobiansCore(mu, k, Dv, fn, points, split) {
 
 export function rankProbabilities(mu, opts = {}) {
   checkOpts(opts, RANK_PROBABILITIES_OPTS, "rankProbabilities", OPT_HINTS);
-  const { V = null, D = null, base = "normal", points = 513, qa } = opts;
+  return rankForward(mu, opts).P;
+}
+
+function rankForward(mu, { V = null, D = null, base = "normal", points = 513, qa }) {
   mu = asAbilities(mu);        // an empty field threw RangeError (#440)
   mu = translatedHome(mu, asIdio(D, mu.length));   // local coordinates (#477)
   const n = mu.length;
@@ -777,7 +780,8 @@ export function rankProbabilities(mu, opts = {}) {
       "Raise points=.");
   };
   const finite = (M) => M.every(r => r.every(Number.isFinite));
-  const checked = (P) => {
+  const checked = ({ P: rawP, pts }) => {
+    let P = rawP;
     let [reRaw, ceRaw] = defects(P);
     if (!finite(P) || reRaw > 5e-3 || ceRaw > 5e-3)
       reject("before normalisation", reRaw, ceRaw);
@@ -786,12 +790,13 @@ export function rankProbabilities(mu, opts = {}) {
     const [reOut, ceOut] = defects(P);
     if (!finite(P) || reOut > 5e-3 || ceOut > 5e-3)
       reject("in the RETURNED matrix after row normalisation", reOut, ceOut);
-    return P;
+    return { P, mass: raw, points: pts };
   };
   // a defect is refined on nested 2p - 1 lattices, as top-k (#769): the
   // default 513 and 1025 points both rejected a Laplace field that 2049
   // resolves (#819). A call that passes first time is untouched.
-  return refinedTopk(rawAt, null, points, "rank marginals", checked);
+  return refinedTopk(pts => ({ P: rawAt(pts), pts }), null, points,
+                     "rank marginals", checked);
 }
 
 function validatedTarget(q, k, n, targetFloor) {
@@ -1315,20 +1320,19 @@ function rankMarginalOnce(p, r, opts) {
   // LM stalls or crawls, as python.
   const kinked = !!kinksOf(fn);
   const model = (m, jac = true) => {
-    const nx = rankMarginalWithJacobian(m, sd, r, fn, points, false,
-                                        jac && !kinked);
-    const u = nx.p.map((v, i) => v / nx.mass[i]);
+    const ranked = rankForward(m, { D, base, points });
+    const u = ranked.P.map(row => row[r - 1]);
     const tot = u.reduce((a, b) => a + b, 0);
     const logp = u.map(v => Math.log(Math.max(v / tot, 1e-300)));
-    if (!jac) return { logp, Jlog: null };
-    const Jv = kinked
-      ? rankMarginalWithJacobian(m, sd, r, fn, points, true).J
-      : nx.J;
+    if (!jac || logp.every((v, i) => Math.abs(v - logt[i]) < tol))
+      return { logp, Jlog: null };
+    const Jv = rankMarginalWithJacobian(
+      m, sd, r, fn, ranked.points, kinked).J;
     const colw = new Array(n).fill(0);
     for (let i = 0; i < n; i++)
-      for (let j = 0; j < n; j++) colw[j] += Jv[i][j] / nx.mass[i];
+      for (let j = 0; j < n; j++) colw[j] += Jv[i][j] / ranked.mass[i];
     const Jlog = Jv.map((row, i) => row.map((v, j) =>
-      v / Math.max(nx.p[i], 1e-300) - colw[j] / tot));
+      v / ranked.mass[i] / Math.max(u[i], 1e-300) - colw[j] / tot));
     return { logp, Jlog };
   };
   const fdJacobian = (m, logp) => {
@@ -1340,7 +1344,7 @@ function rankMarginalOnce(p, r, opts) {
     }
     return logp.map((_, i) => cols.map(c => c[i]));
   };
-  let { logp, Jlog } = model(mu);
+  let { logp, Jlog } = model(mu, nIter > 0);
   let resid = logp.map((v, i) => v - logt[i]);
   let cost = resid.reduce((a, b) => a + b * b, 0);
   let residMax = Math.max(...resid.map(Math.abs));
@@ -1348,7 +1352,9 @@ function rankMarginalOnce(p, r, opts) {
   for (let it = 0; it < nIter; it++) {
     iters = it + 1;
     if (residMax < tol) break;
-    if (fdMode) Jlog = fdJacobian(mu, logp);
+    if (fdMode) {
+      try { Jlog = fdJacobian(mu, logp); } catch (e) { break; }
+    }
     const A = [], g = new Array(n).fill(0);
     for (let a = 0; a < n; a++) {
       const row = new Array(n).fill(0);
@@ -1369,7 +1375,14 @@ function rankMarginalOnce(p, r, opts) {
       let muN = mu.map((v, i) => v + step[i]);
       const mm = muN.reduce((a, b) => a + b, 0) / n;
       muN = muN.map(v => v - mm);
-      const nx = model(muN, !(kinked || fdMode));
+      let nx;
+      try {
+        nx = model(muN, !(kinked || fdMode));
+      } catch (e) {
+        // An unresolved trial cannot replace the last priced iterate.
+        lam *= 8;
+        continue;
+      }
       const rN = nx.logp.map((v, i) => v - logt[i]);
       const costN = rN.reduce((a, b) => a + b * b, 0);
       if (costN < cost) {
