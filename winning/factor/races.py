@@ -1194,10 +1194,10 @@ def kink_lattice(x, M, sd, kinks):
     # same budget as a composite rule; at or below it nothing changes.
     if (count > KINK_MAX_ORDER).any():
         los, his, cnts = [], [], []
-        for l, h, m in zip(lo, hi, count):
+        for a, b, m in zip(lo, hi, count):
             k = -(-int(m) // KINK_MAX_ORDER)            # panels, ceil(m / max)
-            edges = l + (h - l) * np.arange(k + 1) / k
-            edges[0], edges[-1] = l, h                  # an unsplit piece keeps its bits
+            edges = a + (b - a) * np.arange(k + 1) / k
+            edges[0], edges[-1] = a, b                  # an unsplit piece keeps its bits
             los.extend(edges[:-1]); his.extend(edges[1:])
             cnts.extend([-(-int(m) // k)] * k)
         lo, hi, count = np.array(los), np.array(his), np.array(cnts)
