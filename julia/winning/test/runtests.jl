@@ -711,3 +711,12 @@ end
     b = race_probabilities(mu; D = [1.0, 4.0, 9.0, 16.0], points = 1025)
     @test maximum(abs.(a .- b)) > 0.05  # the two readings differ by nine points
 end
+
+@testset "the top-k inverse refines a failing lattice (#943)" begin
+    mu = [-0.10455761128105223, 0.10455761128105223]
+    D = [0.8967612229487083, 0.021331877150829952]
+    q = top_k_probabilities(mu, 1; D = D, base = "laplace", points = 513)
+    r = abilities_from_topk(q, 1; D = D, base = "laplace", points = 513)
+    m = r isa Tuple || r isa NamedTuple ? r[1] : r
+    @test maximum(abs.(top_k_probabilities(m, 1; D = D, base = "laplace", points = 513) .- q)) < 1e-8
+end
