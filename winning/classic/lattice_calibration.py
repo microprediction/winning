@@ -16,8 +16,9 @@ _fastrace, _RUST_OK, _HAVE_RUST = load_fastrace('classic_exact_calibrate')
 
 # The inverse iterates until its own exact reprice is within
 # CALIBRATION_TOL of every target, or CALIBRATION_MAX_ITER steps have run,
-# or two successive steps fail to reduce the error; it returns the best
-# iterate it assessed. The budget was a fixed three sweeps: ordinary books
+# or two successive steps miss by the best miss again, to a relative
+# CALIBRATION_PLATEAU_RTOL (a plateau); it returns the best iterate it
+# assessed. The budget was a fixed three sweeps: ordinary books
 # reach 1e-4 to 1e-7 in three and keep gaining a factor of 30 to 100 per
 # step, so 1e-9 costs them two to five more (a tolerance of 1e-6 stopped
 # a two-runner book short of what three sweeps had reached, and the
@@ -27,10 +28,14 @@ _fastrace, _RUST_OK, _HAVE_RUST = load_fastrace('classic_exact_calibrate')
 # way to ask the dividend wrapper for more (#904). The stall rule is for a
 # target the lattice cannot resolve, such as a straggler it prices at
 # exactly zero: the table has no gradient there and the offset drifted
-# along the plateau for as many steps as the budget allowed. The browser
+# along the plateau for as many steps as the budget allowed, its miss
+# pinned at the straggler's price. A miss that rises and falls again is
+# not a plateau: an atomic law can climb for two steps, or for forty, and
+# then converge, so that runs on to tol or the budget (#923). The browser
 # and R ports use the same rule and constants.
 CALIBRATION_MAX_ITER = 100
 CALIBRATION_TOL = 1e-9
+CALIBRATION_PLATEAU_RTOL = 1e-6
 
 
 #################################################################
@@ -78,6 +83,17 @@ def _check_unit(unit, where):
         raise ValueError(where + ': unit must be a finite positive number; got ' + repr(unit))
 
 
+def _check_budget(nIter, tol):
+    """ The inverse's iteration budget and stopping tolerance; returns tol
+    as a float. nIter is a loop bound: zero or negative skipped every step
+    and returned the warm start as a calibration -- a tied race for an
+    asymmetric target (#543); the browser has refused these since #401. """
+    if isinstance(nIter, bool) or not isinstance(nIter, (int, np.integer)) or nIter < 1:
+        raise ValueError('nIter must be a positive integer number of iterations; got ' + repr(nIter)
+                         + '. A zero or negative budget skips the solve and returns the warm start.')
+    return as_tolerance(tol)
+
+
 def _check_max_depth(max_depth, where):
     """ max_depth is a recursion budget: a whole number >= 0, as the
     browser port requires. The recursion stops only on max_depth == 0, so
@@ -108,6 +124,9 @@ def state_price_implied_ability(prices, density, unit=1.0, nIter=CALIBRATION_MAX
     # User should supply the lattice unit if they wish ability to be commensurate with some lattice
     # width that was assumed when generating the density
     _check_unit(unit, 'state_price_implied_ability')
+    # validated here too: a book with one live runner returns before the
+    # inverse runs, and accepted nIter=0 or tol=0 there (#924)
+    _check_budget(nIter, tol)
     p = as_classic_prices(prices)
     live = [i for i, x in enumerate(p) if x > 0]
     ability = [float('inf')] * len(p)
@@ -219,8 +238,8 @@ def normalize_dividends(dividends):
 
 def solve_for_implied_offsets(prices, density, offset_samples=None,
                               implied_offsets_guess=None,
-                              nIter=CALIBRATION_MAX_ITER, tol=CALIBRATION_TOL,
-                              verbose=False, visualize=False):
+                              nIter=CALIBRATION_MAX_ITER, verbose=False,
+                              visualize=False, *, tol=CALIBRATION_TOL):
     """
     This is the main routine.
 
@@ -230,9 +249,12 @@ def solve_for_implied_offsets(prices, density, offset_samples=None,
         offset_samples   Optionally supply a list of offsets which are used in the interpolation table  a_i -> p_i
         nIter            Iteration budget. The iteration stops early once the exact
                          reprice of the current field is within tol of every target, or
-                         when two successive steps fail to reduce the error; the best
-                         iterate assessed is returned.
+                         when two successive steps miss by the best miss again (to a
+                         relative CALIBRATION_PLATEAU_RTOL); the best iterate assessed
+                         is returned.
         tol              Stopping tolerance on the maximum price error; finite and positive.
+                         Keyword-only, so verbose and visualize keep their 1.6.0
+                         positions (#924).
         verbose, visualize   Per-iteration diagnostics. Requesting either
                          runs the pure-Python iteration even when the
                          compiled kernel is installed (same answer).
@@ -241,13 +263,7 @@ def solve_for_implied_offsets(prices, density, offset_samples=None,
 
     density = as_classic_density(density)
     prices = as_classic_prices(prices)
-    # a loop bound: zero or negative skipped every step and returned the
-    # warm start as a calibration -- a tied race for an asymmetric target
-    # (#543); the browser has refused these since #401
-    if isinstance(nIter, bool) or not isinstance(nIter, (int, np.integer)) or nIter < 1:
-        raise ValueError('nIter must be a positive integer number of iterations; got ' + repr(nIter)
-                         + '. A zero or negative budget skips the solve and returns the warm start.')
-    tol = as_tolerance(tol)
+    tol = _check_budget(nIter, tol)
     L = implied_L(density)
     core = None
     if offset_samples is None:
@@ -295,7 +311,7 @@ def solve_for_implied_offsets(prices, density, offset_samples=None,
     implied_offsets = np.asarray(implied_offsets_guess, dtype=float)
     # Each iterate is assessed by its exact reprice before the next step:
     # stop once the best miss is within tol, or two successive iterates
-    # fail to improve on it (a plateau), and return the best iterate. nIter
+    # miss by the best miss again (a plateau), and return the best iterate. nIter
     # bounds the steps. The browser and R ports apply the same rule, so
     # the ports still agree.
     target = np.asarray(prices, dtype=float)
@@ -303,10 +319,15 @@ def solve_for_implied_offsets(prices, density, offset_samples=None,
 
     def assess(offsets, current):
         miss = float(np.max(np.abs(np.asarray(current, dtype=float) - target))) if target.size else 0.0
+        # a stall is an iterate whose miss equals the best to within
+        # CALIBRATION_PLATEAU_RTOL; any other iterate, better or worse,
+        # resets the count. Counting every non-improvement stopped an
+        # atomic market at 2.2e-4 during a two-step rise it recovered
+        # from to reach 9.4e-9 (#923).
+        flat = math.isfinite(best['miss']) and abs(miss - best['miss']) <= CALIBRATION_PLATEAU_RTOL * best['miss']
         if miss < best['miss']:
-            best['offsets'], best['miss'], best['stalls'] = np.array(offsets, dtype=float), miss, 0
-        else:
-            best['stalls'] += 1
+            best['offsets'], best['miss'] = np.array(offsets, dtype=float), miss
+        best['stalls'] = best['stalls'] + 1 if flat else 0
         return best['miss'] <= tol or best['stalls'] >= 2
 
     def repriced(offsets):
