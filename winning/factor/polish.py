@@ -127,7 +127,24 @@ def race_jacobian(mu, V=None, D=None, F=None, W=None, base="normal",
     lattice race_probabilities(..., kink_split=True) integrates on for a
     kinked base (laplace, exponential power with beta < 2); see there.
     False, or a smooth base, is the uniform lattice unchanged.
+
+    The race is unchanged when abilities, loadings and sds are scaled by a
+    common c, and J scales by 1/c. Far from unit scale (an sd outside
+    [2^-30, 2^30]) the field is moved there by an exact power of two and
+    J moved back: at a unit of 1e-18 a tied race's off-diagonal came back
+    0.82 of the exact value, and 19x it at 1e-20 (#870). Ordinary fields
+    are untouched.
     """
+    if D is not None:
+        Dv = np.asarray(D, dtype=float)
+        sd_max = float(np.sqrt(np.max(Dv))) if Dv.size else 1.0
+        if np.isfinite(sd_max) and sd_max > 0 and not (2.0 ** -30 <= sd_max <= 2.0 ** 30):
+            c = 2.0 ** round(np.log2(sd_max))
+            J = race_jacobian(np.asarray(mu, dtype=float) / c,
+                              None if V is None else np.asarray(V, dtype=float) / c,
+                              Dv / c / c, F, W, base=base, points=points,
+                              window=window, delta=delta, kink_split=kink_split)
+            return J / c
     if (isinstance(base, str) and base == "normal" and np.size(mu) == 2):
         # the forward prices a normal pair in closed form (one Gaussian
         # contrast), so its Jacobian is the closed form's: the lattice
@@ -267,20 +284,20 @@ def polish_race(p0=None, mu0=None, V=None, D=None, F=None, W=None,
     if mu0 is None:
         if p0 is None:
             raise ValueError("give p0 or mu0")
-        if structure is not None:
-            mu0 = invert(np.asarray(p0, float))
-        else:
-            mu0, inv = invert(np.asarray(p0, float))
-            inv_converged = inv["converged"]
-            if not inv_converged:
-                import warnings
-                warnings.warn(
-                    f"polish_race: abilities_from_race did not converge on "
-                    f"p0: max |log residual| {inv['max_log_residual']:.2e} "
-                    f"after {inv['iterations']} iterations; the polished "
-                    "race starts from a race that is not p0, so "
-                    "info['converged'] is False. Raise points= or pass mu0.",
-                    RuntimeWarning, stacklevel=2)
+        # every engine reports its verdict, structure= included: the
+        # declarative Factor(V, D) path discarded it, so the same failed
+        # inversion the explicit call flags came back converged (#886)
+        mu0, inv = invert(np.asarray(p0, float))
+        inv_converged = inv["converged"]
+        if not inv_converged:
+            import warnings
+            warnings.warn(
+                f"polish_race: the inverse did not converge on "
+                f"p0: max |log residual| {inv['max_log_residual']:.2e} "
+                f"after {inv['iterations']} iterations; the polished "
+                "race starts from a race that is not p0, so "
+                "info['converged'] is False. Raise points= or pass mu0.",
+                RuntimeWarning, stacklevel=2)
     mu0 = np.asarray(mu0, float) - np.mean(mu0)
     n = len(mu0)
     A0, b0 = concentration_matrix(n, name_caps=name_caps, groups=groups)
@@ -416,12 +433,14 @@ def _structure_engines(structure, points):
         D = np.asarray(structure.D, float)
         return (lambda m: race_probabilities(m, V=V, D=D, points=points),
                 lambda m: race_jacobian(m, V=V, D=D, points=points),
-                lambda p: abilities_from_race(p, V=V, D=D, points=points))
+                lambda p: abilities_from_race(p, V=V, D=D, points=points,
+                                              return_info=True))
     if isinstance(structure, Blocks):
         c, L, D = structure.cluster, structure.loading, structure.D
         return (lambda m: block_race_probabilities(m, c, L, D, points=points),
                 lambda m: block_race_jacobian(m, c, L, D, points=points),
-                lambda p: abilities_from_block_race(p, c, L, D, points=points)[0])
+                lambda p: _verdict(*abilities_from_block_race(p, c, L, D,
+                                                              points=points)))
     if isinstance(structure, Nested):
         c, L, D, g, ga = (structure.cluster, structure.loading, structure.D,
                           structure.coupling, structure.gamma)
@@ -446,16 +465,33 @@ def _structure_engines(structure, points):
                     f"{type(structure).__name__}")
 
 
+# a structure inverse's residual counts as converged below the race
+# inverse's default tolerance, the bar the explicit V, D path applies (#886)
+_STRUCTURE_INVERSE_TOL = 1e-8
+
+
+def _verdict(mu, residual, iterations):
+    """(mu, info) from an inverse that reports (mu, max log residual,
+    iterations), in abilities_from_race's info shape."""
+    return mu, {"converged": bool(residual < _STRUCTURE_INVERSE_TOL),
+                "max_log_residual": float(residual),
+                "iterations": int(iterations)}
+
+
 def _invert_generic(p, forward, tol=1e-9, max_iter=400):
+    """(mu, info): a damped log-residual fixed point for structures without
+    a dedicated inverse, reporting its own residual (#886)."""
     p = np.asarray(p, float); p = p / p.sum()
     lt = np.log(np.maximum(p, 1e-300))
     mu = -(lt - lt.mean())
     eta = 1.0
     lp = np.log(np.maximum(forward(mu), 1e-300))
     err = np.abs(lp - lt).max()
+    it = 0
     for _ in range(max_iter):
         if err < tol:
             break
+        it += 1
         mu_n = mu - eta * (lt - lp); mu_n -= mu_n.mean()
         lp_n = np.log(np.maximum(forward(mu_n), 1e-300))
         e = np.abs(lp_n - lt).max()
@@ -466,4 +502,4 @@ def _invert_generic(p, forward, tol=1e-9, max_iter=400):
             eta *= 0.5
             if eta < 1e-4:
                 break
-    return mu
+    return _verdict(mu, err, it)
