@@ -3825,6 +3825,27 @@ rejects(C => demo.fitGrammar(C, 1, 0, { method: "ipaf", tol: 0 }),
   accepts("three-runner omitted gamma remains explicit 1 (#897)",
           () => races.raceProbabilities([0, 0.2, 0.4], { structure: s3 }),
           p => eq(p, races.raceProbabilities([0, 0.2, 0.4], { structure: { ...s3, gamma: 1 } })));
+  // raceJacobian reaches the same pair helper: omitted gamma equals 1 and
+  // the derivative is the public forward's, for a split and a same-cluster
+  // pair (review of #965)
+  const same = { kind: "Nested", cluster: [0, 0], loading: [0.4, 0.7],
+                 D: [1, 1.3], coupling: [[0.6, 0.2], [-0.3, 0.5]] };
+  for (const pair of [s, same]) {
+    const explicit = { ...pair, gamma: 1 };
+    const J = polish.raceJacobian(mu, { structure: pair });
+    holds(`pair Jacobian omitted gamma equals explicit 1, cluster=${pair.cluster} (#897)`,
+          eq(J, polish.raceJacobian(mu, { structure: explicit })));
+    const h = 1e-5, fd = [[0, 0], [0, 0]];
+    for (let j = 0; j < 2; j++) {
+      const a = mu.slice(), b = mu.slice(); a[j] += h; b[j] -= h;
+      const pa = races.raceProbabilities(a, { structure: pair });
+      const pb = races.raceProbabilities(b, { structure: pair });
+      for (let i = 0; i < 2; i++) fd[i][j] = (pa[i] - pb[i]) / (2 * h);
+    }
+    holds(`pair Jacobian differentiates the public forward, cluster=${pair.cluster} (#897)`,
+          J.flat().every((v, k) => Number.isFinite(v) && Math.abs(v - fd.flat()[k]) < 1e-8),
+          JSON.stringify([J, fd]));
+  }
   // The default really uses the coupling, not the independent/Blocks law.
   holds("pair gamma=1 differs from gamma=0 (#897)",
         Math.abs(races.raceProbabilities(mu, { structure: { ...s, gamma: 1 } })[0]
