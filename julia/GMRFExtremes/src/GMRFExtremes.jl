@@ -543,11 +543,37 @@ function _transition!(M::Matrix{Float64}, ph::Float64, s::Float64,
     fill!(M, 0.0)
     a = abs(ph) * dzs / sqrt(12.0)
     sdv = s > a ? sqrt((s - a) * (s + a)) : 0.0
+    # one tail probability per cell EDGE, not two per cell: adjacent cells
+    # share an edge, and the CDF calls were nearly all of max_cdf's time
+    # (#889). q[k] = ndtr(-|z_k|), the tail beyond edge k, so a cell above
+    # the mean is q_lo - q_hi, one below it q_hi - q_lo, both tail-stable
+    # as _interval_mass is (#197); only the cell straddling the mean takes
+    # 1 - q_lo - q_hi, where the mass is O(1). Edges are the cells' own
+    # zd[i] -+ h, the lower one of the first cell and the upper one of
+    # each cell, as before.
+    q = Vector{Float64}(undef, L + 1)
+    zl = Vector{Float64}(undef, L + 1)
     for (j, zj) in enumerate(zs)
         m = ph * zj
         if sdv > 0.0
-            @inbounds for i in 1:L
-                M[i, j] = _interval_mass(zd[i] - h, zd[i] + h, m, sdv)
+            @inbounds begin
+                zl[1] = (zd[1] - h - m) / sdv
+                for i in 1:L
+                    zl[i + 1] = (zd[i] + h - m) / sdv
+                end
+                for k in 1:(L + 1)
+                    q[k] = ndtr(-abs(zl[k]))
+                end
+                for i in 1:L
+                    za, zb = zl[i], zl[i + 1]
+                    mass = za >= 0.0 ? q[i] - q[i + 1] :
+                           zb <= 0.0 ? q[i + 1] - q[i] : 1.0 - q[i] - q[i + 1]
+                    if !(mass > 0.0)
+                        mass = isfinite(za) && isfinite(zb) ?
+                               npdf(0.5 * (za + zb)) * (zb - za) : 0.0
+                    end
+                    M[i, j] = mass
+                end
             end
         else
             q = (m - zd[1]) / dzd + 1.0          # fractional cell index
