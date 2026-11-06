@@ -3693,6 +3693,31 @@ rejects(C => demo.fitGrammar(C, 1, 0, { method: "ipaf", tol: 0 }),
   }
 }
 
+// --- Mendell-Elston keeps positive contrast variances below its fallback (#375)
+{
+  for (const v of [1e-16, 1e-320]) {
+    const s = Math.sqrt(v);
+    const p = demo.mendellElstonOne([0, s, 0], [[0, 0, 0], [0, v, 0], [0, 0, 1]], 0);
+    // Runner 0 faces independent constraints with z scores 1 and 0.
+    holds(`Mendell-Elston keeps a positive contrast variance ${v} (#375)`,
+          Math.abs(p - core.ndtr(1) / 2) < 1e-14, String(p));
+  }
+  const tiny = 1e-320, large = 1e300, s = Math.sqrt(tiny);
+  const pair = demo.mendellElstonOne([0, s], [[tiny, 0], [0, tiny]], 0);
+  holds("Mendell-Elston prices a subnormal binary contrast (#375)",
+        Math.abs(pair - core.ndtr(s / Math.sqrt(2 * tiny))) < 1e-14, String(pair));
+
+  // Runner 0's orthant is unchanged by rescaling either difference by
+  // its own standard deviation. The tiny pivot is conditioned on first.
+  const cross = 0.5 * s * Math.sqrt(large);
+  const p = demo.mendellElstonOne([0, -s, 0], [[0, 0, 0], [0, tiny, cross], [0, cross, large]], 0);
+  const standard = demo.mendellElstonOne([0, -1, 0], [[0, 0, 0], [0, 1, 0.5], [0, 0.5, 1]], 0);
+  holds("Mendell-Elston conditions on a tiny correlated positive pivot (#375)",
+        Math.abs(p - standard) < 1e-14, String(p));
+  holds("Mendell-Elston returns zero when a positive pivot implies an underflowed tail (#375)",
+        demo.mendellElstonOne([0, -1, 0], [[0, 0, 0], [0, tiny, 0], [0, 0, 1]], 0) === 0);
+}
+
 // #805: a p0 call is only as good as its inversion. This seeded fixture
 // (four runners, rank one, a deliberately coarse 33-point lattice) is
 // priced by the forward itself, yet abilitiesFromRace stalls at a max
