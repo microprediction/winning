@@ -191,7 +191,8 @@ polish_race <- function(p0 = NULL, mu0 = NULL, V = NULL, D = NULL,
       # inside an optimizer the bias steers the iterates to a different
       # local solution than the reference. The forward map is exact, so
       # differentiate it directly.
-      jac <- function(m, h = 1e-6) {
+      jac <- function(m) {
+        h <- 1e-6                       # one signature for every jac (R CMD check)
         nn <- length(m)
         Jn <- matrix(0, nn, nn)
         for (j in seq_len(nn)) {

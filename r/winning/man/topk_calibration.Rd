@@ -7,7 +7,7 @@
 (location, scale) from two curves}
 \usage{
 abilities_from_topk(q, k, V = NULL, D = NULL, base = "normal",
-  points = 513, qa = 15, n_iter = 80, tol = 1e-08,
+  points = 513, qa = NULL, n_iter = 80, tol = 1e-08,
   target_floor = NULL, return_info = FALSE)
 
 loc_scale_from_topk_pair(q1, k1, q2, k2, D0 = NULL, base = "normal",
