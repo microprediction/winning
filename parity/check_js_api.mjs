@@ -3854,5 +3854,41 @@ rejects(C => demo.fitGrammar(C, 1, 0, { method: "ipaf", tol: 0 }),
               polish.raceJacobian([-1, 0, 1], { ...ordinary, base: rawNormal }), 0));
 }
 
+// --- a compact-support callable: zero density stays zero, and the
+// leave-one-out survival is summed, not subtracted, at the sentinel (#952)
+{
+  const c = 7, tail = core.ndtr(-c), mass = 1 - 2 * tail;
+  const sd = Math.sqrt(1 - 2 * c * core.npdf(c) / mass);
+  const base = z => {
+    const u = z * sd;
+    if (u <= -c) return [1, 0, 0];
+    if (u >= c) return [0, 0, 0];
+    const f = sd * core.npdf(u) / mass;
+    return [(core.ndtr(-u) - tail) / mass, f, -u * sd * f];
+  };
+  base.logSf = z => Math.log(base(z)[0]);
+  const opts = { base, points: 2001, window: "span" };
+  const mu = [-15, 0, 1];
+  // the first runner's support is disjoint from the others': it always wins
+  const p = races.raceProbabilities(mu, opts);
+  holds("compact callable: the disjoint runner always wins (#952)",
+        p[0] === 1 && p[1] === 0 && p[2] === 0);
+  const J = polish.raceJacobian(mu, opts);
+  holds("compact callable: a fixed winner has a zero Jacobian (#952)",
+        J.flat().every(v => Number.isFinite(v) && Math.abs(v) < 1e-12),
+        () => JSON.stringify(J));
+  // the overlapping pair keeps its derivative, against the forward
+  const h = 1e-5, mu2 = [0, 1];
+  const J2 = polish.raceJacobian(mu2, opts);
+  const fd = [0, 1].map(j => {
+    const a = mu2.slice(), b = mu2.slice(); a[j] += h; b[j] -= h;
+    const pa = races.raceProbabilities(a, opts), pb = races.raceProbabilities(b, opts);
+    return [0, 1].map(i => (pa[i] - pb[i]) / (2 * h));
+  });
+  holds("compact callable: an overlapping pair still differentiates its forward (#952)",
+        [0, 1].every(i => [0, 1].every(j => Math.abs(J2[i][j] - fd[j][i]) < 1e-7)),
+        () => JSON.stringify([J2, fd]));
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");

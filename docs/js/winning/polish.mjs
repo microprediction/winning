@@ -130,6 +130,10 @@ function raceJacobianExplicit(mu, V, D, base, points, F0 = null, W0 = null,
     const Mq = Mall[q], wq = W[q];
     const L = new Array(P).fill(0);
     const logS = [], logf = [];
+    const callable = typeof base === "function";
+    // a lattice point where some survival sits at the -1e300 sentinel: there
+    // L - logS[i] cancels the sentinel and every other runner's term with it
+    const sentinel = new Array(P).fill(false);
     for (let i = 0; i < n; i++) {
       const li = new Array(P), fi = new Array(P);
       for (let t = 0; t < P; t++) {
@@ -138,9 +142,14 @@ function raceJacobianExplicit(mu, V, D, base, points, F0 = null, W0 = null,
         // Match the forward's log-tail metadata when direct survival
         // underflows: -Infinity - -Infinity poisoned ordinary rows (#952).
         // Keep named-base arithmetic unchanged in this callable-only fix.
-        li[t] = typeof base === "function" && S <= 1e-300 && fn.logSf
+        li[t] = callable && S <= 1e-300 && fn.logSf
           ? Math.max(fn.logSf(z), -1e300) || -1e300 : Math.log(S);
-        fi[t] = Math.log(Math.max(f / sd[i], 1e-300));
+        if (callable && li[t] <= -1e299) sentinel[t] = true;
+        // a callable with compact support has exactly zero density off it;
+        // flooring that at 1e-300 and dividing by a sentinel survival gave a
+        // fixed-winner race a 4.5e7 Jacobian entry. Zero stays zero.
+        fi[t] = callable && f === 0 ? -Infinity
+          : Math.log(Math.max(f / sd[i], 1e-300));
         L[t] += li[t];
       }
       logS.push(li); logf.push(fi);
@@ -149,7 +158,14 @@ function raceJacobianExplicit(mu, V, D, base, points, F0 = null, W0 = null,
     for (let i = 0; i < n; i++) {
       const p1 = new Array(P), p2 = new Array(P);
       for (let t = 0; t < P; t++) {
-        p1[t] = Math.exp(Math.min(Math.max(logf[i][t] + L[t] - logS[i][t], -745), 40));
+        if (logf[i][t] === -Infinity) { p1[t] = 0; p2[t] = 0; continue; }
+        // leave-one-out by summation where subtraction would cancel (#952)
+        let others = L[t] - logS[i][t];
+        if (sentinel[t]) {
+          others = 0;
+          for (let j = 0; j < n; j++) if (j !== i) others += logS[j][t];
+        }
+        p1[t] = Math.exp(Math.min(Math.max(logf[i][t] + others, -745), 40));
         p2[t] = Math.exp(Math.min(Math.max(logf[i][t] - logS[i][t], -745), 40));
       }
       P1.push(p1); P2.push(p2);
