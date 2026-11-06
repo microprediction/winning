@@ -2025,9 +2025,11 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
     _Vn = np.zeros((n_t, 1)) if V is None else as_loadings(V, n_t)
     _Vc = _gauge_center(_Vn)                       # scale-safe (#471)
     if V is not None and nodes_given:
-        _Fq = np.asarray(F, dtype=float).reshape(len(F), -1)
-        _Wq = (np.ones(len(_Fq)) / len(_Fq) if W is None
-               else as_weights(W))   # via max(W): sum(W) can overflow (#415)
+        # the law the forward prices: _setup's as_factor_law, which also
+        # drops negligible caller nodes. Kept, a 1e-15 node the forward
+        # never sees was solved and certified at residual 0 while the
+        # public reprice missed a 1e-12 share by 1e-3 in log (#941).
+        _Fq, _Wq = as_factor_law(F, W, negligible=True)
         _Fm = _Wq @ _Fq
         _CovF = (_Fq - _Fm).T @ ((_Fq - _Fm) * _Wq[:, None])
     else:
