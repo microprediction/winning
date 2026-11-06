@@ -1118,9 +1118,13 @@ export function mendellElstonOne(mu, C, i) {
   // constraints still tied on all of those are interchangeable by an
   // automorphism of the problem and give the same answer either way.
   const eps = 1e-12 * diffScale(S, d);
+  const variance = k => {
+    const v = S[k * d + k];
+    return v <= 0 ? eps : v; // preserve positive contrasts of every scale (#375)
+  };
   const alive = [];
   for (let a = 0; a < d; a++) alive.push(a);
-  const hard = a => m[a] / Math.sqrt(Math.max(S[a * d + a], eps));
+  const hard = a => m[a] / Math.sqrt(variance(a));
   const rowKey = a => {
     const r = [];
     for (let b = 0; b < d; b++) if (b !== a) r.push(S[a * d + b]);
@@ -1136,7 +1140,8 @@ export function mendellElstonOne(mu, C, i) {
   });
   while (alive.length) {
     const k = alive.shift();
-    const skk = Math.max(S[k * d + k], eps), sk = Math.sqrt(skk);
+    const skk = variance(k), sk = Math.sqrt(skk);
+    const small = skk < eps;
     const z = m[k] / sk;
     const Pz = ndtr(z);
     let lam;
@@ -1148,6 +1153,9 @@ export function mendellElstonOne(mu, C, i) {
       // tail at 1e-300 (gap 53, #734); the Mills ratio from the same logs
       const lPz = logndtr(z);
       logp += lPz;
+      // Further constraints can only reduce the probability. A tiny
+      // positive pivot can make the log Mills ratio an Infinity subtraction.
+      if (Math.exp(logp) === 0) return 0;
       lam = Math.exp(-0.5 * z * z - 0.5 * Math.log(2 * Math.PI) - lPz);
     }
     const del = lam * (lam + z);
@@ -1157,7 +1165,11 @@ export function mendellElstonOne(mu, C, i) {
         const j = alive[aj], l = alive[ak];
         // ratio first: the O(s^4) product of two covariances over/under-
         // flowed under a valid change of units s (1e78, 1e-100) (#795)
-        const upd = (S[k * d + j] / skk) * S[k * d + l] * del;
+        // A newly unfloored tiny pivot can overflow the ratio itself.
+        // Split that division across the two factors in the small case.
+        const upd = small
+          ? (S[k * d + j] / sk) * ((S[k * d + l] / sk) * del)
+          : (S[k * d + j] / skk) * S[k * d + l] * del;
         S[j * d + l] -= upd;
         if (l !== j) S[l * d + j] -= upd;
       }
