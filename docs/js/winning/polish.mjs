@@ -2,7 +2,7 @@
 // (augmented Lagrangian with a compact BFGS inner solver standing in for
 // SLSQP; agrees with the reference optimum to optimizer tolerance).
 import { mean, checkOpts, OPT_HINTS, asLoadings, gaugeCenter, asAbilities,
-         asIdio, isVector } from "./core.mjs";
+         asIdio, isVector, baseSpan } from "./core.mjs";
 import { raceProbabilities, abilitiesFromRace, BASES, SPANS,
          forwardGrid, factorRule, requireWholeRule, asWindow, asDelta,
          collapseStructure, translatedHome } from "./races.mjs";
@@ -131,7 +131,7 @@ function raceJacobianUnit(mu, V, D, base, points, F0 = null, W0 = null,
   const fn = typeof base === "function" ? base : BASES[base];
   if (typeof fn !== "function")
     throw new Error(`unknown base ${JSON.stringify(base)}`);
-  const [left, right] = typeof base === "function" ? [12, 12] : (SPANS[base] || [12, 12]);
+  const [left, right] = (typeof base === "function" ? baseSpan(fn) : SPANS[base]) || [12, 12];
   const Mall = F.map(fq => mu.map((m, i) => {
     let s = m;
     for (let r = 0; r < fq.length; r++) s += V[i][r] * fq[r];
