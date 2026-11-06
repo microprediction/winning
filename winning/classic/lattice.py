@@ -630,7 +630,8 @@ def _state_prices_from_clustered_offsets(density, offsets, fast_ndxs:[int], unit
     dilated_density = dilate_density(density=density, unit_ratio=unit_ratio)
     dilated_offsets = [o / unit_ratio for o in offsets]
     dilated_state_prices = state_prices_from_extended_offsets(density=dilated_density, offsets=dilated_offsets,
-                                                              max_depth=max_depth - 1)
+                                                              max_depth=max_depth - 1,
+                                                              unit_ratio=unit_ratio)
     n = len(offsets)
     if (len(fast_ndxs)==n) or (len(fast_ndxs)==0) or (max_depth <= 0):
         return dilated_state_prices
@@ -645,13 +646,15 @@ def _state_prices_from_clustered_offsets(density, offsets, fast_ndxs:[int], unit
         dilated_slow_offsets = [dilated_offsets[i] for i in slow_ndxs]
         slow_relative_state_prices = state_prices_from_extended_offsets(density=dilated_density,
                                                                         offsets=int_centered(dilated_slow_offsets),
-                                                                        max_depth=max_depth - 2)
+                                                                        max_depth=max_depth - 2,
+                                                                        unit_ratio=unit_ratio)
     # Race the fast horses
     fast_ndxs = [j for j in range(n) if j not in slow_ndxs]
     fast_offsets = [offsets[j] for j in fast_ndxs]
     fast_relative_state_prices = state_prices_from_extended_offsets(density=density,
                                                                     offsets=int_centered(fast_offsets),
-                                                                    max_depth=max_depth - 1)
+                                                                    max_depth=max_depth - 1,
+                                                                    unit_ratio=unit_ratio)
 
     # It remains to combine the two results in a plausible mannner
     slow_share = sum([p for i, p in enumerate(dilated_state_prices) if i in slow_ndxs])
@@ -718,7 +721,8 @@ def state_prices_from_extended_offsets(density, offsets, max_depth=3, unit_ratio
         else:
             finite_state_prices = state_prices_from_extended_offsets(density=density,
                                                                      offsets=int_centered(finite_offsets),
-                                                                     max_depth=max_depth)
+                                                                     max_depth=max_depth,
+                                                                     unit_ratio=unit_ratio)
             state_prices = [ 0 for _ in range(n)]
             for j, ndx in enumerate(finite_ndxs):
                 state_prices[ndx] = finite_state_prices[j]
@@ -795,7 +799,7 @@ def state_prices_from_extended_offsets(density, offsets, max_depth=3, unit_ratio
         augmented_offsets = [o if i not in extremely_bad_ndxs else float('inf') for i, o in enumerate(offsets)]
         return state_prices_from_extended_offsets(density=density,
                                                   offsets=int_centered(augmented_offsets),
-                                                  max_depth=max_depth)
+                                                  max_depth=max_depth, unit_ratio=unit_ratio)
     else:
         if max_depth==0:
             # If we've already tried pretty hard, just set hangers to inf or -inf and call one more time
@@ -803,7 +807,8 @@ def state_prices_from_extended_offsets(density, offsets, max_depth=3, unit_ratio
                 centered_offsets[ndx]=float('inf')
             for ndx in hanging_left:
                 centered_offsets[ndx] = float('-inf')
-            return state_prices_from_extended_offsets(offsets=centered_offsets, density=density, max_depth=0)
+            return state_prices_from_extended_offsets(offsets=centered_offsets, density=density, max_depth=0,
+                                                      unit_ratio=unit_ratio)
         else:
             # Otherwise we can split the race into two clusters
             offset_divider = divide_offsets(centered_offsets)

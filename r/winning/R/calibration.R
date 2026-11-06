@@ -328,16 +328,17 @@ ability_implied_state_prices <- function(ability, density, unit = 1.0,
                                     max_depth) {
   dd <- .dilate_density(density, unit_ratio)
   doff <- offsets / unit_ratio
-  dsp <- .state_prices_from_extended_offsets(dd, doff, max_depth - 1L)
+  # unit_ratio rides every recursion, as the browser's does (#899)
+  dsp <- .state_prices_from_extended_offsets(dd, doff, max_depth - 1L, unit_ratio)
   n <- length(offsets)
   if (length(fast) == n || length(fast) == 0L || max_depth <= 0L)
     return(dsp)
   slow <- setdiff(seq_len(n), fast)
   slow_rel <- if (length(slow) == 1L) 1 else
     .state_prices_from_extended_offsets(dd, .int_centered(doff[slow]),
-                                       max_depth - 2L)
+                                       max_depth - 2L, unit_ratio)
   fast_rel <- .state_prices_from_extended_offsets(
-    density, .int_centered(offsets[fast]), max_depth - 1L)
+    density, .int_centered(offsets[fast]), max_depth - 1L, unit_ratio)
   slow_share <- sum(dsp[slow])
   sp <- numeric(n)
   sp[slow] <- slow_rel * slow_share
@@ -369,7 +370,7 @@ ability_implied_state_prices <- function(ability, density, unit = 1.0,
     if (all(pinf)) return(rep(1 / n, n))
     sp <- numeric(n)
     sp[!pinf] <- .state_prices_from_extended_offsets(
-      density, .int_centered(offsets[!pinf]), max_depth)
+      density, .int_centered(offsets[!pinf]), max_depth, unit_ratio)
     return(sp)
   }
   ninf <- offsets == -Inf
@@ -433,12 +434,12 @@ ability_implied_state_prices <- function(ability, density, unit = 1.0,
     aug <- offsets
     aug[bad] <- Inf
     return(.state_prices_from_extended_offsets(density, .int_centered(aug),
-                                              max_depth))
+                                              max_depth, unit_ratio))
   }
   if (max_depth == 0L) {
     co[right] <- Inf
     co[left] <- -Inf
-    return(.state_prices_from_extended_offsets(density, co, 0L))
+    return(.state_prices_from_extended_offsets(density, co, 0L, unit_ratio))
   }
   divider <- .divide_offsets(co)
   fast <- which(co < divider)

@@ -378,3 +378,13 @@ test_that("a two-step rise in the miss is not a plateau (#923)", {
   expect_silent(w <- dividend_implied_ability(1 / target, atoms))
   expect_lte(max(abs(state_prices_from_offsets(atoms, w) - target)), 1e-6)
 })
+
+test_that("the classic recursion keeps a non-default unit_ratio (#899)", {
+  d <- skew_normal_density(L = 15, unit = 0.2, scale = 1, a = 1.5)
+  for (ratio in c(2, 4)) for (live in list(c(-20, -2, 2), c(-40, -3, 3, 40))) {
+    p <- winning:::.state_prices_from_extended_offsets(d, live, 3L, ratio)
+    q <- winning:::.state_prices_from_extended_offsets(d, c(live, Inf), 3L, ratio)
+    expect_equal(q[length(q)], 0)
+    expect_equal(q[-length(q)], p, tolerance = 1e-15)
+  }
+})
