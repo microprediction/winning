@@ -183,6 +183,8 @@ polish_race <- function(p0 = NULL, mu0 = NULL, V = NULL, D = NULL,
                         F = NULL, W = NULL, base = "normal", points = 257,
                         name_caps = NULL, groups = NULL, A = NULL, b = NULL,
                         tol = 1e-9, max_iter = 60, structure = NULL) {
+  .refuse_matrix(p0, "p0")                                        # (#903)
+  .refuse_matrix(mu0, "mu0")                                      # (#903)
   if (!is.null(structure)) {
     forward <- function(m) race_probabilities(m, structure = structure,
                                               points = points)

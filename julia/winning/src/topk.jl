@@ -455,6 +455,7 @@ end
 """P(runner i among the k smallest), min-wins; slot identity enforced."""
 function top_k_probabilities(mu, k; V = nothing, D = nothing,
                              base = "normal", points = 513, qa = nothing)
+    _refuse_matrix(mu, "mu")                                # (#903)
     mu = Float64.(collect(mu))
     n = length(mu)
     k = Int(k)
@@ -511,6 +512,7 @@ returned 0.0 at 513 points and 2.4e-15 at 2049 for a true 7.73e-24
 (#365, as python/R/browser)."""
 function bottom_k_probabilities(mu, k; V = nothing, D = nothing,
                                 base = "normal", points = 513, qa = nothing)
+    _refuse_matrix(mu, "mu")                                # (#903)
     mu = Float64.(collect(mu))
     n = length(mu)
     k = Int(k)
@@ -534,6 +536,7 @@ end
 exact Gauss-Hermite node mixture."""
 function top_k_jacobians(mu, k; D = nothing, base = "normal",
                          points = 513, V = nothing, qa = nothing)
+    _refuse_matrix(mu, "mu")                                # (#903)
     mu = Float64.(collect(mu))
     n = length(mu)
     k = Int(k)
@@ -599,6 +602,7 @@ the adjacent top-k verbs priced it (#202). Column 1 is correlated top-1
 membership and cumulative row sums are correlated top-k."""
 function rank_probabilities(mu; D = nothing, base = "normal", points = 513,
                             V = nothing, qa = nothing)
+    _refuse_matrix(mu, "mu")                                # (#903)
     mu = Float64.(collect(mu))
     n = length(mu)
     mu = _translated_home(mu, _as_idio(D, n))     # (#477)
@@ -699,6 +703,7 @@ function abilities_from_topk(q, k; V = nothing, D = nothing,
                              base = "normal", points = 513, qa = nothing,
                              n_iter = 80, tol = 1e-8,
                              target_floor = nothing, return_info = false)
+    _refuse_matrix(q, "q")                                  # (#903)
     n = length(q)
     k = Int(k)
     1 <= k <= n - 1 || error("k must be in [1, n-1]; got k=$k, n=$n")
@@ -858,6 +863,9 @@ function loc_scale_from_topk_pair(q1, k1, q2, k2; D0 = nothing,
                                   n_iter = 60, tol = 1e-8, ridge = 0.0,
                                   mu0 = nothing, V = nothing,
                                   return_info = false)
+    _refuse_matrix(q1, "q1")                                # (#903)
+    _refuse_matrix(q2, "q2")                                # (#903)
+    _refuse_matrix(mu0, "mu0")                              # (#903)
     # the cold start (no D0, no mu0) can stall far from an exact board;
     # only then, one retry from a scale-informed D0 (#781), as python
     once(d, m) = _loc_scale_once(q1, k1, q2, k2, d, base, points, n_iter,
@@ -999,6 +1007,8 @@ _I(n) = [i == j ? 1.0 : 0.0 for i in 1:n, j in 1:n]
 
 """Win plus EXACTLY-second marginals: P(2nd) + P(win) = P(top-2)."""
 function loc_scale_from_win_and_second(p_win, p_second; kwargs...)
+    _refuse_matrix(p_win, "p_win")                          # (#903)
+    _refuse_matrix(p_second, "p_second")                    # (#903)
     n = length(p_win)
     length(p_second) == n || error("p_win and p_second must have equal length")
     (any(p_win .<= 0) || any(p_second .<= 0)) &&
@@ -1054,6 +1064,8 @@ function abilities_from_rank_marginal(p, r; mu0 = nothing, D = nothing,
                                       base = "normal", points = 513,
                                       n_iter = 60, tol = 1e-8,
                                       return_info = false)
+    _refuse_matrix(p, "p")                                  # (#903)
+    _refuse_matrix(mu0, "mu0")                              # (#903)
     once(m) = _rank_marginal_once(p, r, m, D, base, points, n_iter, tol)
     out = _retry_on_failure(once(mu0), once,
                             f -> _rank_marginal_starts(mu0, f.mu, f.resid, D),
