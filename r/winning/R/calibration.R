@@ -98,13 +98,20 @@ solve_for_implied_offsets <- function(prices, density,
   # stop once the best miss is within tol, or two successive iterates miss
   # by the best miss again (a plateau), and return the best iterate; n_iter
   # bounds the steps (#904)
-  best <- NULL; best_miss <- Inf; stalls <- 0L
+  best <- NULL; best_miss <- Inf; stalls <- 0L; last <- NULL
   assess <- function(field, current) {
     miss <- max(abs(current - prices))
+    # a flat miss is a plateau only where the update has stopped moving
+    # the field: a runner priced at exactly zero pins the miss while its
+    # offset still travels toward positive mass, and a three-runner book
+    # stopped 1.8e-3 off where the iteration reaches 1e-9 (#968)
+    moved <- is.null(last) ||
+      max(abs(field - last)) > 1e-12 * (1 + max(abs(field)))
+    last <<- field
     # a stall is a miss equal to the best to within
     # CALIBRATION_PLATEAU_RTOL; a rise or a real gain resets the count, so
     # an atomic market climbing for two steps runs on to converge (#923)
-    flat <- is.finite(best_miss) &&
+    flat <- !moved && is.finite(best_miss) &&
       abs(miss - best_miss) <= CALIBRATION_PLATEAU_RTOL * best_miss
     if (miss < best_miss) {
       best <<- field; best_miss <<- miss

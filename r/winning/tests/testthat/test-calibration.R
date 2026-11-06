@@ -378,3 +378,11 @@ test_that("a two-step rise in the miss is not a plateau (#923)", {
   expect_silent(w <- dividend_implied_ability(1 / target, atoms))
   expect_lte(max(abs(state_prices_from_offsets(atoms, w) - target)), 1e-6)
 })
+
+test_that("a flat miss with moving offsets is not a plateau (#968)", {
+  d <- numeric(49); d[c(16, 27, 36)] <- c(0.1, 0.6, 0.3)
+  target <- state_prices_from_offsets(d, c(2.5, 15.8, -4.8))
+  got <- suppressWarnings(solve_for_implied_offsets(target, d, n_iter = 100))
+  mu <- if (is.list(got)) got$offsets else got
+  expect_lt(max(abs(state_prices_from_offsets(d, mu) - target)), 1e-8)   # was 1.8e-3
+})
