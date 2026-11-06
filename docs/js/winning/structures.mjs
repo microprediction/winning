@@ -176,7 +176,7 @@ function refuseHierarchical(kind, opts) {
       "lattice windows. Use structure Factor (or V/D).");
 }
 
-function structureScale(s) {
+function structureVariances(s, centred = true) {
   if (!isVector(s.cluster))
     throw new Error(`${s.kind}: cluster must have one label per contestant`);
   const n = s.cluster.length;
@@ -188,7 +188,8 @@ function structureScale(s) {
   // forward, which never looks at the coupling, so a stale wrong-length
   // one priced fine and then failed the inverse (#644, as python)
   const G = s.kind === "Nested" && s.coupling != null && (s.gamma ?? 1) !== 0
-    ? gaugeCenter(asLoadings(s.coupling, n, "coupling")) : null;  // common part cancels (#698)
+    ? (centred ? gaugeCenter(asLoadings(s.coupling, n, "coupling"))   // common part cancels (#698)
+               : asLoadings(s.coupling, n, "coupling")) : null;
   const tot = [];
   for (let i = 0; i < n; i++) {
     let v = Dv[i] + L[i].reduce((a, b) => a + b * b, 0);
@@ -219,9 +220,66 @@ function structureScale(s) {
       tot[i] += a;
     }
   }
-  tot.sort((a, b) => a - b);
-  const h = Math.floor(n / 2);
+  return tot;
+}
+
+/* the field's contrast scale: the root of the median total variance */
+function structureScale(s) {
+  const tot = structureVariances(s).slice().sort((a, b) => a - b);
+  const n = tot.length, h = Math.floor(n / 2);
   return Math.sqrt(n % 2 ? tot[h] : 0.5 * (tot[h - 1] + tot[h]));
+}
+
+/* The Nested/Tree inverse, preconditioned per runner as python's
+   races._structure_sweeps is: each log residual is divided by its own
+   log-share slope in the independent race at matched total variances,
+   with the same trust limits and backtracking. One field-wide scalar step
+   could not serve heterogeneous variances, and a self-generated Nested
+   target the reference solves in 250 sweeps exhausted 400 at a 3.1e-3 log
+   residual (#887). Returns invertGenericInfo's shape. */
+function invertStructureInfo(p, forward, s, points, tol, maxIter) {
+  asIterations(maxIter, "abilitiesFromRace", "nIter");
+  asTolerance(tol, "abilitiesFromRace");
+  let pv = asFiniteVector(p, "target", "probability");
+  if (pv.some(v => v <= 0))
+    throw new Error(
+      "all target probabilities must be positive: a zero share has no " +
+      "finite inverse. Pass targetFloor to abilitiesFromRace to floor " +
+      "small entries deliberately.");
+  pv = rescaledTarget(pv);
+  const lt = pv.map(v => Math.log(v));
+  const lm = mean(lt);
+  // the preconditioner's surrogate is python's structure_variances, which
+  // does not centre the coupling; the step scale keeps the #698 centring
+  const tot = structureVariances(s, false);
+  const scale = structureScale(s);
+  let { mu, err, iters } = withTrialMassTolerance(() => {
+    let mu = lt.map(v => -(v - lm) / 2 * scale);
+    let alpha = 0.7, last = Infinity, err = Infinity, iters = 0;
+    for (let it = 0; it < maxIter; it++) {
+      iters = it + 1;
+      const resid = forward(mu).map((v, i) => Math.log(Math.max(v, 1e-300)) - lt[i]);
+      err = Math.max(...resid.map(Math.abs));
+      if (err < tol) break;
+      if (err > last) alpha = Math.max(alpha * 0.5, 0.05);
+      last = err;
+      const { p: ps, slopes } = raceProbabilities(mu, { D: tot, points, returnSlopes: true });
+      mu = mu.map((m, i) => {
+        const dlogp = Math.min(slopes[i] / Math.max(ps[i], 1e-300), -1e-6 / scale);
+        const lim = Math.min(2, 10 * Math.abs(resid[i])) * scale;
+        return m - Math.min(Math.max(alpha * resid[i] / dlogp, -lim), lim);
+      });
+      const mm = mean(mu);
+      mu = mu.map(v => v - mm);
+    }
+    return { mu, err, iters };
+  });
+  if (err < tol) {
+    // the returned state re-priced under the strict mass check (#656)
+    const lp = forward(mu).map(v => Math.log(Math.max(v, 1e-300)));
+    err = Math.max(...lp.map((v, i) => Math.abs(v - lt[i])));
+  }
+  return { mu, converged: err < tol, maxLogResidual: err, iterations: iters };
 }
 
 function dp(mu, s, opts) {
@@ -275,11 +333,11 @@ function da(p, s, opts) {
              iterations: r.iterations };
   }
   if (s.kind === "Nested")
-    return invertGenericInfo(p, m => nestedRaceProbabilities(m, s.cluster, s.loading, s.D,
-      { coupling: s.coupling, gamma: s.gamma, points, qa, qf }), tol, nIter ?? 400, structureScale(s));
+    return invertStructureInfo(p, m => nestedRaceProbabilities(m, s.cluster, s.loading, s.D,
+      { coupling: s.coupling, gamma: s.gamma, points, qa, qf }), s, points, tol, nIter ?? 400);
   if (s.kind === "Tree")
-    return invertGenericInfo(p, m => treeRaceProbabilities(m, treeCluster(s), s.loading, s.D,
-      s.parent, s.strength, { points, qa }), tol, nIter ?? 400, structureScale(s));
+    return invertStructureInfo(p, m => treeRaceProbabilities(m, treeCluster(s), s.loading, s.D,
+      s.parent, s.strength, { points, qa }), s, points, tol, nIter ?? 400);
   throw new Error("unknown structure " + s.kind);
 }
 _setDispatch(dp, da);
