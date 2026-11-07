@@ -304,11 +304,12 @@ test_that("an offset of exactly +-(L - 2) is priced exactly, not clustered (#773
   off <- c(-1, 0, 1, 1, -1, 0, -3, 0)
   expect_lt(max(abs(ability_implied_state_prices(off, d5) - state_prices_from_offsets(d5, off))), 1e-15)
   # neighbours, pinned from origin/main 7af3ed1c: just inside was already
-  # exact and just past the endpoint still hangs and clusters
+  # exact. Just past the endpoint hung and clustered to 0.634; an integer
+  # shift of -1 fits it, so it is now the exact price (#1006)
   expect_lt(max(abs(ability_implied_state_prices(c(0, 1 - 1e-9), d) -
                     c(0.7777777775000001, 0.22222222250000007))), 1e-15)
   expect_lt(max(abs(ability_implied_state_prices(c(0, 1 + 1e-9), d) -
-                    c(0.633744856100823, 0.36625514389917707))), 1e-15)
+                    c(0.7777777779444446, 0.22222222205555558))), 1e-15)
 })
 
 test_that("max_depth is a whole number >= 0 (#775)", {
@@ -385,4 +386,20 @@ test_that("finite dividends whose reciprocals overflow price the relative book (
   # ordinary books keep their arithmetic
   d <- c(2.5, 3.3, 5, 10)
   expect_identical(prices_from_dividends(d), (1 / d) / sum(1 / d))
+})
+
+test_that("a field that fits the lattice is priced exactly (#1006)", {
+  # mean-centring pushed this off a [0, 7] support that an integer shift
+  # fits; it was priced on the cluster path, 7.9 points off
+  d <- numeric(21); d[11] <- 0.5; d[18] <- 0.5
+  off <- c(6.25, 2, 3.75, 2, 0.75, 0)
+  expect_equal(winning:::.state_prices_from_extended_offsets(d, off, 3L, 3),
+               state_prices_from_offsets(d, off - 4), tolerance = 1e-14)
+  expect_equal(winning:::.state_prices_from_extended_offsets(d, off, 3L, 3),
+               c(0.013509, 0.09375, 0.03125, 0.09375, 0.283529, 0.484212), tolerance = 1e-6)
+  # a fitting field never reaches the ratio; python took another branch at 2
+  s <- skew_normal_density(L = 15, unit = 0.2, scale = 1, a = 1.5)
+  for (ratio in c(2, 3, 4))
+    expect_equal(winning:::.state_prices_from_extended_offsets(s, c(-20, -2, 2), 3L, ratio),
+                 c(0.99975086, 0.00024442, 4.72e-06), tolerance = 1e-8)
 })

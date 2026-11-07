@@ -409,6 +409,19 @@ ability_implied_state_prices <- function(ability, density, unit = 1.0,
     return(sp)
   }
   co <- .int_centered(offsets[kept])
+  # Centring on the mean can push a field off the lattice that an integer
+  # shift would fit: [6.25, 2, 3.75, 2, 0.75, 0] on support [0, 7] at
+  # L = 10 was 7.9 points off the exact price (#1006). Shift by the
+  # feasible integer nearest zero (a field that already fits is
+  # untouched); an integer shift leaves the exact prices unchanged.
+  s_rel <- which(density > 1e-12) - 1L - L
+  s_lo <- if (W >= L) 0 else min(s_rel)
+  s_hi <- if (W >= L) 0 else max(s_rel)
+  if (length(co) && all(is.finite(co))) {
+    sh_lo <- max(-L - s_lo - floor(min(co)), ceiling(-(L - 2) - min(co)))
+    sh_hi <- min(L - s_hi - ceiling(max(co)), floor((L - 2) - max(co)))
+    if (sh_lo <= sh_hi) co <- co + min(max(0, sh_lo), sh_hi)
+  }
   # Hanging = the shifted density would lose mass off the lattice (or the
   # offset is past the exact range of low_high). Python tests the cruder
   # |o| <= L - W, which misfires whenever the support width W exceeds L:

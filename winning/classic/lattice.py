@@ -764,19 +764,35 @@ def state_prices_from_extended_offsets(density, offsets, max_depth=3, unit_ratio
     # At this point in the algorithm we have a race that isn't completely degenerate
     # Let's center and then see if any horses are hanging off the lattice.
     centered_offsets = int_centered([offsets[i] for i in kept_ndxs])
-    # L - W keeps a support of width W inside the lattice. Once W reaches
-    # L that interval is empty or reversed -- the standard L=500,
-    # unit=0.01 normal has W = 1000 -- and every in-window field was
-    # sent to the dilating cluster path, 0.017 off where the exact
-    # primitive is 1.6e-6 (#725). That primitive piles mass that leaves
-    # the left edge at -L and drops it past +L, which preserves who wins
-    # up to edge dead heats, so for such a density only an offset past
-    # the representable range (_low_high's L - 2) hangs.
-    bound = L - W if W < L else L - 2
-    offset_lower_bound = -bound
-    offset_upper_bound = bound
-    hanging_left  = [ i for i,o in enumerate(centered_offsets) if o<offset_lower_bound  ]
-    hanging_right = [ i for i,o in enumerate(centered_offsets) if o>offset_upper_bound  ]
+    # Hanging = the shifted density would lose mass off the lattice, or the
+    # offset is past _low_high's exact range (+-(L - 2) is represented, one
+    # past it is clamped, #773). This tested |o| <= L - W, which is right
+    # only for a support centred on zero: for [0, 7] at L = 10 it sent a
+    # field that fits to the dilating cluster path, and at unit_ratio 2 it
+    # took a different branch from R and the browser, which test the
+    # support itself (#1006). Once W reaches L the support fills the
+    # lattice (the standard L=500, unit=0.01 normal has W = 1000) and every
+    # nonzero offset "leaves" it, which sent ordinary fields to the cluster
+    # path, 0.017 off (#725); the exact primitive piles mass leaving the
+    # left edge at -L and drops it past +L, which keeps who wins up to edge
+    # dead heats, so for such a density only the range test applies.
+    supp = approximate_support(density)
+    s_lo, s_hi = (supp[0] - L, supp[-1] - L) if W < L else (0, 0)
+    # Centring on the mean can still push a field off the lattice that an
+    # integer shift would fit: [6.25, 2, 3.75, 2, 0.75, 0] on support
+    # [0, 7] at L = 10 was 7.9 points off the exact price (#1006). Shift by
+    # the feasible integer nearest zero, so a field that already fits is
+    # untouched; an integer shift leaves the exact prices unchanged.
+    if centered_offsets and all(math.isfinite(o) for o in centered_offsets):
+        shift_lo = max(-L - s_lo - math.floor(min(centered_offsets)), math.ceil(-(L - 2) - min(centered_offsets)))
+        shift_hi = min(L - s_hi - math.ceil(max(centered_offsets)), math.floor((L - 2) - max(centered_offsets)))
+        if shift_lo <= shift_hi:
+            shift = min(max(0, shift_lo), shift_hi)
+            centered_offsets = [o + shift for o in centered_offsets]
+    hanging_left  = [i for i, o in enumerate(centered_offsets)
+                     if np.floor(o) + s_lo < -L or o < -(L - 2)]
+    hanging_right = [i for i, o in enumerate(centered_offsets)
+                     if np.ceil(o) + s_hi > L or o > L - 2]
     hanging = bool(hanging_right or hanging_left)
     if not hanging:
         # Should be good to go!
