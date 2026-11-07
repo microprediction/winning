@@ -424,6 +424,38 @@ export function polishRace(opts = {}) {
       if (feasibleAt(mu0.map(v => mid * v))) lo = mid; else hi = mid;
     }
     startM = mu0.map(v => lo * v);
+  } else if (!feasibleAt(mu0)) {
+    // A floor above 1/n makes the uniform race infeasible too, so the ray
+    // above never ran and the solve started saturated: it crossed to the
+    // opposite deterministic winner, 2.4e7 ability units away, and
+    // certified it (#840). Walk instead from the uniform race along the
+    // direction the violated rows ask for -- near uniform dp/dmu is -c
+    // times the centring projection, so lowering A_k p means moving mu
+    // along the centred A_k -- to the first feasible point. For a floored
+    // pair that point is the answer.
+    const p0r = fwdM(mu0.map(() => 0));
+    const d = new Array(n).fill(0);
+    A0.forEach((row, k) => {
+      if (row.reduce((a, v, j) => a + v * p0r[j], 0) <= b0[k]) return;
+      const rm = row.reduce((a, v) => a + v, 0) / n;
+      const nr = Math.sqrt(row.reduce((a, v) => a + (v - rm) ** 2, 0)) || 1;
+      for (let j = 0; j < n; j++) d[j] += (row[j] - rm) / nr;
+    });
+    if (d.some(v => v !== 0)) {
+      // doubling from 1 brackets the first feasible step at any scale
+      let hi = 1, found = false;
+      for (let it = 0; it < 60 && !found; it++) {
+        if (feasibleAt(d.map(v => hi * v))) found = true; else hi *= 2;
+      }
+      if (found) {
+        let lo = 0;
+        for (let it = 0; it < 60; it++) {
+          const mid = 0.5 * (lo + hi);
+          if (feasibleAt(d.map(v => mid * v))) hi = mid; else lo = mid;
+        }
+        startM = d.map(v => hi * v);
+      }
+    }
   }
   const unit = (() => {
     // read at the START: at a saturated mu0 the informative longshot rows
@@ -527,9 +559,15 @@ export function polishRace(opts = {}) {
       // feasible one, with an empty active set (#379). The multiplier
       // update lam <- max(0, lam - rho c) is a fixed point exactly when
       // complementarity holds (lam = 0 on a slack row, c = 0 on a
-      // binding one), so feasibility plus a settled multiplier is the
-      // test. rho grows only while the iterate is still infeasible.
-      if (outer > 0 && viol < 1e-8 && dLam <= 1e-7 * lamMax) { converged = true; break; }
+      // binding one), so feasibility plus a settled multiplier was taken
+      // as the test. rho grows only while the iterate is still infeasible.
+      // A settled multiplier at a feasible point is the fixed point of
+      // the update, but not by itself a KKT point: once an overshot
+      // constraint goes slack its multiplier returns to zero and dLam = 0
+      // at a race nowhere near the nearest feasible one, which this branch
+      // certified (#840). It now stops the loop -- nothing more will move
+      // -- and leaves the verdict to the stationarity check below.
+      const settled = outer > 0 && viol < 1e-8 && dLam <= 1e-7 * lamMax;
       // ...or certify the point DIRECTLY. Once infeasible iterates have
       // driven rho to 1e6, a harmless 3e-9 slack on a binding row moves
       // the multiplier by 3e-3 per outer step, so the fixed-point test
@@ -553,6 +591,7 @@ export function polishRace(opts = {}) {
           converged = true; break;
         }
       }
+      if (settled) break;
       if (viol >= 1e-8) rho = Math.min(rho * 3, 1e6);
     }
     return m;

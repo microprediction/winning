@@ -66,14 +66,20 @@ def _low_high(offset, L):
 
 
 def density_from_samples(x: [float], L: int, unit=1.0):
-    low_highs = [ _low_high(xi / unit, L=L) for xi in x]
+    """Atoms on the 2L+1 lattice, each sample split between its two
+    neighbouring points so the mean is kept. A sample inside [-L, L] is
+    placed exactly; one beyond is clamped to the edge. This used
+    _low_high, whose exact range is +-(L - 2): a sample at 9 on L = 10
+    landed at 8, and the events helpers, which size L to the score
+    itself, moved a score of 1 to -1 and priced the leader last."""
     density = [0 for _ in range(2 * L + 1)]
-    mass = 0
-    for lh in low_highs:
-        for (lc, wght) in lh:
-            rel_loc = min(2 * L, max(lc + L, 0))
-            mass += wght
-            density[rel_loc] += wght
+    for xi in x:
+        o = min(max(xi / unit, -L), L)
+        lo = math.floor(o)
+        r = o - lo
+        density[lo + L] += 1 - r
+        if r > 0:
+            density[lo + 1 + L] += r
     total_mass = sum(density)
     return [d / total_mass for d in density]
 
@@ -446,6 +452,36 @@ def state_prices_from_densities(densities:[[float]], densityAll=None, multiplici
     # multiplicityAll are accepted for compatibility and no longer used:
     # the minimum's density and mean multiplicity do not determine the
     # prices (#418, #362).
+    return _state_prices_from_densities(as_unit_densities(densities))
+
+
+def as_unit_densities(densities):
+    """Each density normalised to unit mass, as the offsets door does (#339):
+    raw counts are the law of their frequencies. The exact engine assumes
+    each cdf ends at 1, so counts [0,0,0,3,1,0,0] against [0,0,0,0,1,3,0]
+    were priced [0.875, 0.125] for [0.96875, 0.03125]. A non-finite atom,
+    no positive mass, or an atom below -1e-12 of the total is refused."""
+    if len(densities) == 0:
+        raise ValueError('a race needs at least one runner')
+    out = []
+    for k, d in enumerate(densities):
+        where = 'densities[' + str(k) + ']'
+        d = np.asarray(d, dtype=float)
+        if d.ndim != 1 or d.size == 0:
+            raise ValueError(where + ' must be a nonempty 1-d vector of lattice atoms')
+        if not np.all(np.isfinite(d)):
+            raise ValueError(where + ' has a non-finite atom')
+        total = float(d.sum())
+        if not total > 0:
+            raise ValueError(where + ' has no positive mass')
+        if d.min() < -1e-12 * total:
+            raise ValueError(where + ' has a negative atom (' + repr(float(d.min())) + ')')
+        out.append(np.clip(d, 0, None) / total)
+    return out
+
+
+def _state_prices_from_densities(densities):
+    # unchecked: the copula's conditional densities carry round-off atoms
     if len(densities) == 0:
         raise ValueError('a race needs at least one runner')
     prices = exact_state_prices_from_cdfs([pdf_to_cdf(d) for d in densities])
@@ -480,7 +516,7 @@ def symmetric_state_prices_from_densities(densities:[[float]], densityAll=None, 
 
 def two_prices_from_densities(densities:[[float]], densityAll=None, multiplicityAll=None, with_all=False)->[[float]]:
     q, densityAll, multiplicityAll = symmetric_state_prices_from_densities(densities=densities, densityAll=densityAll, multiplicityAll=multiplicityAll, with_all=True)
-    w = state_prices_from_densities(densities=densities, densityAll=densityAll, multiplicityAll=multiplicityAll)
+    w = _state_prices_from_densities(densities)   # internal: conditional densities
     pl = [0 for _ in w]
     n = len(w)
     for i in range(n):
@@ -630,7 +666,8 @@ def _state_prices_from_clustered_offsets(density, offsets, fast_ndxs:[int], unit
     dilated_density = dilate_density(density=density, unit_ratio=unit_ratio)
     dilated_offsets = [o / unit_ratio for o in offsets]
     dilated_state_prices = state_prices_from_extended_offsets(density=dilated_density, offsets=dilated_offsets,
-                                                              max_depth=max_depth - 1)
+                                                              max_depth=max_depth - 1,
+                                                              unit_ratio=unit_ratio)
     n = len(offsets)
     if (len(fast_ndxs)==n) or (len(fast_ndxs)==0) or (max_depth <= 0):
         return dilated_state_prices
@@ -645,13 +682,15 @@ def _state_prices_from_clustered_offsets(density, offsets, fast_ndxs:[int], unit
         dilated_slow_offsets = [dilated_offsets[i] for i in slow_ndxs]
         slow_relative_state_prices = state_prices_from_extended_offsets(density=dilated_density,
                                                                         offsets=int_centered(dilated_slow_offsets),
-                                                                        max_depth=max_depth - 2)
+                                                                        max_depth=max_depth - 2,
+                                                                        unit_ratio=unit_ratio)
     # Race the fast horses
     fast_ndxs = [j for j in range(n) if j not in slow_ndxs]
     fast_offsets = [offsets[j] for j in fast_ndxs]
     fast_relative_state_prices = state_prices_from_extended_offsets(density=density,
                                                                     offsets=int_centered(fast_offsets),
-                                                                    max_depth=max_depth - 1)
+                                                                    max_depth=max_depth - 1,
+                                                                    unit_ratio=unit_ratio)
 
     # It remains to combine the two results in a plausible mannner
     slow_share = sum([p for i, p in enumerate(dilated_state_prices) if i in slow_ndxs])
@@ -700,9 +739,16 @@ def state_prices_from_extended_offsets(density, offsets, max_depth=3, unit_ratio
     :param offsets:
     :param max_depth: specifies the max number of times to call recursively, not counting
                             the recusion calls that merely get rid of float('inf') or float('-inf')
+    :param unit_ratio: the dilation the clustered approximation coarsens by, a
+                       finite number above 1. It reaches every recursion (#899),
+                       and a ratio at or below 1 contracts instead of coarsening:
+                       at 0.6 two runners with positive exact prices came back 0.
     :return:
     """
     density = as_classic_density(density)
+    if (isinstance(unit_ratio, (bool, np.bool_)) or not isinstance(unit_ratio, (int, float, np.integer, np.floating))
+            or not math.isfinite(unit_ratio) or not unit_ratio > 1):
+        raise ValueError(f"unit_ratio must be a finite number above 1; got {unit_ratio!r}")
     # First get rid of float('inf')
     n = len(offsets)
     if n==1:
@@ -718,7 +764,8 @@ def state_prices_from_extended_offsets(density, offsets, max_depth=3, unit_ratio
         else:
             finite_state_prices = state_prices_from_extended_offsets(density=density,
                                                                      offsets=int_centered(finite_offsets),
-                                                                     max_depth=max_depth)
+                                                                     max_depth=max_depth,
+                                                                     unit_ratio=unit_ratio)
             state_prices = [ 0 for _ in range(n)]
             for j, ndx in enumerate(finite_ndxs):
                 state_prices[ndx] = finite_state_prices[j]
@@ -795,7 +842,7 @@ def state_prices_from_extended_offsets(density, offsets, max_depth=3, unit_ratio
         augmented_offsets = [o if i not in extremely_bad_ndxs else float('inf') for i, o in enumerate(offsets)]
         return state_prices_from_extended_offsets(density=density,
                                                   offsets=int_centered(augmented_offsets),
-                                                  max_depth=max_depth)
+                                                  max_depth=max_depth, unit_ratio=unit_ratio)
     else:
         if max_depth==0:
             # If we've already tried pretty hard, just set hangers to inf or -inf and call one more time
@@ -803,7 +850,8 @@ def state_prices_from_extended_offsets(density, offsets, max_depth=3, unit_ratio
                 centered_offsets[ndx]=float('inf')
             for ndx in hanging_left:
                 centered_offsets[ndx] = float('-inf')
-            return state_prices_from_extended_offsets(offsets=centered_offsets, density=density, max_depth=0)
+            return state_prices_from_extended_offsets(offsets=centered_offsets, density=density, max_depth=0,
+                                                      unit_ratio=unit_ratio)
         else:
             # Otherwise we can split the race into two clusters
             offset_divider = divide_offsets(centered_offsets)
