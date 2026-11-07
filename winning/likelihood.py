@@ -584,7 +584,22 @@ def check_choice(choice, T, J):
     """The label contract shared by every MNP boundary that consumes
     observed choices: exactly one finite integer label in 0..J-1 per
     observation. Returns the labels as an int array."""
+    # a masked entry is a missing label and a bool is not a label: the
+    # #915/#928 rules as_labels applies (np.asarray keeps a masked
+    # payload, and [True, False] read as alternatives 1 and 0)
+    if np.ma.isMaskedArray(choice) and np.ma.getmaskarray(choice).any():
+        raise ValueError("choice has a masked (missing) label; drop those "
+                         "observations deliberately")
     choice = np.asarray(choice)
+    if choice.dtype == bool or (choice.dtype == object and any(
+            isinstance(c, (bool, np.bool_)) for c in choice.ravel())):
+        raise ValueError("choice must hold integer alternative indices, not booleans")
+    if choice.dtype.kind in "OUS":
+        if not all(isinstance(c, (int, np.integer, float, np.floating)) for c in choice.ravel()):
+            raise ValueError("choice must hold integer alternative indices")
+        choice = choice.astype(float)          # e.g. an object array of ints
+    if choice.dtype.kind == "c":
+        raise ValueError("choice must hold integer alternative indices, not complex numbers")
     if choice.ndim != 1 or choice.shape[0] != T:
         raise ValueError(
             f"choice must have one entry per observation: got shape "
@@ -755,6 +770,9 @@ def ranking_loglik_and_score(mu, V, orders, temperature=1.0, Qf=7,
     """
     mu = np.asarray(mu, dtype=float)
     T, J = mu.shape
+    # the #901 guard choice_loglik_and_score has: NaN or +inf returned a
+    # NaN log-likelihood and score with no error
+    _require_finite(mu, "mu", "a utility")
     V = as_loadings(V, J)
     r = V.shape[1]
     # finite and positive, BEFORE the sharpness dispatch: -1 fitted the
