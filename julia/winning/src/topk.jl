@@ -730,22 +730,48 @@ function abilities_from_topk(q, k; V = nothing, D = nothing,
     # 30, #408), and the sweeps adapt it to the contraction they observe
     top2 = (k == 1 && n > 2) ? sum(sort(target)[(end - 1):end]) : 1.0
     alpha = (n == 2 || (k == 1 && top2 > 0.8)) ? 0.7 : 1.0
-    function fwd(m)
-        local qraw, sl
-        if fac === nothing
-            ws = _topk_with_slopes(m, sd, k, fn, points)
-            qraw, sl = ws.q, ws.slopes
-        else
-            qraw = zeros(n)
-            sl = zeros(n)
-            for j in 1:size(fac.nodes, 1)
-                ws = _topk_with_slopes(m .+ fac.Vm * fac.nodes[j, :],
-                                       sd, k, fn, points)
-                qraw .+= fac.w[j] .* ws.q
-                sl .+= fac.w[j] .* ws.slopes
-            end
+    function eval_at(m, pts)
+        fac === nothing && (ws = _topk_with_slopes(m, sd, k, fn, pts);
+                            return ws.q, ws.slopes)
+        qraw = zeros(n)
+        sl = zeros(n)
+        for j in 1:size(fac.nodes, 1)
+            ws = _topk_with_slopes(m .+ fac.Vm * fac.nodes[j, :],
+                                   sd, k, fn, pts)
+            qraw .+= fac.w[j] .* ws.q
+            sl .+= fac.w[j] .* ws.slopes
         end
-        qhat = _checked_topk(qraw, k, "top-k inversion")
+        return qraw, sl
+    end
+    function fwd(m)
+        # python's and the browser's bounded refinement: a lattice that
+        # fails the mass check is doubled (2p - 1) up to four times the
+        # request, and the residual and slopes come from the lattice that
+        # passed. On one fixed lattice the inverse refused, at its warm
+        # start, a target its own forward produced at the same points (#943).
+        qraw, sl = eval_at(m, points)
+        qhat = nothing
+        err = nothing
+        try
+            qhat = _checked_topk(qraw, k, "top-k inversion")
+        catch e
+            err = e
+        end
+        if err !== nothing
+            cap = 4 * (points - 1) + 1
+            pts = points
+            while err !== nothing && pts < cap
+                pts = min(2 * pts - 1, cap)
+                qraw, sl = eval_at(m, pts)
+                try
+                    qhat = _checked_topk(qraw, k, "top-k inversion")
+                    err = nothing
+                catch e
+                    err = e
+                end
+            end
+            err === nothing || throw(err)
+        end
         resid = (log.(max.(qhat, TINY)) .- log.(max.(1 .- qhat, TINY))) .- logit_t
         dlogit = min.(sl ./ max.(qhat .* (1 .- qhat), TINY), -1e-6 / scale)
         return resid, dlogit
