@@ -12,7 +12,7 @@ import pytest
 from winning.classic.lattice import skew_normal_density, state_prices_from_extended_offsets as price
 
 D = skew_normal_density(L=15, unit=0.2, scale=1, a=1.5)
-FIELDS = [[-20, -2, 2], [-30, -25, 0, 1, 2], [-40, -3, 3, 40]]
+FIELDS = [[-20, -2, 6.5], [-30, -25, 0, 1, 2], [-40, -3, 3, 40]]
 
 
 @pytest.mark.parametrize("ratio", [2, 4])
@@ -26,13 +26,13 @@ def test_a_scratched_runner_leaves_the_live_field_at_the_requested_ratio(live, r
 
 def test_the_ratio_is_honoured_not_defaulted():
     live = FIELDS[0]
-    assert np.abs(np.asarray(price(D, live, unit_ratio=2)) - np.asarray(price(D, live, unit_ratio=3))).max() > 1e-4
+    assert np.abs(np.asarray(price(D, live, unit_ratio=2)) - np.asarray(price(D, live, unit_ratio=3))).max() > 1e-5
     q = np.asarray(price(D, live + [float("inf")], unit_ratio=2))[:-1]
-    assert np.abs(q - np.asarray(price(D, live, unit_ratio=3))).max() > 1e-4   # was identical
+    assert np.abs(q - np.asarray(price(D, live, unit_ratio=3))).max() > 1e-5   # was identical
 
 
 @pytest.mark.parametrize("ratio", [2, 4])
-@pytest.mark.parametrize("field", [[-20, -2, 2], [-20, -2, 2, float("inf")]])
+@pytest.mark.parametrize("field", [[-20, -2, 6.5], [-20, -2, 6.5, float("inf")]])
 def test_every_recursive_call_receives_the_requested_ratio(monkeypatch, field, ratio):
     # The scratch comparison above passes if BOTH sides drop the ratio
     # further down; this records the ratio each recursion actually gets.
@@ -89,7 +89,7 @@ def test_both_cluster_recursions_run_on_the_dilated_and_base_lattices(monkeypatc
     # a split with slow and fast both non-empty and depth left recurses
     # into the slow group on the dilated density and the fast group on the
     # base one; every one of those calls must carry the ratio
-    _, calls = _trace(monkeypatch, [-20, -2, 2], ratio)
+    _, calls = _trace(monkeypatch, [-20, -2, 6.5], ratio)
     splits = [c for c in calls if c[0] == "clustered" and 0 < c[2] < c[1] and c[3] > 0]
     assert splits, calls
     base = {c[1] for c in calls if c[0] == "extended"}
@@ -99,8 +99,8 @@ def test_both_cluster_recursions_run_on_the_dilated_and_base_lattices(monkeypatc
 
 @pytest.mark.parametrize("ratio", [2, 4])
 def test_a_finite_bad_runner_is_removed_at_the_requested_ratio(monkeypatch, ratio):
-    p = np.asarray(price(D, [-20, -2, 2], unit_ratio=ratio))
-    q, calls = _trace(monkeypatch, [-20, -2, 2, 200], ratio)
+    p = np.asarray(price(D, [-20, -2, 6.5], unit_ratio=ratio))
+    q, calls = _trace(monkeypatch, [-20, -2, 6.5, 200], ratio)
     # the 200 is rewritten as +inf and the field priced again
     assert any(c[0] == "extended" and c[2][-1] == float("inf") for c in calls[1:]), calls
     assert all(c[-1] == ratio for c in calls)
@@ -109,11 +109,13 @@ def test_a_finite_bad_runner_is_removed_at_the_requested_ratio(monkeypatch, rati
 
 
 def test_ratio_sensitive_prices_are_pinned():
-    # ratio 3 and 4 agree with the R port to 1e-8. Ratio 2 does not: the
-    # ports decide "hanging" differently at that dilation (#1006), so it
-    # is pinned only as differing from the default above.
-    for ratio, want in [(3, [0.99870245, 0.00097081, 0.00032674]),
-                        (4, [0.99803399, 0.00147217, 0.00049385])]:
-        for field in ([-20, -2, 2], [-20, -2, 2, float("inf")], [-20, -2, 2, 200]):
+    # the python, R and browser ports agree at every ratio. [-20, -2, 2]
+    # was the field here until #1006: it fits this lattice, so it is now
+    # priced exactly and never reaches the ratio; [-20, -2, 6.5] spans 26.5
+    # against the 26 the range test allows, and must cluster
+    for ratio, want in [(2, [0.9994313990, 0.0005320731, 0.0000365279]),
+                        (3, [0.9993836116, 0.0005729348, 0.0000434535]),
+                        (4, [0.9971923608, 0.0025548886, 0.0002527506])]:
+        for field in ([-20, -2, 6.5], [-20, -2, 6.5, float("inf")], [-20, -2, 6.5, 200]):
             got = np.asarray(price(D, field, unit_ratio=ratio))[:3]
-            np.testing.assert_allclose(got, want, atol=1e-8)
+            np.testing.assert_allclose(got, want, atol=1e-9)

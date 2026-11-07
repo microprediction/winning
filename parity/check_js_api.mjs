@@ -3326,9 +3326,11 @@ accepts("dividendImpliedAbility keeps the favourite first at unit 0.1 (#649)",
       accepts(`[${off}] at L = 3, maxDepth ${maxDepth}, is the exact primitive (#773)`,
               () => classic.abilityImpliedStatePrices(off, d, { maxDepth }),
               p => maxAbs(p, classic.statePricesFromOffsets(d, off)) < 1e-15, p => String(p));
-  accepts("just past the L - 2 endpoint still hangs and clusters (#773)",
+  // this hung and clustered to 0.634 (#773); an integer shift of -1 fits
+  // it, so it is now the exact price (#1006)
+  accepts("just past the L - 2 endpoint is shifted onto the lattice and priced exactly (#1006)",
           () => classic.abilityImpliedStatePrices([0, 1 + 1e-9], d),
-          p => maxAbs(p, [0.633744856100823, 0.36625514389917707]) < 1e-15, p => String(p));
+          p => maxAbs(p, classic.statePricesFromOffsets(d, [-1, 1e-9])) < 1e-15, p => String(p));
   for (const maxDepth of [-1, 1.5, true, NaN, Infinity])
     rejects(classic.abilityImpliedStatePrices, [[0, 1], d, { maxDepth }],
             `abilityImpliedStatePrices refuses maxDepth ${maxDepth} as python and R (#775)`, "whole number >= 0");
@@ -4193,6 +4195,21 @@ rejects(C => demo.fitGrammar(C, 1, 0, { method: "ipaf", tol: 0 }),
 }
 
 
+
+
+// --- a field that fits the lattice is priced exactly (#1006)
+{
+  // mean-centring pushed this off a [0, 7] support that an integer shift
+  // fits; it was priced on the dilating cluster path, 7.9 points off
+  const d = new Array(21).fill(0); d[10] = 0.5; d[17] = 0.5;
+  const off = [6.25, 2, 3.75, 2, 0.75, 0];
+  const got = classic.abilityImpliedStatePrices(off, d, { unit: 1 });
+  const want = classic.statePricesFromOffsets(d, off.map(o => o - 4));
+  holds("atomic field that fits equals the exact primitive (#1006)",
+        got.every((v, i) => Math.abs(v - want[i]) < 1e-14), JSON.stringify([got, want]));
+  holds("atomic field that fits: the 0.75 runner is 0.2835 (#1006)",
+        Math.abs(got[4] - 0.283529) < 1e-6, String(got[4]));
+}
 
 
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }

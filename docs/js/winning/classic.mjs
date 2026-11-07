@@ -418,6 +418,20 @@ function extendedStatePrices(density, offsets, maxDepth, unitRatio) {
   const kept = [];
   offsets.forEach((o, i) => { if (!(Math.floor(o) > reach)) kept.push(i); });
   const co = intCentred(kept.map(i => offsets[i]));
+  // Centring on the mean can push a field off the lattice that an integer
+  // shift would fit: [6.25, 2, 3.75, 2, 0.75, 0] on support [0, 7] at
+  // L = 10 was 7.9 points off the exact price (#1006). Shift by the
+  // feasible integer nearest zero (a field that already fits is
+  // untouched); an integer shift leaves the exact prices unchanged.
+  if (co.length && co.every(Number.isFinite)) {
+    const s0 = W >= L ? 0 : supp[0] - L, s1 = W >= L ? 0 : supp[supp.length - 1] - L;
+    const lo = Math.max(-L - s0 - Math.floor(minOf(co)), Math.ceil(-(L - 2) - minOf(co)));
+    const hi = Math.min(L - s1 - Math.ceil(maxOf(co)), Math.floor((L - 2) - maxOf(co)));
+    if (lo <= hi) {
+      const t = Math.min(Math.max(0, lo), hi);
+      for (let i = 0; i < co.length; i++) co[i] += t;
+    }
+  }
   // R's hanging test: would the shifted density lose mass off the
   // lattice (or pass lowHigh's exact range)? See calibration.R.
   const sLo = supp[0] - L, sHi = supp[supp.length - 1] - L;
