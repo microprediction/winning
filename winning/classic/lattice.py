@@ -66,14 +66,20 @@ def _low_high(offset, L):
 
 
 def density_from_samples(x: [float], L: int, unit=1.0):
-    low_highs = [ _low_high(xi / unit, L=L) for xi in x]
+    """Atoms on the 2L+1 lattice, each sample split between its two
+    neighbouring points so the mean is kept. A sample inside [-L, L] is
+    placed exactly; one beyond is clamped to the edge. This used
+    _low_high, whose exact range is +-(L - 2): a sample at 9 on L = 10
+    landed at 8, and the events helpers, which size L to the score
+    itself, moved a score of 1 to -1 and priced the leader last."""
     density = [0 for _ in range(2 * L + 1)]
-    mass = 0
-    for lh in low_highs:
-        for (lc, wght) in lh:
-            rel_loc = min(2 * L, max(lc + L, 0))
-            mass += wght
-            density[rel_loc] += wght
+    for xi in x:
+        o = min(max(xi / unit, -L), L)
+        lo = math.floor(o)
+        r = o - lo
+        density[lo + L] += 1 - r
+        if r > 0:
+            density[lo + 1 + L] += r
     total_mass = sum(density)
     return [d / total_mass for d in density]
 
@@ -446,6 +452,36 @@ def state_prices_from_densities(densities:[[float]], densityAll=None, multiplici
     # multiplicityAll are accepted for compatibility and no longer used:
     # the minimum's density and mean multiplicity do not determine the
     # prices (#418, #362).
+    return _state_prices_from_densities(as_unit_densities(densities))
+
+
+def as_unit_densities(densities):
+    """Each density normalised to unit mass, as the offsets door does (#339):
+    raw counts are the law of their frequencies. The exact engine assumes
+    each cdf ends at 1, so counts [0,0,0,3,1,0,0] against [0,0,0,0,1,3,0]
+    were priced [0.875, 0.125] for [0.96875, 0.03125]. A non-finite atom,
+    no positive mass, or an atom below -1e-12 of the total is refused."""
+    if len(densities) == 0:
+        raise ValueError('a race needs at least one runner')
+    out = []
+    for k, d in enumerate(densities):
+        where = 'densities[' + str(k) + ']'
+        d = np.asarray(d, dtype=float)
+        if d.ndim != 1 or d.size == 0:
+            raise ValueError(where + ' must be a nonempty 1-d vector of lattice atoms')
+        if not np.all(np.isfinite(d)):
+            raise ValueError(where + ' has a non-finite atom')
+        total = float(d.sum())
+        if not total > 0:
+            raise ValueError(where + ' has no positive mass')
+        if d.min() < -1e-12 * total:
+            raise ValueError(where + ' has a negative atom (' + repr(float(d.min())) + ')')
+        out.append(np.clip(d, 0, None) / total)
+    return out
+
+
+def _state_prices_from_densities(densities):
+    # unchecked: the copula's conditional densities carry round-off atoms
     if len(densities) == 0:
         raise ValueError('a race needs at least one runner')
     prices = exact_state_prices_from_cdfs([pdf_to_cdf(d) for d in densities])
@@ -480,7 +516,7 @@ def symmetric_state_prices_from_densities(densities:[[float]], densityAll=None, 
 
 def two_prices_from_densities(densities:[[float]], densityAll=None, multiplicityAll=None, with_all=False)->[[float]]:
     q, densityAll, multiplicityAll = symmetric_state_prices_from_densities(densities=densities, densityAll=densityAll, multiplicityAll=multiplicityAll, with_all=True)
-    w = state_prices_from_densities(densities=densities, densityAll=densityAll, multiplicityAll=multiplicityAll)
+    w = _state_prices_from_densities(densities)   # internal: conditional densities
     pl = [0 for _ in w]
     n = len(w)
     for i in range(n):

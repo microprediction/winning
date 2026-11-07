@@ -109,7 +109,13 @@ def longshot_adjusted_dividends(dividends,longshot_expon=1.17):
         return o is not None and not (isinstance(o, float) and math.isnan(o)) and (o <= 0 or o == math.inf)
 
     mask = [scratched(o) for o in dividends]
-    adjusted = [1.0 if m else o ** longshot_expon for m, o in zip(mask, dividends)]
+    # a missing quote (None or NaN) stays missing for normalize_dividends to
+    # price as prices_from_dividends does; None ** expon raised TypeError,
+    # so skew_normal_place_pricing([2, None, 4]) crashed
+    def missing(o):
+        return o is None or (isinstance(o, float) and math.isnan(o))
+    adjusted = [1.0 if m else (o if missing(o) else o ** longshot_expon)
+                for m, o in zip(mask, dividends)]
     if all(mask):
         return [math.inf for _ in dividends]
     live = normalize_dividends([a for m, a in zip(mask, adjusted) if not m])
