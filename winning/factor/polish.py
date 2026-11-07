@@ -182,8 +182,21 @@ def race_jacobian_row(mu, y, V=None, D=None, F=None, W=None, base="normal",
     race_jacobian. y is an integer runner index in [0, n): int(y) read
     0.9 as runner 0 and True as runner 1, and -1 meant the last (#846)."""
     from .topk import _as_runner_index
+    y = _as_runner_index(y, np.size(mu), "y")
+    # the full Jacobian's closed-form pair (#86) and unit rescale (#870)
+    # were never applied here: at a unit of 1e-20 a tied row was 19x the
+    # exact value, and a normal pair's row differentiated a lattice map
+    # the forward does not use (it did not even sum to zero)
+    pair = isinstance(base, str) and base == "normal" and np.size(mu) == 2
+    far = False
+    if D is not None:
+        Dv = np.asarray(D, dtype=float)
+        sd_max = float(np.sqrt(np.max(Dv))) if Dv.size else 1.0
+        far = np.isfinite(sd_max) and sd_max > 0 and not (2.0 ** -30 <= sd_max <= 2.0 ** 30)
+    if pair or far:
+        return race_jacobian(mu, V=V, D=D, F=F, W=W, base=base, points=points,
+                             window=window, delta=delta, kink_split=kink_split)[y]
     mu, V, D, F, W, fn, left, right = _setup(mu, V, D, F, W, base)
-    y = _as_runner_index(y, len(mu), "y")
     sd = np.sqrt(D)
     M_all = mu[None, :] + F @ V.T
     x, points = forward_grid(M_all, sd, V, fn, left, right, points,
@@ -287,7 +300,13 @@ def polish_race(p0=None, mu0=None, V=None, D=None, F=None, W=None,
         # every engine reports its verdict, structure= included: the
         # declarative Factor(V, D) path discarded it, so the same failed
         # inversion the explicit call flags came back converged (#886)
-        mu0, inv = invert(np.asarray(p0, float))
+        p0 = np.asarray(p0, float)
+        # one contract for every engine: the factor inverse refuses a zero
+        # or negative share, while Blocks floored it and Nested clamped it
+        # to 1e-300, and both certified the polish of that race converged
+        if p0.ndim != 1 or not np.all(np.isfinite(p0)) or not np.all(p0 > 0):
+            raise ValueError("all target probabilities must be positive and finite")
+        mu0, inv = invert(p0)
         inv_converged = inv["converged"]
         if not inv_converged:
             import warnings
