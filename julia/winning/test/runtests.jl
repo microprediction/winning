@@ -742,3 +742,12 @@ end
     # and the vector form still prices
     @test sum(race_probabilities(vec(permutedims(M)))) ≈ 1.0 atol = 1e-9
 end
+
+@testset "the top-k inverse refines a failing lattice (#943)" begin
+    mu = [-0.10455761128105223, 0.10455761128105223]
+    D = [0.8967612229487083, 0.021331877150829952]
+    q = top_k_probabilities(mu, 1; D = D, base = "laplace", points = 513)
+    r = abilities_from_topk(q, 1; D = D, base = "laplace", points = 513)
+    m = r isa Tuple || r isa NamedTuple ? r[1] : r
+    @test maximum(abs.(top_k_probabilities(m, 1; D = D, base = "laplace", points = 513) .- q)) < 1e-8
+end

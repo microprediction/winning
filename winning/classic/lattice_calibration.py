@@ -217,11 +217,19 @@ def prices_from_dividends(dividends, nan_value=NAN_DIVIDEND):
     calibrated to, and an all-infinite book divided 0 by 0 (#423). The
     rule is StatePricer.prices_from_dividends' and the R/browser ports'.
     """
-    inv = []
-    for x in dividends:
-        v = nan_value if (x is None or (isinstance(x, (float, np.floating)) and np.isnan(x))) else float(x)
-        inv.append(0.0 if v <= 0 else 1.0 / v)
+    vals = [nan_value if (x is None or (isinstance(x, (float, np.floating)) and np.isnan(x)))
+            else float(x) for x in dividends]
+    inv = [0.0 if v <= 0 else 1.0 / v for v in vals]
     S = sum(inv)
+    if not math.isfinite(S):
+        # finite dividends whose reciprocals overflow -- a relative book
+        # [1e-320, 2e-320] -- are the same book read against the smallest:
+        # every ratio is then at most one. Taking 1/x first made them inf
+        # and the normalisation inf/inf = NaN (#881). Ordinary books never
+        # reach here, so their prices are bit-identical.
+        dmin = min(v for v in vals if v > 0)
+        inv = [0.0 if v <= 0 else dmin / v for v in vals]
+        S = sum(inv)
     return [pr / S for pr in inv] if S > 0 else inv
 
 

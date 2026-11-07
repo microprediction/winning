@@ -83,8 +83,28 @@ const POLISH_RACE_OPTS = new Set(["V", "D", "F", "W", "base", "points", "structu
    non-Gaussian factor and could not differentiate or polish it -- the
    returned Jacobian was the derivative of a different model (#209).
    Used verbatim, exactly as the forward's setup() uses them. */
+/* The race is unchanged when abilities, loadings and sds are scaled by a
+   common c, and its Jacobian scales by 1/c. The kernel below caps each
+   log-domain factor at 40, so at a unit of 1e-18 the factor log(1/sd) = 41
+   hit the cap and a tied race's off-diagonal came back 53% small (1e-20:
+   5339x small) while the forward stayed exact (#870). Far from unit scale
+   the field is moved to it by an exact power of two and the derivative
+   moved back; ordinary fields take the kernel as before, bit for bit. */
 function raceJacobianExplicit(mu, V, D, base, points, F0 = null, W0 = null,
                               win = "bulk", delta = 1e-12) {
+  const sdMax = Math.sqrt(Math.max(...D));
+  if (!(sdMax > 0) || !Number.isFinite(sdMax) || (sdMax >= 2 ** -30 && sdMax <= 2 ** 30))
+    return raceJacobianUnit(mu, V, D, base, points, F0, W0, win, delta);
+  const c = 2 ** Math.round(Math.log2(sdMax));
+  const n = mu.length;
+  const Vs = V == null ? V : asLoadings(V, n).map(row => row.map(v => v / c));
+  const J = raceJacobianUnit(mu.map(v => v / c), Vs, D.map(v => v / c / c), base,
+                             points, F0, W0, win, delta);
+  return J.map(row => row.map(v => v / c));
+}
+
+function raceJacobianUnit(mu, V, D, base, points, F0 = null, W0 = null,
+                          win = "bulk", delta = 1e-12) {
   const n = mu.length;
   const sd = D.map(Math.sqrt);
   // The independent default is the EMPTY node (no coordinates), not the
