@@ -4036,5 +4036,41 @@ rejects(C => demo.fitGrammar(C, 1, 0, { method: "ipaf", tol: 0 }),
         () => JSON.stringify([J2, fd]));
 }
 
+// --- averageLinkage keeps the rescan's merge order, ties included, in
+// Theta(n^2) typical work rather than Theta(n^3) (#847)
+{
+  const brute = dist => {               // the pre-#847 global rescan, verbatim in effect
+    const n = dist.length, D = new Map(), key = (a, b) => (a < b ? a + "_" + b : b + "_" + a);
+    for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) D.set(key(i, j), dist[i][j]);
+    let active = [...Array(n).keys()].map(i => ({ id: i, size: 1 })), Z = [], next = n;
+    while (active.length > 1) {
+      let best = Infinity, bi = 0, bj = 1;
+      for (let i = 0; i < active.length; i++) for (let j = i + 1; j < active.length; j++) {
+        const d = D.get(key(active[i].id, active[j].id)); if (d < best) { best = d; bi = i; bj = j; }
+      }
+      const a = active[bi], b = active[bj], m = { id: next++, size: a.size + b.size };
+      Z.push([a.id, b.id, best, m.size]);
+      const rest = active.filter((_, k) => k !== bi && k !== bj);
+      for (const c of rest) D.set(key(m.id, c.id), (a.size / m.size) * D.get(key(a.id, c.id)) + (b.size / m.size) * D.get(key(b.id, c.id)));
+      active = rest.concat([m]);
+    }
+    return Z;
+  };
+  let seed = 11; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const sym = (n, f) => { const d = Array.from({ length: n }, () => new Array(n).fill(0));
+    for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) d[i][j] = d[j][i] = f(); return d; };
+  let mismatch = 0;
+  for (let t = 0; t < 120; t++) {
+    const n = 2 + Math.floor(rnd() * 24), kind = t % 3;
+    const d = sym(n, () => kind === 0 ? rnd() : kind === 1 ? Math.floor(rnd() * 3) + 1 : 1);
+    if (JSON.stringify(structures.averageLinkage(d)) !== JSON.stringify(brute(d))) mismatch++;
+  }
+  holds("averageLinkage merges as the global rescan, ties included (#847)", mismatch === 0, `${mismatch} of 120`);
+  const n = 800, x = Array.from({ length: n }, (_, i) => [Math.sin(i * 1.7), Math.cos(i * 0.37), ((i * 7919) % 104729) / 104729]);
+  const d = Array.from({ length: n }, (_, i) => x.map(y => Math.hypot(...x[i].map((v, k) => v - y[k]))));
+  const t0 = Date.now(), Z = structures.averageLinkage(d), ms = Date.now() - t0;
+  holds("averageLinkage at 800 leaves is not cubic (#847)", Z.length === n - 1 && ms < 5000, `${ms} ms`);
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");
