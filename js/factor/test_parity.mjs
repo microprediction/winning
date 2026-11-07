@@ -665,6 +665,18 @@ check("calibrated abilities vs truth", muHat, mu, 5e-6);
         [-1.0000000000003233, 2.395494788021237e-13, 1.000000000000084], 1e-12);
 }
 
+// #882: the centring summed first, so an exact warm start near 1e308
+// overflowed to a non-finite iterate instead of coming back mean-zero
+{
+  const p = [1 / 3, 1 / 3, 1 / 3], V = [[], [], []], D = [1, 1, 1], F = [[]], W = [1];
+  const o = { nIter: 1, tol: 1e-12, points: 1001, returnInfo: true };
+  for (const big of [1e308, 1.5e308, -1.7e308]) {
+    const r = abilitiesFromProbabilitiesFactor(p, V, D, F, W, { ...o, mu0: [big, big, big] });
+    check(`exact mu0 at ${big} is centred, not overflowed (#882)`,
+          [...r.mu, r.converged ? 0 : 1], [0, 0, 0, 0], 1e-300);
+  }
+}
+
 // #862: on budget exhaustion the residual and flag were the PRE-update
 // iterate's (0.497, not converged) while the returned mu repriced at
 // 0.071 < tol. They now describe the mu returned; mu itself is unchanged.

@@ -392,32 +392,62 @@ export function asDistanceMatrix(dist, where = "averageLinkage") {
 export function averageLinkage(dist) {
   dist = asDistanceMatrix(dist);
   const n = dist.length;
-  let active = [...Array(n).keys()].map(i => ({ id: i, members: [i] }));
+  // Merge order is the global rescan's, exactly, ties included: the
+  // first pair (i < j) in active order holding the smallest distance,
+  // with each merge appended last. That rescan was Theta(n^3) and froze
+  // the page for seconds at a few hundred leaves (#847). Each active row
+  // now keeps its best partner among the rows after it, so a merge
+  // rescans only the rows whose partner it consumed.
+  const M = 2 * n;
   const D = new Map();
-  const key = (a, b) => (a < b ? a + "_" + b : b + "_" + a);
+  const key = (a, b) => (a < b ? a * M + b : b * M + a);
   for (let i = 0; i < n; i++)
     for (let j = i + 1; j < n; j++) D.set(key(i, j), dist[i][j]);
+  let active = [...Array(n).keys()];
+  const size = new Array(M).fill(1);
+  const best = new Map();                  // id -> {d, id} over later rows
+  const rescan = pos => {
+    const a = active[pos];
+    let d = Infinity, id = -1;
+    for (let q = pos + 1; q < active.length; q++) {
+      const v = D.get(key(a, active[q]));
+      if (v < d) { d = v; id = active[q]; }
+    }
+    best.set(a, { d, id });
+  };
+  for (let p = 0; p < active.length; p++) rescan(p);
   const Z = [];
   let nextId = n;
   while (active.length > 1) {
-    let best = Infinity, bi = 0, bj = 1;
-    for (let i = 0; i < active.length; i++)
-      for (let j = i + 1; j < active.length; j++) {
-        const d = D.get(key(active[i].id, active[j].id));
-        if (d < best) { best = d; bi = i; bj = j; }
-      }
-    const a = active[bi], b = active[bj];
-    Z.push([a.id, b.id, best, a.members.length + b.members.length]);
-    const merged = { id: nextId++, members: a.members.concat(b.members) };
-    const rest = active.filter((_, k) => k !== bi && k !== bj);
-    for (const c of rest) {
-      const da = D.get(key(a.id, c.id)), db = D.get(key(b.id, c.id));
+    let bp = -1, bd = Infinity;
+    for (let p = 0; p < active.length - 1; p++) {
+      const r = best.get(active[p]);
+      if (r.d < bd) { bd = r.d; bp = p; }
+    }
+    if (bp < 0) bp = 0;                    // all distances infinite: first pair, as the rescan
+    const a = active[bp];
+    const b = best.get(a).id >= 0 ? best.get(a).id : active[bp + 1];
+    const na = size[a], nb = size[b];
+    const m = nextId++;
+    size[m] = na + nb;
+    Z.push([a, b, bd === Infinity ? D.get(key(a, b)) : bd, na + nb]);
+    active = active.filter(c => c !== a && c !== b);
+    for (const c of active) {
       // convex weights first: na*da + nb*db overflowed finite distances
       // near 9e307 into an Infinity merge height (#695)
-      const na = a.members.length, nb = b.members.length;
-      D.set(key(merged.id, c.id), (na / (na + nb)) * da + (nb / (na + nb)) * db);
+      D.set(key(m, c), (na / (na + nb)) * D.get(key(a, c)) + (nb / (na + nb)) * D.get(key(b, c)));
     }
-    active = rest.concat([merged]);
+    best.delete(a); best.delete(b);
+    active.push(m);
+    const last = active.length - 1;
+    best.set(m, { d: Infinity, id: -1 });
+    for (let p = 0; p < last; p++) {
+      const c = active[p], r = best.get(c);
+      if (r.id === a || r.id === b) { rescan(p); continue; }
+      // the merged row is the last one, so on a tie the earlier partner stays
+      const v = D.get(key(c, m));
+      if (v < r.d) best.set(c, { d: v, id: m });
+    }
   }
   return Z;
 }

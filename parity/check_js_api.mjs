@@ -2534,6 +2534,39 @@ accepts("raceProbabilities takes delta=1e-3 (#445)",
            [0.3010448211736288, 0.21615827747634736, 0.15439283696956393, 0.3284040643804598]) < 1e-14);
 }
 
+// --- custom block nodes describe Y = mu + loading.f + eps (#909).
+// Expand independent cluster rules into their Cartesian-product factor law;
+// this oracle exercises the ordinary factor grammar, not block internals.
+{
+  const md = (a, b) => Math.max(...a.map((x, i) => Math.abs(x - b[i])));
+  const mu = [0, 0, 0], cl = [0, 1, 2], L = [2, 0, -2], D = [1, 1, 1];
+  for (const f of [1, -1]) {
+    const rule = { nodes: [[f]], w: [1] };
+    const before = JSON.stringify(rule);
+    holds(`deterministic block node ${f} adds loading.f to mu (#909)`,
+          md(blocks.blockRaceProbabilities(mu, cl, L, D, { nodes: rule }),
+             races.raceProbabilities(mu.map((x, i) => x + L[i] * f), { D })) < 1e-13);
+    holds("custom node input is not mutated (#909)", JSON.stringify(rule) === before);
+  }
+  const m = [.2, -.1, .4, 0], c = [0, 0, 1, 1], d = [1, .8, 1.2, .9];
+  for (const loading of [[[.7], [-.2], [.4], [.9]],
+                         [[.7, -.1], [-.2, .3], [.4, .6], [.9, -.4]]]) {
+    const r = loading[0].length;
+    for (const sign of [1, -1]) {
+      const F0 = [[-1.3, .4], [.2, -.8], [1.8, .7]].map(row => row.slice(0, r).map(v => sign * v));
+      const w = [.2, .3, .5], F = [], W = [];
+      for (let a = 0; a < F0.length; a++) for (let b = 0; b < F0.length; b++) {
+        F.push([...F0[a], ...F0[b]]); W.push(w[a] * w[b]);
+      }
+      const V = loading.map((row, i) => c[i] === 0 ? [...row, ...new Array(r).fill(0)]
+                                                               : [...new Array(r).fill(0), ...row]);
+      holds(`asymmetric rank-${r} block rule sign ${sign} matches product factor law (#909)`,
+            md(blocks.blockRaceProbabilities(m, c, loading, d, { nodes: { nodes: F0, w } }),
+               races.raceProbabilities(m, { V, D: d, F, W })) < 1e-12);
+    }
+  }
+}
+
 // --- Nested gamma and -gamma are the same Gaussian law, at every coupling
 // rank: the rank-3+ Halton rule is not symmetric under f -> -f (#871)
 {
@@ -4014,6 +4047,42 @@ rejects(C => demo.fitGrammar(C, 1, 0, { method: "ipaf", tol: 0 }),
         () => JSON.stringify([J2, fd]));
 }
 
+// --- averageLinkage keeps the rescan's merge order, ties included, in
+// Theta(n^2) typical work rather than Theta(n^3) (#847)
+{
+  const brute = dist => {               // the pre-#847 global rescan, verbatim in effect
+    const n = dist.length, D = new Map(), key = (a, b) => (a < b ? a + "_" + b : b + "_" + a);
+    for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) D.set(key(i, j), dist[i][j]);
+    let active = [...Array(n).keys()].map(i => ({ id: i, size: 1 })), Z = [], next = n;
+    while (active.length > 1) {
+      let best = Infinity, bi = 0, bj = 1;
+      for (let i = 0; i < active.length; i++) for (let j = i + 1; j < active.length; j++) {
+        const d = D.get(key(active[i].id, active[j].id)); if (d < best) { best = d; bi = i; bj = j; }
+      }
+      const a = active[bi], b = active[bj], m = { id: next++, size: a.size + b.size };
+      Z.push([a.id, b.id, best, m.size]);
+      const rest = active.filter((_, k) => k !== bi && k !== bj);
+      for (const c of rest) D.set(key(m.id, c.id), (a.size / m.size) * D.get(key(a.id, c.id)) + (b.size / m.size) * D.get(key(b.id, c.id)));
+      active = rest.concat([m]);
+    }
+    return Z;
+  };
+  let seed = 11; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const sym = (n, f) => { const d = Array.from({ length: n }, () => new Array(n).fill(0));
+    for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) d[i][j] = d[j][i] = f(); return d; };
+  let mismatch = 0;
+  for (let t = 0; t < 120; t++) {
+    const n = 2 + Math.floor(rnd() * 24), kind = t % 3;
+    const d = sym(n, () => kind === 0 ? rnd() : kind === 1 ? Math.floor(rnd() * 3) + 1 : 1);
+    if (JSON.stringify(structures.averageLinkage(d)) !== JSON.stringify(brute(d))) mismatch++;
+  }
+  holds("averageLinkage merges as the global rescan, ties included (#847)", mismatch === 0, `${mismatch} of 120`);
+  const n = 800, x = Array.from({ length: n }, (_, i) => [Math.sin(i * 1.7), Math.cos(i * 0.37), ((i * 7919) % 104729) / 104729]);
+  const d = Array.from({ length: n }, (_, i) => x.map(y => Math.hypot(...x[i].map((v, k) => v - y[k]))));
+  const t0 = Date.now(), Z = structures.averageLinkage(d), ms = Date.now() - t0;
+  holds("averageLinkage at 800 leaves is not cubic (#847)", Z.length === n - 1 && ms < 5000, `${ms} ms`);
+}
+
 // --- the Nested/Tree inverse preconditions each runner by its own slope,
 // as python's _structure_sweeps (#887): one field-wide scalar step left a
 // self-generated heterogeneous Nested target at 3.1e-3 after 400 sweeps
@@ -4043,6 +4112,7 @@ rejects(C => demo.fitGrammar(C, 1, 0, { method: "ipaf", tol: 0 }),
   }
   console.warn = quiet;
 }
+
 
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");
