@@ -86,3 +86,22 @@ def test_longshot_adjustment_keeps_a_missing_quote_missing():
     b = longshot_adjusted_dividends([2, float("nan"), 4])
     assert all(math.isfinite(x) for x in a) and a == b
     assert longshot_adjusted_dividends([2, None, math.inf])[2] == math.inf
+
+
+def test_longshot_adjustment_honours_nan_value_and_numpy_nans():
+    # the default 2000 was applied before calibration, so the caller's
+    # nan_value never took effect; np.float32 NaN was not seen as missing
+    # and expon 0 made it a live third of the book (review of #1008)
+    import numpy as np
+    from winning.classic.lattice_simulation import longshot_adjusted_dividends
+    from winning.classic.lattice_calibration import prices_from_dividends
+    for miss in (None, float("nan"), np.float32("nan"), np.float64("nan")):
+        # [2, 2, 4] at exponent 1: the missing runner takes 40%, not 0.067%
+        a = longshot_adjusted_dividends([2, miss, 4], longshot_expon=1.0, nan_value=2.0)
+        p = prices_from_dividends(a)
+        assert abs(p[1] - 0.4) < 1e-12, (miss, p)
+        # at exponent 0 every quoted dividend is 1 and the missing one 2
+        z = prices_from_dividends(longshot_adjusted_dividends([2, miss, 4], longshot_expon=0, nan_value=2.0))
+        assert abs(z[1] - 0.2) < 1e-12, (miss, z)
+        b = longshot_adjusted_dividends([2, miss, 4], longshot_expon=1.0)
+        assert abs(prices_from_dividends(b)[1] - prices_from_dividends([2, None, 4])[1]) < 1e-12
