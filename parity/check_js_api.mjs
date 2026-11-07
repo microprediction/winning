@@ -3371,9 +3371,20 @@ accepts("dividendImpliedAbility keeps the favourite first at unit 0.1 (#649)",
   accepts("ordinary Nested forward unchanged (#722)",
           () => blocks.nestedRaceProbabilities(mu5, cl, ld, D5, { coupling: g, gamma: 0.8 }),
           p => close(p, [0.38432227045253287, 0.2369657345443022, 0.1832837205047436, 0.12254165848578556, 0.07288661601263577]), p => String(p));
-  accepts("ordinary Nested inverse unchanged (#722)",
-          () => races.abilitiesFromRace([0.3, 0.25, 0.2, 0.15, 0.1], { structure: structures.Nested(cl, ld, D5, g, 0.8) }),
-          m => close(m, [-0.3591375700446748, -0.28170740253620297, -0.023065245258169144, 0.21186843954857346, 0.4520417782904735]), m => String(m));
+  // the inverse is pinned by what it solves, not by the bits of one
+  // iteration: #887 replaced the scalar-step solver, whose answer this
+  // matched to 1e-15, with the per-runner preconditioned one
+  {
+    const tgt = [0.3, 0.25, 0.2, 0.15, 0.1], st = structures.Nested(cl, ld, D5, g, 0.8);
+    accepts("ordinary Nested inverse unchanged (#722, #887)",
+            () => races.abilitiesFromRace(tgt, { structure: st, returnInfo: true }),
+            f => {
+              const back = races.raceProbabilities(f.mu, { structure: st });
+              const old = [-0.3591375700446748, -0.28170740253620297, -0.023065245258169144, 0.21186843954857346, 0.4520417782904735];
+              return f.converged && Math.max(...back.map((v, i) => Math.abs(Math.log(v) - Math.log(tgt[i])))) < 1e-8 &&
+                     f.mu.every((v, i) => Math.abs(v - old[i]) < 1e-7);
+            }, f => String(f.mu));
+  }
   // python's nested_race_probabilities (fixed in #733) at coupling 1e308,
   // gamma 0.8e-308, points 257, qa 9, qf 15
   accepts("Nested at coupling 1e308 matches python (#722)",
@@ -4144,6 +4155,43 @@ rejects(C => demo.fitGrammar(C, 1, 0, { method: "ipaf", tol: 0 }),
           `${out.p} ${out.mu} ${out.info.converged} ${out.info.muDistance}`);
   }
 }
+
+
+
+// --- the Nested/Tree inverse preconditions each runner by its own slope,
+// as python's _structure_sweeps (#887): one field-wide scalar step left a
+// self-generated heterogeneous Nested target at 3.1e-3 after 400 sweeps
+{
+  const quiet = console.warn; console.warn = () => {};
+  const s = structures.Nested([0, 0, 1], [0, 0, 0], [1, 10, 0.01], [0.3, 4, 0.15], 10);
+  const truth = [-0.7, 3.4, -2.7];
+  const target = races.raceProbabilities(truth, { structure: s, points: 257 });
+  const fit = races.abilitiesFromRace(target, { structure: s, points: 257, nIter: 400, tol: 1e-8, returnInfo: true });
+  const back = races.raceProbabilities(fit.mu, { structure: s, points: 257 });
+  const r = Math.max(...back.map((v, i) => Math.abs(Math.log(v) - Math.log(target[i]))));
+  holds("heterogeneous Nested target inverts within budget (#887)",
+        fit.converged && r < 1e-8 && Math.max(...fit.mu.map((v, i) => Math.abs(v - truth[i]))) < 1e-5,
+        `${fit.converged} ${fit.iterations} ${r}`);
+  for (const [D, str, tr] of [
+    [[1, 10, 0.01], [0.3, 3, 0.4], [-0.7, 3.4, -2.7]],
+    [[0.05, 8, 0.5, 2], [0.2, 2.5, 0.1, 1], [-1, 2.5, 0.3, -1.8]],
+    [[20, 0.02, 1], [3, 0.1, 0.5], [2, -1.5, 0.4]],
+  ]) {
+    const n = D.length;
+    const t = structures.Tree([...Array(n).keys()], new Array(n).fill(0), D,
+                              [...Array(n).fill(n), n + 1, -1], [...str, 1.0, 0]);
+    const tg = races.raceProbabilities(tr, { structure: t, points: 257 });
+    const ft = races.abilitiesFromRace(tg, { structure: t, points: 257, nIter: 400, tol: 1e-8, returnInfo: true });
+    // repriced through the public forward, not only the inverse's own
+    // residual (review of #989)
+    const backT = races.raceProbabilities(ft.mu, { structure: t, points: 257 });
+    const rT = Math.max(...backT.map((v, i) => Math.abs(Math.log(v) - Math.log(tg[i]))));
+    holds(`heterogeneous Tree D=${D} inverts (#887)`, ft.converged && ft.maxLogResidual < 1e-8 && rT < 1e-8,
+          `${ft.converged} ${ft.iterations} ${ft.maxLogResidual} ${rT}`);
+  }
+  console.warn = quiet;
+}
+
 
 
 
