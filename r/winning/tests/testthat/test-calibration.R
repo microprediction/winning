@@ -386,3 +386,76 @@ test_that("finite dividends whose reciprocals overflow price the relative book (
   d <- c(2.5, 3.3, 5, 10)
   expect_identical(prices_from_dividends(d), (1 / d) / sum(1 / d))
 })
+
+test_that("the classic recursion keeps a non-default unit_ratio (#899)", {
+  d <- skew_normal_density(L = 15, unit = 0.2, scale = 1, a = 1.5)
+  for (ratio in c(2, 4)) for (live in list(c(-20, -2, 2), c(-40, -3, 3, 40))) {
+    p <- winning:::.state_prices_from_extended_offsets(d, live, 3L, ratio)
+    q <- winning:::.state_prices_from_extended_offsets(d, c(live, Inf), 3L, ratio)
+    expect_equal(q[length(q)], 0)
+    expect_equal(q[-length(q)], p, tolerance = 1e-15)
+  }
+})
+
+test_that("every recursive classic call receives the requested unit_ratio (#899)", {
+  # the scratch comparison passes if both sides drop the ratio downstream;
+  # record the ratio each recursion actually receives (review of #983)
+  d <- skew_normal_density(L = 15, unit = 0.2, scale = 1, a = 1.5)
+  orig_e <- winning:::.state_prices_from_extended_offsets
+  orig_c <- winning:::.clustered_state_prices
+  for (ratio in c(2, 4)) {
+    seen <- numeric(0)
+    testthat::local_mocked_bindings(
+      .state_prices_from_extended_offsets = function(density, offsets, max_depth = 3L, unit_ratio = 3) {
+        seen <<- c(seen, unit_ratio); orig_e(density, offsets, max_depth, unit_ratio)
+      },
+      .clustered_state_prices = function(density, offsets, fast, unit_ratio, max_depth) {
+        seen <<- c(seen, unit_ratio); orig_c(density, offsets, fast, unit_ratio, max_depth)
+      })
+    winning:::.state_prices_from_extended_offsets(d, c(-20, -2, 2, Inf), 3L, ratio)
+    expect_gt(length(seen), 3)
+    expect_true(all(seen == ratio))
+  }
+})
+
+test_that("both cluster recursions and bad-runner removal keep the ratio (#899)", {
+  # review of #983: assert the branches are reached, not just the ratio
+  d <- skew_normal_density(L = 15, unit = 0.2, scale = 1, a = 1.5)
+  orig_e <- winning:::.state_prices_from_extended_offsets
+  orig_c <- winning:::.clustered_state_prices
+  for (ratio in c(2, 4)) {
+    ext <- list(); clu <- list()
+    testthat::local_mocked_bindings(
+      .state_prices_from_extended_offsets = function(density, offsets, max_depth = 3L, unit_ratio = 3) {
+        ext[[length(ext) + 1L]] <<- list(base = isTRUE(all.equal(density, d, tolerance = 0)), off = offsets, r = unit_ratio)
+        orig_e(density, offsets, max_depth, unit_ratio)
+      },
+      .clustered_state_prices = function(density, offsets, fast, unit_ratio, max_depth) {
+        clu[[length(clu) + 1L]] <<- list(n = length(offsets), f = length(fast), depth = max_depth, r = unit_ratio)
+        orig_c(density, offsets, fast, unit_ratio, max_depth)
+      })
+    p <- winning:::.state_prices_from_extended_offsets(d, c(-20, -2, 2), 3L, ratio)
+    split <- vapply(clu, function(c) c$f > 0 && c$f < c$n && c$depth > 0, logical(1))
+    expect_true(any(split))
+    base <- vapply(ext, function(e) e$base, logical(1))
+    expect_true(any(base) && any(!base))   # base and dilated densities both priced
+    ext <- list()
+    q <- winning:::.state_prices_from_extended_offsets(d, c(-20, -2, 2, 200), 3L, ratio)
+    expect_true(any(vapply(ext, function(e) is.infinite(e$off[4]) && e$off[4] > 0, logical(1))))
+    expect_true(all(vapply(c(ext, clu), function(e) e$r == ratio, logical(1))))
+    expect_equal(q[4], 0)
+    expect_equal(q[1:3], p, tolerance = 1e-15)
+  }
+  # ratios 3 and 4 agree with the Python port; ratio 2 does not (#1006)
+  want <- list(`3` = c(0.99870245, 0.00097081, 0.00032674),
+               `4` = c(0.99803399, 0.00147217, 0.00049385))
+  for (ratio in c(3, 4)) for (field in list(c(-20, -2, 2), c(-20, -2, 2, Inf), c(-20, -2, 2, 200)))
+    expect_equal(winning:::.state_prices_from_extended_offsets(d, field, 3L, ratio)[1:3],
+                 want[[as.character(ratio)]], tolerance = 1e-6)
+})
+
+test_that("a unit_ratio that does not coarsen is refused (#899)", {
+  d <- skew_normal_density(L = 15, unit = 0.2, scale = 1, a = 1.5)
+  for (bad in list(1, 0.6, -2, NaN, Inf, c(2, 3)))
+    expect_error(winning:::.state_prices_from_extended_offsets(d, c(-20, -2, 2), 3L, bad), "unit_ratio")
+})
