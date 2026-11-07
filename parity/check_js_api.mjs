@@ -4131,6 +4131,24 @@ rejects(C => demo.fitGrammar(C, 1, 0, { method: "ipaf", tol: 0 }),
 }
 
 
+// --- a floor above 1/n from a saturated start (#840): the uniform race is
+// infeasible too, so restoration walks the violated rows' direction; and a
+// settled multiplier is never a certificate without stationarity
+{
+  const xStar = 0.9061938024368232;            // -Phi^-1(0.9) / sqrt(2)
+  for (const a of [8 / Math.sqrt(2), 4.9]) for (const points of [129, 1025]) for (const fdFallback of [false, true]) {
+    const out = polish.polishRace({ mu0: [a, -a], D: [1, 1], A: [[-1, 0]], b: [-0.9], points, fdFallback });
+    holds(`floored saturated pair a=${a.toFixed(3)} points=${points} fd=${fdFallback} is the binding point (#840)`,
+          out.info.converged && Math.abs(out.p[0] - 0.9) < 1e-8 &&
+          Math.abs(out.mu[0] + xStar) < 1e-7 && Math.abs(out.mu[1] - xStar) < 1e-7 &&
+          out.info.active.length === 1 && out.info.active[0] === 0 &&
+          Math.abs(out.info.muDistance - Math.sqrt(2) * (a + xStar)) < 1e-6,
+          `${out.p} ${out.mu} ${out.info.converged} ${out.info.muDistance}`);
+  }
+}
+
+
+
 // --- a field that fits the lattice is priced exactly (#1006)
 {
   // mean-centring pushed this off a [0, 7] support that an integer shift
@@ -4144,6 +4162,7 @@ rejects(C => demo.fitGrammar(C, 1, 0, { method: "ipaf", tol: 0 }),
   holds("atomic field that fits: the 0.75 runner is 0.2835 (#1006)",
         Math.abs(got[4] - 0.283529) < 1e-6, String(got[4]));
 }
+
 
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");

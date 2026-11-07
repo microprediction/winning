@@ -1,6 +1,7 @@
 import numpy as np
 import math
-from winning.classic.lattice import cdf_to_pdf, pdf_to_cdf, state_prices_from_densities, five_prices_from_five_densities
+from winning.classic.lattice import (cdf_to_pdf, pdf_to_cdf, state_prices_from_densities, five_prices_from_five_densities,
+                                     as_unit_densities, _state_prices_from_densities)
 from winning.classic.normaldist import normcdf, invnormcdf
 from winning.classic.scipyinclusion import using_scipy
 
@@ -51,6 +52,7 @@ if using_scipy:
         :return:
         """
         rho = check_rho(rho)
+        densities = as_unit_densities(densities)      # counts are their frequencies
         cdfs = [ pdf_to_cdf( pdf ) for pdf in densities ]
 
         def conditional_functional(p):
@@ -95,7 +97,7 @@ if using_scipy:
         """
 
         def conditional_win(ds):
-            return np.asarray( state_prices_from_densities(ds) )
+            return np.asarray( _state_prices_from_densities(ds) )
 
         return gaussian_copula_functional(densities=densities, f=conditional_win, rho=rho)
 

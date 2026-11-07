@@ -142,6 +142,19 @@ def order_augmented(m, v, order, beta2, rng, n_aug=60, burn=20):
     """
     m = np.asarray(m, float); n = len(m)
     v = as_variance(v, n); sb = np.sqrt(beta2)
+    order = [int(i) for i in order]
+    if len(order) <= 1:
+        return m.copy(), v.copy()          # ranks nobody against anybody
+    if len(order) < n:
+        # a partial order ranks only the runners it names, among themselves,
+        # as the exact and moment methods read it; the rest keep their prior.
+        # This indexed a full-length pi by the partial order and raised.
+        idx = np.asarray(order, dtype=int)
+        Es, Vs = order_augmented(m[idx], v[idx], list(range(len(idx))), beta2, rng,
+                                 n_aug=n_aug, burn=burn)
+        E, Vv = m.copy(), v.copy()
+        E[idx], Vv[idx] = Es, Vs
+        return E, Vv
     pv = 1.0 / (1.0 / v + 1.0 / beta2)                    # var of a | pi (conjugate)
     a = m.copy(); pi = np.empty(n); pi[list(order)] = np.sort(-a)   # init respecting order
     sA = np.zeros(n); sA2 = np.zeros(n); cnt = 0
@@ -155,7 +168,7 @@ def order_augmented(m, v, order, beta2, rng, n_aug=60, burn=20):
         if it >= burn:
             sA += a; sA2 += a * a; cnt += 1
     E = sA / cnt
-    return E, np.maximum(sA2 / cnt - E * E, 1e-9)
+    return E, np.maximum(sA2 / cnt - E * E, 1e-6 * v)          # relative, as #660
 
 
 def block_loadings(groups, rho, beta2=1.0):
@@ -261,6 +274,10 @@ class AbilityTracker:
             )
 
         self.drift = float(drift); self.drift_exp = float(drift_exp)
+        if not np.isfinite(self.drift_exp) or self.drift_exp < 0:
+            # a negative exponent shrinks the diffusion as time passes and
+            # raised ZeroDivisionError at dt = 0
+            raise ValueError(f"drift_exp must be a finite number >= 0; got {drift_exp!r}")
         self.init_var = float(init_var)
         self.beta2 = float(beta2); self.tau2 = float(tau2)
         self.base = base
@@ -288,7 +305,9 @@ class AbilityTracker:
             else:
                 dt = max(float(t) - s.last_time, 0.0)
                 m[k] = s.mean
-                v[k] = s.var + self.drift * dt ** self.drift_exp
+                # no elapsed time, no drift: 0.0 ** 0 is 1, so drift_exp = 0
+                # added the full drift between two contests at one instant
+                v[k] = s.var + (self.drift * dt ** self.drift_exp if dt > 0 else 0.0)
         return m, v
 
     def _store(self, ids, m, v, t):
@@ -299,7 +318,11 @@ class AbilityTracker:
         # the class differences that propagate between races through shared
         # runners (the varying-field washout bug: model sat at uniform).
         for k, i in enumerate(ids):
-            self.state[i] = AbilityState(float(m[k]), float(max(v[k], 1e-9)), float(t))
+            # clipped at zero, not at an absolute 1e-9: the floor broke scale
+            # covariance below a unit of about 1e-4 (win probabilities 0.26
+            # off at 1e-6) and turned a declared-known v = 0 into 1e-9. The
+            # update paths already floor relative to the prior (#660).
+            self.state[i] = AbilityState(float(m[k]), float(max(v[k], 0.0)), float(t))
 
     def _blocks(self, groups, n):
         if groups is None:
@@ -509,7 +532,9 @@ def tune_block_rho(contests: Sequence[dict], rho_grid=(0.0, 0.1, 0.25, 0.4, 0.6)
     if beta2_grid is None:
         evidence = np.asarray([walk(rho, {}) for rho in rho_grid])
         best = int(np.argmax(evidence))
-        axis = list(dict.fromkeys(rho_grid))
+        # by value: a grid given out of order put an interior optimum at an
+        # "edge" and the true end inside it
+        axis = sorted(dict.fromkeys(rho_grid))
         _, report = select({r: -e for r, e in zip(rho_grid, evidence)},
                            "rho", order=axis)
         # edges of the unique axis select judged, not of the raw grid: a
@@ -527,5 +552,5 @@ def tune_block_rho(contests: Sequence[dict], rho_grid=(0.0, 0.1, 0.25, 0.4, 0.6)
     return {"rho_grid": rho_grid, "beta2_grid": beta2_grid, "evidence": evidence,
             "rho": rho_grid[i], "beta2": beta2_grid[j],
             # by value, so a repeated endpoint is still an edge (#883)
-            "at_edge": (rho_grid[i] in (rho_grid[0], rho_grid[-1])
-                        or beta2_grid[j] in (beta2_grid[0], beta2_grid[-1]))}
+            "at_edge": (rho_grid[i] in (min(rho_grid), max(rho_grid))
+                        or beta2_grid[j] in (min(beta2_grid), max(beta2_grid)))}
