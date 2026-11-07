@@ -2717,7 +2717,11 @@ def _tempered_curves(sd_i, tau, fn, left, right, m=4001):
             f"limit; use winning.factor.races.softmax_probabilities, which "
             f"is the closed form, rather than this quadrature.")
     f_eta /= total
-    cdf = np.cumsum(f_eta) * du
+    # trapezoid, not left-Riemann: the plain cumulative sum put the cdf
+    # half a cell ahead of the density, a first-order bias (2.7e-4 on
+    # mu = [0, .5, 1], up to 9e-4 across fields) that points= cannot reach
+    # because the curve grid is fixed. The trapezoid is 1.5e-8 off.
+    cdf = (np.cumsum(f_eta) - 0.5 * f_eta) * du
     S = np.maximum(1.0 - cdf, 1e-300)
     fp = np.gradient(f_eta, du)
     return u, S, f_eta, fp
