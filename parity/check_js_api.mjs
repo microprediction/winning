@@ -4182,8 +4182,12 @@ rejects(C => demo.fitGrammar(C, 1, 0, { method: "ipaf", tol: 0 }),
                               [...Array(n).fill(n), n + 1, -1], [...str, 1.0, 0]);
     const tg = races.raceProbabilities(tr, { structure: t, points: 257 });
     const ft = races.abilitiesFromRace(tg, { structure: t, points: 257, nIter: 400, tol: 1e-8, returnInfo: true });
-    holds(`heterogeneous Tree D=${D} inverts (#887)`, ft.converged && ft.maxLogResidual < 1e-8,
-          `${ft.converged} ${ft.iterations} ${ft.maxLogResidual}`);
+    // repriced through the public forward, not only the inverse's own
+    // residual (review of #989)
+    const backT = races.raceProbabilities(ft.mu, { structure: t, points: 257 });
+    const rT = Math.max(...backT.map((v, i) => Math.abs(Math.log(v) - Math.log(tg[i]))));
+    holds(`heterogeneous Tree D=${D} inverts (#887)`, ft.converged && ft.maxLogResidual < 1e-8 && rT < 1e-8,
+          `${ft.converged} ${ft.iterations} ${ft.maxLogResidual} ${rT}`);
   }
   console.warn = quiet;
 }
