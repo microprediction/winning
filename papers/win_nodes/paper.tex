@@ -692,7 +692,7 @@ an orthant probability, $\Pr(X_1\le u,\dots,X_n\le u)$, and as $u$
 falls it becomes a rare event. Plain posterior simulation needs about
 $1/p$ draws to see it at all. GHK does not, because it samples from
 truncated proposals and weights them, and it is not compared here.
-The restricted pass costs the same whatever $p$ is, 66 ms per
+The restricted pass costs the same whatever $p$ is, 136 ms per
 threshold in Table~\ref{tab:tail}.
 
 \begin{table}[h]
@@ -703,11 +703,11 @@ $u$ & lattice, $L{=}400$ & lattice, $L{=}800$ & $10^6$ draws & draws for
 10\% error \\
 \midrule
 $0.0$  & $6.471\times10^{-3}$ & $6.465\times10^{-3}$ & $6.432\times10^{-3}$ & $1.5\times10^{4}$ \\
-$-1.0$ & $1.753\times10^{-5}$ & $1.752\times10^{-5}$ & $1.60\times10^{-5}$ (16 hits) & $5.7\times10^{6}$ \\
-$-1.5$ & $3.067\times10^{-7}$ & $3.079\times10^{-7}$ & no hits & $3.2\times10^{8}$ \\
-$-2.0$ & $2.520\times10^{-9}$ & $2.521\times10^{-9}$ & no hits & $4.0\times10^{10}$ \\
-$-2.5$ & $9.380\times10^{-12}$ & $9.418\times10^{-12}$ & no hits & $1.1\times10^{13}$ \\
-$-3.0$ & $1.576\times10^{-14}$ & $1.578\times10^{-14}$ & no hits & $6.3\times10^{15}$ \\
+$-1.0$ & $1.756\times10^{-5}$ & $1.753\times10^{-5}$ & $1.60\times10^{-5}$ (16 hits) & $5.7\times10^{6}$ \\
+$-1.5$ & $3.088\times10^{-7}$ & $3.082\times10^{-7}$ & no hits & $3.2\times10^{8}$ \\
+$-2.0$ & $2.531\times10^{-9}$ & $2.525\times10^{-9}$ & no hits & $4.0\times10^{10}$ \\
+$-2.5$ & $9.464\times10^{-12}$ & $9.436\times10^{-12}$ & no hits & $1.1\times10^{13}$ \\
+$-3.0$ & $1.588\times10^{-14}$ & $1.582\times10^{-14}$ & no hits & $6.3\times10^{15}$ \\
 \bottomrule
 \end{tabular}
 \caption{$\Pr(\max_t X_t \le u)$ for a stationary AR(1) chain with
