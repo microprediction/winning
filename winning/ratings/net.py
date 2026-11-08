@@ -114,13 +114,20 @@ class GaussianNet:
         factors V are appended. This is where structure is DETECTED: a
         diagonal belief prices on the lattice alone, exactly."""
         from .full import _belief_split
+        from .nway import _canonical_loadings
         nd = self.nodes[node] if isinstance(node, str) else node
         mu = nd.A @ self.m
         B, psi = _belief_split(_psd_repair(nd.A @ self.S @ nd.A.T))
         D = psi + nd.beta2
         if nd.V is not None:
             B = np.hstack([B, nd.V])
-        return mu, (None if B.shape[1] == 0 else B), D
+        if B.shape[1] == 0:
+            return mu, None, D
+        # the quadrature rule is not rotation invariant, so the loadings are
+        # canonicalised as the backward update canonicalises them (#130):
+        # an eigendecomposition that differs between machines must not
+        # move the forward answer. Measured: 1e-4 across platforms before.
+        return mu, _canonical_loadings(B), D
 
     def query(self, node, k=1):
         """P(each member wins), or P(each member in the first k), from the
