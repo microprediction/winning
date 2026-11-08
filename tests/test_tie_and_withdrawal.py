@@ -65,3 +65,32 @@ def test_tie_update_matches_mc_posterior_in_the_narrow_band_limit():
 def test_tie_label_door(bad):
     with pytest.raises(ValueError):
         update_tie_correlated(M, VV, bad, V=L)
+
+
+def test_update_race_routes_tie_and_removes_dnf_entrants():
+    from winning.ratings.market import update_race
+    from winning.ratings.nway import update_prefix_correlated, update_topset_correlated
+    # tie routed
+    m, v, info = update_race(M, VV, tie=[3, 0], V=L, beta2=1.0)
+    ref = update_tie_correlated(M, VV, [3, 0], V=L, beta2=1.0)
+    np.testing.assert_allclose(m, ref[0]); assert info["logZ_outcome"] == ref[2]
+    # a mechanical retirement of entrant 2: the outcome runs on the other four,
+    # entrant 2's belief is untouched, labels stay in full-field terms
+    m, v, info = update_race(M, VV, prefix=[3, 0], dnf=[2], V=L, beta2=1.0)
+    live = [0, 1, 3, 4]
+    ref = update_prefix_correlated(M[live], VV[live], [2, 0], V=L[live], beta2=1.0)
+    np.testing.assert_allclose(m[live], ref[0]); np.testing.assert_allclose(v[live], ref[1])
+    assert m[2] == M[2] and v[2] == VV[2] and info["logZ_outcome"] == ref[2]
+    # ... while a price, quoted on the full field, still updates entrant 2
+    m2, v2, info2 = update_race(M, VV, top=[3, 0], dnf=[2], p_market=[.3, .2, .2, .15, .15], V=L, beta2=1.0)
+    assert v2[2] < VV[2] and "logZ_market" in info2 and "logZ_outcome" in info2
+    ref2 = update_topset_correlated(*update_race(M, VV, p_market=[.3, .2, .2, .15, .15], V=L, beta2=1.0)[:2], [3, 0], V=L, beta2=1.0)
+    # the price-updated belief feeds the outcome, as without dnf
+    assert np.isfinite(ref2[2])
+    # margins for the full field, dnf entry ignored
+    m3, _, _ = update_race(M, VV, margins=[0.0, 1.0, 99.0, 2.0, 3.0], dnf=[2], V=L, beta2=1.0)
+    assert m3[2] == M[2]
+    with pytest.raises(ValueError, match="in dnf"):
+        update_race(M, VV, winner=2, dnf=[2], V=L)
+    with pytest.raises(ValueError, match="one outcome"):
+        update_race(M, VV, tie=[3, 0], winner=3, V=L)
