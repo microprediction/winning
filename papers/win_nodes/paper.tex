@@ -456,6 +456,69 @@ under a different model from the outcome, or with a longshot bias, is
 inverted under its own model and then read as evidence under this
 one; the inversion is agnostic about where the prices came from.
 
+\subsection{Places as evidence}
+\label{sec:places}
+
+Between the winner and the full order lie the results that are
+actually published: the first $k$ in order with the rest unplaced, the
+first $k$ as a set, or the bare fact that a named entrant finished
+among the first $k$. Each is an event of the win node's relatives, and
+conditional on the shared factors each has a one-dimensional lattice
+form, so each passes through the same mixture over factor nodes as
+Equation~\eqref{eq:obslik}.
+
+Write $f_i$ and $\Phi_i$ for the conditional density and distribution
+function of entrant $i$'s performance, and $S_i=1-\Phi_i$. For the set
+$T$ of the first $k$ in unknown order, let $G=\prod_{j\notin T}\Phi_j$
+be the law of the best outsider and $H=\prod_{i\in T}S_i$ the chance
+that every member is above $x$; then
+\begin{equation}
+\Pr(\text{first } k = T)\;=\;\int G'(x)\,H(x)\,dx\;=\;-\int G(x)\,H'(x)\,dx,
+\label{eq:topset}
+\end{equation}
+and differentiating under either form gives the score as one lattice
+sum per entrant: nonnegative for a member, nonpositive for an
+outsider, summing to zero because a common shift of every mean moves
+nothing. For the ordered prefix $i_1,\dots,i_k$ with everyone else
+behind, the last named finishes at $x$ with every unnamed entrant
+below, $A_k(x)=f_{i_k}(x)\prod_{l\ \mathrm{unnamed}}\Phi_l(x)$, each
+earlier named entrant finishes above the next,
+$A_j(x)=f_{i_j}(x)\int_{-\infty}^{x}A_{j+1}$, and the probability is
+$\int A_1$: $k$ cumulative sums on one lattice, for any $k$. The
+membership of one entrant among the first $k$ is the top-$k$ query of
+\citet{cotton2026} and its Jacobian row is the score. At $k=1$ all
+three are the observed winner, and the prefix at $k=n$ is the full
+order; both reductions are checked to the tolerance of the existing
+updates, and every message is checked against rejection-sampled
+posteriors of the generative model.
+
+Table~\ref{tab:places} ranks the messages by what they tell. Same
+simulation as Table~\ref{tab:price}, 1{,}600 seeded races, one piece
+of outcome evidence per race. The order among three named entrants,
+which says nothing about where they finished relative to the rest, is
+the weakest, below the winner alone; the first three as a set tells
+more than the winner, because it places three entrants rather than
+one; the prefix adds their order; the full order is the most.
+\begin{table}[t]
+\centering
+\begin{tabular}{lccc}
+\toprule
+evidence & RMSE of mean contrasts & mean posterior variance & log score, next winner \\
+\midrule
+none (prior) & 0.901 & 1.000 & $-2.073$ \\
+order among three named & 0.901 & 0.920 & $-2.065$ \\
+one named entrant in the first three & 0.843 & 0.948 & $-1.995$ \\
+winner only & 0.834 & 0.872 & $-1.982$ \\
+first three as a set & 0.773 & 0.774 & $-1.946$ \\
+first three in order, rest behind & 0.758 & 0.748 & $-1.922$ \\
+full order & 0.696 & 0.656 & $-1.870$ \\
+\bottomrule
+\end{tabular}
+\caption{One race, one outcome message each, ranked by information.
+Script: \texttt{research/win\_nodes/exp2\_place\_evidence}.}
+\label{tab:places}
+\end{table}
+
 \section{Posteriors of factor form}
 \label{sec:posteriors}
 
@@ -1036,8 +1099,11 @@ is \texttt{exp6\_career\_peak} under \texttt{research/tridiagonal}.
 
 \section{Software}
 
-The factor win node, its top-$k$ relatives, both Jacobian blocks and
-the calibration inverses are in the \texttt{winning} package of
+The factor win node, its top-$k$ relatives, both Jacobian blocks,
+the calibration inverses, and the evidence messages of
+Sections~\ref{sec:observed}--\ref{sec:places} behind one front door
+(\texttt{update\_race}: prices, winner, order, prefix, top set,
+membership) are in the \texttt{winning} package of
 \citet{cotton2026}: a Python reference with R, JavaScript, Julia and
 Rust ports, each checked against the same embedded reference
 vectors, most to $10^{-15}$. The

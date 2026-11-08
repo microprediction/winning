@@ -1,0 +1,35 @@
+{
+ "n": 8,
+ "rank": 1,
+ "beta2": 1.0,
+ "seeds": 1600,
+ "k": 3,
+ "rmse_contrast": {
+  "prior": 0.901490158559374,
+  "member of top 3": 0.8428447037914563,
+  "order among 3 named": 0.9007688460174679,
+  "top-3 set": 0.7731371624814557,
+  "winner": 0.8343421777926642,
+  "top 3 in order, rest behind": 0.7584724521901361,
+  "full order": 0.6962742015687209
+ },
+ "mean_posterior_var": {
+  "prior": 1.0,
+  "member of top 3": 0.947946687926852,
+  "order among 3 named": 0.9203608165505293,
+  "top-3 set": 0.7742636736034165,
+  "winner": 0.8718595794102686,
+  "top 3 in order, rest behind": 0.7477837987553498,
+  "full order": 0.6555486931842225
+ },
+ "mean_log_score_next_winner": {
+  "prior": -2.0729772925931282,
+  "member of top 3": -1.9947244283573218,
+  "order among 3 named": -2.065152570351211,
+  "top-3 set": -1.9455186539065665,
+  "winner": -1.9819740015556226,
+  "top 3 in order, rest behind": -1.9219850678926906,
+  "full order": -1.8704648250466926
+ },
+ "seconds": 1606.0794529914856
+}
