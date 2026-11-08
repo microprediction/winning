@@ -1158,3 +1158,120 @@ def _order_pass_batch(Ms, sd, order, L=None, base="normal", curves=None):
     if redo.any() and base == "normal" and curves is None:
         logP[redo], grad[redo] = _order_pass_log(Ms[redo], sd, order, x)
     return logP, grad
+
+
+# --- observed place: "i finished among the top k", and "the top-k set was S"
+
+def _require_normal_base(base, what):
+    if base != "normal":
+        raise NotImplementedError(
+            f"{what} is implemented for base='normal' only; the non-normal "
+            "predictive curves of update_winner are not yet threaded through "
+            "the top-k count program")
+
+
+def update_topk_correlated(m, v, member, k, V=None, beta2=1.0, Qf=7, eps=1e-3,
+                           base="normal", nodes_log2=10, points=513):
+    """Exact-moment posterior update from the evidence that entrant
+    `member` finished among the top k (max-wins), with optional shared
+    performance factors V as in update_winner_correlated. k = 1 is the
+    observed winner. Conditional on the factors the race is independent
+    and the event's probability is the top-k membership of
+    winning.factor.topk, with its Jacobian row as the score; the
+    mixture over factor nodes is _mixture_update's. Returns
+    (m_post, v_post, logZ) with logZ = log P(member in top k)."""
+    from ..factor.topk import top_k_probabilities, top_k_jacobian_row
+    _require_normal_base(base, "update_topk_correlated")
+    m = np.asarray(m, dtype=float)
+    n = len(m)
+    v = as_variance(v, n)
+    member = int(as_order([member], n, name="member")[0])        # #129
+    k = int(k)
+    if not 1 <= k <= n:
+        raise ValueError(f"k must lie in 1..{n}; got {k}")
+    if k == n:
+        return m.copy(), v.copy(), 0.0                 # everyone is in the top n
+    D = v + _beta_per_player(beta2, n)                 # Gaussian predictive per node
+    if V is None:
+        V = np.zeros((n, 1))
+
+    def node(mm):
+        mu = -np.asarray(mm, dtype=float)              # the engine speaks min-wins
+        q = float(np.asarray(top_k_probabilities(mu, k, D=D, points=points))[member])
+        row = np.asarray(top_k_jacobian_row(mu, member, k, D=D, points=points))
+        q = max(q, 1e-300)
+        return np.log(q), -row / q                     # d log q / d mm = -(dq/dmu)/q
+    return _mixture_update(m, v, V, beta2, node, Qf=Qf, eps=eps, base=base,
+                           nodes_log2=nodes_log2)
+
+
+def _topset_logp_grad(mm, D, top, points=2001):
+    """log P(every entrant in `top` beat every entrant outside it) for
+    independent normal performances N(mm_j, D_j), max-wins, and its
+    gradient in mm. With G(x) = prod_{j not in top} Phi_j(x) the law of
+    the best outsider and H(x) = prod_{i in top} S_i(x) the chance every
+    member is above x,
+
+        P = int G'(x) H(x) dx = -int G(x) H'(x) dx,
+
+    and differentiating under either form gives one lattice sum per
+    entrant: dP/dm_i = int G' phi_i/sd_i prod_{i' in top, i' != i} S_i'
+    for a member (>= 0), dP/dm_j = int H' phi_j/sd_j prod_{l out, l != j}
+    Phi_l for an outsider (<= 0). The gradient sums to zero by
+    translation invariance, which the tests check."""
+    from scipy.special import log_ndtr
+    _trapz = getattr(np, "trapezoid", None) or np.trapz
+    mm = np.asarray(mm, dtype=float); D = np.asarray(D, dtype=float)
+    n = len(mm)
+    top = np.asarray(sorted(set(int(i) for i in top)), dtype=int)
+    out = np.asarray([j for j in range(n) if j not in set(top.tolist())], dtype=int)
+    sd = np.sqrt(D)
+    lo = float(np.min(mm - 9 * sd)); hi = float(np.max(mm + 9 * sd))
+    x = np.linspace(lo, hi, int(points)); dx = x[1] - x[0]
+    z = (x[:, None] - mm[None, :]) / sd[None, :]            # (L, n)
+    logPhi = log_ndtr(z); logS = log_ndtr(-z)
+    phi_over_sd = np.exp(-0.5 * z * z) / (np.sqrt(2 * np.pi) * sd[None, :])
+    logG = logPhi[:, out].sum(axis=1)                        # best outsider's cdf
+    logH = logS[:, top].sum(axis=1)                          # all members above x
+    # G'(x) = sum_l phi_l/sd_l prod_{l' != l} Phi_l'  = G * sum_l phi_l/(sd_l Phi_l)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        ratio_out = np.where(logPhi[:, out] > -700, phi_over_sd[:, out] / np.exp(logPhi[:, out]), 0.0)
+        ratio_top = np.where(logS[:, top] > -700, phi_over_sd[:, top] / np.exp(logS[:, top]), 0.0)
+    G = np.exp(logG); H = np.exp(logH)
+    Gp = G * ratio_out.sum(axis=1)
+    Hp = -H * ratio_top.sum(axis=1)
+    P = float(_trapz(Gp * H, dx=dx))
+    grad = np.zeros(n)
+    for a, i in enumerate(top):
+        # d/dm_i of H = H * phi_i/(sd_i S_i)
+        grad[i] = _trapz(Gp * H * ratio_top[:, a], dx=dx)
+    for b, j in enumerate(out):
+        # -d/dm_j of G = G * phi_j/(sd_j Phi_j); P = -int G H'
+        grad[j] = _trapz(Hp * G * ratio_out[:, b], dx=dx)
+    P = max(P, 1e-300)
+    return np.log(P), grad / P
+
+
+def update_topset_correlated(m, v, top, V=None, beta2=1.0, Qf=7, eps=1e-3,
+                             base="normal", nodes_log2=10, points=2001):
+    """Exact-moment posterior update from the evidence that the set `top`
+    of entrants finished ahead of everyone else, in unknown order
+    (max-wins): the qualifiers, the shortlist, the final. |top| = 1 is
+    the observed winner and |top| = n - 1 names the last finisher.
+    Shared performance factors V as in update_winner_correlated. Returns
+    (m_post, v_post, logZ) with logZ = log P(top set = `top`)."""
+    _require_normal_base(base, "update_topset_correlated")
+    m = np.asarray(m, dtype=float)
+    n = len(m)
+    v = as_variance(v, n)
+    top = [int(i) for i in as_order(top, n, name="top")]            # distinct, in range (#129)
+    if not 1 <= len(top) <= n - 1:
+        raise ValueError(f"top must name between 1 and {n - 1} entrants; got {len(top)}")
+    D = v + _beta_per_player(beta2, n)
+    if V is None:
+        V = np.zeros((n, 1))
+
+    def node(mm):
+        return _topset_logp_grad(mm, D, top, points=points)
+    return _mixture_update(m, v, V, beta2, node, Qf=Qf, eps=eps, base=base,
+                           nodes_log2=nodes_log2)
