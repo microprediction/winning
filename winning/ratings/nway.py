@@ -1333,3 +1333,62 @@ def update_prefix_correlated(m, v, prefix, V=None, beta2=1.0, Qf=7, eps=1e-3,
         return lp, g
     return _mixture_update(m, v, V, beta2, node, Qf=Qf, eps=eps, base=base,
                            nodes_log2=nodes_log2)
+
+
+# --- a dead heat for first
+
+def _tie_logdens_grad(mm, D, tied, points=2001):
+    """log of the density that the entrants in `tied` finish level in
+    first place with everyone else behind, independent normal
+    performances N(mm_j, D_j), max-wins: int prod_{i tied} f_i(x)
+    prod_{j out} Phi_j(x) dx, and its gradient. For one tied entrant this
+    is the win probability; for two it is the tie density of the win
+    Jacobian's off-diagonal. The gradient sums to zero (translation)."""
+    from scipy.special import log_ndtr
+    _trapz = getattr(np, "trapezoid", None) or np.trapz
+    mm = np.asarray(mm, dtype=float); D = np.asarray(D, dtype=float)
+    n = len(mm); sd = np.sqrt(D)
+    tied = [int(i) for i in tied]
+    out = [j for j in range(n) if j not in set(tied)]
+    lo = float(np.min(mm - 9 * sd)); hi = float(np.max(mm + 9 * sd))
+    x = np.linspace(lo, hi, int(points)); dx = x[1] - x[0]
+    z = (x[:, None] - mm[None, :]) / sd[None, :]
+    logf = -0.5 * z * z - 0.5 * np.log(2 * np.pi) - np.log(sd[None, :])
+    logPhi = log_ndtr(z)
+    logh = logf[:, tied].sum(axis=1) + (logPhi[:, out].sum(axis=1) if out else 0.0)
+    h = np.exp(logh)
+    P = float(_trapz(h, dx=dx))
+    grad = np.zeros(n)
+    for i in tied:
+        grad[i] = _trapz(h * z[:, i] / sd[i], dx=dx)             # d log f_i / d m_i = z_i / sd_i
+    with np.errstate(divide="ignore", invalid="ignore"):
+        for j in out:
+            ratio = np.where(logPhi[:, j] > -700,
+                             np.exp(-0.5 * z[:, j] ** 2 - 0.5 * np.log(2 * np.pi) - logPhi[:, j]) / sd[j], 0.0)
+            grad[j] = -_trapz(h * ratio, dx=dx)                   # d log Phi_j / d m_j = -phi_j/(sd_j Phi_j)
+    P = max(P, 1e-300)
+    return np.log(P), grad / P
+
+
+def update_tie_correlated(m, v, tied, V=None, beta2=1.0, Qf=7, eps=1e-3,
+                          base="normal", nodes_log2=10, points=2001):
+    """Exact-moment posterior update from a dead heat: the entrants in
+    `tied` finished level in first place and everyone else behind them
+    (max-wins). The event has probability zero under a continuous
+    model, so its likelihood is a density, Bayes' rule applies to it as
+    to any density, and the evidence returned is a log density, not a
+    log probability. One tied entrant is the observed winner. Shared
+    factors V as in update_winner_correlated."""
+    _require_normal_base(base, "update_tie_correlated")
+    m = np.asarray(m, dtype=float)
+    n = len(m)
+    v = as_variance(v, n)
+    tied = [int(i) for i in as_order(tied, n, name="tied")]           # distinct, in range (#129)
+    D = v + _beta_per_player(beta2, n)
+    if V is None:
+        V = np.zeros((n, 1))
+
+    def node(mm):
+        return _tie_logdens_grad(mm, D, tied, points=points)
+    return _mixture_update(m, v, V, beta2, node, Qf=Qf, eps=eps, base=base,
+                           nodes_log2=nodes_log2)
