@@ -153,16 +153,20 @@ class GaussianNet:
                                 ("scores", scores)) if x is not None]
         if len(given) > 1:
             raise ValueError(f"give one outcome, not {given}: they are not independent evidence")
+        from ..outcomes import as_order
         pos = {lab: i for i, lab in enumerate(nd.labels)}
         info = {}
+        # --- validate EVERYTHING before any state changes, so a bad outcome
+        # beside a price cannot leave the belief half-updated (review of #1026)
         if prices is not None:
-            self.m, self.S, lz = update_team_market_full(self.m, self.S, nd.A, prices, tau2=tau2,
-                                                         **({"V": nd.V, "D": nd.beta2} | market_model))
-            self.evidence += lz; info["logZ_market"] = lz
-        if not given:
-            return info
+            pr = np.asarray(prices, dtype=float)
+            if pr.shape != (nd.k,) or not np.all(np.isfinite(pr)):
+                raise ValueError(f"prices must be one finite entry per member of the node; got shape {pr.shape} for {nd.k}")
         field = nd
-        if dnf is not None:
+        if dnf is not None and given:
+            bad = [x for x in dnf if x not in pos]
+            if bad:
+                raise ValueError(f"dnf names {bad[0]!r}, which is not in the field")
             out = {pos[x] for x in dnf}
             keep = [i for i in range(nd.k) if i not in out]
             if len(keep) < 2:
@@ -170,22 +174,50 @@ class GaussianNet:
             field = nd.restricted(keep)
             pos = {lab: i for i, lab in enumerate(field.labels)}
 
-        def rel(labels, what):
+        def rel(labels, what, lo=1, hi=None):
+            """labels -> row indices of the field, distinct and in range, with
+            between lo and hi of them (the contract the diagonal verbs apply)"""
             try:
-                return [pos[x] for x in labels]
+                idx = [pos[x] for x in labels]
             except KeyError as e:
                 raise ValueError(f"{what} names {e.args[0]!r}, which is not in the field") from None
+            idx = [int(i) for i in as_order(idx, field.k, name=what, min_len=lo)]
+            if hi is not None and len(idx) > hi:
+                raise ValueError(f"{what} names {len(idx)} entrants; at most {hi} of the {field.k} in the field")
+            return idx
+        if winner is not None:
+            w_idx = rel([winner], "winner")[0]
+        if order is not None:
+            o_idx = rel(order, "order")
+        if prefix is not None:
+            p_idx = rel(prefix, "prefix")                      # 1..k, in order, rest behind
+        if top is not None:
+            t_idx = rel(top, "top", hi=field.k - 1)            # a set needs at least one outsider
+        if tie is not None:
+            tie_idx = rel(tie, "tie")                          # 1 is the winner
+        if member_of_top is not None:
+            mo_idx = rel([member_of_top[0]], "member_of_top")[0]
+            if not 1 <= int(member_of_top[1]) <= field.k:
+                raise ValueError(f"member_of_top k must lie in 1..{field.k}; got {member_of_top[1]}")
+        if margins is not None or scores is not None:
+            arr = np.asarray(margins if margins is not None else scores, dtype=float)
+            if arr.shape != (nd.k,) or not np.all(np.isfinite(arr[[i for i, lab in enumerate(nd.labels) if lab in pos]])):
+                raise ValueError(f"margins/scores must have one finite entry per member of the node; got {arr.shape} for {nd.k}")
+        # --- now the updates
+        if prices is not None:
+            self.m, self.S, lz = update_team_market_full(self.m, self.S, nd.A, prices, tau2=tau2,
+                                                         **({"V": nd.V, "D": nd.beta2} | market_model))
+            self.evidence += lz; info["logZ_market"] = lz
+        if not given:
+            return info
         A, V, b2 = field.A, field.V, field.beta2
         if winner is not None:
-            self.m, self.S, lz = update_team_winner_full(self.m, self.S, A, rel([winner], "winner")[0],
+            self.m, self.S, lz = update_team_winner_full(self.m, self.S, A, w_idx,
                                                          V=V, beta2=b2, nodes_log2=nodes_log2)
         elif order is not None:
-            self.m, self.S, lz = update_team_order_full(self.m, self.S, A, rel(order, "order"),
+            self.m, self.S, lz = update_team_order_full(self.m, self.S, A, o_idx,
                                                         V=V, beta2=b2, nodes_log2=nodes_log2)
         elif margins is not None or scores is not None:
-            arr = np.asarray(margins if margins is not None else scores, dtype=float)
-            if arr.shape != (nd.k,):
-                raise ValueError(f"margins/scores must have one entry per member of the node; got {arr.shape} for {nd.k}")
             if dnf is not None:
                 arr = arr[[i for i, lab in enumerate(nd.labels) if lab in pos]]
             kw = {"margins": arr} if margins is not None else {"scores": arr}
@@ -193,8 +225,7 @@ class GaussianNet:
                                                           lengths_scale=lengths_scale, meas_var=meas_var, **kw)
         else:
             if prefix is not None:
-                lab = rel(prefix, "prefix")
-                def node_fn(mm, D, _l=lab):
+                def node_fn(mm, D, _l=p_idx):
                     lp = _prefix_logp(mm, D, _l)
                     g = np.empty(len(mm)); h = 1e-5 * np.sqrt(D)
                     for j in range(len(mm)):
@@ -202,17 +233,14 @@ class GaussianNet:
                         g[j] = (_prefix_logp(mm + e, D, _l) - _prefix_logp(mm - e, D, _l)) / (2 * h[j])
                     return lp, g
             elif top is not None:
-                lab = rel(top, "top")
-                def node_fn(mm, D, _l=lab):
+                def node_fn(mm, D, _l=t_idx):
                     return _topset_logp_grad(mm, D, _l)
             elif tie is not None:
-                lab = rel(tie, "tie")
-                def node_fn(mm, D, _l=lab):
+                def node_fn(mm, D, _l=tie_idx):
                     return _tie_logdens_grad(mm, D, _l)
             else:
                 from ..factor.topk import top_k_probabilities, top_k_jacobian_row
-                member, kk = rel([member_of_top[0]], "member_of_top")[0], int(member_of_top[1])
-                def node_fn(mm, D, _i=member, _k=kk):
+                def node_fn(mm, D, _i=mo_idx, _k=int(member_of_top[1])):
                     mu = -np.asarray(mm, float)
                     q = max(float(np.asarray(top_k_probabilities(mu, _k, D=D))[_i]), 1e-300)
                     return np.log(q), -np.asarray(top_k_jacobian_row(mu, _i, _k, D=D)) / q

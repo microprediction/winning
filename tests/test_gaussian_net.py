@@ -104,3 +104,21 @@ def test_subset_topset_matches_the_diagonal_member_on_a_diagonal_belief():
     m_ref, v_ref, lz = update_topset_correlated(m, v, [3, 0], V=V, beta2=1.0)
     np.testing.assert_allclose(net.m, m_ref, atol=3e-3)
     np.testing.assert_allclose(np.diag(net.S), v_ref, rtol=3e-2)
+
+
+def test_a_bad_outcome_beside_a_price_leaves_the_belief_untouched_and_labels_are_checked():
+    # review of #1026: validation precedes every state change
+    net, m, S = _net5()
+    net.attach("race", members=list("abcde"), beta2=1.0)
+    prices = [0.3, 0.25, 0.2, 0.15, 0.1]
+    for bad in (dict(winner="c", dnf=["c"]), dict(winner="z"), dict(top=list("abcde")),
+                dict(prefix=[]), dict(tie=["a", "a"]), dict(member_of_top=("a", 9)), dict(dnf=["q"], winner="a")):
+        with pytest.raises(ValueError):
+            net.observe("race", prices=prices, **bad)
+        np.testing.assert_array_equal(net.m, m); np.testing.assert_array_equal(net.S, S)
+        assert net.evidence == 0.0
+    with pytest.raises(ValueError):
+        net.observe("race", prices=[0.5, 0.5])
+    # and the same outcomes without the price still raise
+    with pytest.raises(ValueError):
+        net.observe("race", top=list("abcde"))
