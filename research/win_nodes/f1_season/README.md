@@ -57,3 +57,27 @@ validate on the others; evidence and held-out log score disagreed on
 Caveat: most odds snapshots are pre-qualifying, so a model that also sees
 Saturday has an information advantage over the market it is compared with;
 the "results + market" row is the same-information comparison.
+
+## Market noise, by evidence and by held-out score (`tau2_sweep/`)
+
+The same run (results + qualifying + market, diagonal path, `beta2_q=4`)
+at three values of the market noise `tau2`. Total evidence, and the log
+score of the race winner over all 19 races:
+
+| `tau2` | 2013 | 2014 | 2015 |
+|---|---|---|---|
+| 0.1 | -1168 / -1.28 | -1062 / -1.316 | -982 / -1.150 |
+| 0.3 | -1348 / -1.26 | -1265 / -1.317 | -1168 / -1.142 |
+| 1.0 | -1580 / -1.23 | -1546 / -1.318 | -1423 / -1.138 |
+
+The evidence prefers trusting the market most in every season; held-out
+prediction is flat in 2014 and slightly prefers trusting it less in 2013
+and 2015 (the disagreement CLAUDE.md warns about). The market helps in
+2014 and 2015 at every `tau2` and hurts in 2013 at every `tau2`, so the
+2013 effect is not the noise level: a pre-qualifying price already encodes
+expected qualifying form, and folding in the price and then Saturday's
+result counts that information twice. The network assumes the price and
+the qualifying outcome are conditionally independent given pace; in 2013,
+when qualifying and race pace diverged most, that assumption cost the
+most. Either observe the market after qualifying only, or model the
+market's information set.
