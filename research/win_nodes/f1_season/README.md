@@ -31,7 +31,7 @@ races with a pre-race market against the market itself.
 |---|---|---|---|
 | results only | -1.41 (-1.54 vs -1.26) | -1.53 (-1.52 vs -1.26) | -1.53 (-1.56 vs -1.19) |
 | + qualifying | -1.11 (-1.24 vs -1.26) | -1.38 (-1.41 vs -1.26) | -1.19 (-1.23 vs -1.19) |
-| + market, no qualifying | - | -1.34 (-1.28 vs -1.26) | -1.19 (-1.23 vs -1.19) |
+| + market, no qualifying | -1.32 (-1.34 vs -1.26) | -1.34 (-1.28 vs -1.26) | -1.19 (-1.23 vs -1.19) |
 | + qualifying + market | -1.26 (-1.31 vs -1.26) | -1.32 (-1.27 vs -1.26) | -1.14 (-1.190 vs -1.191) |
 
 Qualifying evidence helps every season. The market helps in 2014 and 2015
@@ -57,3 +57,33 @@ validate on the others; evidence and held-out log score disagreed on
 Caveat: most odds snapshots are pre-qualifying, so a model that also sees
 Saturday has an information advantage over the market it is compared with;
 the "results + market" row is the same-information comparison.
+
+## Market noise, by evidence and by held-out score (`tau2_sweep/`)
+
+The same run (results + qualifying + market, diagonal path, `beta2_q=4`)
+at three values of the market noise `tau2`. Total evidence, and the log
+score of the race winner over all 19 races:
+
+| `tau2` | 2013 | 2014 | 2015 |
+|---|---|---|---|
+| 0.1 | -1168 / -1.28 | -1062 / -1.316 | -982 / -1.150 |
+| 0.3 | -1348 / -1.26 | -1265 / -1.317 | -1168 / -1.142 |
+| 1.0 | -1580 / -1.23 | -1546 / -1.318 | -1423 / -1.138 |
+
+The evidence prefers trusting the market most in every season; held-out
+prediction is flat in 2014 and slightly prefers trusting it less in 2013
+and 2015 (the disagreement CLAUDE.md warns about). Over the three values
+tested, the market helps in 2014 and 2015 at each and hurts in 2013 at
+each, so within that range the 2013 effect is not the noise level.
+
+A hypothesis, not established by this sweep: a pre-qualifying price
+already encodes expected qualifying form, so folding in the price and then
+Saturday's result counts that information twice. The network assumes the
+price and the qualifying outcome are conditionally independent given pace.
+Two observations are consistent with it but do not test it: in 2013 the
+market alone improves on results alone (-1.32 against -1.41) while market
+plus qualifying is worse than qualifying alone (-1.26 against -1.11), and
+2013 is the season in which qualifying and race pace diverged most. A test
+would observe the market after qualifying only, or model the market's
+information set explicitly; the post-qualifying snapshots (3 to 4 per
+season) are too few here.
