@@ -24,3 +24,4 @@ from .factor_ratings import (fit_design_ratings, design_loglik,  # noqa: F401
                              design_se, factor_se,
                              predict_factor, sweep_offset_ridge,
                              covariate_contrast_report)
+from .net import GaussianNet, WinNode, random_walk_cov  # noqa: F401
