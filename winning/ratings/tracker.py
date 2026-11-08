@@ -377,6 +377,11 @@ class AbilityTracker:
                                 ("member_of_top", member_of_top), ("winner", winner)) if x is not None]
         if len(given) > 1:
             raise ValueError(f"give one outcome, not {given}: they are not independent evidence")
+        # scores beside an order or winner is the historical contract (scores
+        # win); beside one of the newer kinds it would be silently ignored
+        if scores is not None and any(x is not None for x in (prefix, top, member_of_top)):
+            raise ValueError("scores cannot be combined with prefix, top or member_of_top: "
+                             "the scores subsume the placing, give one or the other")
         # A tracker carries state, so bad evidence does not merely give
         # a bad answer for one contest -- it poisons the filter. One NaN
         # score made every entity's mean and variance NaN, a later CLEAN
