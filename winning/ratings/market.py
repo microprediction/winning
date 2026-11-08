@@ -33,7 +33,9 @@ from ..shapes import as_loadings
 
 
 from .nway import (update_order_correlated, update_ranking_exact,
-                   update_winner, update_winner_correlated)
+                   update_winner, update_winner_correlated,
+                   update_prefix_correlated, update_topset_correlated,
+                   update_topk_correlated, update_tie_correlated)
 
 
 def update_market(m, v, p_market, tau2=0.25, invert=None, **market_model):
@@ -136,12 +138,89 @@ def update_market(m, v, p_market, tau2=0.25, invert=None, **market_model):
 
 def update_race(m, v, winner=None, order=None, p_market=None, tau2=0.25,
                 V=None, beta2=1.0, Qf=7, base="normal", nodes_log2=10,
-                **market_model):
+                prefix=None, top=None, member_of_top=None,
+                margins=None, scores=None, lengths_scale=1.0, meas_var=0.0,
+                transform=None, tie=None, dnf=None, **market_model):
     """The typical race: update from market prices, an outcome, or both
     (prices first -- the market's information is pre-race -- then the
-    outcome on the updated prior). Any of winner/order/p_market may be
-    omitted. Returns (m_post, v_post, info) with info holding the logZ
-    of each applied source."""
+    outcome on the updated prior). The outcome is ONE of: `margins`
+    (lengths behind the winner, lower is better) or `scores` (points,
+    higher is better), the cardinal evidence, with `lengths_scale`,
+    `meas_var` and `transform` as in history.update_margins_full;
+    `order` (the full finishing order, or the order among the named
+    entrants only); `prefix` (the first k in order, everyone else
+    behind them); `top` (the first k as a set, order unknown);
+    `member_of_top=(i, k)` (one entrant finished among the first k);
+    `tie` (a dead heat for first among the named entrants, a density
+    event); or `winner`. Any of them and p_market may be omitted.
+    Returns (m_post, v_post, info) with info holding the logZ of each
+    applied source.
+
+    `dnf` names entrants who did not take part in the outcome for a
+    reason that says nothing about their ability (a mechanical failure,
+    a withdrawal before the start): they are removed from the field for
+    the outcome message and their belief is untouched, while prices,
+    which were quoted on the full field, still update them. An
+    informative retirement is placed last in `order` instead. Outcome
+    labels are indices into the full field; margins and scores are
+    given for the full field and the dnf entries are ignored."""
+    given = [k for k, x in (("margins", margins), ("scores", scores), ("order", order),
+                            ("prefix", prefix), ("top", top),
+                            ("member_of_top", member_of_top), ("tie", tie),
+                            ("winner", winner)) if x is not None]
+    if len(given) > 1:
+        raise ValueError(f"give one outcome, not {given}: they are not independent evidence")
+    if dnf is not None and given:
+        # run the outcome on the live field, then scatter the posterior back
+        from ..outcomes import as_order
+        n = len(m)
+        dnf_set = set(int(i) for i in as_order(dnf, n, name="dnf", min_len=0))   # [] = no retirements
+        live = [i for i in range(n) if i not in dnf_set]
+        if len(live) < 2:
+            raise ValueError("dnf leaves fewer than two entrants in the outcome")
+        pos = {i: j for j, i in enumerate(live)}
+
+        def relabel(labels, what):
+            # the same label contract as the no-dnf path (#129), then the field
+            out = []
+            for i in as_order(labels, n, name=what):
+                i = int(i)
+                if i in dnf_set:
+                    raise ValueError(f"{what} names entrant {i}, which is in dnf")
+                out.append(pos[i])
+            return out
+        if p_market is not None:
+            m_p, v_p, info = update_race(m, v, p_market=p_market, tau2=tau2, V=V, beta2=beta2,
+                                         Qf=Qf, base=base, nodes_log2=nodes_log2, **market_model)
+        else:
+            m_p, v_p, info = np.asarray(m, float).copy(), as_variance(v, n).copy(), {}
+        b2 = np.asarray(beta2, dtype=float)
+        sub = dict(V=None if V is None else as_loadings(V, n)[live],
+                   beta2=(b2[live] if b2.ndim == 1 and b2.shape[0] == n else beta2),   # per-player noise follows the field
+                   Qf=Qf, base=base,
+                   nodes_log2=nodes_log2, lengths_scale=lengths_scale, meas_var=meas_var,
+                   transform=transform)
+        if margins is not None or scores is not None:
+            arr = np.asarray(margins if margins is not None else scores, dtype=float)
+            if arr.shape != (n,):
+                raise ValueError(f"margins/scores must have one entry per entrant of the full field; got {arr.shape} for {n}")
+            kw = {"margins": arr[live]} if margins is not None else {"scores": arr[live]}
+        elif order is not None:
+            kw = {"order": relabel(order, "order")}
+        elif prefix is not None:
+            kw = {"prefix": relabel(prefix, "prefix")}
+        elif top is not None:
+            kw = {"top": relabel(top, "top")}
+        elif member_of_top is not None:
+            kw = {"member_of_top": (relabel([member_of_top[0]], "member_of_top")[0], int(member_of_top[1]))}
+        elif tie is not None:
+            kw = {"tie": relabel(tie, "tie")}
+        else:
+            kw = {"winner": relabel([winner], "winner")[0]}
+        m_l, v_l, info_l = update_race(m_p[live], v_p[live], **sub, **kw)
+        m_p[live], v_p[live] = m_l, v_l
+        info.update(info_l)
+        return m_p, v_p, info
     m = np.asarray(m, dtype=float).copy()
     v = as_variance(v, len(m)).copy()
     info = {}
@@ -168,7 +247,17 @@ def update_race(m, v, winner=None, order=None, p_market=None, tau2=0.25,
             market_model = {**defaults, **market_model}
         m, v, lz = update_market(m, v, p_market, tau2=tau2, **market_model)
         info["logZ_market"] = lz
-    if order is not None:
+    if margins is not None or scores is not None:
+        # the cardinal update is exact with a full covariance; the belief
+        # here is diagonal, so pass it as one and keep the posterior
+        # diagonal, as AbilityTracker.observe does (#660 for the floor)
+        from .history import update_margins_full
+        m, S, lz = update_margins_full(m, np.diag(v), margins=margins, V=V, beta2=beta2,
+                                       lengths_scale=lengths_scale, meas_var=meas_var,
+                                       scores=scores, transform=transform)
+        v = np.maximum(np.diag(S).copy(), 1e-6 * v)
+        info["logZ_outcome"] = lz
+    elif order is not None:
         if V is not None:
             m, v, lz = update_order_correlated(m, v, order, V, beta2=beta2,
                                                Qf=Qf, base=base,
@@ -183,6 +272,23 @@ def update_race(m, v, winner=None, order=None, p_market=None, tau2=0.25,
                 _order_evidence(m, v, list(order), beta2, base))
             m, v = update_ranking_exact(m, v, order, beta2=beta2,
                                         base=base)
+    elif prefix is not None:
+        m, v, lz = update_prefix_correlated(m, v, prefix, V=V, beta2=beta2, Qf=Qf,
+                                            base=base, nodes_log2=nodes_log2)
+        info["logZ_outcome"] = lz
+    elif top is not None:
+        m, v, lz = update_topset_correlated(m, v, top, V=V, beta2=beta2, Qf=Qf,
+                                            base=base, nodes_log2=nodes_log2)
+        info["logZ_outcome"] = lz
+    elif member_of_top is not None:
+        member, k = member_of_top
+        m, v, lz = update_topk_correlated(m, v, member, k, V=V, beta2=beta2, Qf=Qf,
+                                          base=base, nodes_log2=nodes_log2)
+        info["logZ_outcome"] = lz
+    elif tie is not None:
+        m, v, lz = update_tie_correlated(m, v, tie, V=V, beta2=beta2, Qf=Qf,
+                                         base=base, nodes_log2=nodes_log2)
+        info["logZ_outcome"] = lz                   # a log DENSITY: the event has probability zero
     elif winner is not None:
         if V is not None:
             m, v, lz = update_winner_correlated(m, v, winner, V,

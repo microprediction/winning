@@ -1,6 +1,8 @@
 from .nway import (update_winner, pairwise_update_winner,  # noqa: F401
                    update_ranking, update_ranking_exact, order_loglik,
                    update_winner_correlated, update_order_correlated,
+                   update_topk_correlated, update_topset_correlated,
+                   update_prefix_correlated, update_tie_correlated,
                    predictive_win_probabilities)
 from .market import update_market, update_race  # noqa: F401
 from .full import (update_winner_full, update_order_full,  # noqa: F401
