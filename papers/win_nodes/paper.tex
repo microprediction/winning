@@ -396,6 +396,66 @@ differentiation to $10^{-10}$. That checks the differentiation of the
 implemented numerical likelihood, not its accuracy against the
 continuum likelihood.
 
+\subsection{A quoted price as evidence}
+\label{sec:price}
+
+The second kind of evidence a win node meets in practice is a price:
+a market's probability that each alternative wins, quoted before the
+outcome is known. A price is soft evidence about the parents, and the
+inverse of the forward query turns it into a Gaussian observation.
+
+Model the market as pricing the same race from its own noisy view of
+the means, $p=\mathrm{race}(m+\eta)$ with $\eta\sim N(0,\tau^2 I)$,
+where $\mathrm{race}$ is the forward query of
+Section~\ref{sec:forward} under the market's loadings and noise. The
+inversion of \citet[\S5]{cotton2026} recovers $m+\eta$ from $p$ up to
+one common level, because prices carry no level: $\sum_i p_i=1$ fixes
+$n-1$ degrees of freedom. The observation therefore lives on the
+contrast space, $y=P(m+\eta)$ with $P=I-\mathbf{1}\mathbf{1}^\top/n$,
+and it is linear and Gaussian in $m$. With a belief $N(\mu,\mathrm{diag}\,v)$ the
+posterior precision is $\mathrm{diag}(1/v)+P/\tau^2$, a rank-one
+correction to a diagonal, and the update is in closed form. The
+common level is untouched, as it should be: no price can speak to it.
+
+The two kinds of evidence compose. Prices are set before the race and
+the outcome is observed after it, and the two are conditionally
+independent given the means, so the price update is applied first
+and the observed-winner message of Equation~\eqref{eq:obslik} is
+applied to the updated belief. Table~\ref{tab:price} measures the
+composition on a seeded simulation: eight alternatives, one shared
+factor, a market with $\tau^2=0.25$, and a prior $N(0,I)$ on the
+means, averaged over 400 races. The error is the root mean square of
+the posterior-mean contrasts against the true contrasts; the score is
+the log probability the posterior predictive assigns to the winner of
+an independent rerun of the same race.
+
+\begin{table}[t]
+\centering
+\begin{tabular}{lccc}
+\toprule
+evidence & RMSE of mean contrasts & mean posterior variance & log score, next winner \\
+\midrule
+none (prior) & 0.919 & 1.000 & $-2.062$ \\
+winner only & 0.855 & 0.872 & $-1.956$ \\
+price only & 0.402 & 0.300 & $-1.671$ \\
+price, then winner & 0.399 & 0.287 & $-1.656$ \\
+\bottomrule
+\end{tabular}
+\caption{One race, two kinds of evidence. A price with noise
+$\tau^2=0.25$ is worth far more than one observed winner, which is a
+single draw from the outcome, and the two compose: the posterior after
+both is tighter and scores better than after either alone. Script:
+\texttt{research/win\_nodes/exp1\_two\_evidence}.}
+\label{tab:price}
+\end{table}
+
+The market noise $\tau^2$ is the one parameter the model adds, and it
+is identified by the evidence of the price observations across many
+races; \citet[\S5]{cotton2026} tunes it that way. A market priced
+under a different model from the outcome, or with a longshot bias, is
+inverted under its own model and then read as evidence under this
+one; the inversion is agnostic about where the prices came from.
+
 \section{Posteriors of factor form}
 \label{sec:posteriors}
 
