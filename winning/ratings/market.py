@@ -174,15 +174,16 @@ def update_race(m, v, winner=None, order=None, p_market=None, tau2=0.25,
         # run the outcome on the live field, then scatter the posterior back
         from ..outcomes import as_order
         n = len(m)
-        dnf_set = set(int(i) for i in as_order(dnf, n, name="dnf"))
+        dnf_set = set(int(i) for i in as_order(dnf, n, name="dnf", min_len=0))   # [] = no retirements
         live = [i for i in range(n) if i not in dnf_set]
         if len(live) < 2:
             raise ValueError("dnf leaves fewer than two entrants in the outcome")
         pos = {i: j for j, i in enumerate(live)}
 
         def relabel(labels, what):
+            # the same label contract as the no-dnf path (#129), then the field
             out = []
-            for i in labels:
+            for i in as_order(labels, n, name=what):
                 i = int(i)
                 if i in dnf_set:
                     raise ValueError(f"{what} names entrant {i}, which is in dnf")
@@ -193,7 +194,10 @@ def update_race(m, v, winner=None, order=None, p_market=None, tau2=0.25,
                                          Qf=Qf, base=base, nodes_log2=nodes_log2, **market_model)
         else:
             m_p, v_p, info = np.asarray(m, float).copy(), as_variance(v, n).copy(), {}
-        sub = dict(V=None if V is None else as_loadings(V, n)[live], beta2=beta2, Qf=Qf, base=base,
+        b2 = np.asarray(beta2, dtype=float)
+        sub = dict(V=None if V is None else as_loadings(V, n)[live],
+                   beta2=(b2[live] if b2.ndim == 1 and b2.shape[0] == n else beta2),   # per-player noise follows the field
+                   Qf=Qf, base=base,
                    nodes_log2=nodes_log2, lengths_scale=lengths_scale, meas_var=meas_var,
                    transform=transform)
         if margins is not None or scores is not None:

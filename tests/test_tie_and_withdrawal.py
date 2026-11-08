@@ -94,3 +94,25 @@ def test_update_race_routes_tie_and_removes_dnf_entrants():
         update_race(M, VV, winner=2, dnf=[2], V=L)
     with pytest.raises(ValueError, match="one outcome"):
         update_race(M, VV, tie=[3, 0], winner=3, V=L)
+
+
+def test_dnf_path_edge_cases_from_review():
+    from winning.ratings.market import update_race
+    from winning.ratings.tracker import AbilityTracker
+    # an empty dnf list means no retirements
+    a = update_race(M, VV, winner=3, dnf=[], V=L, beta2=1.0)
+    b = update_race(M, VV, winner=3, V=L, beta2=1.0)
+    np.testing.assert_allclose(a[0], b[0])
+    # labels on the dnf path meet the same contract as without it
+    for bad in ([1.5, 0], [7, 0], [-1, 0]):
+        with pytest.raises(ValueError):
+            update_race(M, VV, prefix=bad, dnf=[2], V=L, beta2=1.0)
+    # a per-player beta2 follows the live field
+    b2 = np.array([0.5, 1.0, 9.0, 1.5, 2.0])
+    m1, _, _ = update_race(M, VV, winner=3, dnf=[2], V=L, beta2=b2)
+    live = [0, 1, 3, 4]
+    m2, _, _ = update_race(M[live], VV[live], winner=2, V=L[live], beta2=b2[live])
+    np.testing.assert_allclose(m1[live], m2)
+    # the tracker refuses scores beside a newer placing kind
+    with pytest.raises(ValueError, match="scores cannot be combined"):
+        AbilityTracker().observe(list("abcde"), 0.0, scores=[1, 2, 3, 4, 5], prefix=[3, 0])

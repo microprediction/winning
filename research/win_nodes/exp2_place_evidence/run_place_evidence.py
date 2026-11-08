@@ -35,7 +35,10 @@ def main():
     rng = np.random.default_rng(20261108)
     err = {k: [] for k in KINDS}; var = {k: [] for k in KINDS}; score = {k: 0.0 for k in KINDS}
     t0 = time.time()
-    for _ in range(SEEDS):
+    # raw per-race results go to an append-only log as they are produced, so
+    # an interrupted run loses nothing and paired differences can be read back
+    log = open(os.path.join(HERE, "races.jsonl"), "a")
+    for seed in range(SEEDS):
         s = rng.normal(size=N)
         V = rng.normal(scale=0.6, size=(N, RANK))
         D = np.full(N, BETA2)
@@ -54,17 +57,26 @@ def main():
         }
         f2 = rng.normal(size=RANK); eps2 = rng.normal(size=N)
         w2 = int(np.argmax(s + V @ f2 + np.sqrt(D) * eps2))
+        row = {"seed": seed}
         for k, (m, v) in posts.items():
-            err[k].append(float(np.sqrt(np.mean((centred(m) - centred(s)) ** 2))))
-            var[k].append(float(np.mean(v)))
+            e = float(np.sqrt(np.mean((centred(m) - centred(s)) ** 2))); vv = float(np.mean(v))
             pred = np.asarray(race_probabilities(-np.asarray(m), V=V, D=D + np.asarray(v)))
-            score[k] += float(np.log(pred[w2]))
+            ls = float(np.log(pred[w2]))
+            err[k].append(e); var[k].append(vv); score[k] += ls
+            row[k] = {"rmse": e, "var": vv, "log_score": ls}
+        log.write(json.dumps(row) + "\n"); log.flush()
+    log.close()
+    se = {k: float(np.std(err[k], ddof=1) / np.sqrt(SEEDS)) for k in KINDS}
     out = {"n": N, "rank": RANK, "beta2": BETA2, "seeds": SEEDS, "k": K,
            "rmse_contrast": {k: float(np.mean(err[k])) for k in KINDS},
            "mean_posterior_var": {k: float(np.mean(var[k])) for k in KINDS},
            "mean_log_score_next_winner": {k: score[k] / SEEDS for k in KINDS},
-           "seconds": time.time() - t0}
-    json.dump(out, open(os.path.join(HERE, "results.json"), "w"), indent=1)
+           "se_rmse_contrast": se,
+           "paired_rmse_diff_vs_prior_se": {k: float(np.std(np.asarray(err[k]) - np.asarray(err["prior"]), ddof=1) / np.sqrt(SEEDS))
+                                           for k in KINDS if k != "prior"},
+           "raw_log": "races.jsonl", "seconds": time.time() - t0}
+    with open(os.path.join(HERE, "results.json"), "w") as f:
+        json.dump(out, f, indent=1)
     for k in KINDS:
         print(f"{k:28s} rmse {out['rmse_contrast'][k]:.4f}  var {out['mean_posterior_var'][k]:.4f}"
               f"  log score {out['mean_log_score_next_winner'][k]:.4f}")

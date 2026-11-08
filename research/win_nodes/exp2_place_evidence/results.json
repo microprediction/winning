@@ -31,5 +31,23 @@
   "top 3 in order, rest behind": -1.9219850678926906,
   "full order": -1.8704648250466926
  },
- "seconds": 1606.0794529914856
+ "se_rmse_contrast": {
+  "prior": 0.006135295167366683,
+  "member of top 3": 0.005836721044319116,
+  "order among 3 named": 0.006016678523252954,
+  "top-3 set": 0.005399584732994253,
+  "winner": 0.005735523643501437,
+  "top 3 in order, rest behind": 0.00531844565756062,
+  "full order": 0.004833485299943601
+ },
+ "paired_rmse_diff_vs_prior_se": {
+  "member of top 3": 0.0017930603240204248,
+  "order among 3 named": 0.0021385216556784412,
+  "top-3 set": 0.003862968536807271,
+  "winner": 0.0028639481904587398,
+  "top 3 in order, rest behind": 0.004134451913061324,
+  "full order": 0.004863907785827982
+ },
+ "raw_log": "races.jsonl",
+ "seconds": 3044.1008129119873
 }
