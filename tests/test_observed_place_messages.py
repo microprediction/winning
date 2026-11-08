@@ -184,3 +184,23 @@ def test_update_race_and_tracker_route_the_place_evidence():
         update_race(M, VV, winner=3, top=[3, 0], V=L)
     with pytest.raises(ValueError, match="one outcome"):
         AbilityTracker().observe(list("abcde"), 0.0, winner=3, prefix=[3, 0])
+
+
+def test_update_race_takes_margins_and_scores():
+    from winning.ratings.market import update_race
+    from winning.ratings.history import update_margins_full
+    margins = [0.0, 1.5, 0.5, 3.0, 2.0]
+    m, v, info = update_race(M, VV, margins=margins, V=L, beta2=1.0, lengths_scale=0.7)
+    m_ref, S_ref, lz = update_margins_full(M, np.diag(VV), margins=margins, V=L, beta2=1.0, lengths_scale=0.7)
+    np.testing.assert_allclose(m, m_ref); np.testing.assert_allclose(v, np.diag(S_ref))
+    assert info["logZ_outcome"] == lz
+    # scores are the same door, higher is better; the winner has the top score
+    m2, _, _ = update_race(M, VV, scores=[3.0, 1.5, 2.5, 0.0, 1.0], V=L, beta2=1.0)
+    assert m2[0] > M[0] and m2[3] < M[3]
+    # margins compose with a price, and are exclusive with the ranked kinds
+    m3, _, info3 = update_race(M, VV, margins=margins, p_market=[.3, .2, .2, .15, .15], V=L, beta2=1.0)
+    assert "logZ_market" in info3 and "logZ_outcome" in info3
+    with pytest.raises(ValueError, match="one outcome"):
+        update_race(M, VV, margins=margins, winner=0, V=L)
+    with pytest.raises(ValueError, match="one entry per runner"):
+        update_race(M, VV, margins=[1.0], V=L)

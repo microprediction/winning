@@ -139,17 +139,22 @@ def update_market(m, v, p_market, tau2=0.25, invert=None, **market_model):
 def update_race(m, v, winner=None, order=None, p_market=None, tau2=0.25,
                 V=None, beta2=1.0, Qf=7, base="normal", nodes_log2=10,
                 prefix=None, top=None, member_of_top=None,
-                **market_model):
+                margins=None, scores=None, lengths_scale=1.0, meas_var=0.0,
+                transform=None, **market_model):
     """The typical race: update from market prices, an outcome, or both
     (prices first -- the market's information is pre-race -- then the
-    outcome on the updated prior). The outcome is ONE of: `order` (the
-    full finishing order, or the order among the named entrants only),
-    `prefix` (the first k in order, everyone else behind them), `top`
-    (the first k as a set, order unknown), `member_of_top=(i, k)` (one
-    entrant finished among the first k), or `winner`. Any of them and
-    p_market may be omitted. Returns (m_post, v_post, info) with info
+    outcome on the updated prior). The outcome is ONE of: `margins`
+    (lengths behind the winner, lower is better) or `scores` (points,
+    higher is better), the cardinal evidence, with `lengths_scale`,
+    `meas_var` and `transform` as in history.update_margins_full;
+    `order` (the full finishing order, or the order among the named
+    entrants only); `prefix` (the first k in order, everyone else
+    behind them); `top` (the first k as a set, order unknown);
+    `member_of_top=(i, k)` (one entrant finished among the first k); or
+    `winner`. Any of them and p_market may be omitted. Returns (m_post, v_post, info) with info
     holding the logZ of each applied source."""
-    given = [k for k, x in (("order", order), ("prefix", prefix), ("top", top),
+    given = [k for k, x in (("margins", margins), ("scores", scores), ("order", order),
+                            ("prefix", prefix), ("top", top),
                             ("member_of_top", member_of_top), ("winner", winner)) if x is not None]
     if len(given) > 1:
         raise ValueError(f"give one outcome, not {given}: they are not independent evidence")
@@ -179,7 +184,17 @@ def update_race(m, v, winner=None, order=None, p_market=None, tau2=0.25,
             market_model = {**defaults, **market_model}
         m, v, lz = update_market(m, v, p_market, tau2=tau2, **market_model)
         info["logZ_market"] = lz
-    if order is not None:
+    if margins is not None or scores is not None:
+        # the cardinal update is exact with a full covariance; the belief
+        # here is diagonal, so pass it as one and keep the posterior
+        # diagonal, as AbilityTracker.observe does (#660 for the floor)
+        from .history import update_margins_full
+        m, S, lz = update_margins_full(m, np.diag(v), margins=margins, V=V, beta2=beta2,
+                                       lengths_scale=lengths_scale, meas_var=meas_var,
+                                       scores=scores, transform=transform)
+        v = np.maximum(np.diag(S).copy(), 1e-6 * v)
+        info["logZ_outcome"] = lz
+    elif order is not None:
         if V is not None:
             m, v, lz = update_order_correlated(m, v, order, V, beta2=beta2,
                                                Qf=Qf, base=base,
