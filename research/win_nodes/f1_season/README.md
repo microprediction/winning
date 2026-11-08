@@ -14,15 +14,15 @@ winner; the market's own consensus probability of the winner is recorded
 on the races that have a pre-race snapshot.
 
 Data: results, grids and Q1/Q2/Q3 times from the cached f1db zip
-(`f1db_load.py`, `Q_BY_POSITION=1`); winner odds from Wayback captures of
+(`f1db_load.py`; the qualifying classification decides who reached Q2/Q3, `Q_BY_TIMES=1` restores the old time-based reading); winner odds from Wayback captures of
 Oddschecker via `research/f1_odds_fetch.py`, parsed by `parse_all.py` to
 `f1_market_all.csv` (derived consensus probabilities only), joined by
 `f1_market_join.py`. 2013-2015 are the seasons with 25-30 snapshots each.
 
-    BELIEF=diag Q_BY_POSITION=1 BETA2_Q=4 TAG=_diag_bq4 NODES=8 \
+    BELIEF=diag BETA2_Q=4 TAG=_diag_bq4 NODES=8 \
       python run_f1_season.py 2014 race race+quali race+market race+quali+market
 
-## Results (`season_*_diag_bq4.json`, per-round logs in `rounds/`)
+## Results (`season_*_diag_bq4.json`, per-round logs in `rounds/`; new runs write a timestamped summary and carry their parameters in every row)
 
 Log score of the race winner, all 19 races; in brackets the model on the
 races with a pre-race market against the market itself.

@@ -34,16 +34,19 @@ def load_season(year):
         no_quali = [d for d in drivers if d not in set(q_drivers)]
         raced = {r["driverId"] for r in rr}
         no_race = [d for d in drivers if d not in raced]
-        if os.environ.get("Q_BY_POSITION"):
-            # the qualifying classification decides who reached Q2/Q3; a Q3
-            # participant who set no time is still in the top ten
+        if os.environ.get("Q_BY_TIMES"):
+            # the old reading, kept for the record: a Q3 participant who set no
+            # time (tyre saving, common in 2013) is read as eliminated in Q2 and
+            # the prefix then places him behind drivers he out-qualified
+            has_q2 = [r["driverId"] for r in q if r["q2Millis"]]
+            has_q3 = [r["driverId"] for r in q if r["q3Millis"]]
+        else:
+            # default: the qualifying classification decides who reached Q2/Q3;
+            # an untimed Q3 participant is top ten without an order
             def posn(r):
                 return int(r["positionNumber"]) if r["positionNumber"] else 99
             has_q2 = [r["driverId"] for r in q if posn(r) <= 15]
             has_q3 = [r["driverId"] for r in q if posn(r) <= 10]
-        else:
-            has_q2 = [r["driverId"] for r in q if r["q2Millis"]]
-            has_q3 = [r["driverId"] for r in q if r["q3Millis"]]
         # only classified Q3 drivers carry an order: a driver with a Q3 time but
         # no classification (excluded after the session, Silverstone 2013) is
         # neither placed nor behind anyone

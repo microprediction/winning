@@ -38,8 +38,17 @@ def main():
             n_snap += 1
             for d, (nb, p) in consensus(drivers).items():
                 rows.append((race_key, ts, d, nb, f"{p:.6f}"))
-    with open(OUT, "w", newline="") as f:
+    # never silently shrink the tracked file: a fetch that missed pages would
+    # otherwise remove market evidence from later season runs
+    if os.path.exists(OUT) and "--allow-fewer" not in sys.argv:
+        have = len({(r["race_key"], r["snapshot_ts"]) for r in csv.DictReader(open(OUT))})
+        if n_snap < have:
+            raise SystemExit(f"refusing to replace {OUT}: {n_snap} snapshots parsed, {have} already there; "
+                             "pass --allow-fewer to accept the smaller set")
+    tmp = OUT + ".tmp"
+    with open(tmp, "w", newline="") as f:
         w = csv.writer(f); w.writerow(["race_key", "snapshot_ts", "driver", "n_bookies", "consensus_prob"]); w.writerows(rows)
+    os.replace(tmp, OUT)                       # the file is complete or unchanged, never partial
     print(f"{n_snap} snapshots over {len({r[0] for r in rows})} races -> {OUT}")
 
 

@@ -26,6 +26,7 @@ NODES, TAU2 = int(_e("NODES", 6)), float(_e("TAU2", 0.3))
 TAG = _e("TAG", "")
 SPLIT_QR = float(_e("SPLIT_QR", 0.0))
 QUALI_MODE = _e("QUALI_MODE", "prefix")    # prefix | sets (Q1 and Q2 sets only, no ordering)
+Q_BY_TIMES = bool(_e("Q_BY_TIMES", ""))     # f1db_load: time-based classification (the old reading)
 BELIEF = _e("BELIEF", "dense")              # dense: GaussianNet over the season | diag: per-weekend update_race with drift
 WATCH = [d for d in _e("WATCH", "").split(",") if d]      # > 0: separate qualifying and race pace, correlated by this much
 from f1_market_join import snapshots as market_snapshots
@@ -178,7 +179,8 @@ def run(variant, season, snaps):
             net.observe(rn, order=[rlab[d] for d in w["finishers"]], dnf=[rlab[d] for d in w["dnf"]], nodes_log2=NODES)
         watch = {d: (float(net.m[net.index[rlab[d]]]), float(np.sqrt(net.S[net.index[rlab[d]], net.index[rlab[d]]])))
                  for d in WATCH if d in drv}
-        rounds_log.write(json.dumps({"round": r, "name": w["name"], "watch_mean_sd_after": watch, "pole_log_score": pole_ls[-1] if pole_ls and "quali" in variant else None,
+        rounds_log.write(json.dumps({"round": r, "name": w["name"], "watch_mean_sd_after": watch,
+                                     "params": PARAMS, "variant": variant, "pole_log_score": pole_ls[-1] if pole_ls and "quali" in variant else None,
                                      "winner": w["winner"], "winner_log_score": win_ls[-1] if win_ls else None,
                                      "market_log_score": mkt_ls[-1] if mkt_ls and (post or pre) and w["winner"] in sorted(post or pre, key=lambda s: s[1])[-1][2] else None,
                                      "evidence_so_far": float(net.evidence)}) + "\n"); rounds_log.flush()
@@ -192,13 +194,22 @@ def run(variant, season, snaps):
             "uniform": float(np.log(1 / 20)), "seconds": time.time() - t0}
 
 
+PARAMS = dict(init_var=INIT_VAR, drift=DRIFT, rho=RHO, beta2_q=BETA2_Q, beta2_r=BETA2_R, lengths_scale_q=LS_Q,
+              nodes_log2=NODES, tau2=TAU2, belief=BELIEF, quali_mode=QUALI_MODE, q_by_times=Q_BY_TIMES, split_qr=SPLIT_QR)
+
+
 def main():
+    t_start = time.time()
     season = load_season(YEAR)
     snaps = market_snapshots(YEAR, {d for w in season for d in w["drivers"]})
     out = [run(v, season, snaps) for v in VARIANTS]
-    json.dump({"year": YEAR, "params": dict(init_var=INIT_VAR, drift=DRIFT, rho=RHO, beta2_q=BETA2_Q, beta2_r=BETA2_R,
-                                           lengths_scale_q=LS_Q, nodes_log2=NODES, tau2=TAU2), "results": out},
-              open(os.path.join(HERE, f"season_{YEAR}{TAG}.json"), "w"), indent=1)
+    # one summary file per run (year, tag, variants, start time): a later run
+    # never overwrites an earlier one
+    stamp = time.strftime("%Y%m%dT%H%M%S", time.gmtime(t_start))
+    path = os.path.join(HERE, f"season_{YEAR}{TAG}_{'_'.join(v.replace('+', '-') for v in VARIANTS)}_{stamp}.json")
+    with open(path, "w") as f:
+        json.dump({"year": YEAR, "params": PARAMS, "variants": VARIANTS, "results": out}, f, indent=1)
+    print("summary ->", path)
     for o in out:
         print(f"{o['variant']:20s} evidence {o['total_evidence']:.1f} winner log score {o['mean_log_score_winner']:.3f}"
               f"  on {o['races_with_market']} market races: model {o['model_log_score_on_those']} vs market {o['market_log_score']}"
