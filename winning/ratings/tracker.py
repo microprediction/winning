@@ -103,6 +103,7 @@ from scipy.special import ndtr, ndtri
 
 from .nway import (update_winner, update_ranking, update_ranking_exact,
                    update_winner_correlated, update_order_correlated,
+                   update_prefix_correlated, update_topset_correlated, update_topk_correlated,
                    predictive_win_probabilities, _order_pass, _predictive_curves)
 from .market import update_market
 from .tuning import select
@@ -355,7 +356,9 @@ class AbilityTracker:
     def observe(self, ids: Sequence[str], t: float, scores: Optional[Sequence[float]] = None,
                 order: Optional[Sequence[int]] = None, winner: Optional[int] = None,
                 prices: Optional[Sequence[float]] = None,
-                groups: Optional[Sequence] = None) -> None:
+                groups: Optional[Sequence] = None,
+                prefix: Optional[Sequence[int]] = None, top: Optional[Sequence[int]] = None,
+                member_of_top: Optional[Tuple[int, int]] = None) -> None:
         """Fold one contest's evidence. Both observers (market prices, results)
         are contrast evidence through the same conjugate update. ``groups``
         (one label per entrant, None for ungrouped) switches every observer to
@@ -365,7 +368,15 @@ class AbilityTracker:
         ``order`` lists entrants first to last finisher, best first. A rank
         array (position of entrant i) is the inverse permutation and is
         silently wrong at K >= 3; convert it with order_from_positions
-        (winning.ratings.orders)."""
+        (winning.ratings.orders). ``prefix`` is the first k in order with
+        everyone else behind them; ``top`` the first k as a set, order
+        unknown; ``member_of_top=(i, k)`` that entrant i finished among
+        the first k. Give at most one of order / prefix / top /
+        member_of_top / winner."""
+        given = [k for k, x in (("order", order), ("prefix", prefix), ("top", top),
+                                ("member_of_top", member_of_top), ("winner", winner)) if x is not None]
+        if len(given) > 1:
+            raise ValueError(f"give one outcome, not {given}: they are not independent evidence")
         # A tracker carries state, so bad evidence does not merely give
         # a bad answer for one contest -- it poisons the filter. One NaN
         # score made every entity's mean and variance NaN, a later CLEAN
@@ -439,6 +450,19 @@ class AbilityTracker:
                                            n_aug=self.n_aug, burn=self.burn)
                 else:
                     m, v = update_ranking(m, v, order, beta2=self.beta2, base=self.base)
+            self.evidence += lz
+        elif prefix is not None:                                   # first k in order, rest behind
+            m, v, lz = update_prefix_correlated(m, v, prefix, V=V, beta2=b2, Qf=self.Qf,
+                                                base=self.base, nodes_log2=self.nodes_log2)
+            self.evidence += lz
+        elif top is not None:                                      # first k as a set
+            m, v, lz = update_topset_correlated(m, v, top, V=V, beta2=b2, Qf=self.Qf,
+                                                base=self.base, nodes_log2=self.nodes_log2)
+            self.evidence += lz
+        elif member_of_top is not None:                            # one entrant among the first k
+            member, k = member_of_top
+            m, v, lz = update_topk_correlated(m, v, member, k, V=V, beta2=b2, Qf=self.Qf,
+                                              base=self.base, nodes_log2=self.nodes_log2)
             self.evidence += lz
         elif winner is not None:                                   # winner-only fallback (see order note)
             if V is not None:

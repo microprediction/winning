@@ -33,7 +33,9 @@ from ..shapes import as_loadings
 
 
 from .nway import (update_order_correlated, update_ranking_exact,
-                   update_winner, update_winner_correlated)
+                   update_winner, update_winner_correlated,
+                   update_prefix_correlated, update_topset_correlated,
+                   update_topk_correlated)
 
 
 def update_market(m, v, p_market, tau2=0.25, invert=None, **market_model):
@@ -136,12 +138,21 @@ def update_market(m, v, p_market, tau2=0.25, invert=None, **market_model):
 
 def update_race(m, v, winner=None, order=None, p_market=None, tau2=0.25,
                 V=None, beta2=1.0, Qf=7, base="normal", nodes_log2=10,
+                prefix=None, top=None, member_of_top=None,
                 **market_model):
     """The typical race: update from market prices, an outcome, or both
     (prices first -- the market's information is pre-race -- then the
-    outcome on the updated prior). Any of winner/order/p_market may be
-    omitted. Returns (m_post, v_post, info) with info holding the logZ
-    of each applied source."""
+    outcome on the updated prior). The outcome is ONE of: `order` (the
+    full finishing order, or the order among the named entrants only),
+    `prefix` (the first k in order, everyone else behind them), `top`
+    (the first k as a set, order unknown), `member_of_top=(i, k)` (one
+    entrant finished among the first k), or `winner`. Any of them and
+    p_market may be omitted. Returns (m_post, v_post, info) with info
+    holding the logZ of each applied source."""
+    given = [k for k, x in (("order", order), ("prefix", prefix), ("top", top),
+                            ("member_of_top", member_of_top), ("winner", winner)) if x is not None]
+    if len(given) > 1:
+        raise ValueError(f"give one outcome, not {given}: they are not independent evidence")
     m = np.asarray(m, dtype=float).copy()
     v = as_variance(v, len(m)).copy()
     info = {}
@@ -183,6 +194,19 @@ def update_race(m, v, winner=None, order=None, p_market=None, tau2=0.25,
                 _order_evidence(m, v, list(order), beta2, base))
             m, v = update_ranking_exact(m, v, order, beta2=beta2,
                                         base=base)
+    elif prefix is not None:
+        m, v, lz = update_prefix_correlated(m, v, prefix, V=V, beta2=beta2, Qf=Qf,
+                                            base=base, nodes_log2=nodes_log2)
+        info["logZ_outcome"] = lz
+    elif top is not None:
+        m, v, lz = update_topset_correlated(m, v, top, V=V, beta2=beta2, Qf=Qf,
+                                            base=base, nodes_log2=nodes_log2)
+        info["logZ_outcome"] = lz
+    elif member_of_top is not None:
+        member, k = member_of_top
+        m, v, lz = update_topk_correlated(m, v, member, k, V=V, beta2=beta2, Qf=Qf,
+                                          base=base, nodes_log2=nodes_log2)
+        info["logZ_outcome"] = lz
     elif winner is not None:
         if V is not None:
             m, v, lz = update_winner_correlated(m, v, winner, V,

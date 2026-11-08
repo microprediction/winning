@@ -1275,3 +1275,61 @@ def update_topset_correlated(m, v, top, V=None, beta2=1.0, Qf=7, eps=1e-3,
         return _topset_logp_grad(mm, D, top, points=points)
     return _mixture_update(m, v, V, beta2, node, Qf=Qf, eps=eps, base=base,
                            nodes_log2=nodes_log2)
+
+
+def _prefix_logp(mm, D, prefix, points=2001):
+    """log P(prefix[0] first, prefix[1] second, ..., and every entrant not
+    named finishes behind the last named), independent normal
+    performances N(mm_j, D_j), max-wins. Nested integrals on one lattice:
+    the last named finishes at x with every unnamed below it,
+    A_k(x) = f_k(x) prod_{l unnamed} Phi_l(x); each earlier named must
+    finish above the next, A_j(x) = f_j(x) int_{-inf}^x A_{j+1}; and
+    P = int A_1. k cumulative sums, O(kL)."""
+    from scipy.special import log_ndtr
+    _trapz = getattr(np, "trapezoid", None) or np.trapz
+    mm = np.asarray(mm, dtype=float); D = np.asarray(D, dtype=float)
+    n = len(mm); sd = np.sqrt(D)
+    prefix = [int(i) for i in prefix]
+    rest = [j for j in range(n) if j not in set(prefix)]
+    lo = float(np.min(mm - 9 * sd)); hi = float(np.max(mm + 9 * sd))
+    x = np.linspace(lo, hi, int(points)); dx = x[1] - x[0]
+    z = (x[:, None] - mm[None, :]) / sd[None, :]
+    logf = -0.5 * z * z - 0.5 * np.log(2 * np.pi) - np.log(sd[None, :])
+    logPhi = log_ndtr(z)
+    below_rest = logPhi[:, rest].sum(axis=1) if rest else np.zeros(len(x))
+    A = np.exp(logf[:, prefix[-1]] + below_rest)
+    for i in reversed(prefix[:-1]):
+        C = np.concatenate([[0.0], np.cumsum(0.5 * (A[1:] + A[:-1])) * dx])   # int_{-inf}^x A
+        A = np.exp(logf[:, i]) * C
+    return float(np.log(max(_trapz(A, dx=dx), 1e-300)))
+
+
+def update_prefix_correlated(m, v, prefix, V=None, beta2=1.0, Qf=7, eps=1e-3,
+                             base="normal", nodes_log2=10, points=2001, h=1e-5):
+    """Exact-moment posterior update from an ordered top-k result with
+    the rest unplaced (max-wins): prefix lists the first k finishers in
+    order, and every entrant not named finished behind them. k = 1 is
+    the observed winner, k = n the full order. Shared factors V as in
+    update_winner_correlated. The conditional score is a central
+    difference of the lattice log-probability at relative step h, exact
+    for the fixed lattice to about h^2. Returns (m_post, v_post, logZ)."""
+    _require_normal_base(base, "update_prefix_correlated")
+    m = np.asarray(m, dtype=float)
+    n = len(m)
+    v = as_variance(v, n)
+    prefix = [int(i) for i in as_order(prefix, n, name="prefix")]        # distinct, in range (#129)
+    D = v + _beta_per_player(beta2, n)
+    if V is None:
+        V = np.zeros((n, 1))
+    step = float(h) * np.sqrt(D)
+
+    def node(mm):
+        lp = _prefix_logp(mm, D, prefix, points=points)
+        g = np.empty(n)
+        for j in range(n):
+            e = np.zeros(n); e[j] = step[j]
+            g[j] = (_prefix_logp(mm + e, D, prefix, points=points)
+                    - _prefix_logp(mm - e, D, prefix, points=points)) / (2 * step[j])
+        return lp, g
+    return _mixture_update(m, v, V, beta2, node, Qf=Qf, eps=eps, base=base,
+                           nodes_log2=nodes_log2)
