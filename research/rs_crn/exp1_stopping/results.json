@@ -4,6 +4,8 @@
     "uncommitted_changes_in_script_dir_or_package": [
       "M research/rs_crn/exp1_stopping/run_stopping.py"
     ],
+    "runner_committed_in": "41096d291c51ab107d2d8f937664338daec0b131",
+    "runner_note": "git_commit above is the checkout the run started from; the modified run_stopping.py it lists is the fixed-seed runner (SEEDS below, replacing the earlier hash-derived seeds) and was committed unchanged in runner_committed_in; this results.json was committed in 520a6fd7. The numbers were not regenerated. See papers/win_nodes/README.md.",
     "winning_source": "/Users/petercotton/github/winning-merge-pom/winning",
     "winning_version": "1.7.0",
     "winning_imported_from_worktree": true,

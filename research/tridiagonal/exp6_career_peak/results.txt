@@ -1,3 +1,5 @@
+# NOTE (2026-11-08): in the table below the "80% credible set" column of this run is a min-max SPAN, not the set; the sets are not contiguous (Nadal's six years span 2008-2019, Agassi's three span 1995-2003). The per-player "80% set" block further down, which lists the years explicitly, is authoritative. run_peak.jl now prints the explicit years; this run was not repeated.
+# NOTE: tau (the random-walk step sd, 0.25-0.35 per player) is an in-sample empirical-Bayes choice: prep_tennis.py picks it per player by maximising the Laplace marginal likelihood on the same matches that yield P(peak) below. It is not validated out of sample.
 player           MAP peak  P(peak)  most likely  80% credible set
 Roger Federer    2006      0.52     2006         2005-2006 (2 yrs)
 Rafael Nadal     2013      0.267    2013         2008-2019 (6 yrs)

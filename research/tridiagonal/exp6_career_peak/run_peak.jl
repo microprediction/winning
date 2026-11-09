@@ -54,10 +54,12 @@ for pl in inp["players"]
     cs = credible_set(P, 0.8)
     ref = mc_argmax(mu, Q, 200_000, 7)
     push!(rows, (pl["name"], y0, mu, P, ref, mapk, modek, cs))
+    # the explicit years: the set is not contiguous, so a min-max span
+    # (what this column used to print) overstates the width of the window
     println(rpad(pl["name"], 17), rpad(y0 + mapk - 1, 10),
             rpad(round(P[mapk], digits = 3), 9),
             rpad(y0 + modek - 1, 13),
-            "$(y0 + cs[1] - 1)-$(y0 + cs[end] - 1) ($(length(cs)) yrs)")
+            join(y0 .+ cs .- 1, ","), " ($(length(cs)) yrs)")
 end
 
 println()

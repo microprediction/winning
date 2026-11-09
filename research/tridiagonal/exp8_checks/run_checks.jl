@@ -1,6 +1,9 @@
-# The measured rows of the win_nodes paper's checks table, on the
-# GMRFExtremes.jl pass (not the exp1-exp3 Python prototypes). Seeded
-# Monte Carlo referees; the i.i.d. row has a closed form.
+# The measured rows of the checks table in an EARLIER version of the
+# win_nodes paper. The Gauss-Markov chain material was cut from that
+# paper on 2026-11-09 and papers/win_nodes/paper.tex no longer cites
+# these rows; they are kept as the record for the GMRFExtremes.jl pass
+# (not the exp1-exp3 Python prototypes). Seeded Monte Carlo referees;
+# the i.i.d. row has a closed form.
 #   julia run_checks.jl > results.txt
 include(joinpath(@__DIR__, "..", "..", "..", "julia", "GMRFExtremes",
                  "src", "GMRFExtremes.jl"))

@@ -32,6 +32,10 @@ from winning.ratings.nway import (update_winner_correlated, update_order_correla
 N, RANK, BETA2, SEEDS, K = 8, 1, 1.0, 1600, 3
 HERE = os.path.dirname(os.path.abspath(__file__))
 KINDS = ["prior", "member of top 3", "order among 3 named", "top-3 set", "winner", "top 3 in order, rest behind", "full order"]
+# Who is named (see the docstring). Recorded in every raw row and in the
+# summary so rows from a run under another protocol cannot be mixed in.
+PROTOCOL = ("named: uniform member of the actual first K; "
+            "trio: uniform K-subset of the field, reported in finishing order")
 
 
 def centred(x):
@@ -39,13 +43,25 @@ def centred(x):
     return x - x.mean()
 
 
+def write_json_atomic(path, obj):
+    """Sibling temp file then rename: a crash mid-write leaves no truncated file."""
+    tmp = f"{path}.tmp.{os.getpid()}"
+    with open(tmp, "w") as f:
+        json.dump(obj, f, indent=1)
+    os.replace(tmp, path)
+
+
 def main():
     rng = np.random.default_rng(20261108)
     err = {k: [] for k in KINDS}; var = {k: [] for k in KINDS}; score = {k: 0.0 for k in KINDS}
     t0 = time.time()
-    # raw per-race results go to an append-only log as they are produced, so
-    # an interrupted run loses nothing and paired differences can be read back
-    log = open(os.path.join(HERE, "races.jsonl"), "a")
+    run_id = f"{time.strftime('%Y%m%dT%H%M%S', time.gmtime(t0))}-{os.getpid()}"
+    # raw per-race results go to this run's own append-only log as they are
+    # produced (created exclusively: one file per run, so a rerun can never
+    # append rows with repeated seeds to an earlier run's log); an interrupted
+    # run loses nothing and paired differences can be read back
+    log_path = os.path.join(HERE, f"races_{run_id}.jsonl")
+    log = open(log_path, "x")
     for seed in range(SEEDS):
         s = rng.normal(size=N)
         V = rng.normal(scale=0.6, size=(N, RANK))
@@ -67,7 +83,7 @@ def main():
         }
         f2 = rng.normal(size=RANK); eps2 = rng.normal(size=N)
         w2 = int(np.argmax(s + V @ f2 + np.sqrt(D) * eps2))
-        row = {"seed": seed}
+        row = {"run_id": run_id, "protocol": PROTOCOL, "seed": seed}
         for k, (m, v) in posts.items():
             e = float(np.sqrt(np.mean((centred(m) - centred(s)) ** 2))); vv = float(np.mean(v))
             pred = np.asarray(race_probabilities(-np.asarray(m), V=V, D=D + np.asarray(v)))
@@ -84,9 +100,14 @@ def main():
            "se_rmse_contrast": se,
            "paired_rmse_diff_vs_prior_se": {k: float(np.std(np.asarray(err[k]) - np.asarray(err["prior"]), ddof=1) / np.sqrt(SEEDS))
                                            for k in KINDS if k != "prior"},
-           "raw_log": "races.jsonl", "seconds": time.time() - t0}
-    with open(os.path.join(HERE, "results.json"), "w") as f:
-        json.dump(out, f, indent=1)
+           "run_id": run_id, "protocol": PROTOCOL,
+           "raw_log": os.path.basename(log_path), "seconds": time.time() - t0}
+    # never overwrite an existing results.json silently: a rerun gets a stamped name
+    path = os.path.join(HERE, "results.json")
+    if os.path.exists(path):
+        path = os.path.join(HERE, f"results_{run_id}.json")
+    write_json_atomic(path, out)
+    print("summary ->", path, " raw ->", log_path)
     for k in KINDS:
         print(f"{k:28s} rmse {out['rmse_contrast'][k]:.4f}  var {out['mean_posterior_var'][k]:.4f}"
               f"  log score {out['mean_log_score_next_winner'][k]:.4f}")
