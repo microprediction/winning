@@ -688,27 +688,48 @@ abilities_from_topk <- function(q, k, V = NULL, D = NULL, base = "normal",
   # a kinked base takes its slopes from the split lattice, the value from
   # the map being inverted (#267)
   kinked <- !is.null(.kinks_of(fn))
-  with_slopes <- function(m) {
-    ws <- .topk_with_slopes(m, sd, k, fn, points)
-    if (kinked) ws$slopes <- .topk_with_slopes(m, sd, k, fn, points, TRUE)$slopes
+  with_slopes <- function(m, pts) {
+    ws <- .topk_with_slopes(m, sd, k, fn, pts)
+    if (kinked) ws$slopes <- .topk_with_slopes(m, sd, k, fn, pts, TRUE)$slopes
     ws
   }
-  fwd <- function(m) {
+  eval_at <- function(m, pts) {
     if (is.null(fac)) {
-      ws <- with_slopes(m)
-      qraw <- ws$q
-      sl <- ws$slopes
-    } else {
-      qraw <- rep(0, n)
-      sl <- rep(0, n)
-      for (j in seq_len(nrow(fac$nodes))) {
-        shift <- as.vector(fac$Vm %*% fac$nodes[j, ])
-        ws <- with_slopes(m + shift)
-        qraw <- qraw + fac$w[j] * ws$q
-        sl <- sl + fac$w[j] * ws$slopes
-      }
+      ws <- with_slopes(m, pts)
+      return(list(qraw = ws$q, sl = ws$slopes))
     }
-    qhat <- .checked_topk(qraw, k, "top-k inversion")
+    qraw <- rep(0, n)
+    sl <- rep(0, n)
+    for (j in seq_len(nrow(fac$nodes))) {
+      shift <- as.vector(fac$Vm %*% fac$nodes[j, ])
+      ws <- with_slopes(m + shift, pts)
+      qraw <- qraw + fac$w[j] * ws$q
+      sl <- sl + fac$w[j] * ws$slopes
+    }
+    list(qraw = qraw, sl = sl)
+  }
+  fwd <- function(m) {
+    # python's and the browser's bounded refinement: a lattice that fails
+    # the mass check is doubled (2p - 1) up to four times the request, and
+    # the residual and slopes come from the lattice that passed. On one
+    # fixed lattice the inverse refused, at its warm start, a target its
+    # own forward produced at the same points (#943).
+    ev <- eval_at(m, points)
+    qhat <- tryCatch(.checked_topk(ev$qraw, k, "top-k inversion"),
+                     error = function(e) e)
+    if (inherits(qhat, "error")) {
+      cap <- 4L * (points - 1L) + 1L
+      pts <- points
+      while (inherits(qhat, "error") && pts < cap) {
+        pts <- min(2L * pts - 1L, cap)
+        ev <- eval_at(m, pts)
+        qhat <- tryCatch(.checked_topk(ev$qraw, k, "top-k inversion"),
+                         error = function(e) e)
+      }
+      if (inherits(qhat, "error")) stop(conditionMessage(qhat), call. = FALSE)
+    }
+    qraw <- ev$qraw
+    sl <- ev$sl
     # a membership above one, clipped to exactly one, leaves a flat logit
     # residual of ~690 the sweeps stall in: refuse the iterate so they
     # back off (the uniform lattice overshoots one near saturation for a

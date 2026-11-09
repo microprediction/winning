@@ -828,6 +828,8 @@ export function legendre(m) {
    location, so a uniform rectangle sum of a slope or Jacobian is only
    first order there; on these pieces it is spectral (#267). Used for the
    inverses' derivatives only: the forward maps keep the uniform lattice. */
+export const KINK_MAX_ORDER = 512;        // python's races.KINK_MAX_ORDER (#835)
+
 export function kinkLattice(x, M, sd, kinks) {
   const a = x[0], b = x[x.length - 1], L = x.length;
   let K = [];
@@ -857,10 +859,20 @@ export function kinkLattice(x, M, sd, kinks) {
   }
   const xs = [], ws = [];
   for (let j = 0; j < P; j++) {
-    const m = Math.max(4, Math.round(L * eff[j] / tot));
+    const mAll = Math.max(4, Math.round(L * eff[j] / tot));
+    // a piece above KINK_MAX_ORDER is split into k equal panels of
+    // ceil(m / k) nodes: one Gauss rule is O(m^2) to build, and a
+    // 32,769-point Laplace inverse blocked for seconds on it (#835). At or
+    // below the cap nothing changes. As python's kink_lattice.
+    const k = Math.ceil(mAll / KINK_MAX_ORDER), m = Math.ceil(mAll / k);
     const { t, w } = legendre(m);
-    const mid = 0.5 * (cuts[j + 1] + cuts[j]), half = 0.5 * (cuts[j + 1] - cuts[j]);
-    for (let r = 0; r < m; r++) { xs.push(mid + half * t[r]); ws.push(half * w[r]); }
+    const lo = cuts[j], hi = cuts[j + 1];
+    for (let s = 0; s < k; s++) {
+      const pl = s === 0 ? lo : lo + (hi - lo) * s / k;
+      const ph = s === k - 1 ? hi : lo + (hi - lo) * (s + 1) / k;
+      const mid = 0.5 * (ph + pl), half = 0.5 * (ph - pl);
+      for (let r = 0; r < m; r++) { xs.push(mid + half * t[r]); ws.push(half * w[r]); }
+    }
   }
   return { xs, ws };
 }

@@ -8,7 +8,7 @@ include(joinpath(@__DIR__, "..", "..", "..", "julia", "GMRFExtremes",
 using .GMRFExtremes
 include(joinpath(@__DIR__, "..", "..", "..", "julia",
                  "MultinomialProbit", "test", "minijson.jl"))
-using LinearAlgebra: SymTridiagonal, cholesky, Symmetric
+using LinearAlgebra: SymTridiagonal, cholesky, Symmetric, diag, inv
 using Random: Xoshiro
 
 inp = parse_json(read(ARGS[1], String))
@@ -63,7 +63,15 @@ end
 println()
 maxerr = maximum(maximum(abs.(r[4] .- r[5])) for r in rows)
 println("Monte Carlo referee (200k posterior draws each): max |exact - MC| = ",
-        round(maxerr, digits = 4))
+        round(maxerr, sigdigits = 3))
+
+# the credible sets year by year, with their mass
+println()
+for r in rows
+    name, y0, mu, P, _, _, _, cs = r
+    println(rpad(name, 17), "80% set ", join(y0 .+ cs .- 1, ","),
+            "  mass ", round(sum(P[cs]), digits = 3))
+end
 
 # the sparse-year effect: does match count predict argmax mass at
 # equal posterior mean?
@@ -85,5 +93,29 @@ for r in rows
             P[t] > 0.02 && println("  ", y0 + t - 1, "  ",
                                    round(P[t], digits = 3))
         end
+    end
+    if name == "Rafael Nadal"
+        println("\nNadal year-by-year: posterior mean, sd, matches, P(peak year)")
+        pl = only(filter(p -> p["name"] == name, inp["players"]))
+        Q = Matrix(SymTridiagonal(Float64.(pl["Q_diag"]),
+                                  Float64.(pl["Q_off"])))
+        sd = sqrt.(diag(inv(Q)))
+        per = pl["per_year"]
+        for t in eachindex(P)
+            println("  ", y0 + t - 1, "  ", round(mu[t], digits = 3), "  ",
+                    round(sd[t], digits = 3), "  ", per[t], "  ",
+                    round(P[t], digits = 4))
+        end
+        # the sparse-year effect at EQUAL posterior mean: move 2012's
+        # mean (48 matches) down to 2010's (80 matches), same precision
+        i10, i12 = 2010 - y0 + 1, 2012 - y0 + 1
+        m2 = copy(mu)
+        m2[i12] = mu[i10]
+        P2 = argmax_marginals(chain_from_precision(m2, Q); points = 400)
+        println("\nNadal, 2012 mean set equal to 2010's: P(2010) = ",
+                round(P2[i10], digits = 4), ", P(2012) = ",
+                round(P2[i12], digits = 4), "  (actual ",
+                round(P[i10], digits = 4), ", ", round(P[i12], digits = 4),
+                ")")
     end
 end
