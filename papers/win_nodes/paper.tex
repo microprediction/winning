@@ -463,6 +463,13 @@ another's is not, a price fixes their difference and so fixes the
 unknown mean, and the average moves with it. The price says nothing
 about the level; the movement comes from the prior.
 
+A win node can now take two kinds of evidence about the same race, a
+price before it and the outcome after it. Two questions follow. How
+much is each worth on its own? And does using both improve on either,
+as it should if the two are conditionally independent given the
+means? The simulation below measures the posterior after each kind of
+evidence, and after both, against the truth.
+
 Prices are set before the race and the outcome is observed after it,
 and the two are conditionally independent given the means, so the
 price update is applied first and the observed-winner message of
@@ -482,8 +489,11 @@ probability the posterior assigns to the winner of a second,
 independent running of the same race. Table~\ref{tab:price} reports
 the averages over the 400 races.
 
-Between messages the belief is kept
-in the diagonal Gaussian family: the price posterior is exact and its
+Table~\ref{tab:price} answers both questions. The price is worth far
+more than one observed winner, which is a single draw from the
+outcome, and the posterior after both is tighter and scores better
+than after either alone. Between messages the belief is kept in the
+diagonal Gaussian family: the price posterior is exact and its
 diagonal is carried forward, and the winner message is projected to a
 diagonal Gaussian as in Section~\ref{sec:observed}, so the composed
 row is a moment-matched posterior, not the exact one.
@@ -500,10 +510,8 @@ price only & 0.402 & 0.300 & $-1.671$ \\
 price, then winner & 0.399 & 0.287 & $-1.656$ \\
 \bottomrule
 \end{tabular}
-\caption{One race, two kinds of evidence. A price with noise
-$\tau^2=0.25$ is worth far more than one observed winner, which is a
-single draw from the outcome, and the posterior after both is tighter
-and scores better than after either alone. Script:
+\caption{One race, two kinds of evidence, averaged over 400 seeded
+races with market noise $\tau^2=0.25$. Script:
 \texttt{research/win\_nodes/exp1\_two\_evidence}.}
 \label{tab:price}
 \end{table}
