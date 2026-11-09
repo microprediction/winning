@@ -448,13 +448,17 @@ the diagonal Gaussian family between messages: the price posterior is
 exact and its diagonal is carried forward, and the winner message is
 projected to a diagonal Gaussian as in Section~\ref{sec:observed}. The
 composed row is therefore a moment-matched posterior, not the exact
-one. Table~\ref{tab:price} measures the
-composition on a seeded simulation: eight alternatives, one shared
-factor, a market with $\tau^2=0.25$, and a prior $N(0,I)$ on the
-means, averaged over 400 races. The error is the root mean square of
-the posterior-mean contrasts against the true contrasts; the score is
-the log probability the posterior predictive assigns to the winner of
-an independent rerun of the same race.
+one. We simulate 400 races. In each race eight alternatives have means
+drawn from $N(0,I)$ and share one factor; a market quotes a price for
+each alternative from its own noisy view of the means, with
+$\tau^2=0.25$; the race is run and the winner recorded. Starting from
+the prior $N(0,I)$ we form three posteriors, one from the price, one
+from the winner, and one from the price followed by the winner, and
+compare each with the truth in two ways: the root mean square error of
+the posterior-mean contrasts against the true contrasts, and the log
+probability the posterior assigns to the winner of a second,
+independent running of the same race. Table~\ref{tab:price} reports
+the averages over the 400 races.
 
 \begin{table}[t]
 \centering
@@ -476,11 +480,11 @@ both is tighter and scores better than after either alone. Script:
 \label{tab:price}
 \end{table}
 
-The model has one new parameter, the market noise $\tau^2$. Each
-price observation has a marginal likelihood that depends on $\tau^2$,
-the product over many races is a function of $\tau^2$ alone, and its
-maximiser is the estimate; \citet[\S5]{cotton2026} fits $\tau^2$ this
-way. A market priced
+The price model adds one parameter, the market noise $\tau^2$. To
+estimate it, take a history of races with prices, compute the
+likelihood of all the observed prices as a function of $\tau^2$, and
+choose the $\tau^2$ that maximises it; \citet[\S5]{cotton2026} does
+this. A market priced
 under a different model from the outcome, or with a longshot bias, is
 inverted under its own model and then read as evidence under this
 one; the inversion is agnostic about where the prices came from.
