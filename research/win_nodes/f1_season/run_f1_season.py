@@ -24,11 +24,14 @@ INIT_VAR, DRIFT, RHO = float(_e("INIT_VAR", 1.0)), float(_e("DRIFT", 0.05)), flo
 BETA2_Q, BETA2_R, LS_Q = float(_e("BETA2_Q", 0.5)), float(_e("BETA2_R", 1.0)), float(_e("LS_Q", 2.0))
 NODES, TAU2 = int(_e("NODES", 6)), float(_e("TAU2", 0.3))
 TAG = _e("TAG", "")
-SPLIT_QR = float(_e("SPLIT_QR", 0.0))
+SPLIT_QR = float(_e("SPLIT_QR", 0.0))        # > 0: separate qualifying and race pace, correlated by this much
 QUALI_MODE = _e("QUALI_MODE", "prefix")    # prefix | sets (Q1 and Q2 sets only, no ordering)
 Q_BY_TIMES = bool(_e("Q_BY_TIMES", ""))     # f1db_load: time-based classification (the old reading)
 BELIEF = _e("BELIEF", "dense")              # dense: GaussianNet over the season | diag: per-weekend update_race with drift
-WATCH = [d for d in _e("WATCH", "").split(",") if d]      # > 0: separate qualifying and race pace, correlated by this much
+                                            # | block: per-driver (q, r) blocks, cross-driver covariance dropped (needs SPLIT_QR > 0)
+WATCH = [d for d in _e("WATCH", "").split(",") if d]
+LAMBDA_MKT = float(_e("LAMBDA_MKT", 0.0))   # the market node loads (1 - lambda) on race pace and lambda on Saturday pace
+MAX_ROUNDS = int(_e("MAX_ROUNDS", 0))       # > 0: stop after this many rounds (parity checks, timing)
 from f1_market_join import snapshots as market_snapshots
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -88,9 +91,97 @@ class DiagNet:
         return info
 
 
+class BlockNet:
+    """Between DiagNet and the dense net: per driver a 2 x 2 block over
+    (Saturday pace q, race pace r), correlated SPLIT_QR in the prior and in
+    the random-walk innovation, and NO covariance across drivers. Every
+    message goes through a per-weekend GaussianNet, whose induced covariance
+    at each node is diagonal because each row of A touches one driver, so
+    the belief prices on the lattice exactly (no Sobol over the belief, the
+    fault of #1027 cannot arise); after each message the cross-driver
+    covariance the message created is dropped, as DiagNet drops it. The
+    market node may load on a mix of q and r (LAMBDA_MKT), which is the
+    statement that a pre-qualifying price knows Saturday form."""
+    def __init__(self):
+        if not SPLIT_QR > 0:
+            raise ValueError("BELIEF=block needs SPLIT_QR > 0 (the q/r correlation)")
+        self.state = {}          # driver -> (mean (2,), cov (2, 2), last round)
+        self.net, self.rnd, self.drivers = None, None, None
+        self.evidence = 0.0
+        self._seen = 0.0
+
+    # the current weekend's belief, for WATCH and for building mixed nodes
+    names = property(lambda self: self.net.names)
+    index = property(lambda self: self.net.index)
+    m = property(lambda self: self.net.m)
+    S = property(lambda self: self.net.S)
+    nodes = property(lambda self: self.net.nodes)
+
+    @staticmethod
+    def _parse(label):
+        d, rest = label.split("@"); r, s = rest.split(":")
+        return d, int(r), s
+
+    def _flush(self):
+        if self.net is None:
+            return
+        for d in self.drivers:
+            iq, ir = self.net.index[f"{d}@{self.rnd}:q"], self.net.index[f"{d}@{self.rnd}:r"]
+            idx = [iq, ir]
+            self.state[d] = (self.net.m[idx].copy(), self.net.S[np.ix_(idx, idx)].copy(), self.rnd)
+
+    def _weekend(self, drivers, rnd):
+        if self.net is not None and self.rnd == rnd:
+            for d in drivers:
+                if f"{d}@{rnd}:q" not in self.net.index:
+                    raise ValueError(f"{d} is not in round {rnd}'s field")
+            return self.net
+        self._flush()
+        C = np.array([[1.0, SPLIT_QR], [SPLIT_QR, 1.0]])
+        names, mean, blocks = [], [], []
+        for d in drivers:
+            names += [f"{d}@{rnd}:q", f"{d}@{rnd}:r"]
+            if d in self.state:
+                m, B, last = self.state[d]
+                mean += list(m); blocks.append(B + DRIFT * (rnd - last) * C)
+            else:
+                mean += [0.0, 0.0]; blocks.append(INIT_VAR * C)
+        S = np.zeros((2 * len(drivers), 2 * len(drivers)))
+        for i, B in enumerate(blocks):
+            S[2 * i:2 * i + 2, 2 * i:2 * i + 2] = B
+        self.net, self.rnd, self.drivers = GaussianNet(names, np.array(mean), S), rnd, list(drivers)
+        self._seen = 0.0
+        self._mask = np.kron(np.eye(len(drivers)), np.ones((2, 2)))
+        return self.net
+
+    def attach(self, name, members=None, A=None, beta2=1.0, V=None):
+        if members is not None:
+            parsed = [self._parse(x) for x in members]
+            rounds = {r for _, r, _ in parsed}
+            if len(rounds) != 1:
+                raise ValueError("a node's members must share one round")
+            drivers = list(dict.fromkeys(d for d, _, _ in parsed))     # first appearance order
+            net = self._weekend(drivers, rounds.pop())                  # builds the weekend on its first node
+            return net.attach(name, members=members, beta2=beta2, V=V)
+        if self.net is None:
+            raise ValueError("attach a members= node first: it defines the weekend's field")
+        return self.net.attach(name, A=A, beta2=beta2, V=V)
+
+    def query(self, name, k=1):
+        return self.net.query(name, k=k)
+
+    def observe(self, name, **kw):
+        info = self.net.observe(name, **kw)
+        self.net.S = self.net.S * self._mask            # drop what the message put across drivers
+        self.evidence += self.net.evidence - self._seen; self._seen = self.net.evidence
+        return info
+
+
 def build(season):
     if BELIEF == "diag":
         return DiagNet()
+    if BELIEF == "block":
+        return BlockNet()
     names, blocks = [], []
     appearances = {}
     for w in season:
@@ -121,6 +212,8 @@ def run(variant, season, snaps):
     rounds_log = open(os.path.join(HERE, f"rounds_{YEAR}{TAG}_{variant.replace('+', '_')}.jsonl"), "a")
     for w in season:
         r, drv = w["round"], w["drivers"]
+        if MAX_ROUNDS and r > MAX_ROUNDS:
+            break
         pre = [s for s in snaps.get(r, []) if s[0] == "pre_quali"]
         post = [s for s in snaps.get(r, []) if s[0] == "post_quali"]
 
@@ -132,7 +225,17 @@ def run(variant, season, snaps):
             p = np.array([probs[d] for d in quoted]); p = p / p.sum()
             teams_q = sorted(set(w["team"][d] for d in quoted)); g = [teams_q.index(w["team"][d]) for d in quoted]
             Vm, b2m = block_loadings(g, RHO, BETA2_R)
-            node = net.attach(f"mkt{r}_{snapshot[1]}", members=[rlab[d] for d in quoted], beta2=b2m, V=Vm)
+            if LAMBDA_MKT > 0:
+                if not SPLIT_QR > 0:
+                    raise ValueError("LAMBDA_MKT needs SPLIT_QR > 0: there is no Saturday pace to load on")
+                if BELIEF == "diag":
+                    raise ValueError("LAMBDA_MKT needs BELIEF=block or dense: the diagonal path has no mixed node")
+                A = np.zeros((len(quoted), len(net.names)))
+                for i, d in enumerate(quoted):
+                    A[i, net.index[rlab[d]]] = 1.0 - LAMBDA_MKT; A[i, net.index[lab[d]]] = LAMBDA_MKT
+                node = net.attach(f"mkt{r}_{snapshot[1]}", A=A, beta2=b2m, V=Vm)
+            else:
+                node = net.attach(f"mkt{r}_{snapshot[1]}", members=[rlab[d] for d in quoted], beta2=b2m, V=Vm)
             net.observe(node, prices=p, tau2=TAU2, nodes_log2=NODES)
         qmem = [f"{d}@{r}:q" if SPLIT_QR > 0 else f"{d}@{r}" for d in drv]
         members = [f"{d}@{r}:r" if SPLIT_QR > 0 else f"{d}@{r}" for d in drv]
@@ -190,15 +293,18 @@ def run(variant, season, snaps):
             "total_evidence": float(net.evidence), "belief": BELIEF,
             "races_with_market": len(mkt_ls), "market_log_score": float(np.mean(mkt_ls)) if mkt_ls else None,
             "model_log_score_on_those": float(np.mean(win_ls_on_mkt)) if win_ls_on_mkt else None,
-            "mean_log_score_pole": float(np.mean(pole_ls)) if pole_ls else None, "split_qr": SPLIT_QR,
+            "mean_log_score_pole": float(np.mean(pole_ls)) if pole_ls else None, "split_qr": SPLIT_QR, "lambda_mkt": LAMBDA_MKT, "max_rounds": MAX_ROUNDS,
             "uniform": float(np.log(1 / 20)), "seconds": time.time() - t0}
 
 
 PARAMS = dict(init_var=INIT_VAR, drift=DRIFT, rho=RHO, beta2_q=BETA2_Q, beta2_r=BETA2_R, lengths_scale_q=LS_Q,
-              nodes_log2=NODES, tau2=TAU2, belief=BELIEF, quali_mode=QUALI_MODE, q_by_times=Q_BY_TIMES, split_qr=SPLIT_QR)
+              nodes_log2=NODES, tau2=TAU2, belief=BELIEF, quali_mode=QUALI_MODE, q_by_times=Q_BY_TIMES, split_qr=SPLIT_QR,
+              lambda_mkt=LAMBDA_MKT, max_rounds=MAX_ROUNDS)
 
 
 def main():
+    if LAMBDA_MKT > 0 and (BELIEF == "diag" or not SPLIT_QR > 0):
+        raise SystemExit("LAMBDA_MKT > 0 needs SPLIT_QR > 0 and BELIEF=block or dense (the diagonal path has no mixed node)")
     t_start = time.time()
     season = load_season(YEAR)
     snaps = market_snapshots(YEAR, {d for w in season for d in w["drivers"]})
