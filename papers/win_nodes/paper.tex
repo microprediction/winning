@@ -385,17 +385,20 @@ or have zero row sums \citep[\S\S3.2, 5.2]{cotton2026}.
 \subsection{The likelihood of an observed winner}
 \label{sec:observed}
 
-A node in a Bayes net must also accept evidence. Condition on $W=k$ and integrate out the factors and the
-winner's own standardized noise $u\sim N(0,1)$, independent of $z$:
+A node in a Bayes net must also accept evidence. The likelihood of
+the observation $W=k$ is the probability, under the parents, that
+alternative $k$ is the largest. Write $u\sim N(0,1)$ for the winner's
+own standardized noise, independent of $z$. Conditional on $z$ and
+$u$ the winner's performance is fixed, each rival must finish below
+it, and the rivals are independent, so the conditional probability is
+a product of $n-1$ normal distribution functions. The likelihood is
+the average of that product over $z$ and $u$:
 \begin{equation}
 \Pr(W=k\mid m)\;=\;\mathbb{E}_{z,u}\prod_{j\ne k}
 \Phi\!\left(\frac{m_k-m_j+(Bz)_k-(Bz)_j+u\sqrt{d_k}}
 {\sqrt{d_j}}\right).
 \label{eq:obslik}
 \end{equation}
-Given the shared factors and the winner's own performance,
-each rival independently had to finish below, and each such event is
-one normal distribution function.
 
 The score of Equation~\eqref{eq:obslik}, its gradient in $m$, has a
 closed form on the quadrature nodes: a weighted sum of Mills ratios,
