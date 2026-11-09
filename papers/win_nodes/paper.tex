@@ -30,9 +30,9 @@ November 9, 2026.}
 correlated variables is largest or who won a contest, have long
 resisted exact treatment in Bayes nets. For correlated Gaussian
 variables the probability that one is the maximum is an orthant
-probability. Authors in Bayesian optimization and reinforcement
-learning call it intractable and approximate it, and rating systems
-approximate their posteriors by expectation propagation. We show
+probability, which Bayesian optimization and reinforcement learning
+call intractable and approximate, and which rating systems reach only
+through expectation propagation. We show
 that when the dependence among Gaussian variables runs through a few
 shared factors, or along a Markov chain, the probability that each
 variable is the largest can be computed deterministically at a cost
@@ -179,7 +179,9 @@ as its only parent, with $X_{t+1}\mid X_t\sim N(\phi X_t,\,1-\phi^2)$.
 This is the stationary AR(1) process. Read $X_t$ as the departure of
 day $t$'s temperature from its seasonal norm, with $\phi$ the
 persistence of weather from one day to the next; the query asks which
-day of the period is the most unusually hot. With $\phi=0.9$ and
+day of the period is the most unusually hot.
+
+With $\phi=0.9$ and
 $n=20$, the first and last days are each the hottest with probability
 $0.0974$, and a day in the middle with probability $0.0396$, against
 $1/n=0.05$ from the marginals. A day in the middle
@@ -193,7 +195,9 @@ $X_i\mid Z\sim N(\sqrt{1-\epsilon}\,Z,\,\epsilon)$, and $X_1\sim N(0,1)$
 has no parent. Read the $X_i$ as a year of returns on $n$ funds: funds
 $2,\dots,n$ track the same index $Z$ with tracking variance
 $\epsilon$, fund 1 follows its own strategy, and the query asks which
-fund returns the most. When $\epsilon$ is small the index funds rise
+fund returns the most.
+
+When $\epsilon$ is small the index funds rise
 and fall together, so the contest is close to one between two
 competitors, fund 1 and the index. As $\epsilon\to0$, $p_1\to1/2$ and
 each index fund's $p_i\to1/(2(n-1))$, so the total-variation distance
@@ -231,18 +235,24 @@ the orthant probabilities behind $p_i$, and \citet{cotton2026}
 compares it in detail with the factor computation used here. GHK
 writes one orthant probability as a nested sequence of truncated
 normal probabilities and simulates it, at $O(n^2)$ per draw for a
-single alternative. Within the scope of this paper, factor or chain
+single alternative.
+
+Within the scope of this paper, factor or chain
 dependence, the win node improves on it in three respects. It gives
 all $n$ probabilities in one pass, where GHK needs $n$ runs. Its cost
 is linear in $n$. The cost of all $n$ probabilities by GHK grows
 empirically as $n^{2.8}$ beyond $n=200$, where \citet{cotton2026}
-already measures a gap of two orders of magnitude. With fixed quadrature nodes
+already measures a gap of two orders of magnitude.
+
+With fixed quadrature nodes
 it is deterministic: the probabilities and their Jacobian are a
 reproducible numerical map, with integration error but no simulation
 noise. Randomized nodes such as scrambled Sobol bring back an error
 that varies with the scramble, and the logarithm of an unbiased
 randomized estimate, which is what a log-likelihood needs, is biased
-downward. On AR(1) covariances
+downward.
+
+On AR(1) covariances
 \citet{ridgway2016} shows the normalized variance of GHK growing
 exponentially in dimension; we have not compared the two on the
 chains of Section~\ref{sec:checks}. Outside this scope, for dense high-rank covariance where accuracy is
@@ -298,8 +308,8 @@ p_i \;=\; \int_{\mathbb{R}^\rho} \phi_\rho(z) \int_{\mathbb{R}}
 f_{i|z}(x) \prod_{j \neq i} F_{j|z}(x)\, dx \, dz .
 \label{eq:integral}
 \end{equation}
-In English: component $i$ wins by finishing at some value $x$ with
-everyone else below it, averaged over the shared factors.
+Component $i$ wins by finishing at some value $x$ with everyone
+else below it, averaged over the shared factors.
 
 The inner integrands for different $i$ share the product
 $G_z(x) = \prod_j F_{j|z}(x)$. Dividing out the $i$th term gives
@@ -371,7 +381,7 @@ winner's own standardized noise $u\sim N(0,1)$, independent of $z$:
 {\sqrt{d_j}}\right).
 \label{eq:obslik}
 \end{equation}
-In English: given the shared factors and the winner's own performance,
+Given the shared factors and the winner's own performance,
 each rival independently had to finish below, and each such event is
 one normal distribution function.
 
@@ -384,13 +394,17 @@ Gaussian parents therefore carries exact first-order information. At
 $n=2$ with no factors the likelihood is
 $\Phi\bigl((m_k-m_j)/\sqrt{d_k+d_j}\bigr)$, the binary probit
 comparison, which is TrueSkill's greater-than factor with no draw
-margin. Observing the winner tells less than observing the full
+margin.
+
+Observing the winner tells less than observing the full
 ranking, and Equation~\eqref{eq:obslik} is the likelihood of that
 smaller piece of evidence. Moment approximations enter only if the
 user chooses a Gaussian posterior family, as in expectation
 propagation. Equation~\eqref{eq:obslik} is the
 multinomial probit likelihood, and with its score it is the
-estimation core of \citet[\S5]{cotton2026}. The implementation used
+estimation core of \citet[\S5]{cotton2026}.
+
+The implementation used
 here agrees with finite differences and with dual-number automatic
 differentiation to $10^{-10}$. That checks the differentiation of the
 implemented numerical likelihood, not its accuracy against the
@@ -603,6 +617,7 @@ A^{-1} &= \mathrm{diag}(a)^{-1} + \mathrm{diag}(a)^{-1} U \, C \, U'
 & C &= \bigl(S^{-1} - U' \mathrm{diag}(a)^{-1} U\bigr)^{-1}.
 \label{eq:wood2}
 \end{align}
+
 $C$ is positive definite. Let $K = \bigl(\begin{smallmatrix}
 \mathrm{diag}(a) & U \\ U' & S^{-1} \end{smallmatrix}\bigr)$. The
 Schur complement of $S^{-1}$ in $K$ is $A$, which is positive
@@ -615,7 +630,9 @@ d_i = a_i^{-1}, \quad
 B = \mathrm{diag}(a)^{-1} U \, C^{1/2},
 \label{eq:postform}
 \end{equation}
-exactly, for every $n_r \ge 1$. The posterior mean is $m = A^{-1} h$
+exactly, for every $n_r \ge 1$.
+
+The posterior mean is $m = A^{-1} h$
 with $h = n_r \Lambda^{-1} \bar{Y}$, and both factors are available
 from Equations~\eqref{eq:wood1} and~\eqref{eq:wood2}. No step
 approximates. The posterior has factor form because the shared
@@ -631,7 +648,9 @@ $\sigma_n > 0$. Arm $i$ has known features $v_i$, and $\theta_i =
 v_i' \beta + e_i$ with a shared $\beta \sim N(0, I_\rho)$ and
 independent $e_i \sim N(0, d_{0i})$, $d_{0i} > 0$. The prior is
 $\theta \sim N(0, \Sigma_0)$ with $\Sigma_0 = V V' +
-\mathrm{diag}(d_0)$, which has factor form. Linear Thompson sampling
+\mathrm{diag}(d_0)$, which has factor form.
+
+Linear Thompson sampling
 \citep{agrawal2013}, the version \citet{chapelle2011} evaluated on
 display advertising and news recommendation, is this model without
 the residual, with factor rank equal to the number of features. A
@@ -696,14 +715,16 @@ with equality for the continuous operators.
 This is one forward pass. A banded precision does not make the
 lattice transition matrix banded, and with dense $L\times L$
 transitions the pass costs $O(nL^2)$ per threshold.
+
 The mass lost at step $t$ of the same pass is the probability that
 the chain first crosses $u$ at time $t$, so the pass also gives the
 first-passage law. The expected maximum $M$ follows from its
-distribution function: on a threshold window $[a,b]$ that holds
-essentially all of its mass, $\mathbb E[M]\approx a+\int_a^b
+distribution function: on a threshold window $[a,b]$ that holds all but a negligible part of its mass, $\mathbb E[M]\approx a+\int_a^b
 [1-F_M(u)]\,du$. The rectangle rule for this integral has an error of
 order $\Delta u$, measured at $+0.053$ on a ten-node chain, and the
-trapezoid rule removes that leading error. A hard cut of the
+trapezoid rule removes that leading error.
+
+A hard cut of the
 lattice at $u$ has error $O(\Delta x)$; giving the boundary cell its
 fractional occupancy restores $O(\Delta x^2)$, which improves
 agreement with the i.i.d.\ closed form at 400 lattice points from
@@ -823,7 +844,9 @@ With what probability will Thompson sampling show each of fifty
 advertisements next? Let $X=\theta\mid\mathcal{D}$ be a posterior over the values of $n$
 alternatives. Thompson sampling draws one sample $\tilde{\theta}$ and
 chooses the alternative with the largest sampled value, so it chooses
-$i$ with probability $p_i=\Pr(W=i)$. Lemma~8 of
+$i$ with probability $p_i=\Pr(W=i)$.
+
+Lemma~8 of
 \citet{tarbouriech2023} states the general version: the expected
 fraction of pulls each arm receives under Thompson sampling equals
 its posterior probability of being best. Choosing $i$ with the
@@ -940,6 +963,7 @@ selected alternative and $I^*$ the best. Then
 \end{equation}
 Optional stopping does not affect this statement, which averages over
 the prior. It is not a frequentist guarantee for a fixed $\theta$.
+
 For computed probabilities with $\|\hat p - p\|_\infty \le \eta$ at
 stopping, the error is at most $\delta + \eta$, and a threshold of
 $1 - \delta + \eta$ restores $\delta$. At the ten posteriors measured
@@ -1155,10 +1179,13 @@ comparison with counted posterior draws depends on rank. On the
 posteriors of the two experiments, where the centered loadings have
 rank at most two, one evaluation for a hundred alternatives takes
 about ten milliseconds and is accurate to $10^{-6}$ per entry.
+
 Counting draws for ten milliseconds gives about twenty thousand
 draws, which estimate an entry near $0.01$ to seven percent of
 itself. A standard error of $10^{-6}$ on an entry near $0.01$
-would take about $10^{10}$ draws. At factor ranks three to five, on single hundred-arm
+would take about $10^{10}$ draws.
+
+At factor ranks three to five, on single hundred-arm
 posteriors of a linear sampler, one evaluation takes $0.3$ to $1$
 second and $200{,}000$ draws take $0.3$ second, with errors of the
 same order. The win node is faster than counting at low rank, and

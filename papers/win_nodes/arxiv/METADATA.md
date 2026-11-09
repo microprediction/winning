@@ -10,7 +10,7 @@ Title: Win Nodes for Structured Gaussian Bayes Nets Admitting Deterministic Orde
 Authors: Peter Cotton
 Primary category: stat.ML
 Cross-list: stat.CO, cs.LG, cs.AI
-Comments: 16 pages, 2 figures. Code and experiment scripts: github.com/microprediction/winning
+Comments: 19 pages, 2 figures. Code and experiment scripts: github.com/microprediction/winning
 (papers/win_nodes, research/tridiagonal, research/rs_crn).
 License: arXiv non-exclusive license, or CC BY 4.0 if the paper is to be reused freely.
 Abstract: paste arxiv/abstract.txt (plain text; arXiv accepts $...$ math).
