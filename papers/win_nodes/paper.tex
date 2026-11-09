@@ -452,16 +452,18 @@ With a belief $N(\mu,\mathrm{diag}\,v)$ the
 posterior precision is $\mathrm{diag}(1/v)+P/\tau^2$, a rank-one
 correction to a diagonal, and the update is in closed form.
 
-The price
-observes only the contrasts, so what happens to the common level
-depends on the prior. With a common prior variance the level is
-independent of the contrasts under the prior and stays where it was: no
-price can speak to it. With unequal prior variances the level and the
-contrasts are correlated under the prior, and the level moves. The
-extreme case shows why. If one entrant's mean is known exactly and
-another's is not, a price fixes their difference and so fixes the
-unknown mean, and the average moves with it. The price says nothing
-about the level; the movement comes from the prior.
+A price says how much better one entrant is than another, not how
+good the field is. Eight entrants priced at one in eight each are
+priced the same whether all eight are champions or all eight are
+novices. A price can therefore move the gaps between the estimated
+means, but it carries no information about their average, the common
+level. With a common prior variance the update leaves that average
+exactly where it was. With unequal prior variances the average does
+move, and the movement comes from the prior. Suppose entrant 1's
+ability is known exactly from a long record and entrant 2 is a
+newcomer with a wide prior. A price that calls the two evenly matched
+says that entrant 2 is about as good as entrant 1, so entrant 2's mean
+moves to entrant 1's, and the average moves with it.
 
 A win node can now take two kinds of evidence about the same race, a
 price before it and the outcome after it. Two questions follow. How
