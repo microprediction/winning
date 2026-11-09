@@ -34,7 +34,8 @@ import numpy as np
 from scipy.stats import norm
 from sklearn.linear_model import lars_path
 
-from run_trex_race import (N, P, P1, SNR, K, L, ALPHA, V_GRID, S_GRID, MAX_ITER, deflated, race_table, write_results, HERE)
+from run_trex_race import (N, P, P1, SNR, K, L, ALPHA, V_GRID, S_GRID, MAX_ITER, deflated, race_table, write_results,
+                           open_log, log_record, HERE)
 
 MC = int(sys.argv[1]) if len(sys.argv) > 1 else 50
 DESIGNS = sys.argv[2:] or ["independent", "ar1", "clustered"]
@@ -44,7 +45,8 @@ T_EVAL = [t for t in (5, 10, 20) if t <= T_CAP]
 S0 = 2.0                        # half-normal prior sd on the strength (the grid is s >= 0)
 N_SYNTH = 4000
 BLOCK = 5
-rng = np.random.default_rng(20251109)
+SEED = 20251109
+rng = np.random.default_rng(SEED)
 
 
 # ---------------------------------------------------------------- designs
@@ -215,9 +217,9 @@ def trex_published(phi, phi_def, T_max):
 
 
 # ---------------------------------------------------------------- main
-def run_design(kind, log_path):
+def run_design(kind, log):
     t0 = time.time()
-    log = open(log_path, "a")
+    log_path = log.name
     C = design_cov(kind); chol = None if C is None else np.linalg.cholesky(C)
     blocks = np.arange(P) // BLOCK
     nb = P // BLOCK
@@ -329,10 +331,9 @@ def run_design(kind, log_path):
         if Rm:
             row["C"]["block_model"] = ({"fdp": fdpB, "vhat": float((1 - phiB[bs]).sum() / Rm),
                                       "model": float((nb - n_blk_act) * (stB >= st[chosen].min()).mean() / Rm)})
-        log.write(json.dumps(row) + "\n"); log.flush()
+        log_record(log, row, SEED)
         if (rep + 1) % 10 == 0:
             print(f"  {kind} rep {rep + 1}/{MC} {time.time() - t0:.0f}s", flush=True)
-    log.close()
     # the summary is built from the log: what was completed is what is summarised
     rows = [r for r in (json.loads(line) for line in open(log_path)) if r["design"] == kind]
     A_auc = {T: {"phi": [r["A"][str(T)][0] for r in rows if str(T) in r["A"]],
@@ -357,14 +358,14 @@ def run_design(kind, log_path):
 
 def main():
     res = {}
-    stamp = time.strftime("%Y%m%dT%H%M%S", time.gmtime())
-    log_path = os.path.join(HERE, f"log_extensions_MC{MC}_{stamp}.jsonl")
+    log = open_log(f"log_extensions_MC{MC}")            # exclusive: stamp and pid in the name
     path = None
     for kind in DESIGNS:
         print(kind, flush=True)
-        res[kind] = run_design(kind, log_path)
+        res[kind] = run_design(kind, log)
         print(json.dumps({k: res[kind][k] for k in ("A_auc", "B", "C")}, indent=1), flush=True)
         path = write_results(res, f"results_extensions_MC{MC}", path=path)     # rewritten after every design
+    log.close()
     print("->", path)
 
 

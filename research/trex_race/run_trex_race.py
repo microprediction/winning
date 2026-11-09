@@ -59,6 +59,7 @@ V_GRID = np.round(np.arange(0.5, 1.0, 1.0 / K), 3)      # 0.5, 0.55, ..., 0.95 (
 T_GRID = np.arange(1, min(20, T_CAP) + 1)
 S_GRID = np.linspace(0.0, 9.0, 181)                     # strengths on the dummy scale (absolute correlations)
 MAX_ITER = N - 2
+SEED = 1030
 
 
 # ---------------------------------------------------------------- the race map
@@ -181,6 +182,21 @@ def calibrate(fdp_fn, T_max, alpha):
     return best
 
 
+def open_log(stem):
+    """A run's JSONL log, created exclusively under a name carrying the
+    UTC stamp and the pid, so two runs started in the same second cannot
+    share one. Returns the open file."""
+    path = os.path.join(HERE, f"{stem}_{time.strftime('%Y%m%dT%H%M%S', time.gmtime())}_{os.getpid()}.jsonl")
+    return open(path, "x")                     # O_CREAT | O_EXCL; .name is the path
+
+
+def log_record(log, row, seed):
+    """One record: the run's seed and a UTC timestamp are added, the line
+    is written, flushed and fsynced."""
+    row = {"seed": int(seed), "utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), **row}
+    log.write(json.dumps(row) + "\n"); log.flush(); os.fsync(log.fileno())
+
+
 def write_results(obj, stem, path=None):
     """Atomic write next to the script; an existing file is never
     overwritten: the new one takes a UTC time stamp (as run_f1_season does).
@@ -203,7 +219,7 @@ def write_results(obj, stem, path=None):
 # ---------------------------------------------------------------- main
 def main():
     t0 = time.time()
-    rng = np.random.default_rng(1030)
+    rng = np.random.default_rng(SEED)
     print(f"race table: L={L}, T<= {T_CAP}, {len(S_GRID)} strengths", flush=True)
     tab = race_table(L, T_CAP, S_GRID)
     ref = []
@@ -254,8 +270,7 @@ def main():
     # repetition is appended to a JSONL log as it finishes (one line each,
     # flushed), and the summary is built from that log, so an interruption
     # keeps what was done.
-    log_path = os.path.join(HERE, f"log_L{L_MULT}p_MC{MC}_{time.strftime('%Y%m%dT%H%M%S', time.gmtime(t0))}.jsonl")
-    log = open(log_path, "a")
+    log = open_log(f"log_L{L_MULT}p_MC{MC}"); log_path = log.name
     for rep in range(MC):
         X, y, beta, act = simulate(rng)
         phi, dmin = experiments(rng, X, y, L, K, T_CAP)
@@ -284,8 +299,8 @@ def main():
                 sel = phi[T - 1] > v
                 cal_row[name] = {"R": int(R), "fdp": float((sel & ~is_act).sum() / R), "tpp": float((sel & is_act).sum() / P1),
                                  "v": v, "T": int(T)}
-        log.write(json.dumps({"rep": rep, "dmin": int(dmin), "T_max": int(T_max),
-                              "grid": {k_: g[k_].round(6).tolist() for k_ in g}, "cal": cal_row}) + "\n"); log.flush()
+        log_record(log, {"rep": rep, "dmin": int(dmin), "T_max": int(T_max),
+                         "grid": {k_: g[k_].round(6).tolist() for k_ in g}, "cal": cal_row}, SEED)
         if (rep + 1) % 10 == 0:
             print(f"  rep {rep + 1}/{MC} {time.time() - t0:.0f}s", flush=True)
     log.close()
