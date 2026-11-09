@@ -476,9 +476,11 @@ both is tighter and scores better than after either alone. Script:
 \label{tab:price}
 \end{table}
 
-The market noise $\tau^2$ is the one parameter the model adds, and it
-is identified by the evidence of the price observations across many
-races; \citet[\S5]{cotton2026} tunes it that way. A market priced
+The model has one new parameter, the market noise $\tau^2$. Each
+price observation has a marginal likelihood that depends on $\tau^2$,
+the product over many races is a function of $\tau^2$ alone, and its
+maximiser is the estimate; \citet[\S5]{cotton2026} fits $\tau^2$ this
+way. A market priced
 under a different model from the outcome, or with a longshot bias, is
 inverted under its own model and then read as evidence under this
 one; the inversion is agnostic about where the prices came from.
