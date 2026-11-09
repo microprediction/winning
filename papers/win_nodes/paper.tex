@@ -428,13 +428,16 @@ $n-1$ degrees of freedom. The observation therefore lives on the
 contrast space, $y=P(m+\eta)$ with $P=I-\mathbf{1}\mathbf{1}^\top/n$,
 and it is linear and Gaussian in $m$. With a belief $N(\mu,\mathrm{diag}\,v)$ the
 posterior precision is $\mathrm{diag}(1/v)+P/\tau^2$, a rank-one
-correction to a diagonal, and the update is in closed form. With a
-common prior variance the level and the contrasts are independent under
-the prior, and the common level is untouched, as it should be: no price
-can speak to it. With unequal prior variances the level moves through
-its prior correlation with the contrasts, as any coordinate correlated
-with an observed one does; the price still carries no information about
-it on its own.
+correction to a diagonal, and the update is in closed form. The price
+observes only the contrasts, so what happens to the common level
+depends on the prior. With a common prior variance the level is
+independent of the contrasts under the prior and stays where it was: no
+price can speak to it. With unequal prior variances the level and the
+contrasts are correlated under the prior, and the level moves. The
+extreme case shows why. If one entrant's mean is known exactly and
+another's is not, a price fixes their difference and so fixes the
+unknown mean, and the average moves with it. The price says nothing
+about the level; the movement comes from the prior.
 
 The two kinds of evidence compose. Prices are set before the race and
 the outcome is observed after it, and the two are conditionally
