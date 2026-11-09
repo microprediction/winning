@@ -34,7 +34,7 @@ import numpy as np
 from scipy.stats import norm
 from sklearn.linear_model import lars_path
 
-from run_trex_race import (N, P, P1, SNR, K, L, ALPHA, V_GRID, S_GRID, MAX_ITER, deflated, race_table, HERE)
+from run_trex_race import (N, P, P1, SNR, K, L, ALPHA, V_GRID, S_GRID, MAX_ITER, deflated, race_table, write_results, HERE)
 
 MC = int(sys.argv[1]) if len(sys.argv) > 1 else 50
 DESIGNS = sys.argv[2:] or ["independent", "ar1", "clustered"]
@@ -230,7 +230,9 @@ def run_design(kind):
         is_act = np.zeros(P, bool); is_act[act] = True
         blk_act = np.zeros(nb, bool); blk_act[np.unique(blocks[act])] = True
         cand, dums = experiments_positions(X, y)
-        T_max = min(T_CAP, min(len(x) for x in dums))
+        if min(len(x) for x in dums) < 1:
+            raise RuntimeError("an experiment's path ended before any dummy entered: raise MAX_ITER")
+        T_max = min(T_CAP, min(len(x) for x in dums))                # >= 1
         phi = np.zeros((T_CAP, P)); dd = {}
         for T in range(1, T_CAP + 1):
             phi[T - 1], dd[T] = inclusion_and_rank(cand, dums, T)
@@ -244,7 +246,8 @@ def run_design(kind):
         sel = (phi[T - 1] > v) if R else np.zeros(P, bool)
         B["trex"].append({"R": int(R), "fdp": float((sel & ~is_act).sum() / max(R, 1)), "tpp": float((sel & is_act).sum() / P1), "T": T})
         bs = np.zeros(nb, bool); bs[np.unique(blocks[sel])] = True
-        B["trex_blocklevel"].append({"R": int(bs.sum()), "fdp": float((bs & ~blk_act).sum() / max(bs.sum(), 1)), "tpp": float((bs & blk_act).sum() / P1)})
+        n_blk_act = int(blk_act.sum())                 # actives can share a block (independent, AR(1)); block TPP is over active blocks
+        B["trex_blocklevel"].append({"R": int(bs.sum()), "fdp": float((bs & ~blk_act).sum() / max(bs.sum(), 1)), "tpp": float((bs & blk_act).sum() / n_blk_act)})
         # B (ii) ranked by the position-aware statistic, sized by V-hat; best over T
         best = (0, None, None, None)
         for T in range(1, T_max + 1):
@@ -297,7 +300,7 @@ def run_design(kind):
         if Rb_:
             bs[chosen] = True
         fdpB = float((bs & ~blk_act).sum() / max(Rb_, 1))
-        B["block"].append({"R": int(Rb_), "fdp": fdpB, "tpp": float((bs & blk_act).sum() / P1), "T": T})
+        B["block"].append({"R": int(Rb_), "fdp": fdpB, "tpp": float((bs & blk_act).sum() / n_blk_act), "T": T})
         if Rb_:
             vhat = float((1 - phiB[bs]).sum() / Rb_)
             thr = st[chosen].min()
@@ -320,7 +323,7 @@ def run_design(kind):
         if Rm:
             bs[chosen] = True
         fdpB = float((bs & ~blk_act).sum() / max(Rm, 1))
-        B["block_model"].append({"R": int(Rm), "fdp": fdpB, "tpp": float((bs & blk_act).sum() / P1), "T": T})
+        B["block_model"].append({"R": int(Rm), "fdp": fdpB, "tpp": float((bs & blk_act).sum() / n_blk_act), "T": T})
         if Rm:
             Cc["block_model"].append({"fdp": fdpB, "vhat": float((1 - phiB[bs]).sum() / Rm),
                                       "model": float((nb - P1) * (stB >= st[chosen].min()).mean() / Rm)})
@@ -347,8 +350,7 @@ def main():
         print(kind, flush=True)
         res[kind] = run_design(kind)
         print(json.dumps({k: res[kind][k] for k in ("A_auc", "B", "C")}, indent=1), flush=True)
-    path = os.path.join(HERE, f"results_extensions_MC{MC}.json")
-    json.dump(res, open(path, "w"), indent=1)
+    path = write_results(res, f"results_extensions_MC{MC}")
     print("->", path)
 
 

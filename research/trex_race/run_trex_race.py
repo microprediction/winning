@@ -177,6 +177,19 @@ def calibrate(fdp_fn, T_max, alpha):
     return best
 
 
+def write_results(obj, stem):
+    """Atomic write next to the script; an existing file is never
+    overwritten: the new one takes a UTC time stamp (as run_f1_season does)."""
+    path = os.path.join(HERE, stem + ".json")
+    if os.path.exists(path):
+        path = os.path.join(HERE, f"{stem}_{time.strftime('%Y%m%dT%H%M%S', time.gmtime())}.json")
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(obj, f, indent=1)
+    os.replace(tmp, path)
+    return path
+
+
 # ---------------------------------------------------------------- main
 def main():
     t0 = time.time()
@@ -244,7 +257,9 @@ def main():
                 grid["fdp_hat"][ti, vi] += f
                 grid["fdp_model"][ti, vi] += model_selected_nulls(T, v, tab, S_GRID, K, P) / max(R, 1)
                 grid["tpp"][ti, vi] += (sel & is_act).sum() / P1
-        T_max = min(T_CAP, dmin)
+        if dmin < 1:
+            raise RuntimeError("an experiment's path ended before any dummy entered: raise MAX_ITER")
+        T_max = min(T_CAP, dmin)                       # >= 1: Algorithm 1 needs T = 1 at least
         for name, fn in (("trex", lambda T, v: fdp_hat(phi[T - 1], phi_def[T - 1], v)),
                          ("model", lambda T, v: (model_selected_nulls(T, v, tab, S_GRID, K, P) / max((phi[T - 1] > v).sum(), 1),
                                                  int((phi[T - 1] > v).sum())))):
@@ -271,9 +286,7 @@ def main():
            "engine_check": ref, "detail_one_dataset": detail, "graded_betas": graded,
            "grid": {"v": V_GRID.tolist(), "T": T_GRID.tolist(), **grid},
            "calibrated": {k_: summ(v_) for k_, v_ in cal.items()}, "seconds": time.time() - t0}
-    path = os.path.join(HERE, f"results_L{L_MULT}p_MC{MC}.json")
-    with open(path, "w") as f:
-        json.dump(out, f, indent=1)
+    path = write_results(out, f"results_L{L_MULT}p_MC{MC}")
     print("->", path)
     print(json.dumps(out["calibrated"], indent=1))
 

@@ -132,8 +132,9 @@ Graded betas, T = 10: beta [0.25, 0.25, 0.5, 0.5, 0.75, 0.75, 1.0, 1.0, 1.25, 1.
 - The race-model estimate in the same Algorithm 1 at L = p calibrates at
   the target (FDR 0.096 ± 0.007) with power 0.85 (table). It is an
   estimate under a model, not a guarantee: on the grid it tracks the
-  realised FDP to within 0.01 at T <= 2, over-estimates by 0.03 to 0.07
-  at T = 5 to 10 and by 0.23 at T = 20, v = 0.95, so Algorithm 1 lands
+  realised FDP to within 0.01 at T = 1 and within 0.03 at T = 2,
+  over-estimates by 0.03 to 0.07 at T = 5 to 10 and by 0.23 at T = 20,
+  v = 0.95, so Algorithm 1 lands
   on T* = 3 (median) where the estimate is about right. Section C shows
   the same estimate is anti-conservative on sets chosen by other
   statistics.
@@ -213,10 +214,14 @@ Graded betas, T = 10: beta [0.25, 0.25, 0.5, 0.5, 0.75, 0.75, 1.0, 1.0, 1.25, 1.
   the published selection mapped to blocks in the clustered design.
   Nothing here both controls FDR at 0.1 and has power at L = p; the
   paper's remedy for that is more dummies (Algorithm 2), not run.
-- **C.** V-hat on the sets the position ranking selects held empirically
-  in the independent (FDP - V-hat = -0.03 ± 0.06) and AR(1) (-0.01 ± 0.03)
-  designs and lost calibration in the clustered design (+0.23 ± 0.03);
-  there is no proof behind it there. On block-level sets it is far off
+- **C.** V-hat on the sets the position ranking selects: the column n in
+  the table is the number of the 50 runs in which that selection was
+  non-empty, and the SEs are over those runs only. In the independent
+  design the selection was empty in 44 of 50 runs, so FDP - V-hat =
+  -0.03 ± 0.06 rests on 6 runs and says little; in AR(1) (n = 20) it is
+  -0.01 ± 0.03, consistent with calibration; in the clustered design
+  (n = 35) it is +0.23 ± 0.03, calibration lost. There is no proof behind
+  it in any of them. On block-level sets it is far off
   (+0.5 to +0.6): a null block's "any member entered" occurrence is
   inflated by its five members and the paper defines no block deflation.
   The race-model estimate is calibrated for Phi-threshold selection in the
@@ -226,6 +231,18 @@ Graded betas, T = 10: beta [0.25, 0.25, 0.5, 0.5, 0.75, 0.75, 1.0, 1.0, 1.25, 1.
   own statistic finds exactly the nulls for which the |N(0, 1)| dummy law
   is optimistic. The model-based alternative is a diagnostic here, not a
   calibration tool.
+
+### Denominators and n
+
+Block-level TPP in the committed `results_extensions_MC50.json` divides
+by p1 = 10. In the clustered design the actives are one per block, so that
+is the number of active blocks; in the independent and AR(1) designs two
+actives can share a block (about 9.8 distinct active blocks on average),
+so the committed block TPPs there are under-stated by up to about 2
+percent and a perfect block selector tops out near 0.98, which is the
+value the (iii) row shows. The script now divides by the number of active
+blocks; the JSON was not regenerated. The n column of the C table counts
+the runs with a non-empty selection; every SE there is over those runs.
 
 ### Not done
 
