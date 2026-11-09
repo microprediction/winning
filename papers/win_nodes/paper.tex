@@ -570,15 +570,21 @@ order; both reductions are checked to the tolerance of the existing
 updates, and every message is checked against rejection-sampled
 posteriors of the generative model.
 
-With several kinds of outcome message available, the question is how
-much each one tells the model about the means. Table~\ref{tab:places}
-answers it by the same measures as Table~\ref{tab:price}: the same
-simulation, with 1{,}600 seeded races and one message per race. The named entrant in the membership message is drawn
-uniformly from the first three, and the three entrants whose order is
-reported are drawn uniformly from the field, so the choice of who is
-named tells the model nothing. The gains over the prior run from
-fifteen paired standard errors for the membership message to
-thirty-nine for the full order.
+Published results are usually partial: a podium, a cut, a winner.
+The question is how much of the information in the full order each
+partial result keeps, and the messages above let us measure it.
+Table~\ref{tab:places} does so in the simulation of
+Table~\ref{tab:price}, with 1{,}600 seeded races and one message per
+race. Taking the full order's reduction in contrast error as the
+whole, the first three in order with the rest behind keep
+71 percent of it, the first three as a set
+62 percent, the winner alone 34 percent, the order among
+three named entrants 22 percent, and the membership of one
+named entrant in the first three 15 percent. Every gain is at
+least fifteen paired standard errors. The named entrant is drawn
+uniformly from the first three and the three ordered entrants
+uniformly from the field, so the choice of who is named carries no
+information.
 \begin{table}[t]
 \centering
 \begin{tabular}{lccc}
