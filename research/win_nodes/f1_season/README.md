@@ -87,3 +87,56 @@ plus qualifying is worse than qualifying alone (-1.26 against -1.11), and
 would observe the market after qualifying only, or model the market's
 information set explicitly; the post-qualifying snapshots (3 to 4 per
 season) are too few here.
+
+## A shared Saturday-pace latent (`saturday_pace/`): the hypothesis above fails
+
+The hypothesis above predicts that the 2013 harm disappears if the price
+is read as evidence about Saturday form rather than race pace. Model: per
+driver per weekend two paces, qualifying `q` and race `r`, correlated
+0.9 in the prior and in the random-walk innovation; qualifying evidence
+lands on `q`, the race on `r`, and the pre-qualifying market node loads
+`(1 - lambda)` on `r` and `lambda` on `q`. `lambda = 0` is the model of
+the table above; `lambda = 1` reads the price as pure Saturday form.
+
+Belief: `BELIEF=block`, per-driver 2x2 blocks with no cross-driver
+covariance (dropped after each message, as the diagonal path drops it),
+every message through a per-weekend `GaussianNet` whose induced node
+covariance is diagonal, so the lattice prices it exactly and the fault of
+#1027 cannot arise. The mixed market node is a `GaussianNet.attach(A=)`.
+Parity: block at `rho = 0.999, lambda = 0` reproduces the diagonal path
+on 2014 rounds 1-3 (evidence -142.0 in both; log score -1.55198 against
+-1.55212).
+
+    BELIEF=block SPLIT_QR=0.9 LAMBDA_MKT=0.5 BETA2_Q=4 NODES=8 TAG=_block_r09_lam05 \
+      python run_f1_season.py 2013 race+quali+market
+
+Held-out log score of the race winner over the 19 races, evidence in
+brackets:
+
+| | results + qualifying | + market, `lambda = 0` | `lambda = 0.5` | `lambda = 1` |
+|---|---|---|---|---|
+| 2013 | -1.148 | -1.276 (-1338) | -1.302 (-1352) | -1.223 (-1357) |
+| 2014 | -1.367 | -1.315 (-1259) | -1.314 (-1268) | -1.309 (-1266) |
+| 2015 | -1.231 | -1.150 (-1162) | -1.216 (-1172) | -1.239 (-1174) |
+
+No `lambda` removes the 2013 harm: at `lambda = 1` the market still costs
+0.075 against qualifying alone. The evidence prefers `lambda = 0` in every
+season, and `lambda = 1` hurts 2015, where the market helps at
+`lambda = 0`. The price is best read as evidence about race pace, and the
+double-counting explanation is not supported.
+
+Two caveats. The split itself costs a little against the diagonal path
+(results + qualifying: -1.148 / -1.367 / -1.231 against -1.11 / -1.38 /
+-1.19), because qualifying informs race pace only through `rho = 0.9`
+while `beta2_q = 4` was tuned for the single-pace model; `rho` and
+`beta2_q` are confounded and only `rho = 0.9` was run. And the sweep
+fixes `tau2 = 0.3`.
+
+What is left of the 2013 question. The `tau2` sweep stopped at 1.0, where
+the harm was smallest (-1.23), so the limit of a market trusted very
+little has not been reached; a plain explanation is that the 2013
+pre-qualifying market carried no information beyond qualifying, in which
+case any weight hurts and the cure is a `tau2` set by the evidence of
+that season alone. The other candidate is the noise model: prices are
+inverted under the race model with Gaussian noise on the means, and a
+compressed or longshot-biased market would be misread at every `tau2`.
