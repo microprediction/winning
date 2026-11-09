@@ -34,8 +34,9 @@ call intractable and approximate, and which rating systems reach only
 through expectation propagation. We show
 that when the dependence among Gaussian variables runs through a few
 shared factors, the probability that each variable is the largest can
-be computed deterministically at a cost linear in the number of
-variables, by a recent algorithm for correlated contests, and that the
+be computed deterministically, at fixed factor rank and quadrature
+resolution, at a cost linear in the number of variables, by a recent
+algorithm for correlated contests, and that the
 same computation gives the derivatives of these probabilities, the
 likelihood of an observed winner, and the likelihoods of a quoted
 price and of a published place. Under a posterior, the probabilities
@@ -472,7 +473,7 @@ row is a moment-matched posterior, not the exact one.
 evidence & contrast RMSE & posterior variance & log score \\
 \midrule
 none (prior) & 0.919 & 1.000 & $-2.062$ \\
-winner only & 0.855 & 0.872 & $-1.956$ \\
+winner only & 0.854 & 0.872 & $-1.956$ \\
 price only & 0.402 & 0.300 & $-1.671$ \\
 price, then winner & 0.399 & 0.287 & $-1.656$ \\
 \bottomrule
