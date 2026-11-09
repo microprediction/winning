@@ -1,74 +1,113 @@
 {
+  "provenance": {
+    "git_commit": "81d6402cee6897398a0ddc597a70d7f862ff2523",
+    "uncommitted_changes_in_script_dir_or_package": [
+      "M research/rs_crn/exp1_stopping/run_stopping.py"
+    ],
+    "runner_committed_in": "41096d291c51ab107d2d8f937664338daec0b131",
+    "runner_note": "git_commit above is the checkout the run started from; the modified run_stopping.py it lists is the fixed-seed runner (SEEDS below, replacing the earlier hash-derived seeds) and was committed unchanged in runner_committed_in; this results.json was committed in 520a6fd7. The numbers were not regenerated. See papers/win_nodes/README.md.",
+    "winning_source": "/Users/petercotton/github/winning-merge-pom/winning",
+    "winning_version": "1.7.0",
+    "winning_imported_from_worktree": true,
+    "numpy": "2.5.1",
+    "scipy": "1.18.0",
+    "python": "3.14.6",
+    "seeds": {
+      "independent": 20261101,
+      "aligned": 20261102,
+      "opposed": 20261103
+    },
+    "script": "run_stopping.py",
+    "wall_seconds": 21154.2
+  },
   "independent_c0.0": {
     "exact": {
-      "mean_n": 141.23,
-      "censored": 35,
-      "pcs": 0.9696969696969697,
+      "mean_n": 126.475,
+      "censored": 29,
+      "stopped": 171,
+      "mean_n_stopped": 80.08771929824562,
+      "pcs": 0.9707602339181286,
       "tv_median": 0.0,
       "tv_p90": 0.0
     },
     "indep": {
-      "mean_n": 207.015,
-      "censored": 65,
-      "pcs": 0.9851851851851852,
-      "tv_median": 0.0628571280656004,
-      "tv_p90": 0.08202898824928002
+      "mean_n": 188.735,
+      "censored": 57,
+      "stopped": 143,
+      "mean_n_stopped": 104.52447552447552,
+      "pcs": 1.0,
+      "tv_median": 0.06310486662825034,
+      "tv_p90": 0.08207488729064444
     },
     "vbos": {
-      "mean_n": 271.49,
-      "censored": 102,
+      "mean_n": 252.925,
+      "censored": 88,
+      "stopped": 112,
+      "mean_n_stopped": 137.36607142857142,
       "pcs": 1.0,
-      "tv_median": 0.09584241126508777,
-      "tv_p90": 0.12734378509641828
+      "tv_median": 0.09489788808846263,
+      "tv_p90": 0.1277266637703819
     },
-    "mc_certificate_worst_tv": 0.0014632857630269712
+    "mc_certificate_worst_tv": 0.002604048823723748
   },
   "aligned_c0.6": {
     "exact": {
-      "mean_n": 69.695,
-      "censored": 9,
-      "pcs": 0.9581151832460733,
+      "mean_n": 81.195,
+      "censored": 17,
+      "stopped": 183,
+      "mean_n_stopped": 51.5792349726776,
+      "pcs": 0.9726775956284153,
       "tv_median": 0.0,
       "tv_p90": 0.0
     },
     "indep": {
-      "mean_n": 175.58,
-      "censored": 60,
+      "mean_n": 175.24,
+      "censored": 53,
+      "stopped": 147,
+      "mean_n_stopped": 94.20408163265306,
       "pcs": 1.0,
-      "tv_median": 0.12319814449563044,
-      "tv_p90": 0.17362310772631825
+      "tv_median": 0.11604229124542859,
+      "tv_p90": 0.17370894823328245
     },
     "vbos": {
-      "mean_n": 240.13,
-      "censored": 91,
+      "mean_n": 236.68,
+      "censored": 90,
+      "stopped": 110,
+      "mean_n_stopped": 103.05454545454545,
       "pcs": 1.0,
-      "tv_median": 0.14129602061391114,
-      "tv_p90": 0.20581879458739494
+      "tv_median": 0.13268025969333025,
+      "tv_p90": 0.20704302044832185
     },
-    "mc_certificate_worst_tv": 0.00011309604174391078
+    "mc_certificate_worst_tv": 0.001189473192907674
   },
   "opposed_c0.6": {
     "exact": {
-      "mean_n": 106.27,
-      "censored": 21,
-      "pcs": 0.9441340782122905,
+      "mean_n": 122.69,
+      "censored": 33,
+      "stopped": 167,
+      "mean_n_stopped": 67.89221556886227,
+      "pcs": 0.9700598802395209,
       "tv_median": 0.0,
       "tv_p90": 0.0
     },
     "indep": {
-      "mean_n": 171.735,
-      "censored": 57,
-      "pcs": 0.9790209790209791,
-      "tv_median": 0.05204181262606078,
-      "tv_p90": 0.14859902907756392
+      "mean_n": 188.605,
+      "censored": 64,
+      "stopped": 136,
+      "mean_n_stopped": 89.125,
+      "pcs": 0.9926470588235294,
+      "tv_median": 0.06672040958115605,
+      "tv_p90": 0.15189284480363097
     },
     "vbos": {
-      "mean_n": 238.955,
-      "censored": 88,
-      "pcs": 0.9910714285714286,
-      "tv_median": 0.08221633502937255,
-      "tv_p90": 0.17519606207684216
+      "mean_n": 244.15,
+      "censored": 92,
+      "stopped": 108,
+      "mean_n_stopped": 111.38888888888889,
+      "pcs": 1.0,
+      "tv_median": 0.08543078125579305,
+      "tv_p90": 0.1821029601401523
     },
-    "mc_certificate_worst_tv": 0.0013548244096038505
+    "mc_certificate_worst_tv": 0.000738051746562521
   }
 }
