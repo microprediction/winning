@@ -2,14 +2,22 @@
 
 One factor-correlated race, eight entrants, one shared factor, prior
 N(0, I) on the skills. After the race we learn one of: nothing; that a
-named entrant (the actual winner) finished in the top three; the top
-three as a set, order unknown; the order among three named entrants
-(saying nothing about the rest); the top three in order with the rest
-behind; the winner only; the full finishing order. Each is folded in by its exact message
+named entrant finished in the top three; the top three as a set, order
+unknown; the order among three named entrants (saying nothing about the
+rest); the top three in order with the rest behind; the winner only; the
+full finishing order. Each is folded in by its exact message
 (update_topk_correlated, update_topset_correlated, update_prefix_correlated,
 update_order_correlated, update_winner_correlated). Posterior error of
 the skill contrasts against the truth and the log score on the winner
 of an independent rerun, averaged over seeded races.
+
+Who is named must not leak the outcome beyond what the message says
+(review of #1024): the entrant reported in the top three is drawn
+uniformly from the actual top three, so the message carries exactly
+"this one is in the first three" and nothing about their rank within
+it; the three entrants whose mutual order is reported are a uniform
+random subset of the field, not the actual first three. Naming the
+winner, or the first three, would smuggle the stronger message in.
 
 Reproduce: OMP_NUM_THREADS=1 python research/win_nodes/exp2_place_evidence/run_place_evidence.py
 """
@@ -46,12 +54,14 @@ def main():
         f = rng.normal(size=RANK); eps = rng.normal(size=N)
         order = list(np.argsort(-(s + V @ f + np.sqrt(D) * eps)))      # max wins
         w = order[0]
+        named = int(rng.choice(order[:K]))                                # a uniform member of the first K
+        trio = sorted(rng.choice(N, size=K, replace=False), key=order.index)   # a uniform K-subset, in finishing order
         posts = {
             "prior": (m0, v0),
-            "member of top 3": update_topk_correlated(m0, v0, w, K, V=V, beta2=BETA2)[:2],
+            "member of top 3": update_topk_correlated(m0, v0, named, K, V=V, beta2=BETA2)[:2],
             "top-3 set": update_topset_correlated(m0, v0, order[:K], V=V, beta2=BETA2)[:2],
             "winner": update_winner_correlated(m0, v0, w, V, beta2=BETA2)[:2],
-            "order among 3 named": update_order_correlated(m0, v0, order[:K], V, beta2=BETA2)[:2],
+            "order among 3 named": update_order_correlated(m0, v0, trio, V, beta2=BETA2)[:2],
             "top 3 in order, rest behind": update_prefix_correlated(m0, v0, order[:K], V=V, beta2=BETA2)[:2],
             "full order": update_order_correlated(m0, v0, order, V, beta2=BETA2)[:2],
         }

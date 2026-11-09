@@ -20,7 +20,7 @@
 Admitting Deterministic Order-Statistic Queries}}
 \author{Peter Cotton}
 \date{\normalsize First version: September 1, 2026.\\ This version:
-November 6, 2026.}
+November 9, 2026.}
 
 \begin{document}
 \maketitle
@@ -414,14 +414,24 @@ $n-1$ degrees of freedom. The observation therefore lives on the
 contrast space, $y=P(m+\eta)$ with $P=I-\mathbf{1}\mathbf{1}^\top/n$,
 and it is linear and Gaussian in $m$. With a belief $N(\mu,\mathrm{diag}\,v)$ the
 posterior precision is $\mathrm{diag}(1/v)+P/\tau^2$, a rank-one
-correction to a diagonal, and the update is in closed form. The
-common level is untouched, as it should be: no price can speak to it.
+correction to a diagonal, and the update is in closed form. With a
+common prior variance the level and the contrasts are independent under
+the prior, and the common level is untouched, as it should be: no price
+can speak to it. With unequal prior variances the level moves through
+its prior correlation with the contrasts, as any coordinate correlated
+with an observed one does; the price still carries no information about
+it on its own.
 
 The two kinds of evidence compose. Prices are set before the race and
 the outcome is observed after it, and the two are conditionally
 independent given the means, so the price update is applied first
 and the observed-winner message of Equation~\eqref{eq:obslik} is
-applied to the updated belief. Table~\ref{tab:price} measures the
+applied to the updated belief. In the experiment the belief is kept in
+the diagonal Gaussian family between messages: the price posterior is
+exact and its diagonal is carried forward, and the winner message is
+projected to a diagonal Gaussian as in Section~\ref{sec:observed}. The
+composed row is therefore a moment-matched posterior, not the exact
+one. Table~\ref{tab:price} measures the
 composition on a seeded simulation: eight alternatives, one shared
 factor, a market with $\tau^2=0.25$, and a prior $N(0,I)$ on the
 means, averaged over 400 races. The error is the root mean square of
@@ -744,7 +754,7 @@ are checked against simulation and against an exact law; the scripts
 are \texttt{research/tridiagonal/exp1} to \texttt{exp4}. On the AR(1)
 chain of Section~\ref{sec:examples}, $4\times10^5$ simulated paths
 agree with the computed argmax probabilities to within
-$8\times10^{-4}$, about twice their standard error. For a random walk
+$8.1\times10^{-4}$, about twice their standard error. For a random walk
 the finite-$n$ argmax law is known exactly:
 $p_t=q_{t-1}q_{n-t}$ with $q_k=\binom{2k}{k}4^{-k}$ \citep{sparreandersen1954}.
 At $n=40$ the lattice pass is within $1.1\times10^{-4}$ of it, a
@@ -1096,7 +1106,7 @@ their neighbours and correlations, so the comparison does not isolate
 the effect of the number of matches.
 
 Two hundred thousand draws from each posterior agree with the
-computed probabilities to $0.0019$ or better, across all six careers
+computed probabilities to $0.0020$ or better, across all six careers
 and every year. The Gaussian posterior is a Laplace approximation,
 and the probabilities are computed for that posterior. The script
 is \texttt{exp6\_career\_peak} under \texttt{research/tridiagonal}.
