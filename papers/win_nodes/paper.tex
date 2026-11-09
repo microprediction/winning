@@ -89,7 +89,9 @@ the dependence among the $X_i$ runs through a few shared factors, the
 lattice algorithm of \citet{cotton2026} for correlated contests gives
 all $n$ probabilities $\Pr(W=i)$ at once, and Section~\ref{sec:factor}
 derives the Jacobian and the exact likelihood of an observed winner
-from the same computation. When the $X_i$ form a Markov chain,
+from the same computation.
+
+When the $X_i$ form a Markov chain,
 Section~\ref{sec:chain} computes the same probabilities by a forward
 and a backward pass over a lattice of values, each pass restricted
 to paths that stay below a threshold. The same passes give the
@@ -320,8 +322,9 @@ p_i \;=\; \int_{\mathbb{R}^\rho} \phi_\rho(z) \int_{\mathbb{R}}
 f_{i|z}(x) \prod_{j \neq i} F_{j|z}(x)\, dx \, dz .
 \label{eq:integral}
 \end{equation}
-Component $i$ wins by finishing at some value $x$ with everyone
-else below it, averaged over the shared factors.
+Given $z$, the inner integral is the probability that component $i$
+finishes at some value $x$ with every other component below it; the
+outer integral averages over the factors.
 
 The inner integrands for different $i$ share the product
 $G_z(x) = \prod_j F_{j|z}(x)$. Dividing out the $i$th term gives
@@ -375,6 +378,7 @@ densities \citep[\S5]{cotton2026}, and it is positive semidefinite,
 as it must be: $p$ is the gradient of $\mathbb{E}[\max_i X_i]$ with
 respect to $m$, and the expected maximum is convex in $m$. Its product with a vector costs
 $O(nLQ)$ on the same lattice, without forming the matrix.
+
 \citet{muller2019} reach the same identity for general joint laws
 through the surplus function. Equation~\eqref{eq:tie} is the derivative of the
 exact probabilities. The derivative of the computed lattice
@@ -400,12 +404,12 @@ the average of that product over $z$ and $u$:
 \label{eq:obslik}
 \end{equation}
 
-The score of Equation~\eqref{eq:obslik}, its gradient in $m$, has a
-closed form on the quadrature nodes: a weighted sum of Mills ratios,
-with weights the posterior probabilities of the nodes given the win,
+The score of Equation~\eqref{eq:obslik}, its gradient in $m$, is a
+weighted sum of Mills ratios over the quadrature nodes, the weight of
+each node being its posterior probability given the win. It is
 computed in one extra pass over the arrays the likelihood already
-builds. The message an observed win node passes to its
-Gaussian parents therefore carries exact first-order information. At
+builds, so the message an observed win node passes to its Gaussian
+parents carries exact first-order information. At
 $n=2$ with no factors the likelihood is
 $\Phi\bigl((m_k-m_j)/\sqrt{d_k+d_j}\bigr)$, the binary probit
 comparison, which is TrueSkill's greater-than factor with no draw
@@ -413,9 +417,10 @@ margin.
 
 Observing the winner tells less than observing the full
 ranking, and Equation~\eqref{eq:obslik} is the likelihood of that
-smaller piece of evidence. Moment approximations enter only if the
-user chooses a Gaussian posterior family, as in expectation
-propagation. Equation~\eqref{eq:obslik} is the
+smaller piece of evidence. The likelihood is exact; a moment
+approximation enters only if the user then projects the posterior
+onto a Gaussian family, as expectation propagation does.
+Equation~\eqref{eq:obslik} is the
 multinomial probit likelihood, and with its score it is the
 estimation core of \citet[\S5]{cotton2026}.
 
@@ -438,12 +443,16 @@ the means, $p=\mathrm{race}(m+\eta)$ with $\eta\sim N(0,\tau^2 I)$,
 where $\mathrm{race}$ is the forward query of
 Section~\ref{sec:forward} under the market's loadings and noise. The
 inversion of \citet[\S5]{cotton2026} recovers $m+\eta$ from $p$ up to
-one common level, because prices carry no level: $\sum_i p_i=1$ fixes
-$n-1$ degrees of freedom. The observation therefore lives on the
+one common level, because the prices sum to one and so carry $n-1$
+numbers, not $n$. The observation therefore lives on the
 contrast space, $y=P(m+\eta)$ with $P=I-\mathbf{1}\mathbf{1}^\top/n$,
-and it is linear and Gaussian in $m$. With a belief $N(\mu,\mathrm{diag}\,v)$ the
+and it is linear and Gaussian in $m$.
+
+With a belief $N(\mu,\mathrm{diag}\,v)$ the
 posterior precision is $\mathrm{diag}(1/v)+P/\tau^2$, a rank-one
-correction to a diagonal, and the update is in closed form. The price
+correction to a diagonal, and the update is in closed form.
+
+The price
 observes only the contrasts, so what happens to the common level
 depends on the prior. With a common prior variance the level is
 independent of the contrasts under the prior and stays where it was: no
@@ -454,19 +463,17 @@ another's is not, a price fixes their difference and so fixes the
 unknown mean, and the average moves with it. The price says nothing
 about the level; the movement comes from the prior.
 
-The two kinds of evidence compose. Prices are set before the race and
-the outcome is observed after it, and the two are conditionally
-independent given the means, so the price update is applied first
-and the observed-winner message of Equation~\eqref{eq:obslik} is
-applied to the updated belief. In the experiment the belief is kept in
-the diagonal Gaussian family between messages: the price posterior is
-exact and its diagonal is carried forward, and the winner message is
-projected to a diagonal Gaussian as in Section~\ref{sec:observed}. The
-composed row is therefore a moment-matched posterior, not the exact
-one. We simulate 400 races. In each race eight alternatives have means
+Prices are set before the race and the outcome is observed after it,
+and the two are conditionally independent given the means, so the
+price update is applied first and the observed-winner message of
+Equation~\eqref{eq:obslik} is applied to the updated belief.
+
+We simulate 400 races. In each race eight alternatives have means
 drawn from $N(0,I)$ and share one factor; a market quotes a price for
 each alternative from its own noisy view of the means, with
-$\tau^2=0.25$; the race is run and the winner recorded. Starting from
+$\tau^2=0.25$; the race is run and the winner recorded.
+
+Starting from
 the prior $N(0,I)$ we form three posteriors, one from the price, one
 from the winner, and one from the price followed by the winner, and
 compare each with the truth in two ways: the root mean square error of
@@ -474,6 +481,12 @@ the posterior-mean contrasts against the true contrasts, and the log
 probability the posterior assigns to the winner of a second,
 independent running of the same race. Table~\ref{tab:price} reports
 the averages over the 400 races.
+
+Between messages the belief is kept
+in the diagonal Gaussian family: the price posterior is exact and its
+diagonal is carried forward, and the winner message is projected to a
+diagonal Gaussian as in Section~\ref{sec:observed}, so the composed
+row is a moment-matched posterior, not the exact one.
 
 \begin{table}[t]
 \centering
@@ -489,8 +502,8 @@ price, then winner & 0.399 & 0.287 & $-1.656$ \\
 \end{tabular}
 \caption{One race, two kinds of evidence. A price with noise
 $\tau^2=0.25$ is worth far more than one observed winner, which is a
-single draw from the outcome, and the two compose: the posterior after
-both is tighter and scores better than after either alone. Script:
+single draw from the outcome, and the posterior after both is tighter
+and scores better than after either alone. Script:
 \texttt{research/win\_nodes/exp1\_two\_evidence}.}
 \label{tab:price}
 \end{table}
@@ -507,33 +520,39 @@ one; the inversion is agnostic about where the prices came from.
 \subsection{Places as evidence}
 \label{sec:places}
 
-Between the winner and the full order lie the results that are
-actually published: the first $k$ in order with the rest unplaced, the
-first $k$ as a set, or the bare fact that a named entrant finished
-among the first $k$. Each is an event of the win node's relatives, and
-conditional on the shared factors each has a one-dimensional lattice
-form, so each passes through the same mixture over factor nodes as
+Published results usually lie between the winner and the full order:
+the first $k$ in order with the rest unplaced, the first $k$ as a set,
+or the fact that a named entrant finished among the first $k$. Each
+is an event about the order of the same performances. Conditional on
+the shared factors each has a one-dimensional lattice form, so each
+passes through the same mixture over factor nodes as
 Equation~\eqref{eq:obslik}.
 
 Write $f_i$ and $\Phi_i$ for the conditional density and distribution
 function of entrant $i$'s performance, and $S_i=1-\Phi_i$. For the set
 $T$ of the first $k$ in unknown order, let $G=\prod_{j\notin T}\Phi_j$
-be the law of the best outsider and $H=\prod_{i\in T}S_i$ the chance
-that every member is above $x$; then
+be the distribution function of the best outsider and
+$H=\prod_{i\in T}S_i$ the probability that every member is above
+$x$. Then
 \begin{equation}
-\Pr(\text{first } k = T)\;=\;\int G'(x)\,H(x)\,dx\;=\;-\int G(x)\,H'(x)\,dx,
+\Pr(\text{first } k = T)\;=\;\int G'(x)\,H(x)\,dx\;=\;-\int G(x)\,H'(x)\,dx .
 \label{eq:topset}
 \end{equation}
-and differentiating under either form gives the score as one lattice
-sum per entrant: nonnegative for a member, nonpositive for an
-outsider, summing to zero because a common shift of every mean moves
-nothing. For the ordered prefix $i_1,\dots,i_k$ with everyone else
-behind, the last named finishes at $x$ with every unnamed entrant
-below, $A_k(x)=f_{i_k}(x)\prod_{l\ \mathrm{unnamed}}\Phi_l(x)$, each
-earlier named entrant finishes above the next,
-$A_j(x)=f_{i_j}(x)\int_{-\infty}^{x}A_{j+1}$, and the probability is
-$\int A_1$: $k$ cumulative sums on one lattice, for any $k$. The
-membership of one entrant among the first $k$ is the top-$k$ query of
+Differentiating either form gives the score as one lattice sum per
+entrant, nonnegative for a member and nonpositive for an outsider;
+the sums total zero because a common shift of every mean changes
+nothing.
+
+For the ordered prefix $i_1,\dots,i_k$ with everyone else
+behind, let $A_k(x)=f_{i_k}(x)\prod_{l\ \mathrm{unnamed}}\Phi_l(x)$
+be the density that the last named entrant finishes at $x$ with every
+unnamed entrant below, and recursively let
+$A_j(x)=f_{i_j}(x)\int_{-\infty}^{x}A_{j+1}$ be the density that
+entrant $i_j$ finishes at $x$ ahead of the rest of the prefix. The
+probability of the prefix is $\int A_1$, which is $k$ cumulative sums
+on one lattice, for any $k$.
+
+The membership of one entrant among the first $k$ is the top-$k$ query of
 \citet{cotton2026} and its Jacobian row is the score. At $k=1$ all
 three are the observed winner, and the prefix at $k=n$ is the full
 order; both reductions are checked to the tolerance of the existing
@@ -650,8 +669,8 @@ exactly, for every $n_r \ge 1$.
 
 The posterior mean is $m = A^{-1} h$
 with $h = n_r \Lambda^{-1} \bar{Y}$, and both factors are available
-from Equations~\eqref{eq:wood1} and~\eqref{eq:wood2}. No step
-approximates. The posterior has factor form because the shared
+from Equations~\eqref{eq:wood1} and~\eqref{eq:wood2}. No step is an
+approximation. The posterior has factor form because the shared
 random inputs have factor form.
 
 \subsection{A bandit whose arms share features}
@@ -719,16 +738,16 @@ $L\times L$ matrices $T_s$ and the passes below are approximations to
 the corresponding integral operators.
 
 \emph{Law of the maximum and first passage.} The maximum stays
-below $u$ when every step does, so restrict each transition to
-values below $u$. With $T_s$ the lattice transition from $X_s$ to
-$X_{s+1}$ and $\pi_u$ the initial mass vector cut at $u$,
+below $u$ when every step does, so each transition is restricted to
+values below $u$. Let $T_s$ be the lattice transition from $X_s$ to
+$X_{s+1}$ and $\pi_u$ the initial mass vector cut at $u$. Then
 \begin{equation}
 \Pr(\max_{s\le t}X_s\le u)\;\approx\;\mathbf{1}^\top
 T_{t-1}^{(u)}\cdots T_1^{(u)}\,\pi_u,
 \qquad T_s^{(u)}(x'\mid x)=T_s(x'\mid x)\,\mathbf 1\{x'\le u\},
 \end{equation}
-with equality for the continuous operators.
-This is one forward pass. A banded precision does not make the
+where the approximation is the lattice; for the continuous operators
+the relation is an equality. This is one forward pass. A banded precision does not make the
 lattice transition matrix banded, and with dense $L\times L$
 transitions the pass costs $O(nL^2)$ per threshold.
 
@@ -1160,9 +1179,9 @@ is \texttt{exp6\_career\_peak} under \texttt{research/tridiagonal}.
 
 The factor win node, its top-$k$ relatives, both Jacobian blocks,
 the calibration inverses, and the evidence messages of
-Sections~\ref{sec:observed}--\ref{sec:places} behind one front door
-(\texttt{update\_race}: prices, winner, order, prefix, top set,
-membership) are in the \texttt{winning} package of
+Sections~\ref{sec:observed}--\ref{sec:places}, all through one
+function (\texttt{update\_race}: prices, winner, order, prefix, top
+set, membership), are in the \texttt{winning} package of
 \citet{cotton2026}: a Python reference with R, JavaScript, Julia and
 Rust ports, each checked against the same embedded reference
 vectors, most to $10^{-15}$. The
@@ -1178,7 +1197,7 @@ lifted pass and to \citet{bolin2015} respectively.
 \section{Scope}
 \label{sec:limits}
 
-\emph{Structure.} The reduction requires structure. Factor dependence
+\emph{Structure.} The reduction requires factor or band structure. Factor dependence
 of rank $\rho$ costs a $Q$-node quadrature and is exact to quadrature
 accuracy. On a chain the argmax probabilities cost $O(nL^3)$ with
 dense transitions. For precision bandwidth $b$ the law of the maximum
