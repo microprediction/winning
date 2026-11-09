@@ -31,6 +31,25 @@ def as_noise_variances(x, k, name):
     return A
 
 
+def as_observation(x, k, name):
+    """One finite entry per runner (or team), as a float vector.
+
+    rate_history checks this at its door; the single-update verbs did
+    not. A length-1 margins/scores/p_market broadcast against an n-runner
+    belief and, once centred, was the observation of a dead heat (or a
+    uniform market): a confident wrong posterior. A NaN or inf came back
+    as NaN means beside a finite, shrunk covariance.
+    """
+    a = np.asarray(x, dtype=float)
+    if a.ndim != 1 or a.shape[0] != k:
+        raise ValueError(f"{name} must have one entry per runner; got shape "
+                         f"{a.shape} for {k}")
+    bad = np.flatnonzero(~np.isfinite(a))
+    if bad.size:
+        raise ValueError(f"{name}[{int(bad[0])}] = {float(a[bad[0]])!r} is not finite")
+    return a
+
+
 def require_distinct(ids, name="runners"):
     """Identities within one contest must be distinct.
 

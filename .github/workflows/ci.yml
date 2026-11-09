@@ -4,9 +4,24 @@ on:
   push:
     branches: [main]
   pull_request:
+  # The full grid (every Python, macOS, Windows) runs nightly and on
+  # demand rather than on every merge: one merge cost ~6 runner-hours and
+  # the account's runners are shared with every other repository.
+  schedule:
+    - cron: "23 6 * * *"   # 06:23 UTC daily
+  workflow_dispatch:
 
 permissions:
   contents: read
+
+
+# One run per workflow per PR (or per ref on main). A newer run cancels a
+# still-pending one in the same group; on pull requests it also cancels the
+# one in progress. Superseded runs were queueing for hours. The nightly
+# grid has its own group so a merge never displaces it, nor it a merge.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'grid' || 'ci' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
@@ -15,12 +30,16 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        python-version: ["3.10", "3.11", "3.12", "3.13"]
-        include:
-          - os: macos-latest
-            python-version: "3.12"
-          - os: windows-latest
-            python-version: "3.12"
+        # Pull requests and pushes to main test the oldest and newest Python
+        # on Ubuntu; the nightly (and manually dispatched) run adds 3.11,
+        # 3.12, macOS and Windows.
+        python-version: >-
+          ${{ fromJSON((github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+          && '["3.10", "3.11", "3.12", "3.13"]' || '["3.10", "3.13"]') }}
+        include: >-
+          ${{ fromJSON((github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+          && '[{"os": "macos-latest", "python-version": "3.12"}, {"os": "windows-latest", "python-version": "3.12"}]'
+          || '[]') }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -29,9 +48,18 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install
-        run: pip install -e ".[test]"
+        run: pip install -e ".[test]" pytest-xdist
       - name: Test
-        run: python -m pytest -q
+        # One worker per core, one BLAS thread per worker (the suite is
+        # BLAS-heavy and would otherwise oversubscribe). The whole suite
+        # passed in parallel, with the same counts as a serial run, in half
+        # the time before this was switched on.
+        env:
+          OMP_NUM_THREADS: "1"
+          OPENBLAS_NUM_THREADS: "1"
+          MKL_NUM_THREADS: "1"
+          VECLIB_MAXIMUM_THREADS: "1"
+        run: python -m pytest -q -n auto
 
   test-minimal:
     # the shipped core must work with numpy and scipy alone

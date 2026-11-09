@@ -1204,6 +1204,21 @@ def kink_lattice(x, M, sd, kinks):
     eff[0] *= 0.25
     eff[-1] *= 0.25
     count = np.maximum(4, np.round(L * eff / eff.sum()).astype(int))
+    # One Gauss rule per piece is built in O(m^2) (leggauss in O(m^3)), and
+    # a large points= gave one piece a large share of the budget: 4,000
+    # nodes took 2.7 s to construct and a 32,769-point Laplace inverse
+    # blocked for seconds before its first sweep (#835). A piece above
+    # KINK_MAX_ORDER is split into k equal panels of ceil(m / k) nodes, the
+    # same budget as a composite rule; at or below it nothing changes.
+    if (count > KINK_MAX_ORDER).any():
+        los, his, cnts = [], [], []
+        for a, b, m in zip(lo, hi, count):
+            k = -(-int(m) // KINK_MAX_ORDER)            # panels, ceil(m / max)
+            edges = a + (b - a) * np.arange(k + 1) / k
+            edges[0], edges[-1] = a, b                  # an unsplit piece keeps its bits
+            los.extend(edges[:-1]); his.extend(edges[1:])
+            cnts.extend([-(-int(m) // k)] * k)
+        lo, hi, count = np.array(los), np.array(his), np.array(cnts)
     mid, half = 0.5 * (hi + lo), 0.5 * (hi - lo)
     xs, ws = [], []
     for m in np.unique(count):
@@ -1215,6 +1230,7 @@ def kink_lattice(x, M, sd, kinks):
 
 
 _LEGENDRE = {}
+KINK_MAX_ORDER = 512        # see kink_lattice (#835); the browser and R use it too
 
 
 def _legendre(m):
@@ -2701,7 +2717,11 @@ def _tempered_curves(sd_i, tau, fn, left, right, m=4001):
             f"limit; use winning.factor.races.softmax_probabilities, which "
             f"is the closed form, rather than this quadrature.")
     f_eta /= total
-    cdf = np.cumsum(f_eta) * du
+    # trapezoid, not left-Riemann: the plain cumulative sum put the cdf
+    # half a cell ahead of the density, a first-order bias (2.7e-4 on
+    # mu = [0, .5, 1], up to 9e-4 across fields) that points= cannot reach
+    # because the curve grid is fixed. The trapezoid is 1.5e-8 off.
+    cdf = (np.cumsum(f_eta) - 0.5 * f_eta) * du
     S = np.maximum(1.0 - cdf, 1e-300)
     fp = np.gradient(f_eta, du)
     return u, S, f_eta, fp

@@ -474,3 +474,12 @@ test_that("a retry that raises keeps the completed attempts (#855)", {
   expect_identical(.retry_on_failure(conv, boom, function(f) list(1),
                                      "max_logit_residual"), conv)
 })
+
+test_that("the top-k inverse refines a failing lattice as python and the browser (#943)", {
+  mu <- c(-0.10455761128105223, 0.10455761128105223)
+  D <- c(0.8967612229487083, 0.021331877150829952)
+  q <- top_k_probabilities(mu, 1, D = D, base = "laplace", points = 513)
+  r <- abilities_from_topk(q, 1, D = D, base = "laplace", points = 513)
+  m <- if (is.list(r)) r$mu else r
+  expect_lt(max(abs(top_k_probabilities(m, 1, D = D, base = "laplace", points = 513) - q)), 1e-8)
+})

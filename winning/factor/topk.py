@@ -1366,28 +1366,42 @@ def abilities_from_topk(q, k, V=None, D=None, base="normal", points=513,
 
     split_slopes = bool(_base_kinks(base_rows)) and not kink_split
 
-    def _with_slopes(m):
-        qj, sj = _topk_with_slopes(m, sd, k, base_rows, points,
+    def _with_slopes(m, pts):
+        qj, sj = _topk_with_slopes(m, sd, k, base_rows, pts,
                                    is_normal=(base == "normal"),
                                    kink_split=kink_split)
         if split_slopes:
             # a kinked base: the slope from the split lattice, the value
             # from the map being inverted (#267)
-            sj = _topk_with_slopes(m, sd, k, base_rows, points,
+            sj = _topk_with_slopes(m, sd, k, base_rows, pts,
                                    kink_split=True)[1]
         return qj, sj
 
-    def _forward(m):
+    def _raw_at(m, pts):
         if nodes is None:
-            qraw, sl = _with_slopes(m)
-        else:
-            qraw = np.zeros(n)
-            sl = np.zeros(n)
-            for j in range(len(nodes)):
-                qj, sj = _with_slopes(m + Vm @ nodes[j])
-                qraw += w[j] * qj
-                sl += w[j] * sj
-        qhat = _checked_topk(qraw, k, "top-k inversion")
+            return _with_slopes(m, pts)
+        qraw = np.zeros(n)
+        sl = np.zeros(n)
+        for j in range(len(nodes)):
+            qj, sj = _with_slopes(m + Vm @ nodes[j], pts)
+            qraw += w[j] * qj
+            sl += w[j] * sj
+        return qraw, sl
+
+    def _forward(m):
+        # the forward's bounded refinement (_refined_topk, #623): a lattice
+        # that fails the mass check is doubled (2p - 1) up to four times
+        # the request, and the residual and slopes come from the lattice
+        # that passed. On one fixed lattice the inverse refused, at its
+        # warm start, a target the public forward produced at the same
+        # points (#943).
+        held = {}
+
+        def raw_at(pts):
+            held["qraw"], held["sl"] = _raw_at(m, pts)
+            return held["qraw"]
+        qhat = _refined_topk(raw_at, k, points, "top-k inversion")
+        qraw, sl = held["qraw"], held["sl"]
         if float(qraw.max()) * k > float(qraw.sum()):
             # a membership above one, clipped to exactly one: the logit
             # residual there is ~690 and flat, and the sweeps stalled in
