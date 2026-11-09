@@ -228,6 +228,8 @@ def run(variant, season, snaps):
             if LAMBDA_MKT > 0:
                 if not SPLIT_QR > 0:
                     raise ValueError("LAMBDA_MKT needs SPLIT_QR > 0: there is no Saturday pace to load on")
+                if BELIEF == "diag":
+                    raise ValueError("LAMBDA_MKT needs BELIEF=block or dense: the diagonal path has no mixed node")
                 A = np.zeros((len(quoted), len(net.names)))
                 for i, d in enumerate(quoted):
                     A[i, net.index[rlab[d]]] = 1.0 - LAMBDA_MKT; A[i, net.index[lab[d]]] = LAMBDA_MKT
@@ -291,16 +293,18 @@ def run(variant, season, snaps):
             "total_evidence": float(net.evidence), "belief": BELIEF,
             "races_with_market": len(mkt_ls), "market_log_score": float(np.mean(mkt_ls)) if mkt_ls else None,
             "model_log_score_on_those": float(np.mean(win_ls_on_mkt)) if win_ls_on_mkt else None,
-            "mean_log_score_pole": float(np.mean(pole_ls)) if pole_ls else None, "split_qr": SPLIT_QR, "lambda_mkt": LAMBDA_MKT,
+            "mean_log_score_pole": float(np.mean(pole_ls)) if pole_ls else None, "split_qr": SPLIT_QR, "lambda_mkt": LAMBDA_MKT, "max_rounds": MAX_ROUNDS,
             "uniform": float(np.log(1 / 20)), "seconds": time.time() - t0}
 
 
 PARAMS = dict(init_var=INIT_VAR, drift=DRIFT, rho=RHO, beta2_q=BETA2_Q, beta2_r=BETA2_R, lengths_scale_q=LS_Q,
               nodes_log2=NODES, tau2=TAU2, belief=BELIEF, quali_mode=QUALI_MODE, q_by_times=Q_BY_TIMES, split_qr=SPLIT_QR,
-              lambda_mkt=LAMBDA_MKT)
+              lambda_mkt=LAMBDA_MKT, max_rounds=MAX_ROUNDS)
 
 
 def main():
+    if LAMBDA_MKT > 0 and (BELIEF == "diag" or not SPLIT_QR > 0):
+        raise SystemExit("LAMBDA_MKT > 0 needs SPLIT_QR > 0 and BELIEF=block or dense (the diagonal path has no mixed node)")
     t_start = time.time()
     season = load_season(YEAR)
     snaps = market_snapshots(YEAR, {d for w in season for d in w["drivers"]})
