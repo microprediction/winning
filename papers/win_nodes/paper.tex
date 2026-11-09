@@ -273,8 +273,15 @@ parents have factor structure: the forward query, which gives all $n$
 probabilities $\Pr(W=i)$ (Section~\ref{sec:forward}); their
 derivative with respect to the means (Section~\ref{sec:jacobian});
 and the likelihood when the winner is observed
-(Section~\ref{sec:observed}). All three follow from one fact:
-conditional on the factors, the components are independent.
+(Section~\ref{sec:observed}). All three come out of one computation.
+Conditional on the factors the components are independent, so each
+probability is a one-dimensional integral of one component's density
+against the product of the others' distribution functions. The
+algorithm of \citet{cotton2026} builds that product once on a lattice
+at each factor node and reads every alternative's probability off it
+by dividing out that alternative's own term; the derivatives and the
+likelihood of an observed winner are further passes over the same
+arrays. The cost is linear in $n$.
 
 \subsection{The forward query}
 \label{sec:forward}
