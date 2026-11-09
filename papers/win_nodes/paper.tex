@@ -554,9 +554,10 @@ the sums total zero because a common shift of every mean changes
 nothing.
 
 For the ordered prefix $i_1,\dots,i_k$ with everyone else
-behind, let $A_k(x)=f_{i_k}(x)\prod_{l\ \mathrm{unnamed}}\Phi_l(x)$
-be the density that the last named entrant finishes at $x$ with every
-unnamed entrant below, and recursively let
+behind, let $N=\{i_1,\dots,i_k\}$ be the named entrants, let
+$A_k(x)=f_{i_k}(x)\prod_{l\notin N}\Phi_l(x)$ be the density that
+the last named entrant finishes at $x$ with every unnamed entrant
+below, and recursively let
 $A_j(x)=f_{i_j}(x)\int_{-\infty}^{x}A_{j+1}$ be the density that
 entrant $i_j$ finishes at $x$ ahead of the rest of the prefix. The
 probability of the prefix is $\int A_1$, which is $k$ cumulative sums
