@@ -17,10 +17,58 @@
   "both": 0.2869138962621257
  },
  "mean_log_score_next_winner": {
-  "prior": -2.0617686260027686,
-  "outcome": -1.9554981138630625,
-  "price": -1.670581846650733,
-  "both": -1.6560225660097267
+  "prior": -2.061768626002769,
+  "outcome": -1.955498113863063,
+  "price": -1.6705818466507327,
+  "both": -1.6560225660097263
  },
- "seconds": 83.56123089790344
+ "standard_errors": {
+  "rmse_contrast": {
+   "prior": 0.012577138722777844,
+   "outcome": 0.011451751540467524,
+   "price": 0.005629796954071446,
+   "both": 0.005432595555224638
+  },
+  "mean_posterior_var": {
+   "prior": 0.0,
+   "outcome": 0.0006712737938248517,
+   "price": 2.7790335273101198e-18,
+   "both": 0.00016266535316177035
+  },
+  "mean_log_score_next_winner": {
+   "prior": 0.007636559140528418,
+   "outcome": 0.025691113919654025,
+   "price": 0.039102321911331096,
+   "both": 0.03957895023012902
+  }
+ },
+ "paired_difference_standard_errors": {
+  "rmse_contrast": {
+   "prior_minus_outcome": 0.005688234855751093,
+   "prior_minus_price": 0.0125097325299839,
+   "prior_minus_both": 0.01254246567879684,
+   "outcome_minus_price": 0.01188503729453461,
+   "outcome_minus_both": 0.01149417612232714,
+   "price_minus_both": 0.0021781752697703116
+  },
+  "mean_posterior_var": {
+   "prior_minus_outcome": 0.0006712737938248517,
+   "prior_minus_price": 0.0,
+   "prior_minus_both": 0.00016266535316177022,
+   "outcome_minus_price": 0.0006712737938248517,
+   "outcome_minus_both": 0.0006079261317714001,
+   "price_minus_both": 0.00016266535316177035
+  },
+  "mean_log_score_next_winner": {
+   "prior_minus_outcome": 0.02546157159639397,
+   "prior_minus_price": 0.039306307012262086,
+   "prior_minus_both": 0.039983381737276974,
+   "outcome_minus_price": 0.03999364496616512,
+   "outcome_minus_both": 0.03530735139894768,
+   "price_minus_both": 0.009260997243166962
+  }
+ },
+ "run_id": "20261109T043327-67126",
+ "raw_log": "seeds_20261109T043327-67126.jsonl",
+ "seconds": 104.34634399414062
 }

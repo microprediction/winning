@@ -45,38 +45,37 @@ def main():
     # raw per-seed rows go to this run's own append-only log as they are
     # produced (created exclusively, so no run ever writes into another's)
     log_path = os.path.join(HERE, f"seeds_{run_id}.jsonl")
-    log = open(log_path, "x")
-    for seed in range(SEEDS):
-        s = rng.normal(size=N)                                   # true skills (max wins)
-        V = rng.normal(scale=0.6, size=(N, RANK))                # shared-factor loadings
-        D = np.full(N, BETA2)
-        m0, v0 = np.zeros(N), np.ones(N)
-        # the market: a noisy view of s, priced under the same race model
-        eta = rng.normal(scale=np.sqrt(TAU2), size=N)
-        p_market = np.asarray(race_probabilities(-(s + eta), V=V, D=D))
-        # the race: performances s + V f + sqrt(D) eps, max wins
-        f = rng.normal(size=RANK); eps = rng.normal(size=N)
-        perf = s + V @ f + np.sqrt(D) * eps
-        winner = int(np.argmax(perf))
-        posts = {
-            "prior": (m0, v0),
-            "outcome": update_race(m0, v0, winner=winner, V=V, beta2=BETA2)[:2],
-            "price": update_race(m0, v0, p_market=p_market, tau2=TAU2, V=V, beta2=BETA2)[:2],
-            "both": update_race(m0, v0, winner=winner, p_market=p_market, tau2=TAU2, V=V, beta2=BETA2)[:2],
-        }
-        # a second, independent running of the same race to score the posteriors
-        f2 = rng.normal(size=RANK); eps2 = rng.normal(size=N)
-        winner2 = int(np.argmax(s + V @ f2 + np.sqrt(D) * eps2))
-        row = {"run_id": run_id, "seed": seed}
-        for k, (m, v) in posts.items():
-            e = float(np.sqrt(np.mean((centred(m) - centred(s)) ** 2)))
-            vv = float(np.mean(v))
-            pred = np.asarray(race_probabilities(-np.asarray(m), V=V, D=D + np.asarray(v)))
-            ls = float(np.log(pred[winner2]))
-            err[k].append(e); var[k].append(vv); hit_winner[k].append(ls)
-            row[k] = {"rmse": e, "var": vv, "log_score": ls}
-        log.write(json.dumps(row) + "\n"); log.flush()
-    log.close()
+    with open(log_path, "x") as log:
+        for seed in range(SEEDS):
+            s = rng.normal(size=N)                                   # true skills (max wins)
+            V = rng.normal(scale=0.6, size=(N, RANK))                # shared-factor loadings
+            D = np.full(N, BETA2)
+            m0, v0 = np.zeros(N), np.ones(N)
+            # the market: a noisy view of s, priced under the same race model
+            eta = rng.normal(scale=np.sqrt(TAU2), size=N)
+            p_market = np.asarray(race_probabilities(-(s + eta), V=V, D=D))
+            # the race: performances s + V f + sqrt(D) eps, max wins
+            f = rng.normal(size=RANK); eps = rng.normal(size=N)
+            perf = s + V @ f + np.sqrt(D) * eps
+            winner = int(np.argmax(perf))
+            posts = {
+                "prior": (m0, v0),
+                "outcome": update_race(m0, v0, winner=winner, V=V, beta2=BETA2)[:2],
+                "price": update_race(m0, v0, p_market=p_market, tau2=TAU2, V=V, beta2=BETA2)[:2],
+                "both": update_race(m0, v0, winner=winner, p_market=p_market, tau2=TAU2, V=V, beta2=BETA2)[:2],
+            }
+            # a second, independent running of the same race to score the posteriors
+            f2 = rng.normal(size=RANK); eps2 = rng.normal(size=N)
+            winner2 = int(np.argmax(s + V @ f2 + np.sqrt(D) * eps2))
+            row = {"run_id": run_id, "seed": seed}
+            for k, (m, v) in posts.items():
+                e = float(np.sqrt(np.mean((centred(m) - centred(s)) ** 2)))
+                vv = float(np.mean(v))
+                pred = np.asarray(race_probabilities(-np.asarray(m), V=V, D=D + np.asarray(v)))
+                ls = float(np.log(pred[winner2]))
+                err[k].append(e); var[k].append(vv); hit_winner[k].append(ls)
+                row[k] = {"rmse": e, "var": vv, "log_score": ls}
+            log.write(json.dumps(row) + "\n"); log.flush()
 
     def se(x):
         return float(np.std(np.asarray(x), ddof=1) / np.sqrt(SEEDS))
