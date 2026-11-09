@@ -29,7 +29,14 @@ before the numbers made sense.
    performance noise, and the dummy field is L i.i.d. half-normal runners
    (|N(0, 1)| in units of the dummy sampling sd; entry is by |correlation|).
    So P_T(s) = P(Binomial(L, P(|Z| > s)) <= T - 1), a closed form on the
-   identical field, and Phi_{T,L}(j) ~ Binomial(K, P_T(s_j)) / K exactly.
+   identical field. Given the data the K inclusion indicators are i.i.d.
+   Bernoulli, so Phi_{T,L}(j) ~ Binomial(K, q_j) / K exactly; the race
+   model is the approximation q_j = P_T(s_j). It is an approximation
+   because a candidate's statistic is its correlation with the current
+   residual, which moves with the variables and the up-to-T-1 dummies
+   already on the path, and LARS enters by that rather than by the
+   marginal correlation. The null-count check below measures how good it
+   is.
    The first version used winning's `top_k_probabilities` with the runner
    at unit noise; it predicted 131 nulls with Phi_1 > 0 where one was
    observed. The general engine can represent the noiseless runner only
@@ -243,6 +250,32 @@ percent and a perfect block selector tops out near 0.98, which is the
 value the (iii) row shows. The script now divides by the number of active
 blocks; the JSON was not regenerated. The n column of the C table counts
 the runs with a non-empty selection; every SE there is over those runs.
+
+Three further changes to the scripts after review, none of which changes
+a committed number by more than the stated amount, and none re-run:
+
+- The race-model null count in the base grid and calibration now uses
+  p0 = p - p1 (the simulation's null count, as the detail check and the
+  extensions already did) instead of p. The committed `fdp_model` column
+  and the "model" calibration row used p and are 1 percent more
+  conservative than the script now computes.
+- The block-model sizing and reporting use the number of null blocks,
+  nb minus the number of active blocks, instead of nb - p1; identical in
+  the clustered design, and 0.1 percent off in the others.
+- Arm A evaluated every T in {5, 10, 20} regardless of how many dummies
+  a repetition's paths reached; it now skips T above that repetition's
+  T_max and reports n per T. No committed cell was affected: T_max is
+  min(30, dummies reached), and the paths reach far more than 30 dummies
+  in 298 LARS steps. Replaying the committed base seed, the per-repetition
+  minimum over the 20 paths was 96 to 110 dummies in the first 20
+  repetitions; a clustered-design check reached 131 to 139. New runs
+  record the range in `dmin_over_reps`.
+
+Every repetition is now appended to a JSONL log as it completes
+(`log_*.jsonl`, one line per repetition, flushed) and the summaries are
+built from the log; result files are written atomically, never over an
+existing file (a stamped, pid-suffixed name claimed exclusively), and the
+extensions file is rewritten after every design.
 
 ### Not done
 

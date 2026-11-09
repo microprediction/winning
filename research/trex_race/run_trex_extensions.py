@@ -215,17 +215,16 @@ def trex_published(phi, phi_def, T_max):
 
 
 # ---------------------------------------------------------------- main
-def run_design(kind):
+def run_design(kind, log_path):
     t0 = time.time()
+    log = open(log_path, "a")
     C = design_cov(kind); chol = None if C is None else np.linalg.cholesky(C)
     blocks = np.arange(P) // BLOCK
     nb = P // BLOCK
     Rb = np.eye(BLOCK) if C is None else C[:BLOCK, :BLOCK]
     LLs = {T: loglik_table(T) for T in range(1, T_CAP + 1)}
-    A_auc = {T: {"phi": [], "position": []} for T in T_EVAL}
-    B = {"trex": [], "position": [], "block": [], "trex_blocklevel": [], "position_model": [], "block_model": []}
-    Cc = {"position": [], "block": [], "position_model": [], "block_model": []}
     for rep in range(MC):
+        row = {"design": kind, "rep": rep, "A": {}, "B": {}, "C": {}}
         X, y, beta_, act = simulate(kind, chol)
         is_act = np.zeros(P, bool); is_act[act] = True
         blk_act = np.zeros(nb, bool); blk_act[np.unique(blocks[act])] = True
@@ -237,17 +236,20 @@ def run_design(kind):
         for T in range(1, T_CAP + 1):
             phi[T - 1], dd[T] = inclusion_and_rank(cand, dums, T)
         phi_def = deflated(phi, L)
-        # A
+        row["dmin"], row["T_max"] = int(min(len(x) for x in dums)), int(T_max)
+        # A: only the T this repetition's paths reached (every path has >= T_max dummies)
         for T in T_EVAL:
+            if T > T_max:
+                continue
             m = posterior_mean(dd[T], LLs[T])
-            A_auc[T]["phi"].append(auc(phi[T - 1], is_act)); A_auc[T]["position"].append(auc(m, is_act))
+            row["A"][str(T)] = [auc(phi[T - 1], is_act), auc(m, is_act)]
         # B (i) as published
         R, v, T = trex_published(phi, phi_def, T_max)
         sel = (phi[T - 1] > v) if R else np.zeros(P, bool)
-        B["trex"].append({"R": int(R), "fdp": float((sel & ~is_act).sum() / max(R, 1)), "tpp": float((sel & is_act).sum() / P1), "T": T})
+        row["B"]["trex"] = ({"R": int(R), "fdp": float((sel & ~is_act).sum() / max(R, 1)), "tpp": float((sel & is_act).sum() / P1), "T": T})
         bs = np.zeros(nb, bool); bs[np.unique(blocks[sel])] = True
         n_blk_act = int(blk_act.sum())                 # actives can share a block (independent, AR(1)); block TPP is over active blocks
-        B["trex_blocklevel"].append({"R": int(bs.sum()), "fdp": float((bs & ~blk_act).sum() / max(bs.sum(), 1)), "tpp": float((bs & blk_act).sum() / n_blk_act)})
+        row["B"]["trex_blocklevel"] = ({"R": int(bs.sum()), "fdp": float((bs & ~blk_act).sum() / max(bs.sum(), 1)), "tpp": float((bs & blk_act).sum() / n_blk_act)})
         # B (ii) ranked by the position-aware statistic, sized by V-hat; best over T
         best = (0, None, None, None)
         for T in range(1, T_max + 1):
@@ -261,20 +263,20 @@ def run_design(kind):
         if Rn:
             sel[chosen] = True
         fdp = float((sel & ~is_act).sum() / max(Rn, 1))
-        B["position"].append({"R": int(Rn), "fdp": fdp, "tpp": float((sel & is_act).sum() / P1), "T": T})
+        row["B"]["position"] = ({"R": int(Rn), "fdp": fdp, "tpp": float((sel & is_act).sum() / P1), "T": T})
         if Rn:
             vhat = float((1 - phi_def[T - 1][sel]).sum() / Rn)
             thr = m[chosen].min()
             d_syn, _ = synthetic_null_stats(T, LLs[T])
             synth = posterior_mean(d_syn, LLs[T])
             model = float((P - P1) * (synth >= thr).mean() / Rn)
-            Cc["position"].append({"fdp": fdp, "vhat": vhat, "model": model})
+            row["C"]["position"] = ({"fdp": fdp, "vhat": vhat, "model": model})
         # (ii-m) the same ranking, sized by the race-model estimate (synthetic reference runners)
         best = (0, None, None, None, None)
         for T in [t for t in T_MODEL if t <= T_max]:
             m = posterior_mean(dd[T], LLs[T]); order = np.argsort(-m)
             d_syn, _ = synthetic_null_stats(T, LLs[T]); synth = posterior_mean(d_syn, LLs[T])
-            Rm = size_by_model(order, m, synth, P - P1, ALPHA)
+            Rm = size_by_model(order, m, synth, P - P1, ALPHA)          # p0 = p - p1: the simulation's null count
             if Rm > best[0]:
                 best = (Rm, T, order[:Rm], m, synth)
         Rm, T, chosen, m, synth = best
@@ -282,9 +284,9 @@ def run_design(kind):
         if Rm:
             sel[chosen] = True
         fdp = float((sel & ~is_act).sum() / max(Rm, 1))
-        B["position_model"].append({"R": int(Rm), "fdp": fdp, "tpp": float((sel & is_act).sum() / P1), "T": T})
+        row["B"]["position_model"] = ({"R": int(Rm), "fdp": fdp, "tpp": float((sel & is_act).sum() / P1), "T": T})
         if Rm:
-            Cc["position_model"].append({"fdp": fdp, "vhat": float((1 - phi_def[T - 1][sel]).sum() / Rm),
+            row["C"]["position_model"] = ({"fdp": fdp, "vhat": float((1 - phi_def[T - 1][sel]).sum() / Rm),
                                          "model": float((P - P1) * (synth >= m[chosen].min()).mean() / Rm)})
         # B (iii) block statistic, selection at block level
         best = (0, None, None, None, None)
@@ -300,21 +302,21 @@ def run_design(kind):
         if Rb_:
             bs[chosen] = True
         fdpB = float((bs & ~blk_act).sum() / max(Rb_, 1))
-        B["block"].append({"R": int(Rb_), "fdp": fdpB, "tpp": float((bs & blk_act).sum() / n_blk_act), "T": T})
+        row["B"]["block"] = ({"R": int(Rb_), "fdp": fdpB, "tpp": float((bs & blk_act).sum() / n_blk_act), "T": T})
         if Rb_:
             vhat = float((1 - phiB[bs]).sum() / Rb_)
             thr = st[chosen].min()
             d_syn, _ = synthetic_null_stats(T, LLs[T], n=BLOCK * 800, R=Rb)
             stB = block_statistic(posterior(d_syn, LLs[T]), T)
-            model = float((nb - P1) * (stB >= thr).mean() / Rb_)
-            Cc["block"].append({"fdp": fdpB, "vhat": vhat, "model": model})
+            model = float((nb - n_blk_act) * (stB >= thr).mean() / Rb_)
+            row["C"]["block"] = ({"fdp": fdpB, "vhat": vhat, "model": model})
         # (iii-m) the block statistic, sized by the race-model estimate (synthetic null blocks)
         best = (0, None, None, None, None, None)
         for T in [t for t in T_MODEL if t <= T_max]:
             st = block_statistic(posterior(dd[T], LLs[T]), T); order = np.argsort(-st)
             d_syn, _ = synthetic_null_stats(T, LLs[T], n=BLOCK * 400, R=Rb)
             stB = block_statistic(posterior(d_syn, LLs[T]), T, draws=200)
-            Rm = size_by_model(order, st, stB, nb - P1, ALPHA)
+            Rm = size_by_model(order, st, stB, nb - n_blk_act, ALPHA)   # null blocks: actives may share a block
             if Rm > best[0]:
                 phiB = (dd[T].reshape(K, nb, BLOCK).min(axis=2) < T).mean(axis=0)
                 best = (Rm, T, order[:Rm], st, stB, phiB)
@@ -323,18 +325,27 @@ def run_design(kind):
         if Rm:
             bs[chosen] = True
         fdpB = float((bs & ~blk_act).sum() / max(Rm, 1))
-        B["block_model"].append({"R": int(Rm), "fdp": fdpB, "tpp": float((bs & blk_act).sum() / n_blk_act), "T": T})
+        row["B"]["block_model"] = ({"R": int(Rm), "fdp": fdpB, "tpp": float((bs & blk_act).sum() / n_blk_act), "T": T})
         if Rm:
-            Cc["block_model"].append({"fdp": fdpB, "vhat": float((1 - phiB[bs]).sum() / Rm),
-                                      "model": float((nb - P1) * (stB >= st[chosen].min()).mean() / Rm)})
+            row["C"]["block_model"] = ({"fdp": fdpB, "vhat": float((1 - phiB[bs]).sum() / Rm),
+                                      "model": float((nb - n_blk_act) * (stB >= st[chosen].min()).mean() / Rm)})
+        log.write(json.dumps(row) + "\n"); log.flush()
         if (rep + 1) % 10 == 0:
             print(f"  {kind} rep {rep + 1}/{MC} {time.time() - t0:.0f}s", flush=True)
+    log.close()
+    # the summary is built from the log: what was completed is what is summarised
+    rows = [r for r in (json.loads(line) for line in open(log_path)) if r["design"] == kind]
+    A_auc = {T: {"phi": [r["A"][str(T)][0] for r in rows if str(T) in r["A"]],
+                 "position": [r["A"][str(T)][1] for r in rows if str(T) in r["A"]]} for T in T_EVAL}
+    B = {k_: [r["B"][k_] for r in rows] for k_ in ("trex", "position", "block", "trex_blocklevel", "position_model", "block_model")}
+    Cc = {k_: [r["C"][k_] for r in rows if k_ in r["C"]] for k_ in ("position", "block", "position_model", "block_model")}
 
     def ms(x):
         x = np.asarray(x, float)
         return [float(x.mean()), float(x.std(ddof=1) / np.sqrt(len(x)))] if len(x) > 1 else [float(x.mean()) if len(x) else None, None]
-    out = {"design": kind, "MC": MC, "seconds": time.time() - t0,
-           "A_auc": {T: {"phi": ms(A_auc[T]["phi"]), "position": ms(A_auc[T]["position"]),
+    out = {"design": kind, "MC": len(rows), "seconds": time.time() - t0, "log": os.path.basename(log_path),
+           "dmin_over_reps": [min(r["dmin"] for r in rows), max(r["dmin"] for r in rows)],
+           "A_auc": {T: {"n": len(A_auc[T]["phi"]), "phi": ms(A_auc[T]["phi"]), "position": ms(A_auc[T]["position"]),
                          "paired_diff": ms(np.array(A_auc[T]["position"]) - np.array(A_auc[T]["phi"]))} for T in T_EVAL},
            "B": {k_: {"fdr": ms([r["fdp"] for r in v_]), "tpr": ms([r["tpp"] for r in v_]), "mean_R": float(np.mean([r["R"] for r in v_])),
                       "share_empty": float(np.mean([r["R"] == 0 for r in v_]))} for k_, v_ in B.items()},
@@ -346,11 +357,14 @@ def run_design(kind):
 
 def main():
     res = {}
+    stamp = time.strftime("%Y%m%dT%H%M%S", time.gmtime())
+    log_path = os.path.join(HERE, f"log_extensions_MC{MC}_{stamp}.jsonl")
+    path = None
     for kind in DESIGNS:
         print(kind, flush=True)
-        res[kind] = run_design(kind)
+        res[kind] = run_design(kind, log_path)
         print(json.dumps({k: res[kind][k] for k in ("A_auc", "B", "C")}, indent=1), flush=True)
-    path = write_results(res, f"results_extensions_MC{MC}")
+        path = write_results(res, f"results_extensions_MC{MC}", path=path)     # rewritten after every design
     print("->", path)
 
 

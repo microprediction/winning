@@ -20,8 +20,12 @@ the runner. Then
            = P(Binomial(L, P(|Z| > s)) <= T - 1)
 
 is the top-k membership probability of a noiseless runner in an identical
-half-normal field, and Phi_{T,L}(j) ~ Binomial(K, P_T(s_j)) / K exactly
-(the K experiments are independent given the data). The nulls are
+half-normal field. Given the data the K inclusion indicators are i.i.d.
+Bernoulli, so Phi_{T,L}(j) ~ Binomial(K, q_j) / K exactly; the race model
+is the approximation q_j = P_T(s_j): a candidate's statistic is its
+correlation with the CURRENT residual, which moves with the variables and
+the up-to-T-1 dummies already on the path, and LARS enters by that, not
+by the marginal correlation. The nulls are
 exchangeable with the dummies, so their strengths are s ~ |N(0, 1)| and
 an active's is large. Inverting Phi through P_T gives a strength on the
 dummy scale; integrating the selection event over the null law gives a
@@ -177,13 +181,19 @@ def calibrate(fdp_fn, T_max, alpha):
     return best
 
 
-def write_results(obj, stem):
+def write_results(obj, stem, path=None):
     """Atomic write next to the script; an existing file is never
-    overwritten: the new one takes a UTC time stamp (as run_f1_season does)."""
-    path = os.path.join(HERE, stem + ".json")
-    if os.path.exists(path):
-        path = os.path.join(HERE, f"{stem}_{time.strftime('%Y%m%dT%H%M%S', time.gmtime())}.json")
-    tmp = path + ".tmp"
+    overwritten: the new one takes a UTC time stamp (as run_f1_season does).
+    With path= given (a run's own file), it is rewritten in place, atomically."""
+    if path is None:
+        path = os.path.join(HERE, stem + ".json")
+        if os.path.exists(path):
+            stamp = time.strftime('%Y%m%dT%H%M%S', time.gmtime())
+            path = os.path.join(HERE, f"{stem}_{stamp}_{os.getpid()}.json")
+        # claim the name exclusively: a second writer in the same second, or
+        # another process, gets an error instead of replacing this file
+        os.close(os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644))
+    tmp = f"{path}.{os.getpid()}.tmp"
     with open(tmp, "w") as f:
         json.dump(obj, f, indent=1)
     os.replace(tmp, path)
@@ -240,40 +250,48 @@ def main():
                           "spearman_strength_vs_beta_actives": float(spearmanr(s_hat[actg], betag[actg]).correlation),
                           "spearman_marginal_t_vs_beta_actives": float(spearmanr(mt[actg], betag[actg]).correlation)}
 
-    # Monte Carlo: the Fig. 5 grid and the calibrated points
-    grid = {"fdp": np.zeros((len(T_GRID), len(V_GRID))), "fdp_hat": np.zeros((len(T_GRID), len(V_GRID))),
-            "fdp_model": np.zeros((len(T_GRID), len(V_GRID))), "tpp": np.zeros((len(T_GRID), len(V_GRID)))}
-    cal = {"trex": [], "model": []}
+    # Monte Carlo: the Fig. 5 grid and the calibrated points. Every completed
+    # repetition is appended to a JSONL log as it finishes (one line each,
+    # flushed), and the summary is built from that log, so an interruption
+    # keeps what was done.
+    log_path = os.path.join(HERE, f"log_L{L_MULT}p_MC{MC}_{time.strftime('%Y%m%dT%H%M%S', time.gmtime(t0))}.jsonl")
+    log = open(log_path, "a")
     for rep in range(MC):
         X, y, beta, act = simulate(rng)
         phi, dmin = experiments(rng, X, y, L, K, T_CAP)
         phi_def = deflated(phi, L)
         is_act = np.zeros(P, bool); is_act[act] = True
+        g = {k_: np.zeros((len(T_GRID), len(V_GRID))) for k_ in ("fdp", "fdp_hat", "fdp_model", "tpp")}
         for ti, T in enumerate(T_GRID):
             for vi, v in enumerate(V_GRID):
                 f, R, V = fdp_hat(phi[T - 1], phi_def[T - 1], v)
                 sel = phi[T - 1] > v
-                grid["fdp"][ti, vi] += (sel & ~is_act).sum() / max(R, 1)
-                grid["fdp_hat"][ti, vi] += f
-                grid["fdp_model"][ti, vi] += model_selected_nulls(T, v, tab, S_GRID, K, P) / max(R, 1)
-                grid["tpp"][ti, vi] += (sel & is_act).sum() / P1
+                g["fdp"][ti, vi] = (sel & ~is_act).sum() / max(R, 1)
+                g["fdp_hat"][ti, vi] = f
+                g["fdp_model"][ti, vi] = model_selected_nulls(T, v, tab, S_GRID, K, P - P1) / max(R, 1)   # p0 = p - p1 in simulation
+                g["tpp"][ti, vi] = (sel & is_act).sum() / P1
         if dmin < 1:
             raise RuntimeError("an experiment's path ended before any dummy entered: raise MAX_ITER")
         T_max = min(T_CAP, dmin)                       # >= 1: Algorithm 1 needs T = 1 at least
+        cal_row = {}
         for name, fn in (("trex", lambda T, v: fdp_hat(phi[T - 1], phi_def[T - 1], v)),
-                         ("model", lambda T, v: (model_selected_nulls(T, v, tab, S_GRID, K, P) / max((phi[T - 1] > v).sum(), 1),
+                         ("model", lambda T, v: (model_selected_nulls(T, v, tab, S_GRID, K, P - P1) / max((phi[T - 1] > v).sum(), 1),
                                                  int((phi[T - 1] > v).sum())))):
             R, v, T = calibrate(fn, T_max, ALPHA)
             if R == 0:
-                cal[name].append({"R": 0, "fdp": 0.0, "tpp": 0.0, "v": None, "T": None})
+                cal_row[name] = {"R": 0, "fdp": 0.0, "tpp": 0.0, "v": None, "T": None}
             else:
                 sel = phi[T - 1] > v
-                cal[name].append({"R": int(R), "fdp": float((sel & ~is_act).sum() / R), "tpp": float((sel & is_act).sum() / P1),
-                                  "v": v, "T": int(T)})
+                cal_row[name] = {"R": int(R), "fdp": float((sel & ~is_act).sum() / R), "tpp": float((sel & is_act).sum() / P1),
+                                 "v": v, "T": int(T)}
+        log.write(json.dumps({"rep": rep, "dmin": int(dmin), "T_max": int(T_max),
+                              "grid": {k_: g[k_].round(6).tolist() for k_ in g}, "cal": cal_row}) + "\n"); log.flush()
         if (rep + 1) % 10 == 0:
             print(f"  rep {rep + 1}/{MC} {time.time() - t0:.0f}s", flush=True)
-    for k_ in grid:
-        grid[k_] = (grid[k_] / MC).round(4).tolist()
+    log.close()
+    rows = [json.loads(line) for line in open(log_path)]
+    grid = {k_: np.mean([r["grid"][k_] for r in rows], axis=0).round(4).tolist() for k_ in ("fdp", "fdp_hat", "fdp_model", "tpp")}
+    cal = {name: [r["cal"][name] for r in rows] for name in ("trex", "model")}
 
     def summ(rows):
         a = np.array([[r["fdp"], r["tpp"], r["R"]] for r in rows])
@@ -282,7 +300,8 @@ def main():
                 "mean_selected": float(a[:, 2].mean()),
                 "T_star_median": float(np.median([r["T"] for r in rows if r["T"]])) if any(r["T"] for r in rows) else None,
                 "v_star_median": float(np.median([r["v"] for r in rows if r["v"]])) if any(r["v"] for r in rows) else None}
-    out = {"setup": dict(n=N, p=P, p1=P1, snr=SNR, K=K, L=L, T_cap=T_CAP, alpha=ALPHA, MC=MC, s_grid=[float(S_GRID[0]), float(S_GRID[-1]), len(S_GRID)]),
+    out = {"setup": dict(n=N, p=P, p1=P1, snr=SNR, K=K, L=L, T_cap=T_CAP, alpha=ALPHA, MC=len(rows), s_grid=[float(S_GRID[0]), float(S_GRID[-1]), len(S_GRID)]),
+           "log": os.path.basename(log_path), "dmin_over_reps": [int(min(r["dmin"] for r in rows)), int(max(r["dmin"] for r in rows))],
            "engine_check": ref, "detail_one_dataset": detail, "graded_betas": graded,
            "grid": {"v": V_GRID.tolist(), "T": T_GRID.tolist(), **grid},
            "calibrated": {k_: summ(v_) for k_, v_ in cal.items()}, "seconds": time.time() - t0}
