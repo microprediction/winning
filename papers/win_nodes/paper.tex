@@ -764,7 +764,18 @@ implement.
 \section{The win node on chain and band parents}
 \label{sec:chain}
 
-Now let the precision matrix of $X$ be banded with bandwidth $b$,
+The second structure is a quantity followed over time: a player's
+ability over the seasons of a career, a temperature over the days of
+a month, a monitored series. Each value is correlated with its
+neighbours rather than through a few shared factors, so the
+computation of Section~\ref{sec:factor} does not apply, and the
+questions are different too: which date was the peak, how large the
+maximum was, and when the series first crossed a level. This section
+answers them by passes over a lattice of values, each pass restricted
+to paths that stay below a threshold. Section~\ref{sec:tennis} applies
+the argmax pass to a tennis career.
+
+Let the precision matrix of $X$ be banded with bandwidth $b$,
 so that $X$ is Markov of order $b$; the Gauss--Markov chain is $b=1$. Write the chain as $X_1\sim
 N(\mu_1,\sigma_0^2)$ and $X_{t+1}\mid X_t\sim
 N(\mu_{t+1}+\phi_t(X_t-\mu_t),s_t^2)$. A tridiagonal precision
