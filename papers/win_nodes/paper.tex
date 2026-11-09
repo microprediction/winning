@@ -611,17 +611,30 @@ Script: \texttt{research/win\_nodes/exp2\_place\_evidence}.}
 \section{Posteriors of factor form}
 \label{sec:posteriors}
 
-The forward query needs the parents in the form of
-Equation~\eqref{eq:factor}. When the parents are a posterior, the
-question is whether updating preserves that form. Two standard models
-preserve it exactly after every update: simulation with common random
-numbers, and a bandit whose arms share features. In both cases the
-posterior has no more factors than the source of the shared
-variation, however many alternatives there are, and the $n\times n$
-posterior covariance is never formed.
+The win node of Section~\ref{sec:factor} needs its parents in the
+factor form of Equation~\eqref{eq:factor}. In the applications we
+care about, the parents are a posterior over the values of $n$
+alternatives, and that posterior changes with every observation. The
+win node can be applied after every update without approximation only
+if the posterior stays in factor form. This section shows that it does
+in two standard settings: a simulation study run under common random
+numbers, and a bandit whose arms share features. In both, the
+posterior has no more factors than the source of the shared variation,
+however many alternatives there are, and the $n\times n$ posterior
+covariance is never formed. Section~\ref{sec:applications} uses both
+posteriors.
 
 \subsection{Simulation with common random numbers}
 \label{sec:crn}
+
+The first setting is ranking and selection by simulation. The
+question there is which of $n$ systems is best, which is the win
+node's query, and a stopping rule needs the probability that each
+system is best (Section~\ref{sec:stopping}). The posterior is
+correlated by design: common random numbers are used precisely so
+that the systems' outputs move together and their differences are
+estimated more sharply. We show that this correlated posterior has
+factor form.
 
 A simulation study compares $n$ systems, such as candidate inventory
 policies, by running each one many times and averaging its output.
@@ -696,6 +709,12 @@ random inputs have factor form.
 
 \subsection{A bandit whose arms share features}
 \label{sec:bandit-posterior}
+
+The second setting is a bandit whose arms are correlated through
+shared features, the model behind linear Thompson sampling. The
+probability that each arm is best is the probability that Thompson
+sampling pulls it (Section~\ref{sec:surrogates}), and we show that
+the posterior stays in factor form after every pull.
 
 In a bandit, a decision maker repeatedly picks one of $n$ arms and
 observes a noisy reward. Here $\theta_i$ is arm $i$'s mean reward,
