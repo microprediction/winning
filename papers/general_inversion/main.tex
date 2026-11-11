@@ -327,9 +327,17 @@ behaves alike, its tail entries off by a factor of nearly four. The family is cu
 \citet{bhat2011} builds the MACML estimator on an analytic approximation
 of this sequential-conditioning family (that of \citealt{solow1990}), and the \texttt{Rprobit} package implements it
 \citep{bauerRprobit}, with its asymptotics examined by
-\citet{batram2019}. Expectation propagation
-is the modern member of the same family. We benchmark representative
-sequential moment approximations through the classical members; MACML's
+\citet{batram2019}. Expectation propagation \citep{minka2001}
+is the modern member of the same family, and for the multinomial probit
+it is no longer one-pass: nested EP \citep{riihimaki2013} iterates
+moment-matched site approximations to a fixed point, is free of the
+variable ordering that makes one-pass conditioning drift, and runs
+without quadrature in time linear in $n$. Its approximation is still a
+Gaussian projection with no error control of its own, which is the
+property the benchmark below probes; we benchmark representative
+sequential moment approximations through the classical one-pass
+members, and an iterative EP baseline is left out of the comparison
+rather than assumed to share their tail drift. MACML's
 composite-likelihood construction around its analytic ingredient is its own
 estimator and is not itself benchmarked here.
 
@@ -892,11 +900,18 @@ compute over the boundary instead of the volume:
 \]
 with $n$ the outward unit normal.
 
-However for this we take $q_0$ continuously differentiable with $q_0$ and
-$\nabla q_0$ integrable and $|x|^{n-1}q_0(x)\to0$, conditions any
-Gaussian law satisfies outright. Integrability alone would
+However for this we take $q_0$ continuously differentiable with $q_0$
+integrable, $\nabla q_0$ locally dominated (bounded on compact
+$\mu$-neighbourhoods by an integrable function, which the substitution
+$u=x-\mu$, $p_i(\mu)=\int_{R_i-\mu}q_0(u)\,du$, reduces to integrability
+of $\nabla q_0$), and $|x|^{n-1}q_0(x)\to0$ uniformly in direction,
+conditions any non-degenerate Gaussian law satisfies outright.
+Integrability alone would
 license neither differentiating under the integral sign nor discarding
-the flux at infinity. With them the contribution over the sphere at
+the flux at infinity. A covariance that is singular along $\mathbf{1}$,
+such as $P\Sigma P$, has no density on $\R^n$, but the argument runs
+unchanged on the contrast space $\mathbf{1}^{\perp}$, where every pairwise
+difference keeps a positive variance. With them the contribution over the sphere at
 infinity vanishes, and only the faces of $R_i$ remain.
 
 The observation: those faces are the photo-finish surfaces $F_{ik}$, one
@@ -1223,12 +1238,13 @@ The reference implementation minimizes that objective in
 \texttt{factor\_model\_projected}, alternating two steps. The $V$-step
 takes the top $k$ eigendirections of the current residual in the contrast
 basis. The $D$-step solves for the diagonal exactly, subject to a lower
-bound, from the normal equations
+bound: the unconstrained stationary point would solve the normal equations
 \[
   (P\!\circ\!P)\,d=\mathrm{diag}\bigl(P(\Sigma-VV')P\bigr),
 \]
-whose Gram matrix is closed form, so the step is $O(n)$ rather than a
-least-squares solve (\S\ref{sec:general}).
+and because that Gram matrix is closed form the bounded problem's KKT
+system reduces to a scalar threshold (water-filling), so the step is
+$O(n)$ rather than a least-squares solve (\S\ref{sec:general}).
 
 Everything downstream works from projected residuals, so a matrix
 already of the form $VV'+\mathrm{diag}(D)$ passes through whenever its
@@ -1302,6 +1318,20 @@ exact structured forward map, so the preconditioner does not change the
 root equation; it can affect convergence and the finite-tolerance point
 returned.
 
+Setting $d_i\equiv-1$ instead recovers the log-share contraction of
+\citet{berry1994} in min-wins form, exact for logit at small shares, so
+the iteration is a diagonally preconditioned generalization of that map,
+and the preconditioner is what makes it work for probit. With everything
+else held fixed (start, clip, recentering, tolerance) at $n=200$ under a
+rank-two factor covariance, the own-slope iteration converges in $17$,
+$18$ and $28$ sweeps on fields of unit scale, triple scale and
+heterogeneous variances ($D_i\in[0.1,4]$); the unpreconditioned map fails
+to converge within $500$ sweeps on the first and third even when damped
+to a quarter step, and needs $69$ to $145$ on the second
+(\texttt{research/inversion\_ablation/run\_blp\_ablation.py}). Tail
+coordinates have $|\partial\log p_i/\partial\mu_i|\gg1$, so a unit slope
+overshoots them.
+
 Working in logs rather than in probabilities matters because win probabilities span
 many orders of magnitude, and an absolute residual would effectively
 ignore everything but the front of the field. A step clip and a
@@ -1323,7 +1353,22 @@ this clipped iteration finds the inverse.
 The solver's convergence, as implemented, stands on empirical evidence, which is strong on the
 benchmark families but not universal. We can try to break the algorithm and construct strongly
 correlated fields on which the damped iteration stalls at a residual
-near $10^{-4}$ instead of converging.
+near $10^{-4}$ instead of converging: at $n=200$, rank-two loadings drawn
+$N(0,1.6^2)$ against idiosyncratic variances in $[0.15,0.25]$, priced on
+a fixed $15\times15$ Gauss--Hermite rule
+(\texttt{research/experiments/exp23\_newton\_cg/run\_newton\_cg3.py}).
+The mechanism is spectral. Strongly correlated alternatives have large
+mutual tie conductances $w_{ij}$, so their own-slopes
+$|\tilde s_i|=\sum_{j\ne i}w_{ij}$ are large, while a coordinated shift of
+the whole correlated group moves its probabilities only through the weak
+edges leaving it; the Jacobi-preconditioned Laplacian then has small
+eigenvalues along those group modes, and a coordinatewise iteration
+crawls along them. The concave objective of Theorem~\ref{thm:inverse},
+$F(\mu)=W(\mu)-\langle p^{\star},\mu\rangle$, would serve as a monotone
+merit function for a line search where the $\ell_\infty$ log residual
+does not; $W(\mu)$ is the mean of the winning time, which a field pass
+could accumulate from the winner's distribution at $O(L)$ extra cost,
+though the shipped kernels do not yet return it.
 
 A matrix-free Newton--Krylov solver using the exact grid Jacobian--vector product is
 provided also but is work in progress. Naively assembled it lost badly to the damped diagonal iteration.\footnote{
@@ -2214,6 +2259,10 @@ eds., \emph{Structural Analysis of Discrete Data}, MIT Press, 1981.
 \bibitem[Mendell and Elston(1974)]{mendell1974} N.~Mendell, R.~Elston.
 Multifactorial qualitative traits: genetic analysis and prediction of
 recurrence risks. \emph{Biometrics} 30:41--57, 1974.
+\bibitem[Minka(2001)]{minka2001} T.~P. Minka. Expectation propagation
+for approximate Bayesian inference. In \emph{Proceedings of the
+Seventeenth Conference on Uncertainty in Artificial Intelligence (UAI
+2001)}, pp.~362--369, 2001.
 \bibitem[Mishra et~al.(2012)Mishra, Natarajan, Tao and Teo]{mishra2012}
 V.~K. Mishra, K.~Natarajan, H.~Tao, C.-P. Teo. Choice prediction with
 semidefinite optimization when utilities are correlated. \emph{IEEE
@@ -2229,6 +2278,11 @@ the simplex. \emph{Mathematics of Operations Research} 47(1):485--507,
 \bibitem[Pearlmutter(1994)]{pearlmutter1994} B.~A. Pearlmutter.
 Fast exact multiplication by the Hessian. \emph{Neural Computation}
 6(1):147--160, 1994.
+\bibitem[Riihim\"aki et~al.(2013)Riihim\"aki, Jyl\"anki and
+Vehtari]{riihimaki2013} J.~Riihim\"aki, P.~Jyl\"anki, A.~Vehtari. Nested
+expectation propagation for Gaussian process classification with a
+multinomial probit likelihood. \emph{Journal of Machine Learning
+Research} 14:75--109, 2013.
 \bibitem[Russo(2020)]{russo2020} D.~Russo. Simple Bayesian algorithms
 for best-arm identification. \emph{Operations Research}
 68(6):1625--1647, 2020. Algorithm~4 appears in the expanded preprint,
