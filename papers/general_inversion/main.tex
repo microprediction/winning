@@ -743,7 +743,10 @@ $\gamma\in[0,1]$: conditional on the global draw $f_q$ the model is a block race
 at shifted abilities, so
 $p=\sum_q w_q\,p_{\mathrm{block}}(\mu+\gamma g f_q)$, a finite mixture of block
 races. At $\gamma=0$ the clusters are isolated, at $\gamma=1$ fully
-coupled, and the covariance contribution scales as $\gamma^{2}gg'$.
+coupled, and the covariance contribution scales as $\gamma^{2}gg'$. The
+inner block race is evaluated at every global node, so the effective
+quadrature budget is the product $Q=Q_gQ_a$ ($15\times9=135$ conditional
+block passes by default).
 
 \subsection{Trees}\label{sec:tree}
 
@@ -782,8 +785,19 @@ a_q\right).
 \end{equation}
 The interpretation: $G_t(x)$ is the probability that every leaf below $t$ survives past
 $x$, with $t$'s effect integrated by quadrature and each child's message shifted
-because the effect moves that child's whole subtree at once. Shifted evaluations
-are linear interpolations on the lattice.
+because the effect moves that child's whole subtree at once. Here
+$(a_q,w_q)$ is the Gauss--Hermite rule for the internal effect $b_t$ (not
+the leaf-cluster rule of \eqref{eq:blockfield}), and $x$ is measured
+relative to the effects of all nodes above the one being processed, so a
+message's argument is always local to its own subtree; with $a_q=-b_t$ the
+shift is the conditional one, and the symmetric rule makes the sign
+immaterial. Shifted evaluations are linear interpolations on the lattice,
+and a query that falls outside $[x_1,x_L]$ takes the nearer endpoint value,
+which on a window placed by the bulk rule of \S\ref{sec:lattice} is a
+survival of one on the left and of essentially zero on the right. The
+window itself places each contestant at $\mu_i\pm(|v_i|+\sum_{t\in
+\mathrm{anc}(c(i))}|\lambda_t|)\max_q|a_q|$, the worst case over the
+retained nodes of every layer.
 
 \paragraph{Downward.} The root's cavity is one. Each node, visited shallowest
 first, receives the field of everything outside its subtree:
@@ -795,9 +809,15 @@ The sibling messages sit outside the parent-factor quadrature. This
 placement is correct but not obvious: the parent effect shifts the
 candidate and every sibling subtree by the same amount, so it cancels
 from every candidate-versus-sibling comparison; only the cavity from
-outside the parent must be shifted and averaged. Contestant $i$ then races against its own leaf cavity,
+outside the parent must be shifted and averaged. The downward pass runs
+all the way to the leaf clusters, and contestant $i$ then races against its own leaf cavity,
 $p_i=\int h_i(x)\,R_{c(i)}(x)\,dx$ with $h_i$ as in \eqref{eq:cavity}. The cost
-is $O(nLQ)$ plus $O(L\,Q)$ per tree node.\footnote{We checked that a depth-one tree with zero strengths reproduces the rank-one block race to machine
+is $O(nLQ)$ plus $O(L\,Q)$ per tree node, and the sibling product
+adds $O(L)$ per sibling pair, which is linear for bounded branching.
+Within a leaf cluster the leave-one-out product is the log-sum subtraction
+of \S\ref{sec:lattice}; across clusters in the block kernel it is the same
+subtraction on the floored cluster log-fields $\log\max(G_c,10^{-300})$,
+so neither divides.\footnote{We checked that a depth-one tree with zero strengths reproduces the rank-one block race to machine
 precision. We ran a long $2^{22}$-path Monte Carlo and found that the recursion was
 accurate as far as this could determine on every resolvable
 entry at depths one through four (root-mean-square $z$ between $0.75$ and
@@ -821,7 +841,12 @@ cophenetic value, which reproduces the floored cophenetic matrix exactly;
 this is the covariance-reporting choice of \S\ref{sec:tree}, and the
 pricing kernel ignores the common component regardless. Setting the root
 effect to zero instead gives the same choices, since a common effect
-cannot move an argmin, but different raw correlations.}
+cannot move an argmin, but different raw correlations. The construction
+needs a monotone (ultrametric) linkage, $h_t\le h_{\mathrm{parent}(t)}$,
+as single, complete and average linkage are; a merge-height inversion
+(centroid or median linkage) would make some $\lambda_t^2$ negative, which
+the constructor clamps to zero, and it floors leaf variances at
+$10^{-10}$ so that $\rho_{\mathrm{first}(i)}=1$ stays priceable.}
 \end{remark}
 
 Concentration limits stated on a dendrogram therefore become contest
@@ -999,10 +1024,17 @@ a/\partial\mu$, it is $(A-p\,\mathbf{1}^{\top}A)/T$. The fourth is the
 exact derivative of the full adaptive map, which adds a grid-motion term,
 since the window itself depends on $\mu$.
 
-The factor implementation returns the third. It differentiates the rectangle sum
+The collapsed operator displayed above is the second object: it imposes
+the diagonal through the zero row sum. The factor implementation returns the third. It differentiates the rectangle sum
 itself, then applies the normalization quotient: a directional derivative
 $v$ of the unnormalized masses is returned as
-$(v-p\,\mathbf{1}^{\top}v)/T$. It does not differentiate the adaptive
+$(v-p\,\mathbf{1}^{\top}v)/T$. The unnormalized $v=Ah$ differs from the
+displayed operator only on the diagonal, which is integrated rather than
+imposed: per factor node, with $g_i=f_i\prod_{k\ne i}S_k$ and
+$\eta_k=f_k/S_k$ the hazard,
+$v_i=\sum_x\bigl[g_i\sum_{j\ne i}\eta_jh_j+h_i\,\partial_{\mu_i}(f_i)\prod_{k\ne i}S_k\bigr]\Delta x$,
+the second term being the derivative of the candidate's own density on the
+fixed grid. It does not differentiate the adaptive
 window, and we measured the residual arising from that omission.
 
 That quotient is critical. Without it, the returned directional
@@ -1044,7 +1076,14 @@ looks more natural, overflows wherever survivals vanish.
 As a final remark, the block Jacobian is exact for
 rank-one cluster loadings. The nested Jacobian is the
 mixture of block Jacobians. The tree Jacobian is exact within a cluster
-and Gram-approximate across clusters. That approximation is safe for
+and Gram-approximate across clusters: with $u_i(x)=h_i(x)R_{c(i)}(x)$ the
+leaf-cavity integrand of \S\ref{sec:tree} and $G_{\mathrm{root}}$ the
+root message, the cross-cluster tie density is taken as
+$w_{ij}\approx\int u_i(x)\,u_j(x)\,G_{\mathrm{root}}(x)^{-1}\,dx$, which is
+exact when the two clusters share no ancestor effect below the root (it
+is then the block formula) and an approximation otherwise; within a
+cluster the exact conditional tie density replaces it, and the diagonal
+is minus the row sum. That approximation is safe for
 Newton because the residual is always computed from the exact forward
 map, so an approximate Jacobian can slow convergence but cannot change the
 answer to which it converges.
@@ -1576,19 +1615,24 @@ Fitting
 $VV'+\mathrm{diag}(D)$ \emph{to} $P\Sigma P$ is the wrong
 objective (\S\ref{sec:jac}). With the identified objective and projected residuals throughout, the ensemble
 study below ran a raw top-$k$ eigenfit pipeline and the identified
-pipeline over twenty seeds per ensemble. On thirteen of fifteen named
-ensembles the arms are statistically indistinguishable and none favors
-the raw arm. On block equicorrelation the identified arm is eight
-times better at the median ($2.5\times10^{-3}$ against
-$2.0\times10^{-2}$), with a worst seed of $3.2\times10^{-3}$ against
-the raw arm's $0.162$: the raw eigenfit spends its rank on a
+pipeline over twenty seeds per ensemble, paired by seed. The identified
+arm is better on eleven of fifteen named ensembles (Wilcoxon signed-rank,
+$p<0.05$), indistinguishable on three (AR(1), hierarchical, Wishart), and
+worse on one: on sparse-precision graphical covariances the raw arm wins
+on all twenty seeds ($5.1\times10^{-3}$ against $6.8\times10^{-3}$ at the
+median). The largest gain is on block equicorrelation, where the
+identified arm is eight times better at the median ($2.5\times10^{-3}$
+against $2.0\times10^{-2}$), with a worst seed of $3.2\times10^{-3}$
+against the raw arm's $0.16$: the raw eigenfit spends its rank on a
 near-common component, as the identification argument predicts.
 
 
 \subsection{Testing against different covariance generation families}
 
-Accuracy depends on the family. We used the named collections of the \texttt{randomcov} library (pinned at commit
-\texttt{0d27a51}), over \emph{twenty seeds} per ensemble at $n=300$,
+Accuracy depends on the family. We used the named collections of the \texttt{randomcov} library
+(version 0.2.1, pinned in the reproduction lockfile; earlier drafts used
+a commit whose LKJ and residual generators did not sample what they
+claimed, which that release corrects), over \emph{twenty seeds} per ensemble at $n=300$,
 each seed refereed by its own $10^6$-path simulation (the committed
 \texttt{run\_ensembles4.py} and \texttt{run\_kernel4.py} regenerate
 everything).
@@ -1609,11 +1653,11 @@ absolute error on those resolved entries.
 ensemble & med TV & q90 TV & worst TV & med $|p-\hat p|$\\
 \midrule
 block equicorrelation & $2.5\times10^{-3}$ & $3.0\times10^{-3}$ & $3.2\times10^{-3}$ & $1.4\times10^{-5}$\\
-factor $+$ sparse links & $2.9\times10^{-3}$ & $6.7\times10^{-3}$ & $1.6\times10^{-2}$ & $1.9\times10^{-5}$\\
-sparse-precision graphical & $4.5\times10^{-3}$ & $5.6\times10^{-3}$ & $6.0\times10^{-3}$ & $1.5\times10^{-5}$\\
-Wishart & $1.2\times10^{-2}$ & $1.4\times10^{-2}$ & $1.5\times10^{-2}$ & $2.6\times10^{-5}$\\
-AR(1) & $4.6\times10^{-2}$ & $8.4\times10^{-2}$ & $1.5\times10^{-1}$ & $7.0\times10^{-5}$\\
-residuals (dense-strong) & $6.8\times10^{-2}$ & $8.6\times10^{-2}$ & $9.2\times10^{-2}$ & $2.5\times10^{-4}$\\
+factor $+$ sparse links & $2.9\times10^{-3}$ & $7.2\times10^{-3}$ & $1.5\times10^{-2}$ & $1.9\times10^{-5}$\\
+sparse-precision graphical & $6.8\times10^{-3}$ & $7.7\times10^{-3}$ & $8.9\times10^{-3}$ & $1.8\times10^{-5}$\\
+Wishart & $1.2\times10^{-2}$ & $1.3\times10^{-2}$ & $1.4\times10^{-2}$ & $2.6\times10^{-5}$\\
+residuals (dense-strong) & $3.1\times10^{-2}$ & $3.6\times10^{-2}$ & $6.0\times10^{-2}$ & $3.0\times10^{-4}$\\
+AR(1) & $4.6\times10^{-2}$ & $6.3\times10^{-2}$ & $6.7\times10^{-2}$ & $2.6\times10^{-5}$\\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -1624,7 +1668,7 @@ twenty distinct covariance seeds, whose genuine spread the q90 and worst
 columns report. Eight further named
 ensembles (LKJ, onion, vine, elliptope walk, animals, Marchenko--Pastur
 and spiked spectra, hierarchical) fall between the third and fifth
-rows; Archakov--Hansen sits with AR(1) at $4.9\times10^{-2}$.
+rows; Archakov--Hansen sits between residuals and AR(1) at $3.7\times10^{-2}$.
 
 \subsection{Kernel covariance as a weakness}
 
@@ -1640,12 +1684,12 @@ single ``kernel'' row had conflated:
 \toprule
 kernel & length scale & med TV, $m{=}5$ & $m{=}12$ & $m{=}5$, $2^{14}$ nodes\\
 \midrule
-RBF & $0.08$ & $3.4\times10^{-2}$ & $3.1\times10^{-2}$ & $3.3\times10^{-2}$\\
-RBF & $0.2$  & $2.6\times10^{-2}$ & $2.6\times10^{-2}$ & $1.2\times10^{-2}$\\
-RBF & $0.4$  & $1.6\times10^{-2}$ & $1.7\times10^{-2}$ & $8.2\times10^{-3}$\\
-Mat\'ern-$\tfrac32$ & $0.08$ & $2.9\times10^{-2}$ & $2.5\times10^{-2}$ & $2.4\times10^{-2}$\\
-Mat\'ern-$\tfrac32$ & $0.2$  & $2.5\times10^{-2}$ & $2.3\times10^{-2}$ & $1.6\times10^{-2}$\\
-Mat\'ern-$\tfrac32$ & $0.4$  & $2.1\times10^{-2}$ & $1.7\times10^{-2}$ & $1.2\times10^{-2}$\\
+RBF & $0.08$ & $3.6\times10^{-2}$ & $3.2\times10^{-2}$ & $3.3\times10^{-2}$\\
+RBF & $0.2$  & $2.3\times10^{-2}$ & $2.9\times10^{-2}$ & $8.9\times10^{-3}$\\
+RBF & $0.4$  & $1.8\times10^{-2}$ & $1.6\times10^{-2}$ & $5.4\times10^{-3}$\\
+Mat\'ern-$\tfrac32$ & $0.08$ & $2.6\times10^{-2}$ & $2.4\times10^{-2}$ & $2.4\times10^{-2}$\\
+Mat\'ern-$\tfrac32$ & $0.2$  & $2.3\times10^{-2}$ & $2.3\times10^{-2}$ & $1.5\times10^{-2}$\\
+Mat\'ern-$\tfrac32$ & $0.4$  & $1.6\times10^{-2}$ & $1.6\times10^{-2}$ & $7.5\times10^{-3}$\\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -1653,7 +1697,7 @@ Mat\'ern-$\tfrac32$ & $0.4$  & $2.1\times10^{-2}$ & $1.7\times10^{-2}$ & $1.2\ti
 At short length scale the bottleneck is \emph{representation}.
 Correlation is locality, the rank needed grows with the number of
 correlation lengths in the domain, and accordingly extra rank helps
-($3.4\to3.1\times10^{-2}$) while extra quadrature does not.
+($3.6\to3.2\times10^{-2}$) while extra quadrature does not.
 
 At long length scale the fit is not the problem at all. A rank-$27$
 eigenfit holds the RBF draw at length scale $0.4$ to a projected residual
@@ -1662,7 +1706,7 @@ twenty-seven-dimensional \emph{sharp} factor integral, since the closing
 diagonal is nearly zero and the conditional races are nearly
 deterministic. There the node budget is the binding constraint:
 raising the residual-factor budget from $m=5$ to $m=12$ does little,
-while $2^{14}$ nodes halve the error
+while $2^{14}$ nodes cut the error by half or more
 and $2^{16}$ nodes reach $6\times10^{-3}$ on the diagnostic draw.
 
 Stage~6 of the pipeline is what reaches this regime at all. The greedy
