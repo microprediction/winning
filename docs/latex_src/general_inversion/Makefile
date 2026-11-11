@@ -28,7 +28,7 @@ endef
 QUICK := tests stress referee ghk alt mislocate invert bm genz200 window tree \
          gh-vs-sobol split-referee multistart fuzz fixed-rule
 FULL  := referee-r botev-tree ensembles kernel estimation covariates independent-inversion \
-         law scale tenmillion invertmillion
+         large-n newton-krylov blp-ablation factor-rqmc law scale tenmillion invertmillion
 
 .PHONY: all quick full timings env clean $(QUICK) $(FULL)
 
@@ -90,6 +90,14 @@ covariates:
 	$(call run,covariates,$(ROOT)/research/mnp_estimation,$(PY) run_mle3.py && $(PY) run_mle4.py)
 independent-inversion:
 	$(call run,independent-inversion,$(ROOT)/research/experiments/exp35_independent_inversion,$(PY) run_independent.py)
+large-n:
+	$(call run,large-n,$(ROOT)/research/general_sigma,$(PY) run_large_n.py)
+newton-krylov:
+	$(call run,newton-krylov,$(ROOT)/research/experiments/exp23_newton_cg,$(PY) run_newton_cg3.py)
+blp-ablation:
+	$(call run,blp-ablation,$(ROOT)/research/inversion_ablation,$(PY) run_blp_ablation.py)
+factor-rqmc:
+	$(call run,factor-rqmc,$(ROOT)/research/experiments/exp24_factor_rqmc,$(PY) run_factor_rqmc.py)
 law:
 	$(call run,law,$(CURDIR),$(PY) bench.py law)
 scale:
