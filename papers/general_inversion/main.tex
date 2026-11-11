@@ -58,7 +58,7 @@ the probability that alternative $i$ is chosen is
 \begin{equation}\label{eq:orthant}
 p_i \;=\; \Pr\{U_i \ge U_j \ \text{for all } j\}
       \;=\; \Pr\{\tilde U \ge 0\},
-\qquad \tilde U_j = U_i - U_j,
+\qquad \tilde U_j = U_i - U_j \ (j\ne i),
 \end{equation}
 an $(n-1)$-dimensional Gaussian orthant integral. The appeal of this inherently natural generative model has been understood since \citet{thurstone1927}. The $\Sigma$ allows alternatives to be close substitutes, but even for $\Sigma=I$ this departs from the choice axiom of \citet{luce1959} when treated as a model for preference revealed by item removal. The axiom would mandate a simple linear renormalization of probability. But if \eqref{eq:orthant} is calibrated to known $p_i$ and then one runner is removed, the new race speaks otherwise except for very special situations (such as a symmetric contest).
 
@@ -69,7 +69,7 @@ renormalization used to run probabilities down the finishing order (the
 formula of \citet{harville1973}, which is the Luce axiom applied to place
 and show)
 that it ``is significantly biased and should not be used for betting
-purposes.''} Practitioners in signal processing and demand estimation have had their own reasons for preferring Gaussian races. Often, this form is independently motivated. It may be demanded by closure. It is consistent with continuous time models and plays better with linear gaussian networks and rating systems. It may simply make more sense.
+purposes.''} Practitioners in signal processing and demand estimation have had their own reasons for preferring Gaussian races. Often, this form is independently motivated. It may be demanded by closure. It is consistent with continuous time models and plays better with linear Gaussian networks and rating systems. It may simply make more sense.
 
 It is possible to reverse into generative race models that satisfy Luce's Choice Axiom. For instance, we might assume runners have exponential performances (not offset, but with different hazard rates), or we can choose Gumbel-noise variants of \eqref{eq:orthant}, or any monotonic transformation of the same. This is often done unwittingly, however, when simple linear renormalization of probability is applied. It is desirable to develop numerical methods that support all possibilities to remove the evidenced temptation to select a model based on its analytical tractability.
 
@@ -88,6 +88,7 @@ which is why the family carries both names.\footnote{Mosteller's
 relaxation is an early sighting of the identification this paper relies
 on throughout. With equal dispersions and a common correlation,
 $\Sigma=\sigma^2[(1-\rho)I+\rho\mathbf{1}\mathbf{1}^{\top}]$, and since
+the centering projection $P=I-\tfrac1n\mathbf{1}\mathbf{1}^{\top}$ has
 $P\mathbf{1}=0$ the common correlation component --- that component, not
 the whole covariance --- lies in the choice-irrelevant direction:
 $P\Sigma P=\sigma^2(1-\rho)P$, observationally equivalent to independent
@@ -269,8 +270,9 @@ four behind.
 \texttt{intmethod} menu (Hammersley, Halton, or pseudorandom point
 sets) selects only the sequence feeding the same simulator. The
 market-leading implementation offers no non-GHK method at all. R's
-\texttt{mlogit} and \texttt{mvProbit} also default to GHK
-\citep{croissant2020}, and the GHK-based \texttt{mvprobit} of
+\texttt{mlogit}, whose probit model is estimated by GHK
+\citep{croissant2020}, and \texttt{mvProbit}, whose default
+\texttt{algorithm} is \texttt{"GHK"}, follow suit, and the GHK-based \texttt{mvprobit} of
 \citet{cappellari2003} carried the method into applied Stata work at
 large.
 
@@ -322,8 +324,8 @@ in two milliseconds within $2\times10^{-3}$ of the reference, then drifts to
 $3\times10^{-2}$ at $n=30$ with tail probabilities off by more than a factor
 of two, and nothing in the output announces the change. The Clark-type recursion
 behaves alike, its tail entries off by a factor of nearly four. The family is current practice, not history:
-\citet{bhat2011} builds the MACML estimator on precisely these
-approximations, and the \texttt{Rprobit} package implements it
+\citet{bhat2011} builds the MACML estimator on an analytic approximation
+of this sequential-conditioning family (that of \citealt{solow1990}), and the \texttt{Rprobit} package implements it
 \citep{bauerRprobit}, with its asymptotics examined by
 \citet{batram2019}. Expectation propagation
 is the modern member of the same family. We benchmark representative
@@ -333,7 +335,7 @@ estimator and is not itself benchmarked here.
 
 \paragraph{Minimax tilting.} \citet{botev2017} computes single Gaussian
 rectangle probabilities with bounded relative error deep into the tails,
-in dimensions up to roughly a thousand. It is the accuracy reference, and
+and works reliably up to about a hundred dimensions. It is the accuracy reference, and
 we use it as the referee for our own tail claims. Like GHK it prices one
 alternative per run, so a whole race costs $n$ runs, and which method is
 preferable depends on the question. For a single tail probability Botev's
@@ -381,7 +383,7 @@ The cost is $O(nL)$: the field is built once, not once per contestant.
 
 We write $$L(x)=\sum_j \log S_j(x)$$ for
 the log survival field, evaluated once per lattice point across all
-contestants, each contestant's leave-one-out product is a subtraction
+contestants; each contestant's leave-one-out product is a subtraction
 rather than a division: $$\prod_{j\neq i}S_j = \exp(L-\log S_i).$$ This is
 what makes one sweep price the whole field, since the alternative is to
 re-form an $(n-1)$-fold product for each of $n$ contestants. It is also
@@ -464,12 +466,14 @@ $5\times10^{-3}$ of total variation, against $5\times10^{-5}$ when the
 true survival sets the window.
 
 Placing the lattice on the bulk is also what makes small lattices work.
-Thirty-three points on this window reach an accuracy that five hundred
-points spread across the ability span cannot, because the span window
-truncates the winner's tail and its error cannot fall below about
-$6\times10^{-11}$ however many points are added to it. We found that on
-fields with a large number of extreme longshots, the bulk window is a
-hundred times more accurate for the same number of points.
+Thirty-three points on this window match what five hundred points spread
+across the ability span achieve, because the span window truncates the
+winner's tail and its error cannot fall below about $6\times10^{-11}$
+however many points are added to it. At equal point counts the bulk window
+is five or more orders of magnitude more accurate at $33$ to $65$ points,
+where the span window has not yet resolved the winner's bulk, and two to
+eight times more accurate from $129$ points on. The pattern is the same
+with or without extreme longshots in the field.
 
 
 
@@ -628,15 +632,20 @@ from $V$ and $D$ before any integration is done.
 
 When the trigger is large the factor draw all but decides some pairwise contest, the
 quantity being averaged over $f$ is close to a step function, and a rule
-built for smooth integrands converges slowly on it.\footnote{Another lesson: the uncentered
-maximum row norm $\max_i\lVert V_i\rVert/\sqrt{D_i}$ is tempting because
-it skips the centering. But it obeys no such inequality. Instead centering can
-\emph{increase} the largest row norm. A three-runner race with loadings
-$(-2.9,0)$, $(2.9,0.01)$, $(2.9,-0.01)$ at unit $D$ has uncentered
+built for smooth integrands converges slowly on it.\footnote{Another lesson: the raw
+maximum row norm $\max_i\lVert V_i\rVert/\sqrt{D_i}$, without the factor
+$\sqrt2$, is tempting but bounds nothing. A three-runner race with loadings
+$(-2.9,0)$, $(2.9,0.01)$, $(2.9,-0.01)$ at unit $D$ has raw
 maximum $2.90$, under the threshold, while its true pairwise sharpness
 is $4.10$; a dispatcher trusting the raw norm stays with Gauss--Hermite
 there and ships a total-variation error of $6.1\times10^{-3}$ against
-the analytic three-runner orthant probabilities.}
+the analytic three-runner orthant probabilities
+(\texttt{tests/test\_bases.py}). With the $\sqrt2$ the uncentered rows do
+satisfy the bound, since the triangle inequality needs no centering, but
+they are not invariant to a common loading shift $V\to V+\mathbf{1}c^{\top}$,
+which leaves the race unchanged; centering makes the dispatch depend on
+the race alone. Centering can also \emph{increase} the largest row norm:
+here it goes from $2.90$ to $3.87$.}
 
 A fixed rule of fifteen nodes per dimension can then miss up to five
 percent of the total variation, and the error is easy to overlook because
@@ -669,7 +678,7 @@ independent altogether so the joint survival factorizes across clusters,
 \begin{equation}\label{eq:blockfield}
 \Pr\{X_j>x\ \text{for every } j\} \;=\; \prod_c G_c(x),
 \qquad
-G_c(x)\;=\;\E_a \prod_{j\in c} S_j(x\mid a)
+G_c(x)\;=\;\E_a\Bigl[\prod_{j\in c} S_j(x\mid a)\Bigr]
        \;=\;\sum_q w_q\, e^{S_c(x,a_q)},
 \end{equation}
 with $S_c(x,a)=\sum_{j\in c}\log S_j(x\mid a)$ the cluster's conditional
@@ -696,10 +705,13 @@ alternative is excluded from the aggregate here rather than included.
 aggregate quantity every contestant is priced against, and the reason one
 pass serves all $n$ of them.}
 The cost
-is $O(nLQ_a)$ whatever the number of clusters, because the per-cluster factors
+is $O(nLQ_a)$, with $Q_a$ the number of quadrature nodes for the cluster
+effect, whatever the number of clusters, because the per-cluster factors
 are accumulated once. Rank two is special: the conditional integrand is smooth
 and a tensor Gauss--Hermite rule beats scrambled Sobol at equal nodes by a wide
-measured margin.
+measured margin: at about sixty nodes, $3\times10^{-5}$ total variation
+against $3\times10^{-3}$ at $n=50$, and $3\times10^{-6}$ against
+$3\times10^{-3}$ at $n=200$.
 
 One limitation of the hierarchical kernels is stated here but we aim to remove it.
 Their quadrature is a fixed-order rule, without
@@ -1072,11 +1084,11 @@ $\partial W/\partial\mu_i=\Pr\{i\ \text{wins}\}$ --- the identity known
 in discrete choice as the Williams--Daly--Zachary theorem
 \citep{mcfadden1981}.\footnote{Danskin's
 theorem differentiates a minimum over a parameter. For
-$W(\mu)=\E\min_i(\mu_i+\epsilon_i)$ the naive move, differentiating
-inside the expectation, is illegitimate because the minimum is not
-differentiable where two contestants tie. The theorem says the
-derivative exists anyway whenever the minimiser is unique, and equals the
-derivative of the selected branch: here $\partial/\partial\mu_i$ of
+$W(\mu)=\E\min_i(\mu_i+\epsilon_i)$ the minimum is not
+differentiable where two contestants tie, but it is $1$-Lipschitz in
+$\mu$, so when ties have probability zero, differentiating inside the
+expectation is licensed by dominated convergence. The theorem gives the
+same answer: the derivative is that of the selected branch, here $\partial/\partial\mu_i$ of
 $\mu_i+\epsilon_i$, which is one, on the event that $i$ is the
 minimiser and zero otherwise. Taking expectations gives the win
 probability. Full support is what supplies uniqueness, since ties then
@@ -1275,9 +1287,9 @@ correlated fields on which the damped iteration stalls at a residual
 near $10^{-4}$ instead of converging.
 
 A matrix-free Newton--Krylov solver using the exact grid Jacobian--vector product is
-provided also but is work in progress. Naively assembled it lost badly to the damped diagonal iteration\footnote{
+provided also but is work in progress. Naively assembled it lost badly to the damped diagonal iteration.\footnote{
 $387$ seconds without converging against $3.7$ seconds converged at
-$n=200$.}. Assembled properly (log-residual system symmetrized by the
+$n=200$.} Assembled properly (log-residual system symmetrized by the
 $\sqrt{p}$ scaling and using integration-by-parts form of the product,
 conjugate gradients preconditioned by the own-slopes and also a null vector
 projected out) it
@@ -1331,8 +1343,8 @@ of $0.34$.}
 
 \section{Approximate results for dense covariance}\label{sec:general}
 
-We ship a fitting procedure as follows for the general case. It comes with several caveats. We use the following notation. Let $$s_i=\sqrt{\Sigma_{ii}}$$,
-$S=\mathrm{diag}(s)$, and $$C=S^{-1}\Sigma S^{-1}$$ the correlation
+We ship a fitting procedure as follows for the general case. It comes with several caveats. We use the following notation. Let $s_i=\sqrt{\Sigma_{ii}}$,
+$S=\mathrm{diag}(s)$, and $C=S^{-1}\Sigma S^{-1}$ the correlation
 matrix. Every fit, residual and closing solve below is carried out in
 $\Sigma$. Correlations appear only once, as the distance used for
 clustering in stage~3.
@@ -1482,7 +1494,7 @@ $8\times10^{-4}$.
 These experiments convince us of two things. First, disperse the priced race across starts, not the objective, which is blind to precisely the case that matters. And when
 dispersion does appear, the remedy is rank rather than a better
 optimizer. So the shipped fitter warns when the chosen rank splits a tied
-eigenvalue of the centered covariance, and tells the user which rank that would take
+eigenvalue of the centered covariance, and tells the user which rank would take
 the whole tied group.
 
 The extreme case is also the oldest model in the subject. Under equicorrelation $P\Sigma P$ is a multiple of $P$, so its
@@ -1730,11 +1742,11 @@ noise, and lattice self-convergence places its error near $10^{-8}$.
 probability to its difference orthant and prices it through the two
 field-standard R implementations. \texttt{mvtnorm}'s Genz--Bretz agrees with
 the lattice to within its own reported error bound in every family:
-$3.8\times10^{-7}$ against a bound of $8.1\times10^{-7}$ at $n=10$, and
-$2.7\times10^{-8}$ against $5.8\times10^{-8}$ on a case whose smallest
-probability is $3\times10^{-10}$. Botev's minimax tilting agrees to its own
-Monte Carlo noise, which in relative terms is $2.2\times10^{-4}$ at
-$p\approx3\times10^{-10}$: the tail claim rests on the named accuracy
+$2.2\times10^{-7}$ against a bound of $7.1\times10^{-7}$ at $n=10$, and
+$1.3\times10^{-8}$ against $6.7\times10^{-8}$ on a case whose smallest
+probability is $3\times10^{-10}$. Botev's minimax tilting agrees within its own
+reported Monte Carlo error: at $p\approx3\times10^{-10}$ the two differ by
+$1.0\times10^{-4}$ in relative terms against a reported $4.6\times10^{-4}$: the tail claim rests on the named accuracy
 reference, not only on self-convergence. On the independent family an
 adaptive-quadrature referee reaches machine precision and the lattice matches
 it to $1.9\times10^{-15}$. An invariance battery (two-runner closed form,
@@ -1747,7 +1759,7 @@ axis until something gives. Depth: against pure-relative adaptive
 quadrature, relative error is $4\times10^{-13}$ at $p\approx10^{-30}$ and
 $2\times10^{-8}$ at $p\approx10^{-50}$, with the first genuine breakdown
 near $p\approx10^{-119}$, a laggard twenty-five standard deviations behind.
-Inversion: the round trip $p\to\mu\to p$ holds $10^{-9}$ in log even when
+Inversion: the round trip $p\to\mu\to p$ holds $2\times10^{-9}$ in log even when
 the target contains a $10^{-10}$ entry or ties at the $10^{-9}$ level. The
 Gumbel base reproduces softmax to $10^{-15}$ at $n=1000$; exact duplicates
 split exactly, and an $\epsilon$ perturbation moves the split linearly.
@@ -1967,7 +1979,7 @@ judged it computationally intractable for correlated probit. The convex
 duality of calibration is in \citet{li2018}. The tie-density
 derivatives and the surplus function's Laplacian structure are in
 \citet{muller2022}, albeit independently arrived at from a different direction. A Hessian vector product at the cost of a gradient
-is \citet{pearlmutter1994}. Building the survival field once and dividing each contestant out to collapse the forward vector to $O(nL)$ is performed here differently than \citealt{cotton2021}, but that is where the idea is borrowed and crucially, this is the point of departure from other smooth methods that require iteration over all items.
+is \citet{pearlmutter1994}. Building the survival field once and dividing each contestant out to collapse the forward vector to $O(nL)$ is performed here differently than in \citet{cotton2021}, but that is where the idea is borrowed and crucially, this is the point of departure from other smooth methods that require iteration over all items.
 
 Herein we have organized the pieces into an efficient algorithm where a
 single shared survival field renders probabilities for all $n$
@@ -1992,56 +2004,60 @@ Automatic Control} 64:190--205, 2019.
 \bibitem[Albert and Chib(1993)]{albert1993} J.~H. Albert, S.~Chib.
 Bayesian analysis of binary and polychotomous response data.
 \emph{JASA} 88:669--679, 1993.
-\bibitem[Berry(1994)]{berry1994} S.~Berry.
-Estimating discrete-choice models of product differentiation.
-\emph{RAND Journal of Economics} 25(2):242--262, 1994.
-\bibitem[Butler and Moffitt(1982)]{butler1982} J.~S. Butler and R.~Moffitt.
-A computationally efficient quadrature procedure for the one-factor
-multinomial probit model. \emph{Econometrica} 50(3):761--764, 1982.
+\bibitem[Batram and Bauer(2019)]{batram2019} M.~Batram, D.~Bauer.
+On consistency of the MACML approach to discrete choice modelling.
+\emph{Journal of Choice Modelling} 30:1--16, 2019.
+\bibitem[Bauer et~al.(2026)]{bauerRprobit} D.~Bauer, M.~Batram,
+S.~B\"uscher, L.~Oelschl\"ager, T.~T. Bui. \emph{Rprobit: Estimation of
+Multinomial Probit Models}. R package version 1.0.0, 2026.
+\texttt{doi:10.32614/CRAN.package.Rprobit}.
 \bibitem[Benter(1994)]{benter1994} W.~Benter. Computer based horse
 race handicapping and wagering systems: a report. In D.~B. Hausch,
 V.~S.~Y. Lo, W.~T. Ziemba (eds.), \emph{Efficiency of Racetrack
 Betting Markets}, Academic Press, 1994, 183--198.
-\bibitem[Botev(2017)]{botev2017} Z.~I. Botev.
-The normal law under linear restrictions: simulation and estimation via minimax
-tilting. \emph{Journal of the Royal Statistical Society B} 79(1):125--148, 2017.
-\bibitem[B\"orsch-Supan and Hajivassiliou(1993)]{borschsupan1993}
-A.~B\"orsch-Supan, V.~Hajivassiliou. Smooth unbiased multivariate probability
-simulators for maximum likelihood estimation of limited dependent variable
-models. \emph{Journal of Econometrics} 58:347--368, 1993.
-\bibitem[Batram and Bauer(2019)]{batram2019} M.~Batram, D.~Bauer.
-On consistency of the MACML approach to discrete choice modelling.
-\emph{Journal of Choice Modelling} 30:1--16, 2019.
-\bibitem[Bauer(2024)]{bauerRprobit} D.~Bauer.
-\emph{Rprobit: R package for the estimation of multinomial probit models},
-2024. \texttt{github.com/dbauer72/Rprobit}.
+\bibitem[Berry(1994)]{berry1994} S.~Berry.
+Estimating discrete-choice models of product differentiation.
+\emph{RAND Journal of Economics} 25(2):242--262, 1994.
 \bibitem[Bhat(2011)]{bhat2011} C.~R. Bhat.
 The maximum approximate composite marginal likelihood (MACML) estimation of
 multinomial probit-based unordered response choice models.
 \emph{Transportation Research Part B} 45(7):923--939, 2011.
+\bibitem[B\"orsch-Supan and Hajivassiliou(1993)]{borschsupan1993}
+A.~B\"orsch-Supan, V.~Hajivassiliou. Smooth unbiased multivariate probability
+simulators for maximum likelihood estimation of limited dependent variable
+models. \emph{Journal of Econometrics} 58:347--368, 1993.
+\bibitem[Botev(2017)]{botev2017} Z.~I. Botev.
+The normal law under linear restrictions: simulation and estimation via minimax
+tilting. \emph{Journal of the Royal Statistical Society B} 79(1):125--148, 2017.
+\bibitem[Butler and Moffitt(1982)]{butler1982} J.~S. Butler and R.~Moffitt.
+A computationally efficient quadrature procedure for the one-factor
+multinomial probit model. \emph{Econometrica} 50(3):761--764, 1982.
 \bibitem[Cappellari and Jenkins(2003)]{cappellari2003} L.~Cappellari,
 S.~P. Jenkins. Multivariate probit regression using simulated maximum
 likelihood. \emph{Stata Journal} 3(3):278--294, 2003.
-\bibitem[Chiong et al.(2016)]{chiong2016} K.~Chiong, A.~Galichon, M.~Shum.
-Duality in dynamic discrete-choice models.
-\emph{Quantitative Economics} 7(1):83--115, 2016.
 \bibitem[Chellel(2018)]{chellel2018} K.~Chellel. The gambler who
 cracked the horse-racing code. \emph{Bloomberg Businessweek}, May 3,
 2018.
+\bibitem[Chiong et al.(2016)]{chiong2016} K.~Chiong, A.~Galichon, M.~Shum.
+Duality in dynamic discrete-choice models.
+\emph{Quantitative Economics} 7(1):83--115, 2016.
 \bibitem[Clark(1961)]{clark1961} C.~E. Clark.
 The greatest of a finite set of random variables.
 \emph{Operations Research} 9:145--162, 1961.
+\bibitem[Cotton(2021)]{cotton2021} P.~Cotton.
+Inferring relative ability from winning probability in multientrant contests.
+\emph{SIAM Journal on Financial Mathematics} 12(1):295--317, 2021.
 \bibitem[Cotton(2026)]{cottonsurvey} P.~Cotton. Probit versus logit:
 a survey of empirical accuracy. SSRN working paper, 2026.
 \bibitem[Croissant(2020)]{croissant2020} Y.~Croissant.
 Estimation of random utility models in R: the mlogit package.
 \emph{Journal of Statistical Software} 95(11):1--41, 2020.
-\bibitem[Cotton(2021)]{cotton2021} P.~Cotton.
-Inferring relative ability from winning probability in multi-entrant contests.
-\emph{SIAM Journal on Financial Mathematics} 12(1):295--317, 2021.
 \bibitem[Danskin(1966)]{danskin1966} J.~M. Danskin. The theory of
 max-min, with applications. \emph{SIAM Journal on Applied Mathematics}
 14(4):641--664, 1966.
+\bibitem[Domencich and McFadden(1975)]{domencich1975} T.~A. Domencich,
+D.~McFadden. \emph{Urban Travel Demand: A Behavioral Analysis}.
+North-Holland, Amsterdam, 1975.
 \bibitem[Fosgerau et~al.(2013)Fosgerau, McFadden and Bierlaire]{fosgerau2013}
 M.~Fosgerau, D.~McFadden, M.~Bierlaire. Choice probability generating
 functions. \emph{Journal of Choice Modelling} 8:1--18, 2013.
@@ -2051,13 +2067,6 @@ matching models. \emph{Review of Economic Studies} 89(5):2600--2629, 2022.
 \bibitem[Gates(2006)]{gates2006} R.~Gates.
 A Mata Geweke--Hajivassiliou--Keane multivariate normal simulator.
 \emph{Stata Journal} 6(2):190--213, 2006.
-\bibitem[Harville(1973)]{harville1973} D.~A. Harville. Assigning
-probabilities to the outcomes of multi-entry competitions.
-\emph{Journal of the American Statistical Association}
-68(342):312--316, 1973.
-\bibitem[Domencich and McFadden(1975)]{domencich1975} T.~A. Domencich,
-D.~McFadden. \emph{Urban Travel Demand: A Behavioural Analysis}.
-North-Holland, Amsterdam, 1975.
 \bibitem[Genz(1992)]{genz1992} A.~Genz.
 Numerical computation of multivariate normal probabilities.
 \emph{Journal of Computational and Graphical Statistics} 1:141--149, 1992.
@@ -2067,6 +2076,10 @@ Bayesian inference in econometric models using Monte Carlo integration.
 \bibitem[Hajivassiliou et al.(1996)]{hajivassiliou1996} V.~Hajivassiliou,
 D.~McFadden, P.~Ruud. Simulation of multivariate normal rectangle probabilities
 and their derivatives. \emph{Journal of Econometrics} 72:85--134, 1996.
+\bibitem[Harville(1973)]{harville1973} D.~A. Harville. Assigning
+probabilities to the outcomes of multi-entry competitions.
+\emph{Journal of the American Statistical Association}
+68(342):312--316, 1973.
 \bibitem[Imai and van Dyk(2005)]{imai2005} K.~Imai, D.~A. van Dyk.
 MNP: R package for fitting the multinomial probit model.
 \emph{Journal of Statistical Software} 14(3):1--32, 2005.
@@ -2083,7 +2096,8 @@ Convergence of a Newton algorithm for semi-discrete optimal transport.
 2019.
 \bibitem[Lerman and Manski(1981)]{lerman1981} S.~Lerman, C.~Manski.
 On the use of simulated frequencies to approximate choice probabilities.
-In \emph{Structural Analysis of Discrete Data}, MIT Press, 1981.
+In C.~F. Manski, D.~McFadden (eds.), \emph{Structural Analysis of
+Discrete Data with Econometric Applications}, pp.~305--319. MIT Press, 1981.
 \bibitem[L\'evy et~al.(2021)L\'evy, Mohayaee and von
 Hausegger]{levy2021} B.~L\'evy, R.~Mohayaee, S.~von Hausegger. A fast
 semidiscrete optimal transport algorithm for a unique reconstruction of
@@ -2093,8 +2107,8 @@ Society} 506(1):1165--1185, 2021.
 inversion. arXiv:1802.04444 (2018).
 \bibitem[Lindgren et al.(2011)]{lindgren2011} F.~Lindgren, H.~Rue,
 J.~Lindstr\"om. An explicit link between Gaussian fields and Gaussian Markov
-random fields. \emph{Journal of the Royal Statistical Society B}
-73(4):423--498, 2011.
+random fields: the stochastic partial differential equation approach.
+\emph{Journal of the Royal Statistical Society B} 73(4):423--498, 2011.
 \bibitem[Loaiza-Maya and Nibbering(2022)]{loaizamaya2022} R.~Loaiza-Maya,
 D.~Nibbering. Scalable Bayesian estimation in the multinomial probit
 model. \emph{Journal of Business \& Economic Statistics}
@@ -2104,19 +2118,19 @@ Building diversified portfolios that outperform out of sample.
 \emph{Journal of Portfolio Management} 42(4):59--69, 2016.
 \bibitem[Luce(1959)]{luce1959} R.~D. Luce. \emph{Individual Choice
 Behavior: A Theoretical Analysis}. Wiley, 1959.
-\bibitem[McFadden(1981)]{mcfadden1981} D.~McFadden.
-Econometric models of probabilistic choice. In C.~Manski, D.~McFadden,
-eds., \emph{Structural Analysis of Discrete Data}, MIT Press, 1981.
 \bibitem[McCulloch and Rossi(1994)]{mcculloch1994} R.~McCulloch, P.~Rossi.
 An exact likelihood analysis of the multinomial probit model.
 \emph{Journal of Econometrics} 64:207--240, 1994.
+\bibitem[McFadden(1981)]{mcfadden1981} D.~McFadden.
+Econometric models of probabilistic choice. In C.~Manski, D.~McFadden,
+eds., \emph{Structural Analysis of Discrete Data}, MIT Press, 1981.
 \bibitem[Mendell and Elston(1974)]{mendell1974} N.~Mendell, R.~Elston.
 Multifactorial qualitative traits: genetic analysis and prediction of
 recurrence risks. \emph{Biometrics} 30:41--57, 1974.
-\bibitem[Mishra et~al.(2012)Mishra, Natarajan and Teo]{mishra2012}
+\bibitem[Mishra et~al.(2012)Mishra, Natarajan, Tao and Teo]{mishra2012}
 V.~K. Mishra, K.~Natarajan, H.~Tao, C.-P. Teo. Choice prediction with
 semidefinite optimization when utilities are correlated. \emph{IEEE
-Transactions on Automatic Control} 57:2450--2463, 2012.
+Transactions on Automatic Control} 57(10):2450--2463, 2012.
 \bibitem[Mosteller(1951)]{mosteller1951} F.~Mosteller. Remarks on the
 method of paired comparisons: I. The least squares solution assuming
 equal standard deviations and equal correlations. \emph{Psychometrika}
@@ -2135,12 +2149,12 @@ arXiv:1602.08448.
 \bibitem[Solow(1990)]{solow1990} A.~R. Solow.
 A method for approximating multivariate normal orthant probabilities.
 \emph{Journal of Statistical Computation and Simulation} 37:225--229, 1990.
+\bibitem[StataCorp(2023)]{statacorp2023} StataCorp.
+\emph{Stata 18 Choice Models Reference Manual} (entry
+\texttt{cmmprobit}). Stata Press, College Station, TX, 2023.
 \bibitem[Stern(1992)]{stern1992} S.~Stern.
 A method for smoothing simulated moments of discrete probabilities in
 multinomial probit models. \emph{Econometrica} 60:943--952, 1992.
-\bibitem[StataCorp(2023)]{statacorp2023} StataCorp.
-\emph{Stata Choice Models Reference Manual: cmmprobit, asmprobit}.
-Stata Press, College Station, 2023.
 \bibitem[Thurstone(1927)]{thurstone1927} L.~L. Thurstone.
 A law of comparative judgment. \emph{Psychological Review} 34:273--286, 1927.
 \bibitem[Train(2009)]{train2009} K.~Train.
