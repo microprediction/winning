@@ -162,13 +162,16 @@ elif mode == "alt":
                   f"TV {0.5*np.abs(g-ref).sum():.2e}  "
                   f"tail {tail_band_err(g, ref):.3f}", flush=True)
 
-        # frequency at wall-clock matched to the race, and at 10x
+        # frequency at wall-clock matched to the race, and at 10x. Its draws
+        # come from their own stream: how many it takes depends on machine
+        # speed, and sharing rng made the next problem drawn depend on it.
+        sim = np.random.default_rng([5, n])
         for mult, tag in ((1.0, "freq(=t)"), (10.0, "freq(10t)")):
             t0 = time.time()
             draws = 0
             counts = np.zeros(n)
             while time.time() - t0 < mult * t_race:
-                zz = rng.standard_normal((n, 4096))
+                zz = sim.standard_normal((n, 4096))
                 counts += np.bincount(
                     np.argmin(mu[:, None] + L @ zz, axis=0), minlength=n)
                 draws += 4096

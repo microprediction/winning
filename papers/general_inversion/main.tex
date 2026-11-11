@@ -319,9 +319,9 @@ sequential conditioning on first and second moments. These are fast, sometimes
 startlingly accurate, and carry no error control, and the benchmark below
 measures all three properties at once: Mendell--Elston prices the $n=10$ vector
 in two milliseconds within $2\times10^{-3}$ of the reference, then drifts to
-$3\times10^{-2}$ at $n=30$ with tail probabilities off by a factor of nearly
-four, and nothing in the output announces the change. The Clark-type recursion
-behaves alike. The family is current practice, not history:
+$3\times10^{-2}$ at $n=30$ with tail probabilities off by more than a factor
+of two, and nothing in the output announces the change. The Clark-type recursion
+behaves alike, its tail entries off by a factor of nearly four. The family is current practice, not history:
 \citet{bhat2011} builds the MACML estimator on precisely these
 approximations, and the \texttt{Rprobit} package implements it
 \citep{bauerRprobit}, with its asymptotics examined by
@@ -1697,12 +1697,12 @@ times that budget; ``zeros'' counts tail alternatives that received no draws.
 & \multicolumn{2}{c}{$n=10$} & \multicolumn{3}{c}{$n=30$}\\
 method & time & TV & time & TV & tail\\
 \midrule
-lattice race & 2.5 ms & $1.8\times10^{-4}$ & 4.7 ms & $8.3\times10^{-4}$ & $0.07$\\
-Genz, full vector & 46 ms & $1.8\times10^{-4}$ & 1.40 s & $8.3\times10^{-4}$ & $0.07$\\
+lattice race & 2.5 ms & $1.8\times10^{-4}$ & 4.7 ms & $8.8\times10^{-4}$ & $0.05$\\
+Genz, full vector & 46 ms & $1.8\times10^{-4}$ & 1.40 s & $8.8\times10^{-4}$ & $0.06$\\
 frequency, matched time & --- & $3.8\times10^{-3}$ & --- & $1.0\times10^{-2}$ & $0.45$, 2 zeros\\
 frequency, $10\times$ time & --- & $9.2\times10^{-4}$ & --- & $2.0\times10^{-3}$ & $0.21$\\
-Mendell--Elston & 2.0 ms & $1.8\times10^{-3}$ & 18 ms & $3.2\times10^{-2}$ & $1.30$\\
-Clark-type & 1.4 ms & $1.1\times10^{-2}$ & 17 ms & $1.6\times10^{-2}$ & $1.33$\\
+Mendell--Elston & 2.0 ms & $1.8\times10^{-3}$ & 18 ms & $3.0\times10^{-2}$ & $0.82$\\
+Clark-type & 1.4 ms & $1.1\times10^{-2}$ & 17 ms & $2.1\times10^{-2}$ & $1.36$\\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -1722,7 +1722,7 @@ lattice, a factor of $3\times10^{3}$ before any accuracy matching.
 
 The Mendell--Elston and Clark-type moment recursions are the only
 entries whose error grows
-silently: its tail entries are off by $e^{1.3}\approx3.7$ with nothing in
+silently: their tail entries are off by up to $e^{1.36}\approx3.9$ with nothing in
 the output to say so. The race's tail figure is the reference's own
 noise, and lattice self-convergence places its error near $10^{-8}$.
 
