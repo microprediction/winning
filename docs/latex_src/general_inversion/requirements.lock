@@ -1,0 +1,26 @@
+# Pinned environment for reproducing this paper (Python 3.12).
+# Install: uv venv -p 3.12 .venv && uv pip install -r docs/latex_src/general_inversion/requirements.lock && uv pip install -e .
+# 'winning' itself is this repository at the paper's tag, installed editable.
+cloudpickle==3.1.2
+fastrace==0.1.2
+formulaic==1.2.2
+iniconfig==2.3.1
+interface-meta==2.0.1
+joblib==1.6.0
+narwhals==2.28.0
+numpy==2.5.4
+packaging==26.3
+pandas==3.1.1
+patsy==1.0.3
+pluggy==1.7.0
+pygments==2.21.0
+pytest==9.2.0
+python-dateutil==4.0.0
+randomcov==0.2.1
+scikit-learn==1.9.1
+scipy==1.18.1
+statsmodels==0.15.0
+threadpoolctl==3.8.0
+typing-extensions==4.16.0
+tzdata==2026.6
+wrapt==2.5.2
