@@ -38,7 +38,7 @@ regenerated figure (reason given).
 | Saturated estimation table (0.0168 / 0.0286 / 0.0184; paired 39/40, 33/40) | `estimation` | `research/mnp_estimation/run_mle2.py --reps 40` | match (times via `timings`) |
 | Covariate table (0.0363 / 0.0380 / 0.0367) | `covariates` | `research/mnp_estimation/run_mle3.py`, `run_mle4.py` | match |
 | Dense n=2000 one call, 82% zero-win tail | `large-n` | `research/general_sigma/run_large_n.py` | match (bulk TV 1.01e-2, 82%) |
-| Stall case of the diagonal iteration; Newton-Krylov rounds | `newton-krylov` | `research/experiments/exp23_newton_cg/run_newton_cg3.py` | see log |
+| Stall case of the diagonal iteration; Newton-Krylov rounds | `newton-krylov` | `research/experiments/exp23_newton_cg/run_newton_cg3.py` | match (Jacobi stalls at 1.1e-4; hybrid diverges; easy case converges to 9.6e-10) |
 | Independent-case inversion vs exact referee | `independent-inversion` | `research/experiments/exp35_independent_inversion/run_independent.py` | match (bitwise vs committed results.txt) |
 | Lattice vs per-alternative factor-RQMC timing | `factor-rqmc` | `research/experiments/exp24_factor_rqmc/run_factor_rqmc.py` | match (accuracy at reference floor; timing ratio) |
 | GHK cost law n^2.15 / n^2.8; Appendix A anchor | `law` | `bench.py law` | re-measured by `timings` |
