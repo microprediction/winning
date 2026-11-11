@@ -1476,8 +1476,7 @@ The constants $k$, the cluster count and $m$ are
 fixed, not tuned per ensemble; a spectral rule for $m$ was tested and
 rejected (it saturates its cap for marginal gains and does not repair the
 failure case below). What results is a factor-plus-blocks race priced in
-one seeded, reproducible call (deterministic under Gauss--Hermite
-nodes, seeded scrambled Sobol past the tensor budget), and the pipeline
+one seeded, reproducible call, and the pipeline
 is the shipped one-call
 (\texttt{fit\_covariance}; \texttt{race\_probabilities} accepts
 \texttt{cov=} directly), not a research script.
@@ -1489,6 +1488,32 @@ at objective $0.88$ where zero was attainable), so when the first
 start's objective is materially above zero, two further deterministic
 starts are tried --- diagonal-heavy and eigen-residual --- and the best
 kept; each rescues that case to $10^{-13}$.
+
+For reimplementation, the shipped constants are as follows. Stage~1
+starts from $D_0=\tfrac12\overline{\mathrm{diag}\,\Sigma}$; its $V$-step
+is the top-$k$ eigenpairs of $P(\Sigma-\mathrm{diag}\,D_0)P$ scaled as
+$U\sqrt{\max(\lambda,0)}$, its $D$-step the water-filling solve of
+stage~5, for at most $60$ sweeps, stopping when $D$ moves by less than
+$10^{-12}$. ``Materially above zero'' means a projected objective above
+$10^{-12}\lVert P\Sigma P\rVert_F^2$; the extra starts are
+$D_0=0.9\,\mathrm{diag}\,\Sigma$ and
+$D_0=\max(\mathrm{diag}\,\Sigma-\bar\lambda_k,10^{-3})$ with
+$\bar\lambda_k$ the sum of the top $k$ eigenvalues over $n$. Stage~3
+cuts the average-linkage tree to $\max\{2,\min(\lfloor n/5\rfloor,20)\}$
+clusters (\texttt{maxclust}); singletons get no loading; each cluster's
+loading is $\sqrt{\lambda_1}\,u_1$ of its diagonal-zeroed block of $R$
+when $\lambda_1>0$. Stage~4 works on $R-BB'$ with $B$ the stage-3 block
+columns, diagonal zeroed, and drops a column whose squared norm is below
+$10^{-10}\,\mathrm{tr}\,\Sigma/n$. In stage~5, with $a=1-\tfrac2n$,
+$b=\tfrac1{n^2}$ and right-hand side $c$, the solution is
+$x_i=\max\{(c_i-b\tau)/a,0\}$ where the scalar $\tau=\sum_jx_j$
+solves $\tau=\sum_{c_i>b\tau}c_i/(a+b\,\#\{c_i>b\tau\})$, found by
+fixed-point iteration without sorting. Stage~6's rank is the number of
+surviving columns of $V_{\mathrm{all}}=[V,\,V_{\mathrm{res}},\,B]$, whose
+block columns are dense $n$-vectors that vanish outside their cluster. The
+fitted race is priced by the factor kernel of \S\ref{sec:factor} on
+$V_{\mathrm{all}}$ with $2^{11}$ seeded scrambled-Sobol nodes, not by the
+block kernel.
 
 The shipped function also
 reports its own quality and warns on failure modes. In particular it
@@ -1534,7 +1559,13 @@ These experiments convince us of two things. First, disperse the priced race acr
 dispersion does appear, the remedy is rank rather than a better
 optimizer. So the shipped fitter warns when the chosen rank splits a tied
 eigenvalue of the centered covariance, and tells the user which rank would take
-the whole tied group.
+the whole tied group. The test, on the leading $\min(2k+4,n-1)$
+eigenvalues $\lambda_1\ge\lambda_2\ge\cdots$ of $P\Sigma P$: the boundary
+is clean if $\lambda_k-\lambda_{k+1}>10^{-6}\lambda_1$ or if
+$\lambda_k<0.05\,\lambda_1$; otherwise the tied group around $k$ is
+extended in both directions by the same gap test and the warning names
+the rank that ends it. A tie in the idiosyncratic bulk counts, provided
+that bulk sits above five percent of $\lambda_1$.
 
 The extreme case is also the oldest model in the subject. Under equicorrelation $P\Sigma P$ is a multiple of $P$, so its
 spectrum is $(n-1)$-fold degenerate. A great many representations are
@@ -1567,8 +1598,12 @@ $12$ & $11$ & yes & $4.0\times10^{-2}$\\
 The first three rows sit at the fitter's ordinary approximation error.
 The last three are the rank cutting a tied group, and the cost grows with
 how much of the group is cut. The warning fires on all three, and on the
-three-group row as well, where the error is harmless: erring toward the
-false positive is the right direction here.
+three-group row as well, where the error is harmless: there the two
+between-group eigenvalues are captured, and the third column is cut from
+the tied within-group bulk, which at $0.051\,\lambda_1$ sits just above
+the five-percent cutoff (at two groups it is $0.034\,\lambda_1$ and no
+warning fires).
+Erring toward the false positive is the right direction here.
 
 To emphasize, all of these issues apply to the dense covariance usage where the package is being asked to fit. A
 user can supply a structure they prefer without ambiguity. And symmetry is
@@ -1577,7 +1612,12 @@ caller who knows the group structure knows the rank to ask for, namely
 one less than the number of exchangeable groups.
 
 \subsection{Accuracy}
-The one-call fit-and-price takes four
+The test problem (\texttt{research/general\_sigma/run\_large\_n.py}) is a
+dense $n=2000$ correlation matrix built from three global factors
+(loading scales $0.55$, $0.3$, $0.2$), a forty-block layer with loadings
+in $[0.35,0.55]$, a small dense residual and a unit diagonal, priced at
+abilities $\mu$ drawn as sorted standard normals scaled by $1.2$, which
+gives a wide field with a long tail. The one-call fit-and-price takes four
 seconds ($0.6$ of them the fit) against thirty-six for a $10^6$-draw
 simulation, and agrees with it at its noise floor on the resolved bulk.
 
@@ -1595,8 +1635,11 @@ anywhere in that set. Because the set is fixed before the second half is
 looked at, its count is binomial in the set's true mass, and a
 Clopper--Pearson interval is valid.
 
-On a dense $n=2000$ correlation with three global factors and a
-forty-block layer, priced in a wide field where $63.6$ percent of
+On a dense $n=2000$ correlation with three global factors (loadings
+$N(0,0.25)$), a forty-block layer (loading $0.45$) and idiosyncratic
+variances in $[0.5,1.5]$, normalized to unit diagonal
+(\texttt{run\_split\_referee.py}), priced at sorted standard-normal
+abilities scaled by $1.2$, a wide field where $63.6$ percent of
 alternatives take no win in the first million paths, the model puts
 $1.13\times10^{-4}$ of mass on that set. The second million paths place
 $111$ wins in it, a $95$ percent interval of
