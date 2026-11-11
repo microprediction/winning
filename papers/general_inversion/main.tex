@@ -1190,11 +1190,18 @@ For the boundary claim, suppose $p^{\star}_i=0$ for $i$ outside
 $S=\{j:p^{\star}_j>0\}$. Under full support $p_i(\mu)>0$ at every finite
 $\mu$, so no finite point inverts the target. Invert the target
 restricted to $S$, then send each excluded $\mu_i\to+\infty$ holding the
-$S$-contrasts fixed: by dominated convergence the race converges to the
+$S$-contrasts fixed: $\min_k(\mu_k+\epsilon_k)$ then increases
+monotonically to $\min_{j\in S}(\mu_j+\epsilon_j)$ and is bounded between
+integrable variables free of $\mu_{S^c}$ (below by
+$\min_{j\in S}\mu_j+\min_k\epsilon_k$ once every excluded $\mu_i$ exceeds
+$\min_{j\in S}\mu_j$, above by $\mu_{j_0}+\epsilon_{j_0}$ for any
+$j_0\in S$), so by dominated convergence the race converges to the
 restricted race and the objective to its restricted optimum, so the
 supremum is approached along exactly those diverging contrasts.
-Conversely, on any maximizing sequence an excluded contrast that
-remained bounded would admit, after gauge fixing, a convergent
+Conversely, the full objective is bounded above by the restricted one,
+$W_S(\mu_S)-\langle p^{\star}_S,\mu_S\rangle$, whose coercivity on
+$\mathbf{1}_S^{\perp}$ keeps the $S$-contrasts of any maximizing sequence
+bounded; an excluded contrast that also remained bounded would then admit, after gauge fixing, a convergent
 subsequence whose limit gives alternative $i$ strictly positive
 probability, and the objective, continuous in $\mu$, would sit strictly
 below the restricted optimum there --- contradicting maximality.
