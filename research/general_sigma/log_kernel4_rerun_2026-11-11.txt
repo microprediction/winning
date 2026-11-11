@@ -1,0 +1,19 @@
+kernel-rbf-ls0.08-m5     projected med(TV) 3.58e-02 q90 4.73e-02 worst 6.02e-02 | med(med abs) 1.7e-04
+kernel-rbf-ls0.08-m12    projected med(TV) 3.16e-02 q90 3.58e-02 worst 4.67e-02 | med(med abs) 1.7e-04
+kernel-rbf-ls0.08-m5n14  projected med(TV) 3.30e-02 q90 4.68e-02 worst 5.87e-02 | med(med abs) 1.4e-04
+kernel-rbf-ls0.2-m5     projected med(TV) 2.27e-02 q90 3.11e-02 worst 3.42e-02 | med(med abs) 3.6e-04
+kernel-rbf-ls0.2-m12    projected med(TV) 2.85e-02 q90 3.13e-02 worst 4.07e-02 | med(med abs) 4.2e-04
+kernel-rbf-ls0.2-m5n14  projected med(TV) 8.91e-03 q90 1.18e-02 worst 1.27e-02 | med(med abs) 1.6e-04
+kernel-rbf-ls0.4-m5     projected med(TV) 1.78e-02 q90 2.09e-02 worst 2.42e-02 | med(med abs) 8.5e-04
+kernel-rbf-ls0.4-m12    projected med(TV) 1.57e-02 q90 2.11e-02 worst 2.26e-02 | med(med abs) 7.1e-04
+kernel-rbf-ls0.4-m5n14  projected med(TV) 5.41e-03 q90 7.14e-03 worst 7.36e-03 | med(med abs) 3.0e-04
+kernel-matern32-ls0.08-m5     projected med(TV) 2.63e-02 q90 3.57e-02 worst 4.37e-02 | med(med abs) 1.1e-04
+kernel-matern32-ls0.08-m12    projected med(TV) 2.44e-02 q90 3.21e-02 worst 4.25e-02 | med(med abs) 1.1e-04
+kernel-matern32-ls0.08-m5n14  projected med(TV) 2.43e-02 q90 3.45e-02 worst 4.21e-02 | med(med abs) 8.5e-05
+kernel-matern32-ls0.2-m5     projected med(TV) 2.32e-02 q90 2.82e-02 worst 3.11e-02 | med(med abs) 2.2e-04
+kernel-matern32-ls0.2-m12    projected med(TV) 2.34e-02 q90 2.62e-02 worst 2.98e-02 | med(med abs) 2.1e-04
+kernel-matern32-ls0.2-m5n14  projected med(TV) 1.53e-02 q90 2.18e-02 worst 2.62e-02 | med(med abs) 1.4e-04
+kernel-matern32-ls0.4-m5     projected med(TV) 1.64e-02 q90 2.11e-02 worst 2.20e-02 | med(med abs) 2.8e-04
+kernel-matern32-ls0.4-m12    projected med(TV) 1.61e-02 q90 2.48e-02 worst 2.82e-02 | med(med abs) 3.0e-04
+kernel-matern32-ls0.4-m5n14  projected med(TV) 7.48e-03 q90 1.12e-02 worst 1.18e-02 | med(med abs) 1.1e-04
+exit 0 sec 1467
