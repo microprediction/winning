@@ -2253,7 +2253,14 @@ A law of comparative judgment. \emph{Psychological Review} 34:273--286, 1927.
 The lattice column below is measured; the GHK column is an
 extrapolation of the two measured exponents ($2.15$ and $2.8$) far
 beyond any regime in which GHK has been run, and cache effects,
-parallelism, Cholesky reuse or a change of regime would move it.
+parallelism, Cholesky reuse or a change of regime would move it. Both
+ends of each bracket are anchored at the largest measured point, the
+complete vector at $n=1000$ ($51.3$\,s at $R=10^3$, so $513$\,s at
+$R=10^4$; \texttt{bench.py law}):
+$t(n)=513\,\mathrm{s}\times(n/1000)^{\beta}$ with $\beta=2.15$ and
+$\beta=2.8$. The lower end therefore applies the gentler exponent only
+beyond $n=1000$; the measured growth from $n=200$ to $1000$ is already in
+the anchor.
 
 \begin{center}\small
 \begin{tabular}{rrrr}
