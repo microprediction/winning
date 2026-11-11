@@ -670,7 +670,20 @@ more nodes of a smooth rule is the wrong medicine for a near-step
 integrand. Rank one with extreme sharpness gets a third treatment, an
 equal-weight grid on quantiles, because Gauss--Hermite clusters its nodes
 near the centre and that is the wrong place when the integrand is nearly
-a step.
+a step. Concretely, with $s=s_{\mathrm{trigger}}$ and rank $r$, the rules
+apply in order: at $r\ge2$ and $s>3$, $2^{13}$ scrambled Sobol nodes; at
+$r=1$ with $\lceil8s\rceil>201$, the equal-weight grid
+$f_q=\Phi^{-1}((q-\tfrac12)/Q)$ with $Q=\min(\lceil8s\rceil,4001)$;
+past a tensor budget of $15^r>10^5$ nodes, $2^{13}$ Sobol nodes; and
+otherwise the product Gauss--Hermite rule of order
+$Q=\min(\max(\lceil8s\rceil,15),c_r)$ per dimension, with
+$c_r=201,41,15$ for $r=1$, $2$ and above, its nodes of weight below
+$10^{-7}$ of the largest pruned. The block, nested and tree kernels do
+not yet escalate: they use fixed Gauss--Hermite rules ($9$ cluster
+nodes, $15$ global nodes), warn when a cluster's loading exceeds three
+idiosyncratic standard deviations, and past that point can lose
+$5\times10^{-2}$ of total variation, so sharp shared effects belong in
+the factor grammar.
 
 
 \subsection{Blocks and nested covariance}\label{sec:blocks}
