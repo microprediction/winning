@@ -30,8 +30,8 @@ correlated variables is largest or who won a contest, have long
 resisted exact treatment in Bayes nets. For correlated Gaussian
 variables the probability that one is the maximum is an orthant
 probability, which Bayesian optimization and reinforcement learning
-call intractable and approximate, and which rating systems reach only
-through expectation propagation. We show
+call intractable and approximate; rating systems such as TrueSkill
+approximate their posteriors by expectation propagation. We show
 that when the dependence among Gaussian variables runs through a few
 shared factors, the probability that each variable is the largest can
 be computed deterministically, at fixed factor rank and quadrature
@@ -995,7 +995,8 @@ half with every marginal held fixed, whatever the factor rank. The
 comparison with counted posterior draws depends on rank. On the
 posteriors of the two experiments, where the centered loadings have
 rank at most two, one evaluation for a hundred alternatives takes
-about ten milliseconds and is accurate to $10^{-6}$ per entry.
+about ten milliseconds and was measured accurate to $10^{-6}$ per entry
+at ten posteriors from the experiments.
 
 Counting draws for ten milliseconds gives about twenty thousand
 draws, which estimate an entry near $0.01$ to seven percent of
