@@ -26,7 +26,7 @@ define run
 endef
 
 QUICK := tests stress referee ghk alt mislocate invert bm genz200 window tree \
-         gh-vs-sobol split-referee multistart fuzz
+         gh-vs-sobol split-referee multistart fuzz fixed-rule
 FULL  := referee-r botev-tree ensembles kernel estimation covariates independent-inversion \
          law scale tenmillion invertmillion
 
@@ -71,6 +71,9 @@ multistart:
 	$(call run,multistart,$(ROOT)/research/general_sigma,$(PY) run_multistart.py --starts 8 --n 300)
 fuzz:
 	$(call run,fuzz,$(ROOT)/research/fuzz,$(PY) fuzz_races.py)
+
+fixed-rule:
+	$(call run,fixed-rule,$(ROOT)/research/fuzz,$(PY) fixed_rule_loss.py)
 
 # ---- full: long accuracy runs ----------------------------------------------
 referee-r:
