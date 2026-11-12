@@ -266,6 +266,31 @@ cat(sprintf("genz: %.6e (err est %.1e) in %.2f s\\n", pr,
     os.unlink(path)
     print(f"lattice all-{n}: {t_lat*1e3:.1f} ms; favourite p = {p_lat[i]:.6e}")
     print(out.stdout.strip() or out.stderr.strip()[-200:])
+elif mode == "classic":
+    # Rust against pure-Python classic (integer-lattice) calibration: the
+    # Scale paragraph's speed ratio. Same answer both ways (printed), median
+    # of five calls each.
+    import winning
+    from winning.classic.lattice_calibration import state_price_implied_ability
+    from winning.classic.lattice import skew_normal_density
+    density = skew_normal_density(L=500, unit=0.01, a=0.0)
+    for n in (10, 50, 200):
+        prices = list(np.random.default_rng(3).dirichlet(np.full(n, 2.0)))
+        res = {}
+        for rust in (True, False):
+            winning.use_rust(rust)
+            ts = []
+            for _ in range(5):
+                t0 = time.perf_counter()
+                a = state_price_implied_ability(prices, density)
+                ts.append(time.perf_counter() - t0)
+            res[rust] = (float(np.median(ts)), np.asarray(a))
+        winning.use_rust(True)
+        print(f"n={n:4d}  rust {1e3*res[True][0]:8.2f} ms  "
+              f"python {1e3*res[False][0]:8.1f} ms  "
+              f"ratio {res[False][0]/res[True][0]:6.0f}  "
+              f"max|diff| {np.abs(res[True][1]-res[False][1]).max():.1e}",
+              flush=True)
 elif mode == "tenmillion":
     # Gap 1: the ten-million-contestant block race, seeded. Needs ~5 GB
     # and a quiet machine; the paper's Scale paragraph cites this run.

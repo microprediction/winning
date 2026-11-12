@@ -44,7 +44,9 @@ regenerated figure (reason given).
 | Lattice vs per-alternative factor-RQMC timing | `factor-rqmc` | `research/experiments/exp24_factor_rqmc/run_factor_rqmc.py` | match (accuracy at reference floor; timing ratio) |
 | GHK cost law; Appendix A anchor | `law` | `bench.py law` | **updated**: 0.18 / 1.69 / 19.4 s at n=200/500/1000; exponents 1.9 / 2.9; anchor 194 s at R=1e4; brackets recomputed |
 | Scale; ten million; inversion at a million | `scale`, `tenmillion`, `invertmillion` | `bench.py` | **updated**: 0.12 / 1.2 / 18 s; 102 s; 105 s independent, 699 s factor |
-| Every wall-clock figure | `timings` | `retime.py` | measured on a quiet machine 2026-11-11 (two windows, load 0.16 and 0.20 per core); logs in `timings_2026-11-11/`; retime.py now also covers law, genz200, tilting, covariates, large_n |
+| Rust classic calibration speed ratio | `timings` (classic) | `bench.py classic` | **new script** (no committed source before); 94-207x for n=200..10, was quoted as 232x |
+| Newton-CG footnote | `timings` (newton_cg) | `research/experiments/exp23_newton_cg/run_newton_cg.py` | times **updated** 370 s vs 3.5 s (n=200) |
+| Every wall-clock figure | `timings` | `retime.py` | measured on a quiet machine 2026-11-11 (three windows, load 0.16, 0.20 and 0.24 per core); logs in `timings_2026-11-11/`; retime.py now also covers law, genz200, tilting, covariates, large_n |
 | Four-language parity | (not in make) | `r/winning/tests/testthat/` golden files + per-port tests | CI |
 
 ## History

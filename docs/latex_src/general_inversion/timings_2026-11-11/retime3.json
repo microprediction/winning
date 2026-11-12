@@ -1,0 +1,27 @@
+{
+  "machine": "macOS-26.2-arm64-arm-64bit",
+  "load": "load 6.8 / 9.2 / 12.1 over 28 cores = 0.24 per core (limit 0.25)",
+  "quiet": true,
+  "results": [
+    {
+      "key": "classic",
+      "paper": "Rust classic calibration 232 times pure Python",
+      "where": "Scale paragraph",
+      "wall_seconds": 8.26,
+      "returncode": 0,
+      "stdout": "n=  10  rust     2.34 ms  python    482.9 ms  ratio    207  max|diff| 9.9e-14\nn=  50  rust     2.74 ms  python    488.2 ms  ratio    178  max|diff| 7.2e-14\nn= 200  rust     5.33 ms  python    502.3 ms  ratio     94  max|diff| 1.7e-13",
+      "stderr": "",
+      "machine_quiet": true
+    },
+    {
+      "key": "newton_cg",
+      "paper": "naive Newton-CG 387 s not converged against Jacobi 3.7 s at n=200 (2056 s vs 19 s at n=1000)",
+      "where": "Inversion, Newton-Krylov footnote",
+      "wall_seconds": 2075.7,
+      "returncode": 0,
+      "stdout": "N=200 Jacobi:         4s, 12 iterations, residual 4.8e-07, converged True\nN=200 Newton-CG:    370s, 25 Newton / 200 JVPs, residual 2.1e+00, converged False\nN=1000 Jacobi:        17s, 12 iterations, residual 5.8e-07, converged True\nN=1000 Newton-CG:   1645s, 25 Newton / 200 JVPs, residual 4.7e+00, converged False\nwrote results.csv",
+      "stderr": "",
+      "machine_quiet": true
+    }
+  ]
+}

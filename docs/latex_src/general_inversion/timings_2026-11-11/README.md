@@ -18,3 +18,5 @@ thread. The lattice kernels use one core; the Rust GHK comparator
 The genz200 R call was unseeded in window 2; it is seeded since
 (`set.seed(20260827)`), which moves the Genz estimate within its error
 estimate and not its time.
+- Window 3, 21:48-22:23 EST, load 0.24 per core: `retime3.log`/`.json`
+  (classic Rust-vs-Python calibration, exp23 Newton-CG footnote).
