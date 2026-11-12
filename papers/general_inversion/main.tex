@@ -34,7 +34,7 @@ Multinomial probit choice probabilities over $n$ alternatives are
 Gaussian orthant integrals, computed by simulation for thirty years, one
 expensive integral per alternative. Inversion, which is to say determining item
 attractiveness consistent with a prescribed choice probability vector, is even more difficult and has been
-considered impractical for correlated contests when $n$ is large. Yet here, for families lying within a grammar including factor, block and hierarchical covariance structures, we exhibit a calibration tested at $n=1{,}000{,}000$ reproducing probabilities to very high accuracy, even in the extreme tail. We must return to much smaller problems for any performance comparison to be possible due to limitations of the prior art. The Geweke--Hajivassiliou--Keane simulator is the standard (and still appropriate for high rank) but is two hundred times slower
+considered impractical for correlated contests when $n$ is large. Yet here, for families lying within a grammar including factor, block and hierarchical covariance structures, we exhibit a calibration tested at $n=1{,}000{,}000$ reproducing probabilities to very high accuracy, even in the extreme tail. We must return to much smaller problems for any performance comparison to be possible due to limitations of the prior art. The Geweke--Hajivassiliou--Keane simulator is the standard (and still appropriate for high rank) but is over a hundred times slower
 already at $n=200$, and its measured cost grows roughly as $n^{2.8}$ while
 ours is linear. Furthermore the independent and factor implementations apply to any sufficiently regular continuous performance distribution, while the current block, nested and tree kernels are Gaussian: the Thurstone--Mosteller model families
 thereby become a practical alternative to logit at modern scale.
@@ -222,10 +222,10 @@ dense $\Sigma$ & fitted grammar $+$ residual factors (approx.) & \S\ref{sec:gene
 \caption{The covariance grammar.}\label{tab:grammar}
 \end{table}
 
-Our chief contribution is scaling. We seek to bring probit modeling to a qualitatively different problem space.  To put it in perspective, we note that on one laptop, the forward computation of all-$n$ probabilities from known utilities, assuming a rank-one factor and using the Rust kernels, takes $0.18$, $2.7$, and $29$ seconds respectively for $n=10^{4},10^{5},10^{6}$. That speed was unthinkable previously.
+Our chief contribution is scaling. We seek to bring probit modeling to a qualitatively different problem space.  To put it in perspective, we note that on one desktop machine, the forward computation of all-$n$ probabilities from known utilities, assuming a rank-one factor and using the Rust kernels, takes $0.12$, $1.2$, and $18$ seconds respectively for $n=10^{4},10^{5},10^{6}$. That speed was unthinkable previously.
 
-The inversion is the tougher problem yet at $n=10^{6}$ this takes not much more than a minute for the independent case, and the rank-one factor problem can be solved at this
-extreme scale also, in around $20$ minutes.
+The inversion is the tougher problem yet at $n=10^{6}$ this takes under two minutes for the independent case, and the rank-one factor problem can be solved at this
+extreme scale also, in around twelve minutes.
 
 Comparisons die well before this scale, as far as we know. Other approaches are considered in detail presently, but briefly, if the comparison set is taken to be those approaches providing smoothness suitable for inversion, GHK is generally regarded as leading that category.
 
@@ -254,7 +254,7 @@ This is somewhat of a standard in \texttt{R} because \texttt{mvtnorm} chooses th
 requires all $n$ of them, so the routine must be called $n$ times, and each of
 those calls is itself an $(n-1)$-dimensional integral over the focal
 alternative's difference orthant. At $n=30$ the complete vector therefore
-costs about three hundred times what the lattice costs, and since the work per
+costs nearly nine hundred times what the lattice costs, and since the work per
 call also grows with $n$, that ratio widens as the field grows.
 
 \paragraph{Frequency simulation.} The crude frequency estimator of
@@ -1417,8 +1417,8 @@ here is open.
 
 We tested the round trip at $n=400$, with twenty
 clusters and a tree of depth three (the committed \texttt{bench.py
-invert}). Timing for independent was $0.04$\,s, tree $0.37$\,s, and blocks $0.67$\,s. A factor
-rank-two took $1.7$\,s and nested $3.7$\,s. In each case the maximum log-probability residual was below $10^{-8}$.
+invert}). Timing for independent was $0.05$\,s, blocks $0.17$\,s, and tree $0.20$\,s. A factor
+rank-two took $0.57$\,s and nested $1.18$\,s. In each case the maximum log-probability residual was below $10^{-8}$.
 
 The implementation does not hide errors. A zero or negative entry raises
 rather than being quietly repaired, since by Theorem~\ref{thm:inverse} it
@@ -1682,8 +1682,8 @@ dense $n=2000$ correlation matrix built from three global factors
 (loading scales $0.55$, $0.3$, $0.2$), a forty-block layer with loadings
 in $[0.35,0.55]$, a small dense residual and a unit diagonal, priced at
 abilities $\mu$ drawn as sorted standard normals scaled by $1.2$, which
-gives a wide field with a long tail. The one-call fit-and-price takes four
-seconds ($0.6$ of them the fit) against thirty-six for a $10^6$-draw
+gives a wide field with a long tail. The one-call fit-and-price takes $3.6$
+seconds ($1.0$ of them the fit) against $18.5$ for a $10^6$-draw
 simulation, and agrees with it at its noise floor on the resolved bulk.
 
 The tail is harder to check, and we are careful about what the check
@@ -1833,6 +1833,17 @@ regimes.
 
 \section{Benchmarks}\label{sec:num}
 
+\paragraph{Hardware and timing.} Every time in this paper was measured on
+one Apple Mac Studio (M3 Ultra: twenty performance and eight efficiency
+cores, 96 GB), in the pinned environment of the replication package, with
+BLAS limited to one thread and the machine otherwise quiet: load below a
+quarter per core, which \texttt{retime.py} checks before it measures. The
+lattice kernels run on one core. The Rust GHK comparator is parallelized
+across alternatives and uses every free core, so its times, and every
+ratio against it (including the simulated-likelihood columns of the
+estimation tables), favour GHK by up to the core count. Absolute times
+will differ on other hardware.
+
 \paragraph{The structure-aware per-alternative comparator.} The fairest
 rival is not GHK but this paper's own conditioning run the literature's
 way: for each alternative separately, integrate the conditional
@@ -1843,8 +1854,8 @@ nodes and the same lattice the two computations are algebraically
 identical, and the measurement
 confirms it: at $n=200$, rank~2, the per-alternative
 version agrees with the shared field to total variation
-$3\times10^{-15}$ and costs $601$ times as much ($22$\,s against
-$36$\,ms; the committed \texttt{bench.py bm}). The comparison isolates
+$3\times10^{-15}$ and costs $1{,}270$ times as much ($17.5$\,s against
+$14$\,ms; the committed \texttt{bench.py bm}). The comparison isolates
 the paper's contribution exactly: not the conditioning, which is forty
 years old, but the field shared across alternatives.
 
@@ -1861,18 +1872,18 @@ times that budget; ``zeros'' counts tail alternatives that received no draws.
 & \multicolumn{2}{c}{$n=10$} & \multicolumn{3}{c}{$n=30$}\\
 method & time & TV & time & TV & tail\\
 \midrule
-lattice race & 2.5 ms & $1.8\times10^{-4}$ & 4.7 ms & $8.8\times10^{-4}$ & $0.05$\\
-Genz, full vector & 46 ms & $1.8\times10^{-4}$ & 1.40 s & $8.8\times10^{-4}$ & $0.06$\\
-frequency, matched time & --- & $3.8\times10^{-3}$ & --- & $1.0\times10^{-2}$ & $0.45$, 2 zeros\\
-frequency, $10\times$ time & --- & $9.2\times10^{-4}$ & --- & $2.0\times10^{-3}$ & $0.21$\\
-Mendell--Elston & 2.0 ms & $1.8\times10^{-3}$ & 18 ms & $3.0\times10^{-2}$ & $0.82$\\
-Clark-type & 1.4 ms & $1.1\times10^{-2}$ & 17 ms & $2.1\times10^{-2}$ & $1.36$\\
+lattice race & 3.3 ms & $1.8\times10^{-4}$ & 3.6 ms & $8.8\times10^{-4}$ & $0.05$\\
+Genz, full vector & 57 ms & $1.8\times10^{-4}$ & 3.15 s & $8.8\times10^{-4}$ & $0.06$\\
+frequency, matched time & --- & $5.0\times10^{-3}$ & --- & $9.7\times10^{-3}$ & $0.63$\\
+frequency, $10\times$ time & --- & $1.9\times10^{-3}$ & --- & $3.4\times10^{-3}$ & $0.31$\\
+Mendell--Elston & 2.3 ms & $1.8\times10^{-3}$ & 21 ms & $3.0\times10^{-2}$ & $0.82$\\
+Clark-type & 1.6 ms & $1.1\times10^{-2}$ & 20 ms & $2.1\times10^{-2}$ & $1.36$\\
 \bottomrule
 \end{tabular}
 \end{center}
 
 Genz and the lattice agree to the reference's noise and to each other.
-Of the $300\times$ cost ratio at $n=30$, the one-at-a-time interface
+Of the roughly $900\times$ cost ratio at $n=30$, the one-at-a-time interface
 supplies an unavoidable $n$-fold component; the remainder reflects the
 differing integral representations, tolerances and implementations, and
 we do not apportion it further.
@@ -1942,9 +1953,9 @@ error, and which the reference's own counting noise floors near $0.1$.
 & \multicolumn{3}{c}{lattice race} & \multicolumn{3}{c}{GHK, $R=10^3$} & \multicolumn{3}{c}{GHK, $R=10^4$}\\
 $n$ & time & TV & tail & time & TV & tail & time & TV & tail\\
 \midrule
-10  & 2.3 ms & $1.8\times10^{-4}$ & --- & 1.0 ms & $8.4\times10^{-3}$ & --- & 8 ms & $2.1\times10^{-3}$ & ---\\
-50  & 7.0 ms & $1.7\times10^{-3}$ & $0.11$ & 21 ms & $4.2\times10^{-2}$ & $1.10$ & 214 ms & $1.2\times10^{-2}$ & $0.29$\\
-200 & 25 ms  & $2.4\times10^{-3}$ & $0.15$ & 436 ms & $3.2\times10^{-2}$ & $1.50$ & 4.8 s & $1.2\times10^{-2}$ & $0.35$\\
+10  & 2.9 ms & $1.8\times10^{-4}$ & --- & 0.9 ms & $8.4\times10^{-3}$ & --- & 5.9 ms & $2.1\times10^{-3}$ & ---\\
+50  & 4.8 ms & $1.7\times10^{-3}$ & $0.11$ & 11 ms & $4.2\times10^{-2}$ & $1.10$ & 92 ms & $1.2\times10^{-2}$ & $0.29$\\
+200 & 15 ms  & $2.4\times10^{-3}$ & $0.15$ & 170 ms & $3.2\times10^{-2}$ & $1.50$ & 1.84 s & $1.2\times10^{-2}$ & $0.35$\\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -2012,16 +2023,16 @@ since every method sees the same draw:
 \toprule
 estimator & RMSE (median) & RMSE (mean $\pm$ s.e.) & median fit time \\
 \midrule
-analytic-gradient smoothed inversion & $0.0168$ & $0.0168\pm0.0006$ & $2.4$ s \\
-MSL, $R=100$ & $0.0286$ & $0.0280\pm0.0006$ & $3.5$ s \\
-MSL, $R=1000$ & $0.0184$ & $0.0185\pm0.0005$ & $39.9$ s \\
+analytic-gradient smoothed inversion & $0.0168$ & $0.0168\pm0.0006$ & $3.0$ s \\
+MSL, $R=100$ & $0.0286$ & $0.0280\pm0.0006$ & $2.6$ s \\
+MSL, $R=1000$ & $0.0184$ & $0.0185\pm0.0005$ & $18.4$ s \\
 \bottomrule
 \end{tabular}
 \end{center}
 
-\noindent The exact path is both faster and more accurate than the
-$R=100$ simulator here, and beats the $R=1000$ accuracy in a sixteenth
-of its time. Because the arms share every draw, the paired differences
+\noindent The exact path is more accurate than the $R=100$ simulator at
+about the same cost, and beats the $R=1000$ accuracy in a sixth of its
+time. Because the arms share every draw, the paired differences
 are the sharper statement: against $R=100$ the exact arm is better by
 $0.0112\pm0.0006$, nearly nineteen standard errors, winning $39$ of $40$
 replications; against $R=1000$ by $0.0017\pm0.0002$, seven standard
@@ -2029,7 +2040,7 @@ errors, winning $33$ of $40$.
 
 The $R=1000$ margin is small in absolute terms, which is the honest
 characterization: enough simulation draws do approach the exact answer,
-at forty times the cost per fit, and the surviving paired gap is
+at six times the cost per fit, and the surviving paired gap is
 consistent with finite-$R$ simulation bias rather than multinomial
 sampling noise, though pairing alone cannot rule out another systematic
 implementation effect. The timing column is from
@@ -2109,7 +2120,7 @@ parallelized across alternatives. Cost figures are complete-vector; the
 large-$n$ columns of the introduction are extrapolations of the measured
 law and are displayed as such.
 
-\paragraph{Scale.} Ten million contestants price in $245$ seconds under the
+\paragraph{Scale.} Ten million contestants price in $102$ seconds under the
 block grammar (ten thousand clusters, $257$-point lattice, the streaming
 field pass; the committed \texttt{bench.py tenmillion}), and the Rust
 classic-calibration kernel runs $232$ times the speed of the pure-Python
@@ -2341,9 +2352,9 @@ the anchor.
 \toprule
 $n$ & lattice, measured & GHK at $10^4$ draws, cost-law bracket & multiplier \\
 \midrule
-$10^4$ & $0.18$ s & $20$ hours -- $3.7$ days & $4\times10^{5}$ -- $2\times10^{6}$ \\
-$10^5$ & $2.7$ s & $0.3$ -- $6.5$ years & $4\times10^{6}$ -- $8\times10^{7}$ \\
-$10^6$ & $29$ s & $46$ -- $4{,}100$ years & $5\times10^{7}$ -- $4\times10^{9}$ \\
+$10^4$ & $0.12$ s & $20$ hours -- $3.7$ days & $4\times10^{5}$ -- $2\times10^{6}$ \\
+$10^5$ & $1.2$ s & $0.3$ -- $6.5$ years & $4\times10^{6}$ -- $8\times10^{7}$ \\
+$10^6$ & $18$ s & $46$ -- $4{,}100$ years & $5\times10^{7}$ -- $4\times10^{9}$ \\
 \bottomrule
 \end{tabular}
 \end{center}
