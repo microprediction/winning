@@ -77,7 +77,7 @@ def update_margins_full(m, S, margins=None, V=None, beta2=1.0,
     from .teams import _cardinal_observation, _lift_contrast_update, _noise_cov
     m = np.asarray(m, dtype=float)
     n = len(m)
-    y, log_jac = _cardinal_observation(margins, scores, lengths_scale, transform)
+    y, log_jac = _cardinal_observation(margins, scores, lengths_scale, transform, k=n)
     Cn = _noise_cov(n, beta2, meas_var, V)
     return _lift_contrast_update(m, S, np.eye(n), y, Cn, log_jac)
 

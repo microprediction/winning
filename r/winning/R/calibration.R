@@ -14,6 +14,7 @@ normalize <- function(p) p / sum(p)
 #' @return numeric probabilities summing to one
 #' @export
 prices_from_dividends <- function(dividends, nan_value = 2000) {
+  .refuse_matrix(dividends, "dividends")                          # (#903)
   # Only a MISSING quote -- NA or NaN -- becomes nan_value. A
   # non-positive dividend, and -Inf with it, is worth nothing and prices
   # at 0; +Inf prices at 1/Inf = 0 on its own. This divided by the
@@ -24,6 +25,15 @@ prices_from_dividends <- function(dividends, nan_value = 2000) {
   d <- ifelse(is.na(dividends), nan_value, dividends)
   p <- ifelse(d <= 0, 0, 1 / d)
   s <- sum(p)
+  if (!is.finite(s)) {
+    # finite dividends whose reciprocals overflow -- c(1e-320, 2e-320) --
+    # are the same book read against the smallest, every ratio at most
+    # one; 1/d first gave Inf / Inf = NaN (#881). Ordinary books never
+    # reach here.
+    dmin <- min(d[d > 0])
+    p <- ifelse(d <= 0, 0, dmin / d)
+    s <- sum(p)
+  }
   if (s > 0) p / s else p
 }
 
@@ -33,6 +43,7 @@ prices_from_dividends <- function(dividends, nan_value = 2000) {
 #' @return numeric dividends
 #' @export
 dividends_from_prices <- function(prices, multiplicity = 1.0) {
+  .refuse_matrix(prices, "prices")                                # (#903)
   p <- normalize(prices)
   ifelse(!is.na(p) & p > 0, 1 / (multiplicity * p), NA_real_)
 }
@@ -266,6 +277,7 @@ dividend_implied_ability <- function(dividends, density,
 #' @export
 ability_implied_state_prices <- function(ability, density, unit = 1.0,
                                          max_depth = 3L) {
+  .refuse_matrix(ability, "ability")                              # (#903)
   .check_unit(unit, "ability_implied_state_prices")
   .check_max_depth(max_depth, "ability_implied_state_prices")
   # the reference's full extended handling, not just centring: a runner
@@ -315,16 +327,17 @@ ability_implied_state_prices <- function(ability, density, unit = 1.0,
                                     max_depth) {
   dd <- .dilate_density(density, unit_ratio)
   doff <- offsets / unit_ratio
-  dsp <- .state_prices_from_extended_offsets(dd, doff, max_depth - 1L)
+  # unit_ratio rides every recursion, as the browser's does (#899)
+  dsp <- .state_prices_from_extended_offsets(dd, doff, max_depth - 1L, unit_ratio)
   n <- length(offsets)
   if (length(fast) == n || length(fast) == 0L || max_depth <= 0L)
     return(dsp)
   slow <- setdiff(seq_len(n), fast)
   slow_rel <- if (length(slow) == 1L) 1 else
     .state_prices_from_extended_offsets(dd, .int_centered(doff[slow]),
-                                       max_depth - 2L)
+                                       max_depth - 2L, unit_ratio)
   fast_rel <- .state_prices_from_extended_offsets(
-    density, .int_centered(offsets[fast]), max_depth - 1L)
+    density, .int_centered(offsets[fast]), max_depth - 1L, unit_ratio)
   slow_share <- sum(dsp[slow])
   sp <- numeric(n)
   sp[slow] <- slow_rel * slow_share
@@ -347,6 +360,11 @@ ability_implied_state_prices <- function(ability, density, unit = 1.0,
 .state_prices_from_extended_offsets <- function(density, offsets,
                                                max_depth = 3L,
                                                unit_ratio = 3) {
+  # a dilation must coarsen: at or below 1 it contracts, and once the ratio
+  # reaches every recursion (#899) the clustered prices degenerate
+  if (!is.numeric(unit_ratio) || length(unit_ratio) != 1L || !is.finite(unit_ratio) ||
+      !(unit_ratio > 1))
+    stop("unit_ratio must be a finite number above 1", call. = FALSE)
   offsets <- as.numeric(offsets)
   n <- length(offsets)
   if (anyNA(offsets)) stop("offsets must not be NA", call. = FALSE)
@@ -356,7 +374,7 @@ ability_implied_state_prices <- function(ability, density, unit = 1.0,
     if (all(pinf)) return(rep(1 / n, n))
     sp <- numeric(n)
     sp[!pinf] <- .state_prices_from_extended_offsets(
-      density, .int_centered(offsets[!pinf]), max_depth)
+      density, .int_centered(offsets[!pinf]), max_depth, unit_ratio)
     return(sp)
   }
   ninf <- offsets == -Inf
@@ -384,6 +402,19 @@ ability_implied_state_prices <- function(ability, density, unit = 1.0,
     return(sp)
   }
   co <- .int_centered(offsets[kept])
+  # Centring on the mean can push a field off the lattice that an integer
+  # shift would fit: [6.25, 2, 3.75, 2, 0.75, 0] on support [0, 7] at
+  # L = 10 was 7.9 points off the exact price (#1006). Shift by the
+  # feasible integer nearest zero (a field that already fits is
+  # untouched); an integer shift leaves the exact prices unchanged.
+  s_rel <- which(density > 1e-12) - 1L - L
+  s_lo <- if (W >= L) 0 else min(s_rel)
+  s_hi <- if (W >= L) 0 else max(s_rel)
+  if (length(co) && all(is.finite(co))) {
+    sh_lo <- max(-L - s_lo - floor(min(co)), ceiling(-(L - 2) - min(co)))
+    sh_hi <- min(L - s_hi - ceiling(max(co)), floor((L - 2) - max(co)))
+    if (sh_lo <= sh_hi) co <- co + min(max(0, sh_lo), sh_hi)
+  }
   # Hanging = the shifted density would lose mass off the lattice (or the
   # offset is past the exact range of low_high). Python tests the cruder
   # |o| <= L - W, which misfires whenever the support width W exceeds L:
@@ -420,12 +451,12 @@ ability_implied_state_prices <- function(ability, density, unit = 1.0,
     aug <- offsets
     aug[bad] <- Inf
     return(.state_prices_from_extended_offsets(density, .int_centered(aug),
-                                              max_depth))
+                                              max_depth, unit_ratio))
   }
   if (max_depth == 0L) {
     co[right] <- Inf
     co[left] <- -Inf
-    return(.state_prices_from_extended_offsets(density, co, 0L))
+    return(.state_prices_from_extended_offsets(density, co, 0L, unit_ratio))
   }
   divider <- .divide_offsets(co)
   fast <- which(co < divider)
@@ -439,5 +470,6 @@ ability_implied_state_prices <- function(ability, density, unit = 1.0,
 #' @return numeric dividends (inverse state prices)
 #' @export
 ability_implied_dividends <- function(ability, density, unit = 1.0) {
+  .refuse_matrix(ability, "ability")                              # (#903)
   1 / ability_implied_state_prices(ability, density, unit = unit)
 }

@@ -18,33 +18,16 @@ import os
 
 import numpy as np
 from scipy.stats import norm
+import sys
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+from chain_argmax import walk_argmax as _walk_argmax, walk_argmax_exact
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 
-def walk_argmax(n, L=900):
-    g = 6.0 * np.sqrt(n)
-    s = np.linspace(-g, g, L)
-    ds = s[1] - s[0]
-    T = norm.pdf(s[None, :] - s[:, None]) * ds      # increment N(0,1)
-    p0 = norm.pdf(s)                                 # X_1 = one step
-    P = np.zeros(n)
-    for mi, m in enumerate(s):
-        if p0[mi] * ds < 1e-14:
-            continue
-        mask = s < m
-        surv = np.empty(n)
-        surv[0] = 1.0
-        msg = norm.pdf(s - m) * ds * mask            # X_2 given X_1=m
-        surv[1] = msg.sum() if n > 1 else 1.0
-        for k in range(2, n):
-            msg = (msg @ T) * mask
-            surv[k] = msg.sum()
-        w = p0[mi] * ds
-        for t in range(n):
-            P[t] += w * surv[t] * surv[n - 1 - t]
-    return P / P.sum()                               # normalize grid
-
+def walk_argmax(n, L=800):
+    # corrected lattice, no renormalisation (see ../chain_argmax.py)
+    return _walk_argmax(n, L=L)
 
 def mc_walk_argmax(n, m=800000, seed=0):
     rng = np.random.default_rng(seed)
@@ -66,6 +49,7 @@ if __name__ == "__main__":
         ex = walk_argmax(n)
         mc = mc_walk_argmax(n)
         ar = arcsine_binned(n)
+        sa = walk_argmax_exact(n)
         err_mc = np.abs(ex - mc).max()
         err_ar = np.abs(ex - ar).max()
         print(f"[random walk n={n}] max|engine-MC| {err_mc:.4f}  "
@@ -76,7 +60,15 @@ if __name__ == "__main__":
         results[f"n{n}"] = dict(engine=ex.tolist(), mc=mc.tolist(),
                                 arcsine=ar.tolist(),
                                 err_vs_mc=float(err_mc),
-                                err_vs_arcsine=float(err_ar))
+                                err_vs_arcsine=float(err_ar),
+                                exact=sa.tolist(),
+                                err_vs_exact=float(np.abs(ex - sa).max()),
+                                rel_err_vs_exact=float(np.max(np.abs(ex - sa) / sa)),
+                                arcsine_vs_exact=float(np.abs(ar - sa).max()),
+                                mass=float(ex.sum()))
+        print(f"  vs exact finite-n law: {np.abs(ex - sa).max():.2e} "
+              f"(rel {np.max(np.abs(ex - sa) / sa):.2e}); arcsine vs exact "
+              f"{np.abs(ar - sa).max():.4f}; mass {ex.sum():.6f}")
     print("If engine ~ arcsine ~ MC, the transfer operator recovers "
           "Levy's law; and it extends to drift/barriers/finite-n where "
           "no closed arcsine holds.")

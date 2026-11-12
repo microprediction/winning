@@ -46,3 +46,13 @@ test_that("laplace exact-rank inverse fits the public rank map", {
   expect_true(f$converged)
   expect_lt(max(abs((f$mu - mean(f$mu)) - (mu - mean(mu)))), 1e-6)
 })
+
+test_that("a kink-split piece above KINK_MAX_ORDER is split into panels (#835)", {
+  for (L in c(513L, 4097L)) {
+    x <- seq(-12, 12, length.out = L)
+    kl <- winning:::.kink_lattice(x, c(-0.4, 0.1, 0.5), c(1, 0.7, 1.3), 0)
+    expect_equal(sum(kl$w), 24, tolerance = 1e-13)
+    expect_equal(sum(kl$w * kl$x^3), (12^4 - 12^4) / 4, tolerance = 1e-8)
+    expect_true(all(diff(sort(kl$x)) > 0))
+  }
+})
