@@ -3933,6 +3933,32 @@ rejects(C => demo.fitGrammar(C, 1, 0, { method: "ipaf", tol: 0 }),
             }
             return d;
           }, d => d < 1e-9, d => d.toExponential(2));
+  // A heavy-tailed callable exposes a span mismatch even on a fine grid.
+  const cauchy = z => {
+    const q = 1 + z * z;
+    return [0.5 - Math.atan(z) / Math.PI, 1 / (Math.PI * q), -2 * z / (Math.PI * q * q)];
+  };
+  const m = [-1, -0.2, 0.4, 1.5];
+  const custom = { D: [1, 0.7, 1.8, 0.4], base: cauchy, points: 4001, window: "span" };
+  const sd = custom.D.map(Math.sqrt);
+  const smax = Math.max(...sd);
+  for (const span of [[200, 200], Float64Array.of(75, 200)]) {
+    cauchy.span = span;
+    accepts(`raceJacobian honors ${span.constructor.name} callable span (#821)`, () => {
+      // The raw off-diagonal integrates f0*f1*S2*S3 on the declared span.
+      const lo = m[0] - span[0] * smax, hi = m[3] + span[1] * smax;
+      const dx = (hi - lo) / (custom.points - 1);
+      let expected = 0;
+      for (let t = 0; t < custom.points; t++) {
+        const x = lo + t * dx;
+        const a = m.map((v, i) => cauchy((x - v) / sd[i]));
+        expected += (a[0][1] / sd[0]) * (a[1][1] / sd[1]) * a[2][0] * a[3][0] * dx;
+      }
+      return Math.abs(polish.raceJacobian(m, custom)[0][1] - expected);
+    }, d => d < 1e-12, d => d.toExponential(2));
+  }
+  cauchy.span = [Infinity, 200];
+  rejects(polish.raceJacobian, [m, custom], "raceJacobian refuses malformed callable span (#821)", "base.span");
   accepts("raceJacobian with the default window and delta spelled out is the default (#821)",
           () => mx(polish.raceJacobian(mu, { ...o, window: "bulk", delta: 1e-12 }),
                    polish.raceJacobian(mu, o)),
