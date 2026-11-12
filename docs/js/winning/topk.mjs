@@ -705,7 +705,8 @@ function topkJacobiansCore(mu, k, Dv, fn, points, split) {
 
 export function rankProbabilities(mu, opts = {}) {
   checkOpts(opts, RANK_PROBABILITIES_OPTS, "rankProbabilities", OPT_HINTS);
-  return rankForward(mu, opts).P;
+  const { V = null, D = null, base = "normal", points = 513, qa } = opts;
+  return rankForward(mu, { V, D, base, points, qa }).P;
 }
 
 function rankForward(mu, { V = null, D = null, base = "normal", points = 513, qa }) {
