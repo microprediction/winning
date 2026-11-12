@@ -510,14 +510,20 @@ export function asWeights(W, nNodes, where = "W") {
 export function asFactorLaw(F, W, where = "W") {
   const Wn = asWeights(W, F.length, where);
   // ... and the lightest nodes whose COMBINED relative mass is at most
-  // 1e-15: they change no share at double precision but size the
+  // 1e-15: their absolute mass is tiny, but they can still size the
   // window (#416; python shapes.as_factor_law, the browser's asFactorLaw)
   const order = Wn.map((_, q) => q).sort((a, b) => Wn[a] - Wn[b] || a - b);
   const drop = new Array(Wn.length).fill(false);
   let cum = 0;
-  for (const q of order) {
+  for (let i = 0; i < order.length; i++) {
+    const q = order[i];
     cum += Wn[q];
-    if (cum > 1e-15) break;
+    if (cum > 1e-15) {
+      // Keep the entire equal-weight group if it straddles the cutoff.
+      for (let j = i - 1; j >= 0 && Wn[order[j]] === Wn[q]; j--)
+        drop[order[j]] = false;
+      break;
+    }
     drop[q] = true;
   }
   const keepF = [], keepW = [];
