@@ -15,7 +15,8 @@ form — gives marginals, joints and samples. It does **not** give:
 
 All by restricted transfer-operator passes on the chain (the
 machinery measured in the winning repo's `research/tridiagonal`
-track), O(n L^2) with precomputed transitions, fractional-occupancy
+track), O(n L^2) per threshold with dense precomputed transitions
+(O(n L^3) for the full argmax vector, which integrates over L thresholds), fractional-occupancy
 boundary cells for O(dx^2) accuracy, for ANY Gauss-Markov chain —
 non-stationary, drifting, inhomogeneous — including any GMRF whose
 precision is tridiagonal (the chain is read off the precision's

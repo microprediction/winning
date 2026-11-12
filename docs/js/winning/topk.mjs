@@ -872,15 +872,17 @@ export function abilitiesFromTopk(q, k, opts = {}) {
   // a kinked base takes its slopes from the split lattice, the value from
   // the map being inverted (#267)
   const kinked = !!kinksOf(fn);
-  const withSlopes = m => {
-    const node = topkWithSlopes(m, sd, k, fn, points);
-    if (kinked) node.slopes = topkWithSlopes(m, sd, k, fn, points, true).slopes;
+  const withSlopes = (m, pts) => {
+    const node = topkWithSlopes(m, sd, k, fn, pts);
+    if (kinked) node.slopes = topkWithSlopes(m, sd, k, fn, pts, true).slopes;
     return node;
   };
-  const forward = mu => {
+  // One residual evaluation on a lattice of `pts` points: the raw
+  // memberships and their slopes, not yet checked.
+  const evalAt = (mu, pts) => {
     let qraw, sl;
     if (!fac) {
-      ({ q: qraw, slopes: sl } = withSlopes(mu));
+      ({ q: qraw, slopes: sl } = withSlopes(mu, pts));
       sl = sl.slice();
     } else {
       qraw = new Array(n).fill(0);
@@ -892,14 +894,33 @@ export function abilitiesFromTopk(q, k, opts = {}) {
             s += fac.Vm[i][c] * fac.nodes[j][c];
           return s;
         });
-        const node = withSlopes(shifted);
+        const node = withSlopes(shifted, pts);
         for (let i = 0; i < n; i++) {
           qraw[i] += fac.w[j] * node.q[i];
           sl[i] += fac.w[j] * node.slopes[i];
         }
       }
     }
-    const qhat = checkedTopk(qraw, k, "top-k inversion");
+    return { qraw, sl };
+  };
+  const forward = mu => {
+    // the forward's bounded refinement (refinedTopk, #769): a lattice that
+    // fails the mass check is doubled (2p - 1) up to four times the request,
+    // and the residual and slopes come from the lattice that passed. On one
+    // fixed lattice the inverse refused, at its warm start, a target the
+    // public forward had produced at the same points (#943).
+    let { qraw, sl } = evalAt(mu, points), qhat, err = null;
+    try { qhat = checkedTopk(qraw, k, "top-k inversion"); } catch (e) { err = e; }
+    if (err) {
+      const cap = Math.min(4 * (points - 1) + 1, MAX_TOPK_POINTS);
+      let pts = points;
+      while (err && pts < cap) {
+        pts = Math.min(2 * pts - 1, cap);
+        ({ qraw, sl } = evalAt(mu, pts));
+        try { qhat = checkedTopk(qraw, k, "top-k inversion"); err = null; } catch (e) { err = e; }
+      }
+      if (err) throw err;
+    }
     // a membership above one, clipped to exactly one, leaves a flat
     // logit residual of ~690 the sweeps stall in: refuse the iterate so
     // they back off (the uniform lattice overshoots one near saturation

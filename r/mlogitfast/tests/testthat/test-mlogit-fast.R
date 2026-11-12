@@ -539,3 +539,36 @@ test_that("a non-finite covariate is refused by name, not misread as unidentifie
                  "covariate price is not finite at row 5")
   }
 })
+
+.no_mean_data <- function(counts) {
+  J <- length(counts)
+  winner <- rep(seq_len(J), counts)
+  idx <- data.frame(id = rep(seq_along(winner), each = J),
+                    alt = rep(seq_len(J), length(winner)))
+  d <- data.frame(chosen = idx$alt == rep(winner, each = J))
+  attr(d, "idx") <- idx
+  d
+}
+
+test_that("a covariance-only model fits its loadings (#949)", {
+  # J = 3, r = 1, no mean design: two free loadings, and the shares
+  # depend on them. Python's MNProbit(intercepts=False, r=1) gives
+  # [0.400481, 0.349762, 0.249758] on these counts.
+  d <- .no_mean_data(c(40, 35, 25))
+  m <- mlogit_fast(chosen ~ 0, d, r = 1L, Qf = 7L, Qz = 7L, maxit = 200L)
+  expect_equal(m$convergence, 0L)
+  expect_length(m$coefficients, 0L)
+  expect_length(m$covariance_par, 2L)
+  # the python reference's theta at the same counts (r = 1, no intercepts)
+  expect_equal(unname(m$covariance_par), c(2.261958, 1.639635), tolerance = 1e-4)
+  expect_true(m$logLik > -100 * log(3))           # better than equal shares
+})
+
+test_that("the parameter-free null is evaluated, not optimized (#949)", {
+  d <- .no_mean_data(c(60, 40))
+  m <- mlogit_fast(chosen ~ 0, d, r = 0L)
+  expect_length(m$coefficients, 0L)
+  expect_length(m$covariance_par, 0L)
+  expect_equal(m$convergence, 0L)
+  expect_equal(m$logLik, -100 * log(2), tolerance = 1e-10)
+})
