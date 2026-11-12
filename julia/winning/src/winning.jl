@@ -314,6 +314,17 @@ end
 # bounds was priced as a different four-coordinate rectangle (#903).
 # Python refuses any shape but (n,); the browser accepts one-dimensional
 # arrays only.
+# A per-coordinate argument (abilities, a target law) is a vector, tuple or
+# range: a matrix with the right number of cells is consumed by linear,
+# column-major indexing, so a visually row-ordered 2 x 2 of abilities was
+# priced as a different field (#903). Python refuses any shape but (n,).
+function _refuse_matrix(x, name)
+    (x isa AbstractArray && ndims(x) != 1) && throw(ArgumentError(
+        name * " must be a vector, not a " * join(string.(size(x)), " x ") *
+        " array: linear indexing would read it column-major as a different vector"))
+    return x
+end
+
 function _as_idio(D, n::Integer; name = "D")
     D === nothing && return ones(n)
     (D isa AbstractArray && ndims(D) != 1) && throw(ArgumentError(
@@ -405,6 +416,7 @@ function _rank1_hermite_rule(sharp)
 end
 
 function _race_setup(mu, V, D, F, W, base)
+    _refuse_matrix(mu, "mu")                                # (#903)
     mu = Float64.(collect(mu))
     n = length(mu)
     D = _as_idio(D, n)
@@ -535,6 +547,7 @@ function race_probabilities(mu; V = nothing, D = nothing, F = nothing,
                             W = nothing, base = "normal", points = 257,
                             return_slopes = false, window = "bulk",
                             delta = 1e-12)
+    _refuse_matrix(mu, "mu")                                # (#903)
     _check_points(points)
     # the bulk window's tail mass: a number in (0, 0.5); delta = -1 hung
     # python's and the browser's relaxation loop and 1 or 2 priced a
@@ -655,6 +668,7 @@ in the field's own units (#100)."""
 function abilities_from_race(p; V = nothing, D = nothing, F = nothing,
                              W = nothing, base = "normal", points = 257,
                              n_iter = 60, tol = 1e-8)
+    _refuse_matrix(p, "p")                                  # (#903)
     target = Float64.(collect(p))
     all(isfinite, target) || error("target probabilities must be finite")
     any(target .<= 0) && error("all target probabilities must be positive")
@@ -742,6 +756,8 @@ function _jacobi_sweeps(mu, forward, scale, alpha, n_iter, tol)
         elseif prev !== nothing && penalty < 1.0
             penalty = min(1.0, penalty / 0.75)
         end
+        # the last sweep's own contraction, for the Aitken gate below (#956)
+        prev_max = prev === nothing ? Inf : prev[4]
         prev = (mu, resid, dres, resid_max, resid_rms)
         a = alpha_base * penalty
         lim = min.(2.0, 10.0 .* abs.(resid)) .* scale
@@ -759,7 +775,8 @@ function _jacobi_sweeps(mu, forward, scale, alpha, n_iter, tol)
                     lam = 1.0 - (1.0 - rho) / a
                     alpha_base = clamp(2.0 / (2.0 - lam), 0.1, 1.0)
                 elseif cosn > 0.999 && 0.5 < ratio < 0.999 &&
-                       resid_max > 1e3 * tol
+                       resid_max > 1e3 * tol &&
+                       abs(resid_max / prev_max - ratio) <= AITKEN_AGREE
                     trial = _aitken_trial(mu, step, ratio, scale, forward,
                                           resid_max)
                     if trial !== nothing      # sum the geometric tail
@@ -802,6 +819,13 @@ function _jacobi_sweeps(mu, forward, scale, alpha, n_iter, tol)
     end
     return mu, resid_max < tol, resid_max, iters
 end
+
+# Aitken sums a geometric tail, which exists only while the residual
+# shrinks by the same factor as the step; when the plain sweeps converge
+# faster than the step ratio says (the superlinear finish after a plateau)
+# the extrapolation overshoots, and #956's exact target ended 13.6 off.
+# python's races.AITKEN_AGREE.
+const AITKEN_AGREE = 0.15
 
 """The Aitken-extrapolated iterate as a bounded, checked trial (#583),
 python's `races._aitken_trial`: the summed tail capped in the max norm at

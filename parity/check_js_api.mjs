@@ -2193,6 +2193,62 @@ for (const c of [1e-8, 100]) {
       }
 }
 
+// --- exported normal callable is the named law at derivative/polish doors (#912)
+{
+  const mu = [-0.8, -0.2, 0.3, 0.9];
+  const cl = [0, 0, 1, 1], ld = [0.5, 0.2, 0.4, 0.1], D = [0.8, 0.9, 0.7, 1.0];
+  const grammars = [
+    structures.Blocks(cl, ld, D),
+    structures.Nested(cl, ld, D, [0.3, 0.1, 0.4, -0.2], 0.5),
+    structures.Tree(cl, ld, D, [2, 2, -1], [0, 0, 0.3]),
+    structures.Independent(D),
+    structures.Factor(ld.map(v => [v]), D),
+  ];
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  for (const structure of grammars) {
+    const o = { structure, points: 257 };
+    const J = polish.raceJacobian(mu, { ...o, base: "normal" });
+    accepts(`${structure.kind} callable normal Jacobian equals named law (#912)`,
+      () => polish.raceJacobian(mu, { ...o, base: races.BASES.normal }),
+      actual => same(actual, J));
+    const po = { ...o, mu0: mu, nameCaps: structure.kind === "Nested" || structure.kind === "Tree" ? 0.8 : 0.35, fdFallback: false };
+    const named = polish.polishRace({ ...po, base: "normal" });
+    accepts(`${structure.kind} callable normal polish equals converged named law (#912)`,
+      () => polish.polishRace({ ...po, base: races.BASES.normal }),
+      actual => named.info.converged && actual.info.converged && same(actual, named));
+    if (["Blocks", "Nested", "Tree"].includes(structure.kind)) {
+      // Identity only: neither another law nor a user-defined normal wrapper
+      // is silently reclassified as the supported named Gaussian grammar.
+      for (const base of ["logistic", races.BASES.logistic, x => races.BASES.normal(x)]) {
+        rejects(polish.raceJacobian, [mu, { ...o, base }],
+          `${structure.kind} Jacobian still rejects unsupported base (#912)`, "support base");
+        rejects(polish.polishRace, [{ ...po, base }],
+          `${structure.kind} polish still rejects unsupported base (#912)`, "support base");
+      }
+    }
+  }
+  // Exercise the structured pair shortcut and polish's p0 inverse closure.
+  const pair = [-0.8, 0.8], d = [1, 1], l = [0.5, 0.5];
+  for (const structure of [
+    structures.Blocks([0, 1], l, d),
+    structures.Nested([0, 1], l, d, [0.3, 0.3], 0.5),
+    structures.Tree([0, 1], l, d, [2, 2, -1], [0, 0, 0.3]),
+    structures.Independent(d), structures.Factor(l.map(v => [v]), d),
+  ]) {
+    const o = { structure, points: 257 };
+    const namedJ = polish.raceJacobian(pair, { ...o, base: "normal" });
+    accepts(`${structure.kind} pair callable normal uses named Jacobian (#912)`,
+      () => polish.raceJacobian(pair, { ...o, base: races.BASES.normal }),
+      actual => same(actual, namedJ));
+    const p0 = [0.5, 0.5];
+    const po = { ...o, p0, nameCaps: [0.4, NaN], fdFallback: false };
+    const named = polish.polishRace({ ...po, base: "normal" });
+    accepts(`${structure.kind} p0 callable normal polish equals named law (#912)`,
+      () => polish.polishRace({ ...po, base: races.BASES.normal }),
+      actual => named.info.converged && actual.info.converged && same(actual, named));
+  }
+}
+
 // --- a structured Jacobian refuses a base its forward refuses (#89)
 for (const s of [structures.Blocks([0, 0, 1], 0.8, 0.2),
                  structures.Tree([0, 0, 1], 0.8, 0.2, [2, 2, -1], [0, 0, 0.5])])
@@ -2476,6 +2532,39 @@ accepts("raceProbabilities takes delta=1e-3 (#445)",
         md(blocks.blockRaceProbabilities(mu, cl, L, D,
              { nodes: { nodes: [[-1, 0], [1, 0], [0, -1], [0, 1]], w: [0.25, 0.25, 0.25, 0.25] } }),
            [0.3010448211736288, 0.21615827747634736, 0.15439283696956393, 0.3284040643804598]) < 1e-14);
+}
+
+// --- custom block nodes describe Y = mu + loading.f + eps (#909).
+// Expand independent cluster rules into their Cartesian-product factor law;
+// this oracle exercises the ordinary factor grammar, not block internals.
+{
+  const md = (a, b) => Math.max(...a.map((x, i) => Math.abs(x - b[i])));
+  const mu = [0, 0, 0], cl = [0, 1, 2], L = [2, 0, -2], D = [1, 1, 1];
+  for (const f of [1, -1]) {
+    const rule = { nodes: [[f]], w: [1] };
+    const before = JSON.stringify(rule);
+    holds(`deterministic block node ${f} adds loading.f to mu (#909)`,
+          md(blocks.blockRaceProbabilities(mu, cl, L, D, { nodes: rule }),
+             races.raceProbabilities(mu.map((x, i) => x + L[i] * f), { D })) < 1e-13);
+    holds("custom node input is not mutated (#909)", JSON.stringify(rule) === before);
+  }
+  const m = [.2, -.1, .4, 0], c = [0, 0, 1, 1], d = [1, .8, 1.2, .9];
+  for (const loading of [[[.7], [-.2], [.4], [.9]],
+                         [[.7, -.1], [-.2, .3], [.4, .6], [.9, -.4]]]) {
+    const r = loading[0].length;
+    for (const sign of [1, -1]) {
+      const F0 = [[-1.3, .4], [.2, -.8], [1.8, .7]].map(row => row.slice(0, r).map(v => sign * v));
+      const w = [.2, .3, .5], F = [], W = [];
+      for (let a = 0; a < F0.length; a++) for (let b = 0; b < F0.length; b++) {
+        F.push([...F0[a], ...F0[b]]); W.push(w[a] * w[b]);
+      }
+      const V = loading.map((row, i) => c[i] === 0 ? [...row, ...new Array(r).fill(0)]
+                                                               : [...new Array(r).fill(0), ...row]);
+      holds(`asymmetric rank-${r} block rule sign ${sign} matches product factor law (#909)`,
+            md(blocks.blockRaceProbabilities(m, c, loading, d, { nodes: { nodes: F0, w } }),
+               races.raceProbabilities(m, { V, D: d, F, W })) < 1e-12);
+    }
+  }
 }
 
 // --- Nested gamma and -gamma are the same Gaussian law, at every coupling
@@ -2949,6 +3038,58 @@ accepts("dividendImpliedAbility keeps the favourite first at unit 0.1 (#649)",
         `C-S ${maxDiff(ghkC, ghkS).toExponential(2)}, Ct-S ${maxDiff(ghkCt, ghkS).toExponential(2)}`);
 }
 
+
+{
+  // #726 overflow residual: the accepted covariance has a finite contrast,
+  // but adding equal 1e308 entries before halving made both dense arms NaN.
+  // In a pair both arms are exact, so this is an analytic check, not MC.
+  for (const H of [5e307, 1e308, 1.5e308]) {
+    const diagonal = H + 4e292;
+    const variance = 2 * (diagonal - H);
+    const C = [[diagonal, H], [H, diagonal]];
+    const mu = [0, Math.sqrt(variance)];
+    accepts(`large common-mode C is valid at ${H} (#726)`,
+            () => demo.validateCovariance(C), v => v.flat().every(Number.isFinite));
+    for (const i of [0, 1]) {
+      const expected = core.ndtr(i === 0 ? 1 : -1);
+      const prep = demo.ghkPrepareOne(mu, C, i);
+      holds(`GHK finite exact contrast at ${H}, runner ${i} (#726)`,
+            Number.isFinite(prep.L[0]) && Math.abs(prep.L[0] / Math.sqrt(variance) - 1) < 1e-14);
+      holds(`GHK analytic pair at ${H}, runner ${i} (#726)`,
+            Math.abs(demo.ghkSampleOne(prep, 1, demo.rng(7)) - expected) < 1e-14);
+      holds(`Mendell-Elston analytic pair at ${H}, runner ${i} (#726)`,
+            Math.abs(demo.mendellElstonOne(mu, C, i) - expected) < 1e-14);
+    }
+  }
+}
+
+{
+  // #726 contrast residual: C is the covariance of (A, 0.8A+B, 0.8A-B) with
+  // var A = 1.7e308, var B = 0.3e308. Its contrasts are representable
+  // (diagonal 3.68e307), but Cjk - Cji - Cik summed left to right reached
+  // -Infinity before Cii. A race is invariant to a common power-of-two
+  // rescaling of C (with mu = 0), so the scaled C is the oracle.
+  const C = [[1.7e308, 1.36e308, 1.36e308], [1.36e308, 1.388e308, 0.788e308],
+             [1.36e308, 0.788e308, 1.388e308]];
+  const s = 2 ** -1020;
+  const Cs = C.map(r => r.map(v => v * s));
+  const mu = [0, 0, 0];
+  for (const i of [0, 1, 2]) {
+    const me = demo.mendellElstonOne(mu, C, i), ref = demo.mendellElstonOne(mu, Cs, i);
+    holds(`Mendell-Elston prices a near-overflow contrast, runner ${i} (#726)`,
+          Number.isFinite(me) && Math.abs(me - ref) < 1e-14, `${me} vs ${ref}`);
+    const prep = demo.ghkPrepareOne(mu, C, i), prepS = demo.ghkPrepareOne(mu, Cs, i);
+    const g = demo.ghkSampleOne(prep, 2000, demo.rng(11));
+    const gS = demo.ghkSampleOne(prepS, 2000, demo.rng(11));
+    holds(`GHK prices a near-overflow contrast, runner ${i} (#726)`,
+          Number.isFinite(g) && Math.abs(g - gS) <= 1e-13 * Math.abs(gS), `${g} vs ${gS}`);
+  }
+  const L = demo.raceFactor(C), Ls = demo.raceFactor(Cs);
+  holds("raceFactor factors a near-overflow contrast (#726)",
+        L.flat().every((v, k) => Number.isFinite(v) &&
+          Math.abs(v * 2 ** -510 - Ls.flat()[k]) <= 1e-14 * Math.abs(Ls.flat()[k]) + 1e-300));
+}
+
 {
   // one global 1e-8 * max|dist| tolerance let an unrelated 1e12 distance
   // hide a -1 distance, a 1 vs 100 asymmetry and a diagonal of 1 (#721)
@@ -3185,9 +3326,11 @@ accepts("dividendImpliedAbility keeps the favourite first at unit 0.1 (#649)",
       accepts(`[${off}] at L = 3, maxDepth ${maxDepth}, is the exact primitive (#773)`,
               () => classic.abilityImpliedStatePrices(off, d, { maxDepth }),
               p => maxAbs(p, classic.statePricesFromOffsets(d, off)) < 1e-15, p => String(p));
-  accepts("just past the L - 2 endpoint still hangs and clusters (#773)",
+  // this hung and clustered to 0.634 (#773); an integer shift of -1 fits
+  // it, so it is now the exact price (#1006)
+  accepts("just past the L - 2 endpoint is shifted onto the lattice and priced exactly (#1006)",
           () => classic.abilityImpliedStatePrices([0, 1 + 1e-9], d),
-          p => maxAbs(p, [0.633744856100823, 0.36625514389917707]) < 1e-15, p => String(p));
+          p => maxAbs(p, classic.statePricesFromOffsets(d, [-1, 1e-9])) < 1e-15, p => String(p));
   for (const maxDepth of [-1, 1.5, true, NaN, Infinity])
     rejects(classic.abilityImpliedStatePrices, [[0, 1], d, { maxDepth }],
             `abilityImpliedStatePrices refuses maxDepth ${maxDepth} as python and R (#775)`, "whole number >= 0");
@@ -3230,9 +3373,20 @@ accepts("dividendImpliedAbility keeps the favourite first at unit 0.1 (#649)",
   accepts("ordinary Nested forward unchanged (#722)",
           () => blocks.nestedRaceProbabilities(mu5, cl, ld, D5, { coupling: g, gamma: 0.8 }),
           p => close(p, [0.38432227045253287, 0.2369657345443022, 0.1832837205047436, 0.12254165848578556, 0.07288661601263577]), p => String(p));
-  accepts("ordinary Nested inverse unchanged (#722)",
-          () => races.abilitiesFromRace([0.3, 0.25, 0.2, 0.15, 0.1], { structure: structures.Nested(cl, ld, D5, g, 0.8) }),
-          m => close(m, [-0.3591375700446748, -0.28170740253620297, -0.023065245258169144, 0.21186843954857346, 0.4520417782904735]), m => String(m));
+  // the inverse is pinned by what it solves, not by the bits of one
+  // iteration: #887 replaced the scalar-step solver, whose answer this
+  // matched to 1e-15, with the per-runner preconditioned one
+  {
+    const tgt = [0.3, 0.25, 0.2, 0.15, 0.1], st = structures.Nested(cl, ld, D5, g, 0.8);
+    accepts("ordinary Nested inverse unchanged (#722, #887)",
+            () => races.abilitiesFromRace(tgt, { structure: st, returnInfo: true }),
+            f => {
+              const back = races.raceProbabilities(f.mu, { structure: st });
+              const old = [-0.3591375700446748, -0.28170740253620297, -0.023065245258169144, 0.21186843954857346, 0.4520417782904735];
+              return f.converged && Math.max(...back.map((v, i) => Math.abs(Math.log(v) - Math.log(tgt[i])))) < 1e-8 &&
+                     f.mu.every((v, i) => Math.abs(v - old[i]) < 1e-7);
+            }, f => String(f.mu));
+  }
   // python's nested_race_probabilities (fixed in #733) at coupling 1e308,
   // gamma 0.8e-308, points 257, qa 9, qf 15
   accepts("Nested at coupling 1e308 matches python (#722)",
@@ -3826,6 +3980,263 @@ rejects(C => demo.fitGrammar(C, 1, 0, { method: "ipaf", tol: 0 }),
           "the block Jacobian refuses window as the block forward does (#821)",
           "do not support window");
 }
+
+// --- callable log tails must reach the Jacobian, as in the forward (#952)
+{
+  const rawNormal = z => [core.ndtr(-z), core.npdf(z), -z * core.npdf(z)];
+  rawNormal.logSf = z => core.logndtr(-z);
+  rawNormal.span = [8, 8];
+  const mu = [-1, 0, 1, 30];
+  const opts = { D: [1, 1, 1, 1], base: rawNormal,
+                 points: 2001, window: "span" };
+  const finite = a => a.flat().every(Number.isFinite);
+  const close = (a, b, tol) => a.length === b.length &&
+    a.flat().every((v, k) => Number.isFinite(v) &&
+      Number.isFinite(b.flat()[k]) && Math.abs(v - b.flat()[k]) <= tol);
+  const p = races.raceProbabilities(mu, opts);
+  const J = polish.raceJacobian(mu, opts);
+  const named = polish.raceJacobian(mu, { ...opts, base: "normal" });
+  holds("raw callable and named normal price the same span (#952)",
+        close(p, races.raceProbabilities(mu, { ...opts, base: "normal" }), 0));
+  holds("raw callable wide-span Jacobian is finite (#952)", finite(J));
+  holds("raw callable wide-span Jacobian matches named normal (#952)", close(J, named, 1e-12));
+  const h = 1e-5;
+  const fd = Array.from({ length: mu.length }, () => []);
+  for (let j = 0; j < mu.length; j++) {
+    const plus = mu.slice(), minus = mu.slice();
+    plus[j] += h; minus[j] -= h;
+    const pp = races.raceProbabilities(plus, opts);
+    const pm = races.raceProbabilities(minus, opts);
+    for (let i = 0; i < mu.length; i++) fd[i][j] = (pp[i] - pm[i]) / (2 * h);
+  }
+  holds("raw callable Jacobian differentiates public forward (#952)", close(J, fd, 1e-9));
+  holds("callable Jacobian ordinary block survives remote runner (#952)",
+        close(J.slice(0, 3).map(r => r.slice(0, 3)),
+          polish.raceJacobian(mu.slice(0, 3), { ...opts, D: [1, 1, 1] }), 1e-12));
+  holds("callable Jacobian row sums preserve translation (#952)",
+        J.every(r => Number.isFinite(r.reduce((a, b) => a + b, 0)) &&
+          Math.abs(r.reduce((a, b) => a + b, 0)) < 1e-14));
+  // A downstream linear-constraint gradient A*J must remain useful,
+  // rather than merely accepting a normalized, finite price vector.
+  const a = [1, -0.5, 0.25, 0];
+  const aj = matrix => mu.map((_, j) => a.reduce((s, v, i) => s + v * matrix[i][j], 0));
+  holds("callable constraint gradient agrees with forward differences (#952)", close(aj(J), aj(fd), 1e-9));
+  // More than one underflowing survival at the same lattice point and a
+  // small explicit factor rule exercise both independent and factor paths.
+  const factor = { ...opts, V: [[0.2], [-0.1], [0.3], [-0.4]],
+                   F: [[-1], [1]], W: [0.5, 0.5] };
+  const jf = polish.raceJacobian(mu, factor);
+  holds("callable factor-law Jacobian is finite (#952)", finite(jf));
+  holds("callable factor-law Jacobian matches named normal (#952)",
+        close(jf, polish.raceJacobian(mu, { ...factor, base: "normal" }), 1e-12));
+  // In ordinary windows the rule is inert, including callables which
+  // provide no log-tail metadata at all.
+  const plain = z => rawNormal(z);
+  plain.span = [8, 8];
+  const ordinary = { D: [1, 1, 1], points: 501, window: "bulk" };
+  holds("ordinary callable without logSf retains its Jacobian (#952)",
+        close(polish.raceJacobian([-1, 0, 1], { ...ordinary, base: plain }),
+              polish.raceJacobian([-1, 0, 1], { ...ordinary, base: rawNormal }), 0));
+}
+
+// --- a compact-support callable: zero density stays zero, and the
+// leave-one-out survival is summed, not subtracted, at the sentinel (#952)
+{
+  const c = 7, tail = core.ndtr(-c), mass = 1 - 2 * tail;
+  const sd = Math.sqrt(1 - 2 * c * core.npdf(c) / mass);
+  const base = z => {
+    const u = z * sd;
+    if (u <= -c) return [1, 0, 0];
+    if (u >= c) return [0, 0, 0];
+    const f = sd * core.npdf(u) / mass;
+    return [(core.ndtr(-u) - tail) / mass, f, -u * sd * f];
+  };
+  base.logSf = z => Math.log(base(z)[0]);
+  const opts = { base, points: 2001, window: "span" };
+  const mu = [-15, 0, 1];
+  // the first runner's support is disjoint from the others': it always wins
+  const p = races.raceProbabilities(mu, opts);
+  holds("compact callable: the disjoint runner always wins (#952)",
+        p[0] === 1 && p[1] === 0 && p[2] === 0);
+  const J = polish.raceJacobian(mu, opts);
+  holds("compact callable: a fixed winner has a zero Jacobian (#952)",
+        J.flat().every(v => Number.isFinite(v) && Math.abs(v) < 1e-12),
+        () => JSON.stringify(J));
+  // the overlapping pair keeps its derivative, against the forward
+  const h = 1e-5, mu2 = [0, 1];
+  const J2 = polish.raceJacobian(mu2, opts);
+  const fd = [0, 1].map(j => {
+    const a = mu2.slice(), b = mu2.slice(); a[j] += h; b[j] -= h;
+    const pa = races.raceProbabilities(a, opts), pb = races.raceProbabilities(b, opts);
+    return [0, 1].map(i => (pa[i] - pb[i]) / (2 * h));
+  });
+  holds("compact callable: an overlapping pair still differentiates its forward (#952)",
+        [0, 1].every(i => [0, 1].every(j => Math.abs(J2[i][j] - fd[j][i]) < 1e-7)),
+        () => JSON.stringify([J2, fd]));
+}
+
+// --- averageLinkage keeps the rescan's merge order, ties included, in
+// Theta(n^2) typical work rather than Theta(n^3) (#847)
+{
+  const brute = dist => {               // the pre-#847 global rescan, verbatim in effect
+    const n = dist.length, D = new Map(), key = (a, b) => (a < b ? a + "_" + b : b + "_" + a);
+    for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) D.set(key(i, j), dist[i][j]);
+    let active = [...Array(n).keys()].map(i => ({ id: i, size: 1 })), Z = [], next = n;
+    while (active.length > 1) {
+      let best = Infinity, bi = 0, bj = 1;
+      for (let i = 0; i < active.length; i++) for (let j = i + 1; j < active.length; j++) {
+        const d = D.get(key(active[i].id, active[j].id)); if (d < best) { best = d; bi = i; bj = j; }
+      }
+      const a = active[bi], b = active[bj], m = { id: next++, size: a.size + b.size };
+      Z.push([a.id, b.id, best, m.size]);
+      const rest = active.filter((_, k) => k !== bi && k !== bj);
+      for (const c of rest) D.set(key(m.id, c.id), (a.size / m.size) * D.get(key(a.id, c.id)) + (b.size / m.size) * D.get(key(b.id, c.id)));
+      active = rest.concat([m]);
+    }
+    return Z;
+  };
+  let seed = 11; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const sym = (n, f) => { const d = Array.from({ length: n }, () => new Array(n).fill(0));
+    for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) d[i][j] = d[j][i] = f(); return d; };
+  let mismatch = 0;
+  for (let t = 0; t < 120; t++) {
+    const n = 2 + Math.floor(rnd() * 24), kind = t % 3;
+    const d = sym(n, () => kind === 0 ? rnd() : kind === 1 ? Math.floor(rnd() * 3) + 1 : 1);
+    if (JSON.stringify(structures.averageLinkage(d)) !== JSON.stringify(brute(d))) mismatch++;
+  }
+  holds("averageLinkage merges as the global rescan, ties included (#847)", mismatch === 0, `${mismatch} of 120`);
+  const n = 800, x = Array.from({ length: n }, (_, i) => [Math.sin(i * 1.7), Math.cos(i * 0.37), ((i * 7919) % 104729) / 104729]);
+  const d = Array.from({ length: n }, (_, i) => x.map(y => Math.hypot(...x[i].map((v, k) => v - y[k]))));
+  const t0 = Date.now(), Z = structures.averageLinkage(d), ms = Date.now() - t0;
+  holds("averageLinkage at 800 leaves is not cubic (#847)", Z.length === n - 1 && ms < 5000, `${ms} ms`);
+}
+
+// --- the pair shortcut shares Nested's omitted gamma=1 default (#897)
+{
+  const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const s = { kind: "Nested", cluster: [0, 1], loading: [0.4, 0.4],
+              D: [1, 1], coupling: [0.6, -0.6] };
+  const mu = [0, 0.2], target = [0.54, 0.46];
+  for (const coupling of [s.coupling, null]) {
+    const omitted = { ...s, coupling }, explicit = { ...omitted, gamma: 1 };
+    accepts(`pair omitted gamma equals explicit 1, coupling=${coupling} (#897)`,
+            () => races.raceProbabilities(mu, { structure: omitted }),
+            p => eq(p, races.raceProbabilities(mu, { structure: explicit })));
+    accepts(`pair omitted gamma inverse reprices, coupling=${coupling} (#897)`, () => {
+      const fit = races.abilitiesFromRace(target, { structure: omitted, returnInfo: true });
+      const back = races.raceProbabilities(fit.mu, { structure: omitted });
+      return fit.converged && Math.max(...back.map((p, i) =>
+        Math.abs(Math.log(p) - Math.log(target[i])))) < 1e-8;
+    }, ok => ok);
+    holds(`pair covariance omitted gamma equals 1, coupling=${coupling} (#897)`,
+          eq(demo.structureCov(omitted), demo.structureCov(explicit)));
+    for (const gamma of [null, false, true, "1", NaN, Infinity, -Infinity])
+      rejects(races.raceProbabilities, [mu, { structure: { ...omitted, gamma } }],
+              `pair rejects explicit gamma ${String(gamma)}, coupling=${coupling} (#897)`,
+              "gamma must be a finite number");
+  }
+  const s3 = { kind: "Nested", cluster: [0, 1, 2], loading: [0.4, 0.4, 0.4],
+               D: [1, 1, 1], coupling: [0.6, -0.6, -0.6] };
+  accepts("three-runner omitted gamma remains explicit 1 (#897)",
+          () => races.raceProbabilities([0, 0.2, 0.4], { structure: s3 }),
+          p => eq(p, races.raceProbabilities([0, 0.2, 0.4], { structure: { ...s3, gamma: 1 } })));
+  // raceJacobian reaches the same pair helper: omitted gamma equals 1 and
+  // the derivative is the public forward's, for a split and a same-cluster
+  // pair (review of #965)
+  const same = { kind: "Nested", cluster: [0, 0], loading: [0.4, 0.7],
+                 D: [1, 1.3], coupling: [[0.6, 0.2], [-0.3, 0.5]] };
+  for (const pair of [s, same]) {
+    const explicit = { ...pair, gamma: 1 };
+    const J = polish.raceJacobian(mu, { structure: pair });
+    holds(`pair Jacobian omitted gamma equals explicit 1, cluster=${pair.cluster} (#897)`,
+          eq(J, polish.raceJacobian(mu, { structure: explicit })));
+    const h = 1e-5, fd = [[0, 0], [0, 0]];
+    for (let j = 0; j < 2; j++) {
+      const a = mu.slice(), b = mu.slice(); a[j] += h; b[j] -= h;
+      const pa = races.raceProbabilities(a, { structure: pair });
+      const pb = races.raceProbabilities(b, { structure: pair });
+      for (let i = 0; i < 2; i++) fd[i][j] = (pa[i] - pb[i]) / (2 * h);
+    }
+    holds(`pair Jacobian differentiates the public forward, cluster=${pair.cluster} (#897)`,
+          J.flat().every((v, k) => Number.isFinite(v) && Math.abs(v - fd.flat()[k]) < 1e-8),
+          JSON.stringify([J, fd]));
+  }
+  // The default really uses the coupling, not the independent/Blocks law.
+  holds("pair gamma=1 differs from gamma=0 (#897)",
+        Math.abs(races.raceProbabilities(mu, { structure: { ...s, gamma: 1 } })[0]
+               - races.raceProbabilities(mu, { structure: { ...s, gamma: 0 } })[0]) > 1e-3);
+}
+
+
+// --- a floor above 1/n from a saturated start (#840): the uniform race is
+// infeasible too, so restoration walks the violated rows' direction; and a
+// settled multiplier is never a certificate without stationarity
+{
+  const xStar = 0.9061938024368232;            // -Phi^-1(0.9) / sqrt(2)
+  for (const a of [8 / Math.sqrt(2), 4.9]) for (const points of [129, 1025]) for (const fdFallback of [false, true]) {
+    const out = polish.polishRace({ mu0: [a, -a], D: [1, 1], A: [[-1, 0]], b: [-0.9], points, fdFallback });
+    holds(`floored saturated pair a=${a.toFixed(3)} points=${points} fd=${fdFallback} is the binding point (#840)`,
+          out.info.converged && Math.abs(out.p[0] - 0.9) < 1e-8 &&
+          Math.abs(out.mu[0] + xStar) < 1e-7 && Math.abs(out.mu[1] - xStar) < 1e-7 &&
+          out.info.active.length === 1 && out.info.active[0] === 0 &&
+          Math.abs(out.info.muDistance - Math.sqrt(2) * (a + xStar)) < 1e-6,
+          `${out.p} ${out.mu} ${out.info.converged} ${out.info.muDistance}`);
+  }
+}
+
+
+
+// --- the Nested/Tree inverse preconditions each runner by its own slope,
+// as python's _structure_sweeps (#887): one field-wide scalar step left a
+// self-generated heterogeneous Nested target at 3.1e-3 after 400 sweeps
+{
+  const quiet = console.warn; console.warn = () => {};
+  const s = structures.Nested([0, 0, 1], [0, 0, 0], [1, 10, 0.01], [0.3, 4, 0.15], 10);
+  const truth = [-0.7, 3.4, -2.7];
+  const target = races.raceProbabilities(truth, { structure: s, points: 257 });
+  const fit = races.abilitiesFromRace(target, { structure: s, points: 257, nIter: 400, tol: 1e-8, returnInfo: true });
+  const back = races.raceProbabilities(fit.mu, { structure: s, points: 257 });
+  const r = Math.max(...back.map((v, i) => Math.abs(Math.log(v) - Math.log(target[i]))));
+  holds("heterogeneous Nested target inverts within budget (#887)",
+        fit.converged && r < 1e-8 && Math.max(...fit.mu.map((v, i) => Math.abs(v - truth[i]))) < 1e-5,
+        `${fit.converged} ${fit.iterations} ${r}`);
+  for (const [D, str, tr] of [
+    [[1, 10, 0.01], [0.3, 3, 0.4], [-0.7, 3.4, -2.7]],
+    [[0.05, 8, 0.5, 2], [0.2, 2.5, 0.1, 1], [-1, 2.5, 0.3, -1.8]],
+    [[20, 0.02, 1], [3, 0.1, 0.5], [2, -1.5, 0.4]],
+  ]) {
+    const n = D.length;
+    const t = structures.Tree([...Array(n).keys()], new Array(n).fill(0), D,
+                              [...Array(n).fill(n), n + 1, -1], [...str, 1.0, 0]);
+    const tg = races.raceProbabilities(tr, { structure: t, points: 257 });
+    const ft = races.abilitiesFromRace(tg, { structure: t, points: 257, nIter: 400, tol: 1e-8, returnInfo: true });
+    // repriced through the public forward, not only the inverse's own
+    // residual (review of #989)
+    const backT = races.raceProbabilities(ft.mu, { structure: t, points: 257 });
+    const rT = Math.max(...backT.map((v, i) => Math.abs(Math.log(v) - Math.log(tg[i]))));
+    holds(`heterogeneous Tree D=${D} inverts (#887)`, ft.converged && ft.maxLogResidual < 1e-8 && rT < 1e-8,
+          `${ft.converged} ${ft.iterations} ${ft.maxLogResidual} ${rT}`);
+  }
+  console.warn = quiet;
+}
+
+
+
+
+// --- a field that fits the lattice is priced exactly (#1006)
+{
+  // mean-centring pushed this off a [0, 7] support that an integer shift
+  // fits; it was priced on the dilating cluster path, 7.9 points off
+  const d = new Array(21).fill(0); d[10] = 0.5; d[17] = 0.5;
+  const off = [6.25, 2, 3.75, 2, 0.75, 0];
+  const got = classic.abilityImpliedStatePrices(off, d, { unit: 1 });
+  const want = classic.statePricesFromOffsets(d, off.map(o => o - 4));
+  holds("atomic field that fits equals the exact primitive (#1006)",
+        got.every((v, i) => Math.abs(v - want[i]) < 1e-14), JSON.stringify([got, want]));
+  holds("atomic field that fits: the 0.75 runner is 0.2835 (#1006)",
+        Math.abs(got[4] - 0.283529) < 1e-6, String(got[4]));
+}
+
 
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");

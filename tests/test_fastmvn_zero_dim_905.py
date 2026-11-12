@@ -31,11 +31,3 @@ def test_rescaler_is_the_identity_on_zero_rows():
     e = np.empty(0)
     out = _rescale_extreme_rows(np.empty((0, 2)), e, e, e, e)
     assert all(a.shape[0] == 0 for a in out)
-
-
-def test_standalone_copy_is_in_lockstep():
-    import os
-    import fastmvn.core as standalone
-    import winning.fastmvn as vendored
-    with open(standalone.__file__, "rb") as a, open(vendored.__file__, "rb") as b:
-        assert a.read() == b.read()

@@ -112,3 +112,21 @@ def test_ports_carry_the_geometric_extrapolation():
     for path in (PY, R, JS):
         text = path.read_text()
         assert "0.999" in text and "1e3 * tol" in text.replace("1e3 * tol", "1e3 * tol"), path.name
+
+
+def test_ports_gate_the_aitken_trial_on_contraction_agreement():
+    """#956: a trial fires only while the residual contracts by the step
+    ratio, to within one shared constant, in every engine's sweep loop."""
+    core = ROOT / "docs" / "js" / "winning" / "core.mjs"
+    for path, const, gate in [
+        (PY, r"AITKEN_AGREE = ([0-9.]+)", "abs(resid_max / prev_max - ratio) <= AITKEN_AGREE"),
+        (R, r"AITKEN_AGREE <- ([0-9.]+)", "abs(rmax / prev_max - ratio) <= AITKEN_AGREE"),
+        (core, r"export const AITKEN_AGREE = ([0-9.]+)", "Math.abs(residMax / prevMax - ratio) <= AITKEN_AGREE"),
+        (JL, r"const AITKEN_AGREE = ([0-9.]+)", "abs(resid_max / prev_max - ratio) <= AITKEN_AGREE"),
+    ]:
+        text = path.read_text()
+        m = re.search(const, text)
+        assert m and float(m.group(1)) == 0.15, path.name
+        assert gate in text, (path.name, gate)
+    # the browser race inverse has its own loop
+    assert "Math.abs(rmax / prevMax - ratio) <= AITKEN_AGREE" in JS.read_text()
