@@ -35,7 +35,7 @@ Gaussian orthant integrals, computed by simulation for thirty years, one
 expensive integral per alternative. Inversion, which is to say determining item
 attractiveness consistent with a prescribed choice probability vector, is even more difficult and has been
 considered impractical for correlated contests when $n$ is large. Yet here, for families lying within a grammar including factor, block and hierarchical covariance structures, we exhibit a calibration tested at $n=1{,}000{,}000$ reproducing probabilities to very high accuracy, even in the extreme tail. We must return to much smaller problems for any performance comparison to be possible due to limitations of the prior art. The Geweke--Hajivassiliou--Keane simulator is the standard (and still appropriate for high rank) but is over a hundred times slower
-already at $n=200$, and its measured cost grows roughly as $n^{2.8}$ while
+already at $n=200$, and its measured cost grows roughly as $n^{2.9}$ while
 ours is linear. Furthermore the independent and factor implementations apply to any sufficiently regular continuous performance distribution, while the current block, nested and tree kernels are Gaussian: the Thurstone--Mosteller model families
 thereby become a practical alternative to logit at modern scale.
 \end{abstract}
@@ -230,9 +230,9 @@ extreme scale also, in around twelve minutes.
 Comparisons die well before this scale, as far as we know. Other approaches are considered in detail presently, but briefly, if the comparison set is taken to be those approaches providing smoothness suitable for inversion, GHK is generally regarded as leading that category.
 
 It cannot compete. We estimate a two order of magnitude speed gap at $n=200$ that is steadily worsening with $n$. GHK's empirical complete-vector cost is superquadratic and steepening as we pass beyond that scale.\footnote{Empirically, the log-log slope is
-$2.15$ from $n=10$ to $200$ and $2.8$ from $200$ to $1000$. The times at
-$R=10^{3}$ were $0.57$, $5.66$, and $51.3$ seconds at $n=200,500,1000$,
-scaling by ten at $R=10^{4}$.} In fact in our tests, the gap to our method grows almost quadratically with $n$ beyond $n=200$ because in that regime GHK scales at roughly $n^{2.8}$ while our shared-field pass is approximately linear in $n$ at fixed
+$1.9$ from $n=10$ to $200$ (at $R=10^{4}$) and $2.9$ from $200$ to $1000$
+(at $R=10^{3}$). The times at $R=10^{3}$ were $0.18$, $1.69$, and $19.4$
+seconds at $n=200,500,1000$, scaling by about ten at $R=10^{4}$.} In fact in our tests, the gap to our method grows almost quadratically with $n$ beyond $n=200$ because in that regime GHK scales at roughly $n^{2.9}$ while our shared-field pass is approximately linear in $n$ at fixed
 lattice and node budgets. We have provided in Appendix~\ref{app:extrap} some brave extrapolations of GHK performance to
 $10^{4}$--$10^{6}$ alternatives and the wall clock time ratios, so dramatic as to not be reproducible in any reasonable time.\footnote{See \texttt{bench.py}.}
 
@@ -349,11 +349,11 @@ alternative per run, so a whole race costs $n$ runs, and which method is
 preferable depends on the question. For a single tail probability Botev's
 is the right tool and this paper defers to it. For the all-$n$ vector it
 is both slower and less accurate than the lattice at every size measured:
-at $n=50$, $0.25$ s against $0.07$ s and $2.5\times10^{-3}$ error against
-$2.9\times10^{-5}$; at $n=200$, $25.8$ s against $0.29$ s and
+at $n=50$, $0.3$ s against $0.07$ s and $2.5\times10^{-3}$ error against
+$2.9\times10^{-5}$; at $n=200$, $31$ s against $0.28$ s and
 $1.4\times10^{-3}$ against $4.1\times10^{-5}$. Raising the tilting sample
 to $R=10^{4}$ narrows the accuracy gap and widens the time one: at
-$n=200$ that is $37.9$ s, a hundred and thirty times the lattice's cost
+$n=200$ that is $50$ s, a hundred and eighty times the lattice's cost
 and still an order of magnitude short of its error.
 
 \medskip
@@ -1889,11 +1889,12 @@ differing integral representations, tolerances and implementations, and
 we do not apportion it further.
 
 At the paper's headline scale the $n$-fold component alone is decisive.
-One probability at $n=200$ costs $0.43$ s at \texttt{maxpts}
-$=2.5\times10^{5}$, agreeing with the lattice to four or five digits, and
+One probability at $n=200$ costs $0.57$ s at \texttt{maxpts}
+$=2.5\times10^{5}$, agreeing with the lattice within its own error
+estimate of $2\times10^{-4}$, and
 six digits needs multi-second budgets (the committed \texttt{bench.py
-genz200}). The full vector therefore costs $86$ s against $26$ ms for the
-lattice, a factor of $3\times10^{3}$ before any accuracy matching.
+genz200}). The full vector therefore costs $114$ s against $14$ ms for the
+lattice, a factor of $8\times10^{3}$ before any accuracy matching.
 
 The Mendell--Elston and Clark-type moment recursions are the only
 entries whose error grows
@@ -1967,7 +1968,7 @@ tail blindness the TV column cannot show.
 
 Self-convergence places the lattice error near $10^{-8}$. GHK error
 contracts as $O(R^{-1/2})$ and its measured complete-vector cost grows
-superquadratically, with exponent $2.15$ to $2.8$ across the measured
+superquadratically, with exponent $1.9$ to $2.9$ across the measured
 range. The lattice is deterministic under Gauss--Hermite nodes and
 seeded-reproducible under scrambled Sobol, supplies smooth matrix-free
 derivatives free of simulation noise, and prices the tails. Simulated
@@ -2063,9 +2064,9 @@ standard errors:
 \toprule
 estimator & RMSE$(\hat\beta)$ & median fit time \\
 \midrule
-analytic-gradient MLE & $0.0363\pm0.0066$ & $41.3$ s \\
-MSL, $R=100$ & $0.0380\pm0.0073$ & $5.4$ s \\
-MSL, $R=1000$ & $0.0367\pm0.0067$ & $39.6$ s \\
+analytic-gradient MLE & $0.0363\pm0.0066$ & $77.5$ s \\
+MSL, $R=100$ & $0.0380\pm0.0073$ & $11.1$ s \\
+MSL, $R=1000$ & $0.0367\pm0.0067$ & $27.9$ s \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -2073,9 +2074,10 @@ MSL, $R=1000$ & $0.0367\pm0.0067$ & $39.6$ s \\
 \noindent All three estimators reach the statistical floor. With three
 parameters and eight hundred observations the simulation error averages
 out, and a well-implemented simulator at $R=100$ is the fastest of the
-three at this size. The exact path's time is dominated by per-observation
-Python overhead: the compiled kernel accounts for under a second of the
-$41$, so the comparison at $n=10$ measures plumbing, not method.
+three at this size. The exact path's time is dominated by the Jacobian,
+which is still evaluated in Python one observation at a time: the
+compiled forward kernel accounts for about six percent of it, so the
+comparison at $n=10$ measures plumbing, not method.
 
 What the exact likelihood buys in estimation is not this row of the
 table. It is freedom from the choice of $R$, gradients without simulation
@@ -2336,14 +2338,14 @@ A law of comparative judgment. \emph{Psychological Review} 34:273--286, 1927.
 \section{Extrapolated GHK cost brackets}\label{app:extrap}
 
 The lattice column below is measured; the GHK column is an
-extrapolation of the two measured exponents ($2.15$ and $2.8$) far
+extrapolation of the two measured exponents ($1.9$ and $2.9$) far
 beyond any regime in which GHK has been run, and cache effects,
 parallelism, Cholesky reuse or a change of regime would move it. Both
 ends of each bracket are anchored at the largest measured point, the
-complete vector at $n=1000$ ($51.3$\,s at $R=10^3$, so $513$\,s at
+complete vector at $n=1000$ ($19.4$\,s at $R=10^3$, so $194$\,s at
 $R=10^4$; \texttt{bench.py law}):
-$t(n)=513\,\mathrm{s}\times(n/1000)^{\beta}$ with $\beta=2.15$ and
-$\beta=2.8$. The lower end therefore applies the gentler exponent only
+$t(n)=194\,\mathrm{s}\times(n/1000)^{\beta}$ with $\beta=1.9$ and
+$\beta=2.9$. The lower end therefore applies the gentler exponent only
 beyond $n=1000$; the measured growth from $n=200$ to $1000$ is already in
 the anchor.
 
@@ -2352,9 +2354,9 @@ the anchor.
 \toprule
 $n$ & lattice, measured & GHK at $10^4$ draws, cost-law bracket & multiplier \\
 \midrule
-$10^4$ & $0.12$ s & $20$ hours -- $3.7$ days & $4\times10^{5}$ -- $2\times10^{6}$ \\
-$10^5$ & $1.2$ s & $0.3$ -- $6.5$ years & $4\times10^{6}$ -- $8\times10^{7}$ \\
-$10^6$ & $18$ s & $46$ -- $4{,}100$ years & $5\times10^{7}$ -- $4\times10^{9}$ \\
+$10^4$ & $0.12$ s & $4.3$ hours -- $1.8$ days & $1\times10^{5}$ -- $1\times10^{6}$ \\
+$10^5$ & $1.2$ s & $14$ days -- $3.9$ years & $1\times10^{6}$ -- $1\times10^{8}$ \\
+$10^6$ & $18$ s & $3.1$ -- $3{,}100$ years & $5\times10^{6}$ -- $5\times10^{9}$ \\
 \bottomrule
 \end{tabular}
 \end{center}

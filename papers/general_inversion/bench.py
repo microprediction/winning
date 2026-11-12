@@ -250,6 +250,7 @@ elif mode == "genz200":
         json.dump(case, f); path = f.name
     rcode = f'''
 suppressMessages(library(mvtnorm)); suppressMessages(library(jsonlite))
+set.seed(20260827)
 cs <- fromJSON("{path}"); mu <- cs$mu; S <- as.matrix(cs$Sig); i <- cs$i + 1
 n <- length(mu); o <- setdiff(seq_len(n), i)
 m <- mu[o] - mu[i]

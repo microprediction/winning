@@ -37,7 +37,7 @@ import sys
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
+ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
 BENCH = os.path.join(HERE, "bench.py")
 MLE2 = os.path.join(ROOT, "research", "mnp_estimation", "run_mle2.py")
 
@@ -53,29 +53,55 @@ class Task:
 
 
 TASKS = [
-    Task("per_alternative", "22 s against 36 ms at n=200 rank 2",
+    Task("per_alternative", "17.5 s against 14 ms at n=200 rank 2",
          "Benchmarks, per-alternative comparator",
          [sys.executable, BENCH, "bm"], 1),
     Task("grammar_inversion",
-         "tree 0.37 s, blocks 0.67 s, factor rank-2 1.7 s, nested 3.7 s",
+         "independent 0.05 s, blocks 0.17 s, tree 0.20 s, factor rank-2 "
+         "0.57 s, nested 1.18 s",
          "Inversion, per-grammar round trips (n=400)",
          [sys.executable, BENCH, "invert"], 2),
-    Task("ghk", "GHK 5.5, 16.6, 51.3 s at n=200, 500, 1000, R=1e4",
-         "Benchmarks, GHK comparator",
-         [sys.executable, BENCH, "ghk"], 5),
-    Task("saturated", "exact 2.4 s, MSL-100 3.5 s, MSL-1000 39.9 s",
+    Task("ghk", "race 2.9 / 4.8 / 15 ms; GHK R=1e3 0.9 / 11 / 170 ms, "
+         "R=1e4 5.9 / 92 / 1840 ms at n=10 / 50 / 200",
+         "Benchmarks, against GHK (table)",
+         [sys.executable, BENCH, "ghk"], 1),
+    Task("law", "GHK R=1e3 0.18, 1.69, 19.4 s at n=200, 500, 1000; "
+         "exponents 1.9 / 2.9",
+         "Introduction footnote; Appendix A anchor t(1000) at R=1e4",
+         [sys.executable, BENCH, "law"], 2),
+    Task("genz200", "one n=200 probability 0.57 s at maxpts=2.5e5; "
+         "full vector 114 s against 14 ms",
+         "Benchmarks, against the field (n=200 paragraph)",
+         [sys.executable, BENCH, "genz200"], 1,
+         "needs R with mvtnorm and jsonlite"),
+    Task("tilting", "n=50: 0.3 s (R=1e3) vs lattice 0.07 s; n=200: 31 s, "
+         "50 s (R=1e4) vs 0.28 s",
+         "Related work, minimax tilting paragraph",
+         [sys.executable, os.path.join(ROOT, "research", "experiments",
+                                       "exp22_minimax_tilting",
+                                       "run_tilting.py")], 10,
+         "rewrites exp22's results.csv"),
+    Task("saturated", "exact 3.0 s, MSL-100 2.6 s, MSL-1000 18.4 s",
          "Estimation, saturated table (RMSE column verified separately "
          "and unchanged: 0.0148 / 0.0275 / 0.0161)",
          [sys.executable, MLE2], 10),
-    Task("scale", "n=1e4, 1e5, 1e6 forward in 0.18, 2.7, 29 s",
+    Task("covariates", "exact 77.5 s, MSL-100 11.1 s, MSL-1000 27.9 s",
+         "Estimation with covariates",
+         [sys.executable, os.path.join(ROOT, "research", "mnp_estimation",
+                                       "run_mle3.py")], 15),
+    Task("large_n", "fit 1.0 s, one call 3.6 s at n=2000; 1e6 draws 18.5 s",
+         "Large-n benchmark (general Sigma)",
+         [sys.executable, os.path.join(ROOT, "research", "general_sigma",
+                                       "run_large_n.py")], 1),
+    Task("scale", "n=1e4, 1e5, 1e6 forward in 0.12, 1.2, 18 s",
          "Scale paragraph, forward pricing",
          [sys.executable, BENCH, "scale"], 2,
          "rank-one factor; needs the Rust kernels for the paper's figure"),
-    Task("invert_million", "n=1e6 inversion in 80 s independent, 22 min "
+    Task("invert_million", "n=1e6 inversion in 105 s independent, 12 min "
          "correlated",
          "Scale paragraph, inversion",
          [sys.executable, BENCH, "invertmillion"], 25),
-    Task("tenmillion", "ten-million block field in 245 s",
+    Task("tenmillion", "ten-million block field in 102 s",
          "Scale paragraph, block grammar",
          [sys.executable, BENCH, "tenmillion"], 4,
          "needs roughly 5 GB of memory"),
@@ -125,7 +151,8 @@ def loud_processes(limit=5):
 
 def run(task, env):
     t0 = time.perf_counter()
-    proc = subprocess.run(task.argv, capture_output=True, text=True, env=env)
+    proc = subprocess.run(task.argv, capture_output=True, text=True, env=env,
+                          cwd=os.path.dirname(task.argv[1]))
     wall = time.perf_counter() - t0
     return {
         "key": task.key,
