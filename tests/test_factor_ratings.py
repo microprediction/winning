@@ -19,7 +19,7 @@ from scipy.optimize import minimize
 
 from winning.ratings.factor_ratings import (
     _Stacked, _design_triplets, _loglik_terms, _winner_batch,
-    covariate_contrast_report, design_loglik, factor_design, factor_loglik,
+    covariate_contrast_report, design_loglik, design_se, factor_design, factor_loglik,
     fit_design_ratings, fit_factor_ratings, predict_factor,
     sweep_offset_ridge)
 from winning.ratings.nway import (_grad_logp_row, order_loglik,
@@ -85,6 +85,36 @@ def test_winner_batch_matches_engine_gradient_row():
         ge, p = _grad_logp_row(Ms[e], np.ones(4), 0)
         assert abs(lp[e] - np.log(p)) < 1e-10
         assert np.abs(g[e] - ge).max() < 1e-10
+
+
+@pytest.mark.parametrize("order, expected", [
+    ([0], -0.3164231481102143),
+    ([0, 1, 2], -0.623338258430893),
+])
+def test_event_specific_ability_origin_does_not_affect_ratings(order, expected):
+    # Two copies of the same contest. An offset in the second event
+    # leaves every ability contrast intact, even at 1e15.
+    Z = np.eye(3)
+    events = [(np.column_stack((Z, np.full(3, flag))), order)
+              for flag in (0, 1)]
+    theta = np.array([1.0, 0.0, -1.0, 0.0])
+    shifted = theta.copy()
+    shifted[-1] = 1e15
+    st = _Stacked(_design_triplets(events, 4), 4)
+    lp, grad = _loglik_terms(theta, st)
+    shifted_lp, shifted_grad = _loglik_terms(shifted, st)
+    # Reference probabilities are one-dimensional integrals conditioned
+    # on the winner's performance or the middle finisher's performance.
+    np.testing.assert_allclose(lp, expected, atol=1e-6, rtol=0)
+    np.testing.assert_array_equal(shifted_lp, lp)
+    np.testing.assert_array_equal(shifted_grad, grad)
+    np.testing.assert_array_equal(design_se(shifted, events, 4),
+                                  design_se(theta, events, 4))
+
+    B = np.column_stack((theta[:3], np.ones(3)))
+    factor_events = [(np.arange(3), order, [1.0, origin])
+                     for origin in (0.0, 2e4)]
+    np.testing.assert_array_equal(factor_loglik(B, factor_events), lp)
 
 
 _factor_world = factor_world
