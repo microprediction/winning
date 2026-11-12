@@ -380,6 +380,14 @@ test_that("a two-step rise in the miss is not a plateau (#923)", {
   expect_lte(max(abs(state_prices_from_offsets(atoms, w) - target)), 1e-6)
 })
 
+test_that("calibration runs through a temporary zero price (#968)", {
+  atoms <- numeric(49)
+  atoms[c(15, 26, 35) + 1] <- c(0.1, 0.6, 0.3)
+  target <- state_prices_from_offsets(atoms, c(2.5, 15.8, -4.8))
+  expect_silent(a <- solve_for_implied_offsets(target, atoms))
+  expect_lte(max(abs(state_prices_from_offsets(atoms, a) - target)), 1e-8)
+})
+
 test_that("finite dividends whose reciprocals overflow price the relative book (#881)", {
   expect_equal(prices_from_dividends(c(1e-320, 2e-320)), c(2, 1) / 3, tolerance = 1e-12)
   expect_equal(prices_from_dividends(c(1e-320, 0, -1, Inf)), c(1, 0, 0, 0))
