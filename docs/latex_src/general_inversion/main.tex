@@ -261,9 +261,9 @@ call also grows with $n$, that ratio widens as the field grows.
 \citet{lerman1981} counts argmax draws. It is unbiased for the whole vector at
 once but not smooth in parameters, and its per-entry relative error explodes for
 small $p_i$. Measured below: at wall clock matched to the lattice it carries
-twelve to twenty times the total-variation error, records zero counts on tail
-alternatives at $n=30$, and at ten times the budget remains a factor of two to
-four behind.
+eleven to twenty-eight times the total-variation error, with tail
+log-errors near $0.6$ at $n=30$, and at ten times the budget remains four
+to eleven times behind.
 
 \paragraph{GHK.} As described above. It is smooth in parameters but like Genz it prices one alternative per run. Despite this, GHK is seemingly the most widespread. Stata's \texttt{cmmprobit} manual states that the likelihood evaluator ``implements the Geweke--Hajivassiliou--Keane (GHK) algorithm to approximate the multivariate distribution function''
 \citep{statacorp2023,gates2006}, and the command's entire
@@ -348,13 +348,17 @@ we use it as the referee for our own tail claims. Like GHK it prices one
 alternative per run, so a whole race costs $n$ runs, and which method is
 preferable depends on the question. For a single tail probability Botev's
 is the right tool and this paper defers to it. For the all-$n$ vector it
-is both slower and less accurate than the lattice at every size measured:
+is both slower and less accurate than the lattice at every size measured,
+even against the lattice's pure-NumPy reference implementation
+(\texttt{winning.factor.core}, timed here; the compiled kernel of the
+tables below is fifteen to twenty times faster at these sizes):
 at $n=50$, $0.3$ s against $0.07$ s and $2.5\times10^{-3}$ error against
 $2.9\times10^{-5}$; at $n=200$, $31$ s against $0.28$ s and
-$1.4\times10^{-3}$ against $4.1\times10^{-5}$. Raising the tilting sample
-to $R=10^{4}$ narrows the accuracy gap and widens the time one: at
-$n=200$ that is $50$ s, a hundred and eighty times the lattice's cost
-and still an order of magnitude short of its error.
+$1.4\times10^{-3}$ against $4.1\times10^{-5}$
+(\texttt{research/experiments/exp22\_minimax\_tilting}). Raising the
+tilting sample to $R=10^{4}$ narrows the accuracy gap and widens the time
+one: at $n=200$ that is $50$ s, a hundred and eighty times the reference
+implementation's cost and still an order of magnitude short of its error.
 
 \medskip
 
@@ -1343,11 +1347,11 @@ Setting $d_i\equiv-1$ instead recovers the log-share contraction of
 the iteration is a diagonally preconditioned generalization of that map,
 and the preconditioner is what makes it work for probit. With everything
 else held fixed (start, clip, recentering, tolerance) at $n=200$ under a
-rank-two factor covariance, the own-slope iteration converges in $17$,
-$18$ and $28$ sweeps on fields of unit scale, triple scale and
+rank-two factor covariance, the own-slope iteration converges in $16$,
+$17$ and $27$ sweeps on fields of unit scale, triple scale and
 heterogeneous variances ($D_i\in[0.1,4]$); the unpreconditioned map fails
 to converge within $500$ sweeps on the first and third even when damped
-to a quarter step, and needs $69$ to $145$ on the second
+to a quarter step, and needs $68$ to $144$ on the second
 (\texttt{research/inversion\_ablation/run\_blp\_ablation.py}). Tail
 coordinates have $|\partial\log p_i/\partial\mu_i|\gg1$, so a unit slope
 overshoots them.

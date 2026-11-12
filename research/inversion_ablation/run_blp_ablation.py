@@ -18,16 +18,15 @@ warnings.simplefilter("ignore")
 def invert(target, V, D, precondition, alpha=1.0, n_iter=500, tol=1e-8):
     logt = np.log(target)
     mu = -(logt - logt.mean()) / 2.0
-    for it in range(1, n_iter + 1):
+    for it in range(n_iter + 1):            # it = updates applied so far
         phat, sl = race_probabilities(mu, V=V, D=D, return_slopes=True)
         r = np.log(np.maximum(phat, 1e-300)) - logt
-        if np.abs(r).max() < tol:
+        if np.abs(r).max() < tol or it == n_iter:
             return it, float(np.abs(r).max())
         d = np.minimum(sl / np.maximum(phat, 1e-300), -1e-6) if precondition else -np.ones_like(r)
         lim = np.minimum(2.0, 10.0 * np.abs(r))
         mu = mu - np.clip(alpha * r / d, -lim, lim)
         mu -= mu.mean()
-    return n_iter, float(np.abs(r).max())
 
 rng = np.random.default_rng(31)
 n = 200

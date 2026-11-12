@@ -26,14 +26,14 @@ regenerated figure (reason given).
 | Per-grammar inversion round trips < 1e-8 | `invert` | `bench.py invert` | match; times **updated** (independent 0.05, blocks 0.17, tree 0.20, factor 0.57, nested 1.18 s) |
 | Shared field vs per-alternative factor quadrature, TV 3e-15 | `bm` | `bench.py bm` | match (TV); time **updated** 17.5 s vs 14 ms (1,270x) |
 | Bulk window: 33 points match 500; span floor 6e-11 | `window` | `research/lattice_window/run_window_savings.py` | match; "a hundred times more accurate" **updated** to the measured ratios |
-| Tree recursion exact at MC noise, depths 1-4 | `tree` | `research/tree_exactness/run_exactness.py` | match (rms z 0.76-1.09); script now reports z on resolvable entries only |
+| Tree recursion exact at MC noise, depths 1-4 | `tree` | `research/tree_exactness/run_exactness.py` | match (rms z 0.75-1.09); z now on entries with at least 10 expected hits under the lattice answer, score-test sd (mask independent of the MC outcome) |
 | Tree tails vs Botev to 0.3% at 7e-8 | `botev-tree` | `research/tree_exactness/botev_tree.R` | match (ratios 1.002-1.003) |
 | Rank 2: tensor GH beats Sobol at equal nodes | `gh-vs-sobol` | `research/factor_nodes/run_gh_vs_sobol.py` | **new script** (was mapped to exp24, which cannot show it); figures added to the paper |
 | Fixed 15-node rule loses up to 5% | `fixed-rule` | `research/fuzz/fixed_rule_loss.py` | match (4.79e-2 at seed 11540), reproduced on shipped code by forcing the old rule |
 | Fuzz battery | `fuzz` | `research/fuzz/fuzz_races.py` | 3 `hopeless_others` flags at sharpness ~4.4, within the stated factor-strength boundary (REPRODUCE.md) |
 | Split-sample referee: 63.6%, 1.13e-4, 111 wins, CI, 4.4e-3 vs 5.4e-3 | `split-referee` | `research/general_sigma/run_split_referee.py` | match |
 | Multistart: 4e-16, 0.25-0.26, 8e-4 | `multistart` | `research/general_sigma/run_multistart.py` | match |
-| Own-slope vs BLP preconditioning | `blp-ablation` | `research/inversion_ablation/run_blp_ablation.py` | **new** (review request) |
+| Own-slope vs BLP preconditioning | `blp-ablation` | `research/inversion_ablation/run_blp_ablation.py` | **new** (review request); counts are updates applied: own-slope 16 / 17 / 27, BLP 68-144 at triple scale, no convergence in 500 otherwise |
 | Ensemble accuracy table and arms comparison (20 seeds) | `ensembles` | `research/general_sigma/run_ensembles4.py` | **updated**: table was from an 27 Aug log predating fitter changes, and randomcov's LKJ/residual generators were later fixed (0.2.1). Table, arms paragraph (now: identified arm better on 11/15, worse on sparse precision) and the residuals row regenerated |
 | Kernel stratification table | `kernel` | `research/general_sigma/run_kernel4.py` | **updated** (regenerated at the tag) |
 | Saturated estimation table (0.0168 / 0.0286 / 0.0184; paired 39/40, 33/40) | `estimation` | `research/mnp_estimation/run_mle2.py --reps 40` | match; times **updated** 3.0 / 2.6 / 18.4 s (exact no longer faster than R=100) |
