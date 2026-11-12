@@ -7,13 +7,17 @@ script forces the old fixed 15-node Gauss-Hermite rule explicitly and sets it
 beside the adaptive default, both against the battery's 2^14-point QMC
 referee. Run: python fixed_rule_loss.py
 """
+import json
+import os
 import warnings
 import numpy as np
 from winning.factor.core import hermite_nodes
 from winning.factor.races import race_probabilities
 
 warnings.simplefilter("ignore")
-src = open("fuzz_races.py").read().split("for case in range(N_CASES):")[0]
+HERE = os.path.dirname(os.path.abspath(__file__))
+LOG = os.path.join(HERE, "fixed_rule_loss.jsonl")    # append-only raw results
+src = open(os.path.join(HERE, "fuzz_races.py")).read().split("for case in range(N_CASES):")[0]
 exec(src.replace("N_CASES = int(sys.argv[1]) if len(sys.argv) > 1 else 400", "N_CASES = 0"))
 
 print("seed    n  rank  fixed-15 TV   adaptive TV   (vs 2^14 QMC referee)")
@@ -29,3 +33,7 @@ for seed in (10700, 11500, 11540, 11920, 11940):
     adapt = race_probabilities(mu, V=V, D=D, points=257)
     print(f"{seed}  {n:3d}  {V.shape[1]:4d}  {0.5*np.abs(fixed-ref).sum():.2e}     "
           f"{0.5*np.abs(adapt-ref).sum():.2e}", flush=True)
+    with open(LOG, "a") as f:
+        f.write(json.dumps(dict(seed=seed, n=n, rank=V.shape[1], points=257,
+                                ref=ref.tolist(), fixed=fixed.tolist(),
+                                adaptive=adapt.tolist())) + "\n")

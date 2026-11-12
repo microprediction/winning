@@ -266,6 +266,8 @@ cat(sprintf("genz: %.6e (err est %.1e) in %.2f s\\n", pr,
     os.unlink(path)
     print(f"lattice all-{n}: {t_lat*1e3:.1f} ms; favourite p = {p_lat[i]:.6e}")
     print(out.stdout.strip() or out.stderr.strip()[-200:])
+    if out.returncode != 0 or "genz:" not in out.stdout:
+        sys.exit("genz200: the R call failed (needs R with mvtnorm and jsonlite)")
 elif mode == "classic":
     # Rust against pure-Python classic (integer-lattice) calibration: the
     # Scale paragraph's speed ratio. Same answer both ways (printed), median
@@ -274,6 +276,9 @@ elif mode == "classic":
     from winning.classic.lattice_calibration import state_price_implied_ability
     from winning.classic.lattice import skew_normal_density
     density = skew_normal_density(L=500, unit=0.01, a=0.0)
+    winning.use_rust(True)
+    if not winning.rust_active():
+        sys.exit("classic: fastrace is not installed, so there is nothing to compare")
     for n in (10, 50, 200):
         prices = list(np.random.default_rng(3).dirichlet(np.full(n, 2.0)))
         res = {}
