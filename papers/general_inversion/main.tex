@@ -1392,8 +1392,8 @@ though the shipped kernels do not yet return it.
 
 A matrix-free Newton--Krylov solver using the exact grid Jacobian--vector product is
 provided also but is work in progress. Naively assembled it lost badly to the damped diagonal iteration.\footnote{
-$387$ seconds without converging against $3.7$ seconds converged at
-$n=200$.} Assembled properly (log-residual system symmetrized by the
+$370$ seconds without converging against $3.5$ seconds converged at
+$n=200$ (\texttt{research/experiments/exp23\_newton\_cg}).} Assembled properly (log-residual system symmetrized by the
 $\sqrt{p}$ scaling and using integration-by-parts form of the product,
 conjugate gradients preconditioned by the own-slopes and also a null vector
 projected out) it
@@ -2125,8 +2125,9 @@ law and are displayed as such.
 \paragraph{Scale.} Ten million contestants price in $102$ seconds under the
 block grammar (ten thousand clusters, $257$-point lattice, the streaming
 field pass; the committed \texttt{bench.py tenmillion}), and the Rust
-classic-calibration kernel runs $232$ times the speed of the pure-Python
-implementation. Throughput at this size is a systems statement; the accuracy
+classic-calibration kernel runs about $100$ to $200$ times the speed of
+the pure-Python implementation, for fields of $200$ down to $10$ (the
+committed \texttt{bench.py classic}). Throughput at this size is a systems statement; the accuracy
 evidence lives at the scales the referees above can reach.
 
 \paragraph{Parity.} One vector file embeds the inputs and outputs of
