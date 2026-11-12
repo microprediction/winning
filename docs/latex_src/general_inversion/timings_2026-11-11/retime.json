@@ -1,0 +1,77 @@
+{
+  "machine": "macOS-26.2-arm64-arm-64bit",
+  "load": "load 4.4 / 7.3 / 11.0 over 28 cores = 0.16 per core (limit 0.25)",
+  "quiet": true,
+  "results": [
+    {
+      "key": "per_alternative",
+      "paper": "22 s against 36 ms at n=200 rank 2",
+      "where": "Benchmarks, per-alternative comparator",
+      "wall_seconds": 18.04,
+      "returncode": 0,
+      "stdout": "shared field: 14 ms   per-alternative: 17.5 s (1269x)   TV 2.74e-15   max|log ratio| 3.29e-10",
+      "stderr": "",
+      "machine_quiet": true
+    },
+    {
+      "key": "grammar_inversion",
+      "paper": "tree 0.37 s, blocks 0.67 s, factor rank-2 1.7 s, nested 3.7 s",
+      "where": "Inversion, per-grammar round trips (n=400)",
+      "wall_seconds": 2.85,
+      "returncode": 0,
+      "stdout": "independent    0.05 s   max|mu err| 2.8e-09   max|log p resid| 4.5e-09\nfactor r2      0.57 s   max|mu err| 2.3e-09   max|log p resid| 8.7e-09\nblocks         0.17 s   max|mu err| 4.3e-10   max|log p resid| 3.7e-09\nnested         1.18 s   max|mu err| 1.4e-09   max|log p resid| 5.8e-09\ntree           0.20 s   max|mu err| 1.8e-09   max|log p resid| 7.3e-09",
+      "stderr": "",
+      "machine_quiet": true
+    },
+    {
+      "key": "ghk",
+      "paper": "GHK 5.5, 16.6, 51.3 s at n=200, 500, 1000, R=1e4",
+      "where": "Benchmarks, GHK comparator",
+      "wall_seconds": 7.26,
+      "returncode": 0,
+      "stdout": "n=  10  race     2.9 ms TV 1.78e-04 tail nan  | GHK R=1000:      0.9 ms TV 8.35e-03 tail nan  | GHK R=10000:      5.9 ms TV 2.14e-03 tail nan\nn=  50  race     4.8 ms TV 1.67e-03 tail 0.11  | GHK R=1000:     10.9 ms TV 4.20e-02 tail 1.10  | GHK R=10000:     91.7 ms TV 1.18e-02 tail 0.29\nn= 200  race    14.7 ms TV 2.42e-03 tail 0.15  | GHK R=1000:    170.0 ms TV 3.15e-02 tail 1.50  | GHK R=10000:   1837.2 ms TV 1.18e-02 tail 0.35",
+      "stderr": "",
+      "machine_quiet": true
+    },
+    {
+      "key": "saturated",
+      "paper": "exact 2.4 s, MSL-100 3.5 s, MSL-1000 39.9 s",
+      "where": "Estimation, saturated table (RMSE column verified separately and unchanged: 0.0148 / 0.0275 / 0.0161)",
+      "wall_seconds": 186.8,
+      "returncode": 0,
+      "stdout": "identified alternatives: 16/30\nrep   0 (seed 100, 0 empty) exact 0.0165  msl100 0.0165  msl1000 0.0174\nrep   1 (seed 101, 0 empty) exact 0.0185  msl100 0.0303  msl1000 0.0210\nrep   2 (seed 102, 0 empty) exact 0.0168  msl100 0.0295  msl1000 0.0179\nrep   3 (seed 103, 1 empty) exact 0.0130  msl100 0.0278  msl1000 0.0136\nrep   4 (seed 104, 0 empty) exact 0.0119  msl100 0.0214  msl1000 0.0148\nrep   5 (seed 105, 1 empty) exact 0.0101  msl100 0.0198  msl1000 0.0123\nrep   6 (seed 106, 0 empty) exact 0.0180  msl100 0.0308  msl1000 0.0200\nrep   7 (seed 107, 0 empty) exact 0.0115  msl100 0.0271  msl1000 0.0147\n\nidentified alternatives: 16/30\nreplications: 8\n\nmethod      median rmse        mean +/- se   median fit\nexact            0.0148      0.0145 +/- 0.0012        3.03s\nmsl100           0.0275      0.0254 +/- 0.0019        2.55s\nmsl1000          0.0161      0.0165 +/- 0.0011       18.35s\n\npaired against exact (positive = exact better):\n  vs msl100   mean diff +0.0108 +/- 0.0017 (  6.3 SE)   exact wins 7/8\n  vs msl1000  mean diff +0.0019 +/- 0.0003 (  5.5 SE)   exact wins 8/8",
+      "stderr": "",
+      "machine_quiet": true
+    },
+    {
+      "key": "scale",
+      "paper": "n=1e4, 1e5, 1e6 forward in 0.18, 2.7, 29 s",
+      "where": "Scale paragraph, forward pricing",
+      "wall_seconds": 19.85,
+      "returncode": 0,
+      "stdout": "n=   10,000      0.12 s  (sum 1.000000)\nn=  100,000      1.17 s  (sum 1.000000)\nn=1,000,000     18.01 s  (sum 1.000000)",
+      "stderr": "",
+      "machine_quiet": true
+    },
+    {
+      "key": "invert_million",
+      "paper": "n=1e6 inversion in 80 s independent, 22 min correlated",
+      "where": "Scale paragraph, inversion",
+      "wall_seconds": 935.9,
+      "returncode": 0,
+      "stdout": "n=  100,000 independent  forward    1.0 s  inversion     9.5 s  max|log p resid| 1.0e-10  max|mu err| 1.2e-11\nn=  100,000 factor r1    forward    1.8 s  inversion    61.4 s  max|log p resid| 9.9e-09  max|mu err| 2.8e-09\nn=1,000,000 independent  forward    9.6 s  inversion   104.6 s  max|log p resid| 7.3e-10  max|mu err| 7.5e-11\nn=1,000,000 factor r1    forward   18.3 s  inversion   698.9 s  max|log p resid| 7.7e-09  max|mu err| 2.4e-09",
+      "stderr": "",
+      "machine_quiet": true
+    },
+    {
+      "key": "tenmillion",
+      "paper": "ten-million block field in 245 s",
+      "where": "Scale paragraph, block grammar",
+      "wall_seconds": 102.59,
+      "returncode": 0,
+      "stdout": "n=10,000,000 clusters=10,000: 102.0 s (sum 1.000000)",
+      "stderr": "",
+      "machine_quiet": true
+    }
+  ]
+}

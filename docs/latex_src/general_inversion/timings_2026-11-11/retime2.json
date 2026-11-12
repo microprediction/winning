@@ -1,0 +1,47 @@
+{
+  "machine": "macOS-26.2-arm64-arm-64bit",
+  "load": "load 5.5 / 14.1 / 19.8 over 28 cores = 0.20 per core (limit 0.25)",
+  "quiet": true,
+  "results": [
+    {
+      "key": "law",
+      "paper": "GHK R=1e3 0.57, 5.66, 51.3 s at n=200, 500, 1000; exponents 2.15 / 2.8",
+      "where": "Introduction footnote; Appendix A anchor t(1000) at R=1e4",
+      "wall_seconds": 21.78,
+      "returncode": 0,
+      "stdout": "n=  200      0.18 s\nn=  500      1.69 s\nn= 1000     19.36 s",
+      "stderr": "",
+      "machine_quiet": true
+    },
+    {
+      "key": "genz200",
+      "paper": "one n=200 probability 0.43 s at maxpts=2.5e5; full vector 86 s against 26 ms",
+      "where": "Benchmarks, against the field (n=200 paragraph)",
+      "wall_seconds": 1.32,
+      "returncode": 0,
+      "stdout": "lattice all-200: 13.8 ms; favourite p = 2.138756e-01\ngenz: 2.139830e-01 (err est 2.0e-04) in 0.57 s",
+      "stderr": "",
+      "machine_quiet": true
+    },
+    {
+      "key": "tilting",
+      "paper": "n=50: 0.25 s (R=1e3) vs lattice 0.07 s; n=200: 25.8 s, 37.9 s (R=1e4) vs 0.29 s",
+      "where": "Related work, minimax tilting paragraph",
+      "wall_seconds": 238.9,
+      "returncode": 0,
+      "stdout": "anchors\n  N=2 closed form: tilting err 2.42e-14\n  N=5 vs 1e7 MC: tilting err 1.47e-04\nbenchmark vs twin 5e7-draw references\n  N=50 R=1000: err 2.5e-03, 0.3s\n  N=50 R=10000: err 6.8e-04, 1.3s\n  N=50 lattice: err 2.9e-05, 0.07s\n  N=200 R=1000: err 1.4e-03, 31.1s\n  N=200 R=10000: err 5.0e-04, 49.9s\n  N=200 lattice: err 4.1e-05, 0.28s\nwrote results.csv",
+      "stderr": "",
+      "machine_quiet": true
+    },
+    {
+      "key": "covariates",
+      "paper": "exact median fit 41.3 s",
+      "where": "Estimation with covariates",
+      "wall_seconds": 940.35,
+      "returncode": 0,
+      "stdout": "exact    rmse(beta) 0.0363 +- 0.0066  median fit    77.5s\nmsl100   rmse(beta) 0.0380 +- 0.0073  median fit    11.1s\nmsl1000  rmse(beta) 0.0367 +- 0.0067  median fit    27.9s",
+      "stderr": "",
+      "machine_quiet": true
+    }
+  ]
+}

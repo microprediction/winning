@@ -18,12 +18,13 @@ regenerated figure (reason given).
 | Invariants, sharp-factor escalation, cophenetic identity, Jacobian signs/row sums | `tests` | `tests/test_race_invariants.py`, `test_sharp_factor_escalation.py`, `test_blocks.py` | match (full suite: 307 passed) |
 | Stress boundaries: depth 4e-13 @1e-30, 2e-8 @1e-50, break near 1e-119; Gumbel = softmax 1e-15; duplicates; JVP 8e-12; GH-25 8e-3 vs Sobol 4e-4 | `stress` | `break.py` | match; round trip **updated** 1e-9 -> 2e-9 (measured 1.85e-9) |
 | Referee agreement: mvtnorm within bound, Botev within its error, quadrature 1.9e-15, invariance battery | `referee` (replays committed R output), `referee-r` (reruns R) | `referee_cases.py`, `referee.R`, `referee_check.py` | **updated**: referee.R was unseeded; now `set.seed`, figures are the seeded run (2.2e-7 vs 7.1e-7; 1.3e-8 vs 6.7e-8; Botev 1.0e-4 vs its 4.6e-4) |
-| Against GHK table (TV, tail) | `ghk` | `bench.py ghk` | match (every TV and tail cell) |
-| Against the field table | `alt` | `bench.py alt` | **updated**: the n=30 problem depended on how many time-matched draws the n=10 simulation consumed; frequency draws now on their own stream. n=30 row regenerated; frequency rows are time-matched by design (see REPRODUCE.md) |
-| Genz n=200 single probability, 4-5 digits | `genz200` | `bench.py genz200` | match (accuracy); time re-measured by `timings` |
+| Against GHK table (TV, tail, times) | `ghk` | `bench.py ghk` | match (every TV and tail cell); times **updated** from the quiet run (n=200: 15 ms vs GHK 1.84 s at R=1e4; abstract now "over a hundred times") |
+| Against the field table | `alt` | `bench.py alt` | **updated** (times and time-matched frequency rows: median of three quiet runs; Genz n=30 now about 900x under the pinned SciPy): the n=30 problem depended on how many time-matched draws the n=10 simulation consumed; frequency draws now on their own stream. n=30 row regenerated; frequency rows are time-matched by design (see REPRODUCE.md) |
+| Genz n=200 single probability | `genz200` | `bench.py genz200` | **updated**: R call now seeded; agrees within its error estimate (2e-4), not "4-5 digits"; 0.57 s per probability, 114 s vs 14 ms for the vector |
+| Minimax tilting all-n: n=50 0.3 s vs 0.07 s; n=200 31 / 50 s vs 0.28 s | `timings` (tilting) | `research/experiments/exp22_minimax_tilting/run_tilting.py` | errors match; times **updated** (were 0.25 / 25.8 / 37.9 s) |
 | Mislocation 2.49 / 8.24 = 30.2%, median 0.34 | `mislocate` | `bench.py mislocate` | match |
-| Per-grammar inversion round trips < 1e-8 | `invert` | `bench.py invert` | match |
-| Shared field vs per-alternative factor quadrature, TV 3e-15 | `bm` | `bench.py bm` | match (time ratio re-measured by `timings`) |
+| Per-grammar inversion round trips < 1e-8 | `invert` | `bench.py invert` | match; times **updated** (independent 0.05, blocks 0.17, tree 0.20, factor 0.57, nested 1.18 s) |
+| Shared field vs per-alternative factor quadrature, TV 3e-15 | `bm` | `bench.py bm` | match (TV); time **updated** 17.5 s vs 14 ms (1,270x) |
 | Bulk window: 33 points match 500; span floor 6e-11 | `window` | `research/lattice_window/run_window_savings.py` | match; "a hundred times more accurate" **updated** to the measured ratios |
 | Tree recursion exact at MC noise, depths 1-4 | `tree` | `research/tree_exactness/run_exactness.py` | match (rms z 0.76-1.09); script now reports z on resolvable entries only |
 | Tree tails vs Botev to 0.3% at 7e-8 | `botev-tree` | `research/tree_exactness/botev_tree.R` | match (ratios 1.002-1.003) |
@@ -35,15 +36,15 @@ regenerated figure (reason given).
 | Own-slope vs BLP preconditioning | `blp-ablation` | `research/inversion_ablation/run_blp_ablation.py` | **new** (review request) |
 | Ensemble accuracy table and arms comparison (20 seeds) | `ensembles` | `research/general_sigma/run_ensembles4.py` | **updated**: table was from an 27 Aug log predating fitter changes, and randomcov's LKJ/residual generators were later fixed (0.2.1). Table, arms paragraph (now: identified arm better on 11/15, worse on sparse precision) and the residuals row regenerated |
 | Kernel stratification table | `kernel` | `research/general_sigma/run_kernel4.py` | **updated** (regenerated at the tag) |
-| Saturated estimation table (0.0168 / 0.0286 / 0.0184; paired 39/40, 33/40) | `estimation` | `research/mnp_estimation/run_mle2.py --reps 40` | match (times via `timings`) |
-| Covariate table (0.0363 / 0.0380 / 0.0367) | `covariates` | `research/mnp_estimation/run_mle3.py`, `run_mle4.py` | match |
-| Dense n=2000 one call, 82% zero-win tail | `large-n` | `research/general_sigma/run_large_n.py` | match (bulk TV 1.01e-2, 82%) |
+| Saturated estimation table (0.0168 / 0.0286 / 0.0184; paired 39/40, 33/40) | `estimation` | `research/mnp_estimation/run_mle2.py --reps 40` | match; times **updated** 3.0 / 2.6 / 18.4 s (exact no longer faster than R=100) |
+| Covariate table (0.0363 / 0.0380 / 0.0367) | `covariates` | `research/mnp_estimation/run_mle3.py`, `run_mle4.py` | match; times **updated** 77.5 / 11.1 / 27.9 s (twice measured); the exact path's time is the Python Jacobian (kernel ~6%, profiled) |
+| Dense n=2000 one call, 82% zero-win tail | `large-n` | `research/general_sigma/run_large_n.py` | match (bulk TV 1.01e-2, 82%); times **updated** 3.6 s (1.0 s fit) vs 18.5 s for 1e6 draws |
 | Stall case of the diagonal iteration; Newton-Krylov rounds | `newton-krylov` | `research/experiments/exp23_newton_cg/run_newton_cg3.py` | match (Jacobi stalls at 1.1e-4; hybrid diverges; easy case converges to 9.6e-10) |
 | Independent-case inversion vs exact referee | `independent-inversion` | `research/experiments/exp35_independent_inversion/run_independent.py` | match (bitwise vs committed results.txt) |
 | Lattice vs per-alternative factor-RQMC timing | `factor-rqmc` | `research/experiments/exp24_factor_rqmc/run_factor_rqmc.py` | match (accuracy at reference floor; timing ratio) |
-| GHK cost law n^2.15 / n^2.8; Appendix A anchor | `law` | `bench.py law` | re-measured by `timings` |
-| Scale: 0.18 / 2.7 / 29 s; ten million; inversion at a million | `scale`, `tenmillion`, `invertmillion` | `bench.py` | re-measured by `timings` |
-| Every wall-clock figure | `timings` | `retime.py` | quiet-machine run pending |
+| GHK cost law; Appendix A anchor | `law` | `bench.py law` | **updated**: 0.18 / 1.69 / 19.4 s at n=200/500/1000; exponents 1.9 / 2.9; anchor 194 s at R=1e4; brackets recomputed |
+| Scale; ten million; inversion at a million | `scale`, `tenmillion`, `invertmillion` | `bench.py` | **updated**: 0.12 / 1.2 / 18 s; 102 s; 105 s independent, 699 s factor |
+| Every wall-clock figure | `timings` | `retime.py` | measured on a quiet machine 2026-11-11 (two windows, load 0.16 and 0.20 per core); logs in `timings_2026-11-11/`; retime.py now also covers law, genz200, tilting, covariates, large_n |
 | Four-language parity | (not in make) | `r/winning/tests/testthat/` golden files + per-port tests | CI |
 
 ## History

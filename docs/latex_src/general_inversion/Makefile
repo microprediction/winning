@@ -4,7 +4,7 @@
 #   make env       build the pinned environment (.venv at the repository root)
 #   make           the accuracy claims, about 15 minutes on one laptop core set
 #   make full      everything else that is not a wall-clock figure (hours)
-#   make timings   every wall-clock figure; refuses a busy machine (about 50 min)
+#   make timings   every wall-clock figure; refuses a busy machine (about 75 min)
 #   make referee-r rerun the two R referees (needs R with mvtnorm,
 #                  TruncatedNormal, jsonlite; see REPRODUCE.md)
 #

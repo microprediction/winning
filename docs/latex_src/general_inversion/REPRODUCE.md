@@ -40,18 +40,20 @@ Logs land in `out/<target>.log`; each target also prints its last lines.
   the against-the-field table draw as many samples as fit in the lattice's
   run time, so their errors vary with machine speed. They draw from their
   own random stream, so nothing else in the table depends on them.
-- **Genz in SciPy** (`bench.py alt`, `genz200`) is randomized internally and
-  unseeded by its API; its TV agrees with the lattice at the reference's noise
-  in every run, but the last digit moves.
+- **Genz in SciPy** (`bench.py alt`) is randomized internally and unseeded
+  by its API; its TV agrees with the lattice at the reference's noise in
+  every run, but the last digit moves. (`genz200` calls R's `mvtnorm`, which
+  is seeded.)
 
 ## Timings
 
-Times are from a single Apple-silicon laptop, single-threaded BLAS. The paper's
+Times are from one Apple Mac Studio (M3 Ultra, 28 cores, 96 GB), single-threaded BLAS; the lattice kernels use one core and the Rust GHK comparator uses all free cores. The paper's
 timing claims are ratios (lattice against GHK, Genz, simulation); absolute
 seconds will differ on other hardware. `make timings` runs `retime.py`, which
 re-measures every wall-clock figure, prints it beside the paper's value, and
 refuses to measure on a machine whose load average is high (`--force`
-overrides and says so in the output).
+overrides and says so in the output). The logs behind every time in the
+paper are in `timings_2026-11-11/`.
 
 ## Known limits
 

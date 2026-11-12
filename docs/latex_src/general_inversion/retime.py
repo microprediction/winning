@@ -60,13 +60,38 @@ TASKS = [
          "tree 0.37 s, blocks 0.67 s, factor rank-2 1.7 s, nested 3.7 s",
          "Inversion, per-grammar round trips (n=400)",
          [sys.executable, BENCH, "invert"], 2),
-    Task("ghk", "GHK 5.5, 16.6, 51.3 s at n=200, 500, 1000, R=1e4",
-         "Benchmarks, GHK comparator",
-         [sys.executable, BENCH, "ghk"], 5),
+    Task("ghk", "race 2.3 / 7.0 / 25 ms; GHK R=1e3 1.0 / 21 / 436 ms, "
+         "R=1e4 8 / 214 / 4.8 s at n=10 / 50 / 200",
+         "Benchmarks, against GHK (table)",
+         [sys.executable, BENCH, "ghk"], 1),
+    Task("law", "GHK R=1e3 0.57, 5.66, 51.3 s at n=200, 500, 1000; "
+         "exponents 2.15 / 2.8",
+         "Introduction footnote; Appendix A anchor t(1000) at R=1e4",
+         [sys.executable, BENCH, "law"], 2),
+    Task("genz200", "one n=200 probability 0.43 s at maxpts=2.5e5; "
+         "full vector 86 s against 26 ms",
+         "Benchmarks, against the field (n=200 paragraph)",
+         [sys.executable, BENCH, "genz200"], 1,
+         "needs R with mvtnorm and jsonlite"),
+    Task("tilting", "n=50: 0.25 s (R=1e3) vs lattice 0.07 s; n=200: 25.8 s, "
+         "37.9 s (R=1e4) vs 0.29 s",
+         "Related work, minimax tilting paragraph",
+         [sys.executable, os.path.join(ROOT, "research", "experiments",
+                                       "exp22_minimax_tilting",
+                                       "run_tilting.py")], 10,
+         "rewrites exp22's results.csv"),
     Task("saturated", "exact 2.4 s, MSL-100 3.5 s, MSL-1000 39.9 s",
          "Estimation, saturated table (RMSE column verified separately "
          "and unchanged: 0.0148 / 0.0275 / 0.0161)",
          [sys.executable, MLE2], 10),
+    Task("covariates", "exact median fit 41.3 s",
+         "Estimation with covariates",
+         [sys.executable, os.path.join(ROOT, "research", "mnp_estimation",
+                                       "run_mle3.py")], 15),
+    Task("large_n", "fit 0.6 s, one call 4 s at n=2000",
+         "Large-n benchmark (general Sigma)",
+         [sys.executable, os.path.join(ROOT, "research", "general_sigma",
+                                       "run_large_n.py")], 1),
     Task("scale", "n=1e4, 1e5, 1e6 forward in 0.18, 2.7, 29 s",
          "Scale paragraph, forward pricing",
          [sys.executable, BENCH, "scale"], 2,
@@ -125,7 +150,8 @@ def loud_processes(limit=5):
 
 def run(task, env):
     t0 = time.perf_counter()
-    proc = subprocess.run(task.argv, capture_output=True, text=True, env=env)
+    proc = subprocess.run(task.argv, capture_output=True, text=True, env=env,
+                          cwd=os.path.dirname(task.argv[1]))
     wall = time.perf_counter() - t0
     return {
         "key": task.key,
