@@ -1177,8 +1177,8 @@ def update_topk_correlated(m, v, member, k, V=None, beta2=1.0, Qf=7, eps=1e-3,
     performance factors V as in update_winner_correlated. k = 1 is the
     observed winner. Conditional on the factors the race is independent
     and the event's probability is the top-k membership of
-    winning.factor.topk, with its Jacobian row as the score; the
-    mixture over factor nodes is _mixture_update's. Returns
+    winning.factor.topk, and the score is its Jacobian row divided by
+    that probability; the mixture over factor nodes is _mixture_update's. Returns
     (m_post, v_post, logZ) with logZ = log P(member in top k)."""
     from ..factor.topk import top_k_probabilities, top_k_jacobian_row
     _require_normal_base(base, "update_topk_correlated")

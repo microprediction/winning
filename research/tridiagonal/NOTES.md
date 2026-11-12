@@ -34,7 +34,9 @@ tridiagonal orthant/max probability is exactly the case where the
 simulation incumbent (GHK) is worst and an exact transfer-operator
 pass is best -- a clean head-to-head. The exact method is a 1-D
 forward integral (transfer operator restricted below the threshold),
-O(n L) per threshold, linear in n.
+linear in n. [Correction, 2026-11-12, #1039: the implemented transition
+is a dense L x L matrix, so this is O(n L^2) per threshold, not O(n L);
+the argmax vector via chain_argmax.py is O(n L^3).]
 
 ## Applications (correlated first-passage / extremes over time)
 - Time-series extremes: max / running-max / max-drawdown of an AR(1)
@@ -75,6 +77,10 @@ the Kalman filter does not give), the first-passage distribution, and
 a timed GHK head-to-head on AR(1).
 
 ## exp2_argmax: P(X_t is the max), the layer Kalman lacks (2026-09-03)
+[Superseded, 2026-11-12, #1039: these figures came from the earlier
+pdf-times-spacing grid with mass loss. run_argmax.py now calls
+chain_argmax.py (cell-integrated transitions, half-tie rule, no
+renormalization); rerun it for current values. Kept as history.]
 Forward-backward argmax over AR(1), vs 400k MC, n=20 (max err <0.007,
 ratios match; sum 0.90-0.95 is grid mass loss at L=240, tighten to
 normalize):
@@ -141,7 +147,9 @@ A precision matrix of bandwidth b means each point depends on its b
 nearest neighbors -- a b-dependent process. The transfer-operator
 trick survives via STATE LIFTING: the vector (X_t, ..., X_{t+b-1})
 IS Markov, so the same forward(-backward) pass runs on the lifted
-state. Cost O(n L^b): still linear in n, exponential only in the
+state. Cost O(n L^b) [correction, 2026-11-12, #1039: the lifted state
+has L^b values and each step also sums over the new coordinate, so a
+dense step is O(L^(b+1)) and the pass O(n L^(b+1)) per threshold]: still linear in n, exponential only in the
 bandwidth -- fine for b = 2, 3 (AR(p), local kernels), and my exp2
 ELI5 overstated this as a hard wall. Beyond small b, use quadrature/
 low-rank compression of the lifted messages rather than a full grid.

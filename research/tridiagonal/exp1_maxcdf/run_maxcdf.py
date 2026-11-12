@@ -8,8 +8,10 @@ so marginals are N(0,1) and the precision is tridiagonal. The event
 where pi_x(s) = phi(s) 1{s<=x} is the initial sub-density and
 T_x(s'|s) = N(s'; phi s, 1-phi^2) 1{s'<=x} is the transition
 restricted below x. One forward pass of sub-probability messages on a
-state grid; O(n L) per threshold with the banded transition, linear
-in n. This is the transfer-operator / sum-product realization on the
+state grid of L points. The transition is a dense L x L matrix (a
+tridiagonal precision in t does not make the kernel banded in the
+state), so each threshold costs O(n L^2) time and O(L^2) storage, and
+K thresholds cost O(K n L^2): linear in n at fixed L. This is the transfer-operator / sum-product realization on the
 chain -- the exact order statistic a Kalman filter does not give, and
 the AR(1) case where GHK's variance is known to blow up.
 """
