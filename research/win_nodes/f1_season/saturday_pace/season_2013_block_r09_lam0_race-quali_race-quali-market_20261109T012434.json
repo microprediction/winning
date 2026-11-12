@@ -1,0 +1,54 @@
+{
+ "year": 2013,
+ "params": {
+  "init_var": 1.0,
+  "drift": 0.05,
+  "rho": 0.5,
+  "beta2_q": 4.0,
+  "beta2_r": 1.0,
+  "lengths_scale_q": 2.0,
+  "nodes_log2": 8,
+  "tau2": 0.3,
+  "belief": "block",
+  "quali_mode": "prefix",
+  "q_by_times": false,
+  "split_qr": 0.9,
+  "lambda_mkt": 0.0
+ },
+ "variants": [
+  "race+quali",
+  "race+quali+market"
+ ],
+ "results": [
+  {
+   "variant": "race+quali",
+   "n_races": 19,
+   "mean_log_score_winner": -1.1480180359491974,
+   "total_evidence": -1062.8850667990528,
+   "belief": "block",
+   "races_with_market": 14,
+   "market_log_score": -1.2631671660766217,
+   "model_log_score_on_those": -1.271490731487391,
+   "mean_log_score_pole": -1.9309000037317663,
+   "split_qr": 0.9,
+   "lambda_mkt": 0.0,
+   "uniform": -2.995732273553991,
+   "seconds": 3884.1534101963043
+  },
+  {
+   "variant": "race+quali+market",
+   "n_races": 19,
+   "mean_log_score_winner": -1.275618490453214,
+   "total_evidence": -1337.9011291842633,
+   "belief": "block",
+   "races_with_market": 14,
+   "market_log_score": -1.2631671660766217,
+   "model_log_score_on_those": -1.3160710189589513,
+   "mean_log_score_pole": -1.9222969352132058,
+   "split_qr": 0.9,
+   "lambda_mkt": 0.0,
+   "uniform": -2.995732273553991,
+   "seconds": 3723.015081167221
+  }
+ ]
+}

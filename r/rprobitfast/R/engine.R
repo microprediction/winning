@@ -485,7 +485,9 @@
                  length(choice)), call. = FALSE)
   nb <- ncol(X)
   beta <- theta[seq_len(nb)]
-  wfree <- theta[-seq_len(nb)]
+  # a tail slice: theta[-seq_len(0)] is EMPTY, so a zero-column mean
+  # design dropped every loading (#949)
+  wfree <- theta[nb + seq_len(length(theta) - nb)]
   V <- matrix(0, J, r)
   k <- 1L
   fill <- list()

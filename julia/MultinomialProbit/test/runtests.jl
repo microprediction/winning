@@ -986,3 +986,14 @@ end
         [0.2 -0.1 0.4; 1.0 0.0 -1.0], [0.3; -0.2; 0.1;;], [3, 1])
     @test isfinite(ll)
 end
+
+@testset "a matrix D is refused, not read column-major (#903)" begin
+    mu = [3.57688293, 1.40018991, 1.43472454, -1.09051211]
+    V = zeros(4, 1)
+    Dmat = [1.0 9.0; 4.0 16.0]     # linear indexing reads 1 4 9 16
+    @test_throws ArgumentError ghk_choice_prob(mu, V, 1; D = Dmat)
+    @test_throws ArgumentError ghk_choice_logprob(mu, V, 1; D = Dmat)
+    @test_throws ArgumentError choice_loglik_and_score(reshape(mu, 1, 4), V, [1]; D = Dmat)
+    # the vector reading still runs
+    @test isfinite(ghk_choice_logprob(mu, V, 1; D = [1.0, 9.0, 4.0, 16.0]))
+end

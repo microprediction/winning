@@ -417,6 +417,7 @@
 
 top_k_probabilities <- function(mu, k, V = NULL, D = NULL,
                                 base = "normal", points = 513, qa = NULL) {
+  .refuse_matrix(mu, "mu")                                        # (#903)
   n <- length(mu)
   k <- .as_depth(k, n)
   sd <- sqrt(.as_idio(D, n))
@@ -477,6 +478,7 @@ top_k_probabilities <- function(mu, k, V = NULL, D = NULL,
 
 bottom_k_probabilities <- function(mu, k, V = NULL, D = NULL,
                                    base = "normal", points = 513, qa = NULL) {
+  .refuse_matrix(mu, "mu")                                        # (#903)
   n <- length(mu)
   k <- .as_depth(k, n)
   # through .as_idio like every other top-k path: a bare sqrt(D) let
@@ -498,6 +500,7 @@ bottom_k_probabilities <- function(mu, k, V = NULL, D = NULL,
 
 top_k_jacobians <- function(mu, k, D = NULL, base = "normal",
                             points = 513, V = NULL, qa = NULL) {
+  .refuse_matrix(mu, "mu")                                        # (#903)
   n <- length(mu)
   k <- .as_depth(k, n)
   mu <- .translated_home(mu, .as_idio(D, n))     # (#477)
@@ -566,6 +569,7 @@ top_k_jacobians <- function(mu, k, D = NULL, base = "normal",
 # adjacent top-k verbs priced it (#202).
 rank_probabilities <- function(mu, D = NULL, base = "normal",
                                points = 513, V = NULL, qa = NULL) {
+  .refuse_matrix(mu, "mu")                                        # (#903)
   n <- length(mu)
   sd <- sqrt(.as_idio(D, n))
   mu <- .translated_home(mu, .as_idio(D, n))     # (#477)
@@ -607,6 +611,7 @@ rank_probabilities <- function(mu, D = NULL, base = "normal",
 }
 
 .validated_topk_target <- function(q, k, n, target_floor) {
+  .refuse_matrix(q, "target")                                    # (#903)
   target <- as.numeric(q)
   if (length(target) != n)
     stop(sprintf("target has %d entries for %d runners", length(target), n))
@@ -656,6 +661,7 @@ abilities_from_topk <- function(q, k, V = NULL, D = NULL, base = "normal",
                                 points = 513, qa = NULL, n_iter = 80,
                                 tol = 1e-8, target_floor = NULL,
                                 return_info = FALSE) {
+  .refuse_matrix(q, "q")                                          # (#903)
   n <- length(q)
   k <- .as_depth(k, n)
   vt <- .validated_topk_target(q, k, n, target_floor)
@@ -682,27 +688,48 @@ abilities_from_topk <- function(q, k, V = NULL, D = NULL, base = "normal",
   # a kinked base takes its slopes from the split lattice, the value from
   # the map being inverted (#267)
   kinked <- !is.null(.kinks_of(fn))
-  with_slopes <- function(m) {
-    ws <- .topk_with_slopes(m, sd, k, fn, points)
-    if (kinked) ws$slopes <- .topk_with_slopes(m, sd, k, fn, points, TRUE)$slopes
+  with_slopes <- function(m, pts) {
+    ws <- .topk_with_slopes(m, sd, k, fn, pts)
+    if (kinked) ws$slopes <- .topk_with_slopes(m, sd, k, fn, pts, TRUE)$slopes
     ws
   }
-  fwd <- function(m) {
+  eval_at <- function(m, pts) {
     if (is.null(fac)) {
-      ws <- with_slopes(m)
-      qraw <- ws$q
-      sl <- ws$slopes
-    } else {
-      qraw <- rep(0, n)
-      sl <- rep(0, n)
-      for (j in seq_len(nrow(fac$nodes))) {
-        shift <- as.vector(fac$Vm %*% fac$nodes[j, ])
-        ws <- with_slopes(m + shift)
-        qraw <- qraw + fac$w[j] * ws$q
-        sl <- sl + fac$w[j] * ws$slopes
-      }
+      ws <- with_slopes(m, pts)
+      return(list(qraw = ws$q, sl = ws$slopes))
     }
-    qhat <- .checked_topk(qraw, k, "top-k inversion")
+    qraw <- rep(0, n)
+    sl <- rep(0, n)
+    for (j in seq_len(nrow(fac$nodes))) {
+      shift <- as.vector(fac$Vm %*% fac$nodes[j, ])
+      ws <- with_slopes(m + shift, pts)
+      qraw <- qraw + fac$w[j] * ws$q
+      sl <- sl + fac$w[j] * ws$slopes
+    }
+    list(qraw = qraw, sl = sl)
+  }
+  fwd <- function(m) {
+    # python's and the browser's bounded refinement: a lattice that fails
+    # the mass check is doubled (2p - 1) up to four times the request, and
+    # the residual and slopes come from the lattice that passed. On one
+    # fixed lattice the inverse refused, at its warm start, a target its
+    # own forward produced at the same points (#943).
+    ev <- eval_at(m, points)
+    qhat <- tryCatch(.checked_topk(ev$qraw, k, "top-k inversion"),
+                     error = function(e) e)
+    if (inherits(qhat, "error")) {
+      cap <- 4L * (points - 1L) + 1L
+      pts <- points
+      while (inherits(qhat, "error") && pts < cap) {
+        pts <- min(2L * pts - 1L, cap)
+        ev <- eval_at(m, pts)
+        qhat <- tryCatch(.checked_topk(ev$qraw, k, "top-k inversion"),
+                         error = function(e) e)
+      }
+      if (inherits(qhat, "error")) stop(conditionMessage(qhat), call. = FALSE)
+    }
+    qraw <- ev$qraw
+    sl <- ev$sl
     # a membership above one, clipped to exactly one, leaves a flat logit
     # residual of ~690 the sweeps stall in: refuse the iterate so they
     # back off (the uniform lattice overshoots one near saturation for a
@@ -800,6 +827,9 @@ loc_scale_from_topk_pair <- function(q1, k1, q2, k2, D0 = NULL,
                                      base = "normal", points = 513,
                                      n_iter = 60, tol = 1e-8, ridge = 0,
                                      mu0 = NULL, return_info = FALSE) {
+  .refuse_matrix(q1, "q1")                                        # (#903)
+  .refuse_matrix(q2, "q2")                                        # (#903)
+  .refuse_matrix(mu0, "mu0")                                      # (#903)
   # the cold start (no D0, no mu0) can stall far from an exact board;
   # only then, one retry from a scale-informed D0 (#781), as python
   once <- function(d, m)
@@ -972,6 +1002,8 @@ loc_scale_from_win_and_second <- function(p_win, p_second, D0 = NULL,
                                           n_iter = 60, tol = 1e-8,
                                           ridge = 0, mu0 = NULL,
                                           return_info = FALSE) {
+  .refuse_matrix(p_win, "p_win")                                  # (#903)
+  .refuse_matrix(p_second, "p_second")                            # (#903)
   # win plus EXACTLY-second marginals: P(2nd) + P(win) = P(top-2), the
   # well-posed pair. Each marginal renormalized to unit mass first.
   n <- length(p_win)
@@ -1074,6 +1106,7 @@ abilities_from_rank_marginal <- function(p, r, mu0 = NULL, D = NULL,
     stop("rank probabilities must be finite")
   if (any(p <= 0))
     stop("all rank probabilities must be positive")
+  .refuse_matrix(p, "p")                                         # (#903)
   logt <- log(.rescaled_target(as.numeric(p)))
   sd <- sqrt(.as_idio(D, n))
   fn <- if (is.function(base)) base else .BASES[[base]]

@@ -239,6 +239,7 @@ Tree <- function(cluster, loading, D, parent, strength, leaves = NULL)
 # resid, iters).
 .abilities_from_structure <- function(p, s, forward, points = 257,
                                       n_iter = 120, tol = 1e-8) {
+  .refuse_matrix(p, "p")                                         # (#903)
   target <- .rescaled_target(as.numeric(p))
   logt <- log(target)
   totvar <- .structure_variances(s)

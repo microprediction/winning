@@ -5,7 +5,8 @@ compare race_probabilities at its defaults with (a) a lattice eight
 times finer, (b) 2^15 scrambled-Sobol factor nodes in place of the
 default rule, and (c) four million Monte Carlo argmax draws. Also the
 rank-one three-alternative example with an analytic answer, where the
-default rule is known to be off by TV 0.0015.
+default rule was off by TV 0.0015 in the run at 81d6402 and is off by
+2.3e-4 at d072375b.
 
 Reports sup-norm and total-variation differences. Run from the repo
 root; thread caps are set before numpy is imported.
