@@ -1976,24 +1976,22 @@ def _rank_marginal_once(p, r, mu0, D, base, points, n_iter, tol,
         one -- a laplace row carries up to 1.6e-3 of rectangle-sum error
         across its kink -- and an exact self-generated target sat 1.5e-3
         (log) outside its range (#267)."""
-        pv, Jv, mass = _rank_marginal_with_jacobian(
-            m, sd, r, base_rows, points, is_normal=is_n,
-            kink_split=kink_split, jacobian=jac and not split_jac,
-            with_mass=True)
-        u = pv / mass
+        P, mass, accepted_points = _rank_forward(
+            m, D, base, points, None, None, kink_split)
+        u = P[:, r - 1]
         tot = u.sum()
         logp = np.log(np.maximum(u / tot, 1e-300))
-        if not jac:
+        if not jac or np.max(np.abs(logp - logt)) < tol:
             return logp, None
-        if split_jac:
-            # a kinked base: the Jacobian from the split lattice, the
-            # value from the map being inverted (#267)
-            Jv = _rank_marginal_with_jacobian(m, sd, r, base_rows, points,
-                                              kink_split=True)[1]
+        # Keep the accepted resolution for the derivative. For a kinked
+        # base the Jacobian still uses split quadrature (#267).
+        _, Jv = _rank_marginal_with_jacobian(
+            m, sd, r, base_rows, accepted_points, is_normal=is_n,
+            kink_split=kink_split or split_jac)
         # d log(u_i / sum u), the lattice mass held fixed (its continuum
         # derivative is zero)
-        Jlog = (Jv / np.maximum(pv, 1e-300)[:, None]
-                - ((Jv / mass[:, None]).sum(axis=0) / tot)[None, :])
+        Ju = Jv / mass[:, None]
+        Jlog = Ju / np.maximum(u, 1e-300)[:, None] - Ju.sum(axis=0) / tot
         return logp, Jlog
 
     def _fd_jacobian(m, logp):
@@ -2006,7 +2004,7 @@ def _rank_marginal_once(p, r, mu0, D, base, points, n_iter, tol,
             cols.append((_model(m + e, jac=False)[0] - logp) / h)
         return np.column_stack(cols)
 
-    logp, Jlog = _model(mu)
+    logp, Jlog = _model(mu, jac=n_iter > 0)
     resid = logp - logt
     cost = float(resid @ resid)
     resid_max = float(np.abs(resid).max())
@@ -2026,7 +2024,10 @@ def _rank_marginal_once(p, r, mu0, D, base, points, n_iter, tol,
         if resid_max < tol:
             break
         if fd_mode:
-            Jlog = _fd_jacobian(mu, logp)
+            try:
+                Jlog = _fd_jacobian(mu, logp)
+            except RuntimeError:
+                break
         A = Jlog.T @ Jlog
         g = Jlog.T @ resid
         accepted = False
@@ -2041,7 +2042,12 @@ def _rank_marginal_once(p, r, mu0, D, base, points, n_iter, tol,
             # a smooth base gets its Jacobian with the value, as before; a
             # kinked one's comes from a second lattice, so only an
             # accepted trial pays for it
-            lp_n, J_n = _model(mu_n, jac=not (split_jac or fd_mode))
+            try:
+                lp_n, J_n = _model(mu_n, jac=not (split_jac or fd_mode))
+            except RuntimeError:
+                # An unresolved trial cannot replace the last priced iterate.
+                lam *= 8.0
+                continue
             r_n = lp_n - logt
             cost_n = float(r_n @ r_n)
             if cost_n < cost:
@@ -2087,6 +2093,12 @@ def rank_probabilities(mu, D=None, base="normal", points=513, V=None,
     the requested points, before raising. Cumulative row
     sums reproduce top_k_probabilities. O(n^2 L) per factor node.
     kink_split as in top_k_probabilities (opt-in, default off)."""
+    P, _, _ = _rank_forward(mu, D, base, points, V, qa, kink_split)
+    return P
+
+
+def _rank_forward(mu, D, base, points, V, qa, kink_split):
+    """Checked rank matrix, raw row masses, and its accepted point budget."""
     mu = np.asarray(mu, float)
     n = len(mu)
     D = np.ones(n) if D is None else as_idio(D, n, positive=True)
@@ -2176,19 +2188,24 @@ def rank_probabilities(mu, D=None, base="normal", points=513, V=None,
             f"column-sum error {ce:.2e}. Raise points=, or report this "
             "field.")
 
-    def _checked(P):
+    def _raw_with_points(pts):
+        return raw_at(pts), pts
+
+    def _checked(raw):
+        P, pts = raw
         re_raw, ce_raw = _defects(P)
         if not np.isfinite(P).all() or re_raw > 5e-3 or ce_raw > 5e-3:
             _reject("before normalisation", re_raw, ce_raw)
-        P = np.clip(P / np.maximum(P.sum(axis=1)[:, None], _TINY), 0.0, 1.0)
+        mass = P.sum(axis=1)
+        P = np.clip(P / np.maximum(mass[:, None], _TINY), 0.0, 1.0)
         re_out, ce_out = _defects(P)
         if not np.isfinite(P).all() or re_out > 5e-3 or ce_out > 5e-3:
             _reject("in the RETURNED matrix after row normalisation",
                     re_out, ce_out)
-        return P
+        return P, mass, pts
 
     # a defect is refined on nested 2p - 1 lattices, as top-k (#623): the
     # default 513 and 1025 points both rejected a Laplace field that 2049
     # resolves (#819). A call that passes first time is untouched.
-    return _refined_topk(raw_at, None, points, "rank marginals",
+    return _refined_topk(_raw_with_points, None, points, "rank marginals",
                          check=_checked)
