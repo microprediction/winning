@@ -790,6 +790,21 @@ export function cholesky(Cin) {
    row and chol(S) below it. mcBatch(mu, L, ...) then draws
    x_0 = mu_0 and x_j = mu_j + (x_j - x_0 noise), whose argmin is the
    race's. Scale-free by construction (#375). */
+/* One entry of a contrast covariance, Cjk - Cji - Cik + Cii. Near the
+   largest double, the left-to-right sum overflows before Cii brings it back
+   (0.788e308 - 1.36e308 - 1.36e308 is -Infinity) although the contrast is
+   representable (#726). Ordinary inputs keep their rounding; only a
+   non-finite plain sum is redone at an exact power-of-two scale. */
+function contrastEntry(cjk, cji, cik, cii) {
+  const plain = cjk - cji - cik + cii;
+  if (Number.isFinite(plain)) return plain;
+  const big = Math.max(Math.abs(cjk), Math.abs(cji), Math.abs(cik), Math.abs(cii));
+  // exact: a power of two, at most 2^1023 (2^1024 is Infinity), so every
+  // scaled entry is at most 2 in magnitude and the grouped sum at most 8
+  const s = 2 ** Math.min(Math.ceil(Math.log2(big)), 1023);
+  return ((cjk / s - cji / s) + (cii / s - cik / s)) * s;
+}
+
 export function raceFactor(C) {
   // through the covariance boundary: cholesky zeroes non-positive pivots,
   // so an asymmetric or indefinite C was silently simulated as some other
@@ -801,7 +816,7 @@ export function raceFactor(C) {
   const S = [];
   for (let j = 1; j < n; j++) {
     const row = [];
-    for (let k = 1; k < n; k++) row.push(C[j][k] - C[j][0] - C[0][k] + C[0][0]);
+    for (let k = 1; k < n; k++) row.push(contrastEntry(C[j][k], C[j][0], C[0][k], C[0][0]));
     S.push(row);
   }
   const Ls = cholesky(S);
@@ -948,14 +963,21 @@ function diffProblem(mu, C, i, where) {
   // pair here makes C and C' yield the same contrast -- and therefore the
   // same price -- instead of differing by several percentage points (#726
   // residual).
-  const csym = (p, q) => 0.5 * (C[p][q] + C[q][p]);
+  const csym = (p, q) => {
+    const x = C[p][q], y = C[q][p], sum = x + y;
+    // Keep ordinary (including subnormal) rounding unchanged. Finite,
+    // same-sign entries can overflow their sum even when their average
+    // and the race contrast are representable (#726).
+    return Number.isFinite(sum) ? 0.5 * sum : 0.5 * x + 0.5 * y;
+  };
   const S = new Float64Array((n - 1) * (n - 1));
   const idx = [];
   for (let j = 0; j < n; j++) if (j !== i) idx.push(j);
   for (let a = 0; a < n - 1; a++) {
     m[a] = mu[idx[a]] - mu[i];
     for (let b = 0; b < n - 1; b++)
-      S[a * (n - 1) + b] = csym(idx[a], idx[b]) - csym(idx[a], i) - csym(i, idx[b]) + C[i][i];
+      S[a * (n - 1) + b] = contrastEntry(csym(idx[a], idx[b]), csym(idx[a], i),
+                                         csym(i, idx[b]), C[i][i]);
   }
   return { m, S };
 }
