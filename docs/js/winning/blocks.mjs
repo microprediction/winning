@@ -397,7 +397,14 @@ function blockMax(mu, sd, cluster, loading, points, qa, nodesOverride) {
     ? checkedNodes(nodesOverride, r) : clusterNodes(r, qa);
   if (!nodesOverride && r <= 2) warnIfSharp(VO, sdO, qa);
   const Q = nodes.length;
-  const shifts = VO.map(vi => nodes.map(nq => vi.reduce((a, b, k) => a + b * nq[k], 0)));
+  // Public custom nodes describe the min-race mu + loading.f + eps.
+  // blockMax sees -mu, so it must also see -loading.f (#909). Keep the
+  // automatic Gaussian rule's arithmetic unchanged, including finite
+  // rank-3+ clouds that need not be exactly sign-symmetric.
+  const shifts = VO.map(vi => nodes.map(nq => {
+    const shift = vi.reduce((a, b, k) => a + b * nq[k], 0);
+    return nodesOverride ? -shift : shift;
+  }));
   // a custom rule is sized by the shifts it actually makes: the bound
   // ||v|| max ||f|| counted node coordinates in the loadings' null space,
   // and an irrelevant +-1000 there failed a 257-point call on mass (#807).
@@ -487,10 +494,11 @@ export function pairFactor(mu, s) {
     return row;
   });
   if (s.kind === "Nested") {
-    asGamma(s.gamma, "nestedRaceProbabilities");
-    if (s.coupling != null && s.gamma !== 0) {
+    // Match the general Nested forward and structureCov: only omission defaults.
+    const gamma = asGamma(s.gamma === undefined ? 1 : s.gamma, "nestedRaceProbabilities");
+    if (s.coupling != null && gamma !== 0) {
       const g = canonicalCoupling(asLoadings(s.coupling, 2, "coupling"));
-      g.forEach((gi, i) => { for (const v of gi) V[i].push(s.gamma * v); });
+      g.forEach((gi, i) => { for (const v of gi) V[i].push(gamma * v); });
     }
   }
   return { V, D: a.D };

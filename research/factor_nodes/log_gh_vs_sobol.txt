@@ -1,0 +1,30 @@
+n=50: reference GH Q=41 (413 nodes after pruning)
+  GH Q= 3 (  9 nodes) TV 7.0e-03   |   Sobol 2^3 (  8 nodes) TV median 2.7e-02 worst 6.6e-02
+  GH Q= 4 ( 16 nodes) TV 2.2e-03   |   Sobol 2^4 ( 16 nodes) TV median 1.2e-02 worst 2.1e-02
+  GH Q= 6 ( 36 nodes) TV 2.4e-04   |   Sobol 2^5 ( 32 nodes) TV median 5.5e-03 worst 1.0e-02
+  GH Q= 8 ( 60 nodes) TV 3.1e-05   |   Sobol 2^6 ( 64 nodes) TV median 3.0e-03 worst 4.7e-03
+  GH Q=11 (101 nodes) TV 2.2e-06   |   Sobol 2^7 (128 nodes) TV median 1.5e-03 worst 2.4e-03
+  GH Q=16 (148 nodes) TV 8.4e-08   |   Sobol 2^8 (256 nodes) TV median 5.7e-04 worst 2.0e-03
+n=200: reference GH Q=41 (413 nodes after pruning)
+  GH Q= 3 (  9 nodes) TV 2.1e-03   |   Sobol 2^3 (  8 nodes) TV median 2.5e-02 worst 4.7e-02
+  GH Q= 4 ( 16 nodes) TV 3.4e-04   |   Sobol 2^4 ( 16 nodes) TV median 1.3e-02 worst 2.5e-02
+  GH Q= 6 ( 36 nodes) TV 2.3e-05   |   Sobol 2^5 ( 32 nodes) TV median 6.3e-03 worst 1.2e-02
+  GH Q= 8 ( 60 nodes) TV 3.1e-06   |   Sobol 2^6 ( 64 nodes) TV median 3.4e-03 worst 3.6e-03
+  GH Q=11 (101 nodes) TV 2.0e-07   |   Sobol 2^7 (128 nodes) TV median 1.8e-03 worst 2.4e-03
+  GH Q=16 (148 nodes) TV 3.8e-08   |   Sobol 2^8 (256 nodes) TV median 7.0e-04 worst 1.5e-03
+
+# rerun 2026-11-11 at paper-r12 (iterations now count updates applied)
+n=50: reference GH Q=41 (413 nodes after pruning)
+  GH Q= 3 (  9 nodes) TV 7.0e-03   |   Sobol 2^3 (  8 nodes) TV median 2.7e-02 worst 6.6e-02
+  GH Q= 4 ( 16 nodes) TV 2.2e-03   |   Sobol 2^4 ( 16 nodes) TV median 1.2e-02 worst 2.1e-02
+  GH Q= 6 ( 36 nodes) TV 2.4e-04   |   Sobol 2^5 ( 32 nodes) TV median 5.5e-03 worst 1.0e-02
+  GH Q= 8 ( 60 nodes) TV 3.1e-05   |   Sobol 2^6 ( 64 nodes) TV median 3.0e-03 worst 4.7e-03
+  GH Q=11 (101 nodes) TV 2.2e-06   |   Sobol 2^7 (128 nodes) TV median 1.5e-03 worst 2.4e-03
+  GH Q=16 (148 nodes) TV 8.4e-08   |   Sobol 2^8 (256 nodes) TV median 5.7e-04 worst 2.0e-03
+n=200: reference GH Q=41 (413 nodes after pruning)
+  GH Q= 3 (  9 nodes) TV 2.1e-03   |   Sobol 2^3 (  8 nodes) TV median 2.5e-02 worst 4.7e-02
+  GH Q= 4 ( 16 nodes) TV 3.4e-04   |   Sobol 2^4 ( 16 nodes) TV median 1.3e-02 worst 2.5e-02
+  GH Q= 6 ( 36 nodes) TV 2.3e-05   |   Sobol 2^5 ( 32 nodes) TV median 6.3e-03 worst 1.2e-02
+  GH Q= 8 ( 60 nodes) TV 3.1e-06   |   Sobol 2^6 ( 64 nodes) TV median 3.4e-03 worst 3.6e-03
+  GH Q=11 (101 nodes) TV 2.0e-07   |   Sobol 2^7 (128 nodes) TV median 1.8e-03 worst 2.4e-03
+  GH Q=16 (148 nodes) TV 3.8e-08   |   Sobol 2^8 (256 nodes) TV median 7.0e-04 worst 1.5e-03

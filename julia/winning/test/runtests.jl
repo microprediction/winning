@@ -711,3 +711,43 @@ end
     b = race_probabilities(mu; D = [1.0, 4.0, 9.0, 16.0], points = 1025)
     @test maximum(abs.(a .- b)) > 0.05  # the two readings differ by nine points
 end
+
+@testset "every per-contestant door refuses a matrix (#903)" begin
+    # a 2 x 2 has four cells, so a length check passes it and linear
+    # indexing prices c(m[1,1], m[2,1], m[1,2], m[2,2]): a different field
+    M = [-2.0 3.0; -1.0 2.0]
+    P = [0.4 0.3; 0.2 0.1]
+    v = [0.3, 0.3, 0.2, 0.2]
+    doors = [
+        "race_probabilities" => () -> race_probabilities(M),
+        "abilities_from_race" => () -> abilities_from_race(P),
+        "top_k_probabilities" => () -> top_k_probabilities(M, 2),
+        "bottom_k_probabilities" => () -> bottom_k_probabilities(M, 2),
+        "top_k_jacobians" => () -> top_k_jacobians(M, 2),
+        "rank_probabilities" => () -> rank_probabilities(M),
+        "abilities_from_topk" => () -> abilities_from_topk(2 .* P, 2),
+        "abilities_from_rank_marginal" => () -> abilities_from_rank_marginal(P, 2),
+        "loc_scale_from_topk_pair" => () -> loc_scale_from_topk_pair(P, 1, 2 .* v, 2),
+        "loc_scale_from_win_and_second" => () -> loc_scale_from_win_and_second(P, v),
+    ]
+    # discovery: every exported function but hermite_nodes must be swept
+    swept = Set(first.(doors))
+    for s in names(winning)
+        s in (:winning, :hermite_nodes) && continue
+        @test string(s) in swept
+    end
+    for (name, call) in doors
+        @test_throws ArgumentError call()
+    end
+    # and the vector form still prices
+    @test sum(race_probabilities(vec(permutedims(M)))) ≈ 1.0 atol = 1e-9
+end
+
+@testset "the top-k inverse refines a failing lattice (#943)" begin
+    mu = [-0.10455761128105223, 0.10455761128105223]
+    D = [0.8967612229487083, 0.021331877150829952]
+    q = top_k_probabilities(mu, 1; D = D, base = "laplace", points = 513)
+    r = abilities_from_topk(q, 1; D = D, base = "laplace", points = 513)
+    m = r isa Tuple || r isa NamedTuple ? r[1] : r
+    @test maximum(abs.(top_k_probabilities(m, 1; D = D, base = "laplace", points = 513) .- q)) < 1e-8
+end

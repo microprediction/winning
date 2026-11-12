@@ -368,3 +368,19 @@ test_that("a matrix D is refused, not flattened column-major (#903)", {
   expect_gt(max(abs(a - b)), 0.05)
   expect_equal(race_probabilities(mu, D = array(c(1, 9, 4, 16)), points = 1025), a)
 })
+
+test_that("an Aitken trial needs the residual to contract as the step does (#956)", {
+  D <- c(41.762407878182444, 0.09543068227692414, 0.014468331935236405,
+         0.30750102862954337, 5.76767363738077, 39.60275014004311,
+         0.05313878565886935, 5.374508765776025, 1.243508995177201,
+         0.02860465678144087)
+  truth <- c(-3.2047748303040864, -2.7799773643724626, -1.1310159973800182,
+             -0.825104952324182, -0.40134965870529415, 0.3350836188532412,
+             0.16529664136469366, 0.2920818901620805, 0.8125011758878828,
+             2.418152273911983)
+  p <- suppressWarnings(race_probabilities(truth, D = D, points = 1001))
+  mu <- suppressWarnings(abilities_from_race(p, D = D, points = 1001,
+                                             n_iter = 60, tol = 1e-8))
+  q <- suppressWarnings(race_probabilities(mu, D = D, points = 1001))
+  expect_lt(max(abs(log(q) - log(p))), 1e-8)        # was 13.6
+})

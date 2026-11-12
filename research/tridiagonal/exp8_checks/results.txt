@@ -1,0 +1,9 @@
+argmax AR(1) phi=0.9 n=20 (L=400): end 0.0974  mid 0.0396  ratio 2.462
+  MC 400000: end 0.0982  mid 0.0395   max|exact-MC| = 8.10e-04
+argmax random walk n=40 (L=400): max|exact-MC| = 6.16e-04
+max-CDF i.i.d. n=12 (L=400) vs Phi(u)^12: max err 1.5e-14
+inhomogeneous n=10, MC 400000 draws
+  max-CDF at u = 0.5, 1.5, 2.5: errs 9.1e-05 3.8e-04 3.8e-04
+  E[max] trapezoid 1.4857  MC 1.4849  err 7.4e-04  (MC s.e. 1.3e-03)
+  E[max] left rectangle 1.5381  bias vs MC +0.053  (du = 0.105)
+  first passage u=1.0, all 10 indices: max err 7.0e-04

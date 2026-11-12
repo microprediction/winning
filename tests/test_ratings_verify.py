@@ -22,14 +22,18 @@ FAST_BUDGET_S = 60.0
 
 
 def test_fast_profile_is_clean():
-    t0 = time.time()
+    # the budget is this process's CPU time, not wall time: CI runs the
+    # suite under pytest-xdist, one worker per core, and a wall clock
+    # charged the verifier for its neighbours (240s and 323s against a
+    # 240s cap on the first parallel runs, 112s of CPU locally)
+    t0 = time.process_time()
     rep = verify(profile="fast", verbose=False)
-    wall = time.time() - t0
+    cpu = time.process_time() - t0
     assert rep.results, "no checks ran"
     assert not rep.failed and not rep.underpowered, rep.to_markdown()
     assert rep.exit_code == 0
     if os.environ.get("CI"):
-        assert wall < 4 * FAST_BUDGET_S, f"fast profile took {wall:.0f}s"
+        assert cpu < 4 * FAST_BUDGET_S, f"fast profile took {cpu:.0f}s of CPU"
 
 
 def test_registry_is_well_formed():

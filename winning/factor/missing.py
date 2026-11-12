@@ -144,6 +144,19 @@ def _fit_k(Yz, obs, k, C, floor, tol, max_iter, n_starts, seed):
     return best
 
 
+def _as_whole(x, name, minimum):
+    """A count: a whole number >= minimum. Booleans, fractions, NaN, inf
+    and arrays are refused before any int() conversion (#873)."""
+    what = "a non-negative integer" if minimum == 0 else f"an integer >= {minimum}"
+    if isinstance(x, (bool, np.bool_)):
+        raise ValueError(f"{name} must be {what}, not the Boolean {x!r}")
+    v = np.asarray(x)
+    if (v.ndim != 0 or v.dtype.kind not in "iuf" or not np.isfinite(v)
+            or v != np.floor(v) or v < minimum):
+        raise ValueError(f"{name} must be {what}; got {x!r}")
+    return int(v)
+
+
 def fit_factor_model_missing(Y, k=None, *, k_max=None, min_pairs=1,
                              tol=1e-10, max_iter=5000, n_starts=1, seed=0):
     """Maximum-likelihood factor model from a score matrix with NaN cells.
@@ -206,6 +219,14 @@ def fit_factor_model_missing(Y, k=None, *, k_max=None, min_pairs=1,
     (entrants whose D hit the floor 1e-8 x their observed variance, a
     boundary solution) and "estimator".
     """
+    # every count-valued control as a whole number, Booleans refused:
+    # int(True) == True, so k=True fitted a one-factor model and k=False the
+    # independent one, both reported converged (#873)
+    k = None if k is None else _as_whole(k, "k", 0)
+    k_max = None if k_max is None else _as_whole(k_max, "k_max", 0)
+    min_pairs = _as_whole(min_pairs, "min_pairs", 0)
+    max_iter = _as_whole(max_iter, "max_iter", 0)
+    n_starts = _as_whole(n_starts, "n_starts", 1)
     Ym = np.asarray(Y, dtype=float)
     if Ym.ndim != 2:
         raise ValueError(f"Y must be (n_trials, n_entrants); got {Ym.shape}")
