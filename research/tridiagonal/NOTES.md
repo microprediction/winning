@@ -179,7 +179,8 @@ RELATION TO THIS TRACK -- the dual, not the same result:
   opposite direction of inference.
 - The two RHYME and the rhyme is real: exp2's static law says the
   max of a positively-correlated stationary path piles up at the
-  BOUNDARY (ends 2.6x at phi=0.9); Go Forth's dynamic theorem says
+  BOUNDARY (ends 2.6x at phi=0.9 [superseded, #1039: exp8_checks/results.txt
+  now gives end 0.0974, mid 0.0396, ratio 2.46 at n=20, L=400]); Go Forth's dynamic theorem says
   never search INSIDE your bracket. The endpoint pile-up is the
   static shadow of the no-backtracking policy: mass at the boundary
   is why the inside is dominated.

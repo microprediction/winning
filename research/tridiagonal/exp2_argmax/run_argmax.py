@@ -63,6 +63,8 @@ if __name__ == "__main__":
           "  on both sides. A stationary Kalman filter gives identical\n"
           "  marginals everywhere and cannot see this.\n"
           "  sum(exact) < 1 by the lattice error only.")
-    with open(os.path.join(HERE, "results.json"), "w") as f:
+    with open(os.path.join(HERE, "results.jsonl"), "a") as f:   # append-only record
+        f.write(json.dumps(results) + "\n")
+    with open(os.path.join(HERE, "results.json"), "w") as f:     # latest copy
         json.dump(results, f, indent=2)
     print("wrote results.json")

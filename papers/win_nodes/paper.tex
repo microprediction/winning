@@ -536,8 +536,9 @@ probability of the prefix is $\int A_1$, which is $k$ cumulative sums
 on one lattice, for any $k$.
 
 The membership of one entrant among the first $k$ is the top-$k$ query of
-\citet{cotton2026}; its Jacobian row divided by the membership
-probability is the score. At $k=1$ all
+\citet{cotton2026}; the gradient of the membership probability in
+$m$, divided by that probability, is the score. (The engine's Jacobian
+row is taken in min-wins means and enters with its sign reversed.) At $k=1$ all
 three are the observed winner, and the prefix at $k=n$ is the full
 order; both reductions are checked to the tolerance of the existing
 updates, and every message is checked against rejection-sampled
