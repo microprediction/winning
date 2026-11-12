@@ -7,6 +7,9 @@
 # Output: referee_out.json.
 
 suppressMessages({library(mvtnorm); library(TruncatedNormal)})
+# Both referees are randomized (Genz-Bretz lattice shifts, Botev's
+# importance sampler): fix the stream so the quoted figures regenerate.
+set.seed(20260827)
 have_jsonlite <- requireNamespace("jsonlite", quietly = TRUE)
 stopifnot(have_jsonlite)
 cases <- jsonlite::fromJSON("cases.json", simplifyVector = FALSE)

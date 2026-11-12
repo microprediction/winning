@@ -704,12 +704,16 @@ def sweep_offset_ridge(train_events, val_events, n_entities, n_cov,
         losses.append(-float(np.mean(factor_loglik(B, val_events, base))))
         fits.append(B)
     best = int(np.argmin(losses))
+    axis = list(dict.fromkeys(grid))
     _, report = select({g: L for g, L in zip(grid, losses)},
-                       "offset_ridge", order=list(dict.fromkeys(grid)))
+                       "offset_ridge", order=axis)
+    # the flags are read on the unique axis select judged: with a repeated
+    # endpoint, (1, 3, 3), argmin is index 1, not the last index, and the
+    # public flags said interior while report.at_edge said edge (#883)
     return {"offset_grid": grid, "val_loss": np.asarray(losses),
             "offset_ridge": grid[best], "B": fits[best],
-            "at_scalar_limit": best == len(grid) - 1,
-            "at_edge": best in (0, len(grid) - 1),
+            "at_scalar_limit": grid[best] == axis[-1],
+            "at_edge": grid[best] in (axis[0], axis[-1]),
             "inert": report.inert, "report": report}
 
 

@@ -176,7 +176,7 @@ function refuseHierarchical(kind, opts) {
       "lattice windows. Use structure Factor (or V/D).");
 }
 
-function structureScale(s) {
+function structureVariances(s, centred = true) {
   if (!isVector(s.cluster))
     throw new Error(`${s.kind}: cluster must have one label per contestant`);
   const n = s.cluster.length;
@@ -188,7 +188,8 @@ function structureScale(s) {
   // forward, which never looks at the coupling, so a stale wrong-length
   // one priced fine and then failed the inverse (#644, as python)
   const G = s.kind === "Nested" && s.coupling != null && (s.gamma ?? 1) !== 0
-    ? gaugeCenter(asLoadings(s.coupling, n, "coupling")) : null;  // common part cancels (#698)
+    ? (centred ? gaugeCenter(asLoadings(s.coupling, n, "coupling"))   // common part cancels (#698)
+               : asLoadings(s.coupling, n, "coupling")) : null;
   const tot = [];
   for (let i = 0; i < n; i++) {
     let v = Dv[i] + L[i].reduce((a, b) => a + b * b, 0);
@@ -219,9 +220,66 @@ function structureScale(s) {
       tot[i] += a;
     }
   }
-  tot.sort((a, b) => a - b);
-  const h = Math.floor(n / 2);
+  return tot;
+}
+
+/* the field's contrast scale: the root of the median total variance */
+function structureScale(s) {
+  const tot = structureVariances(s).slice().sort((a, b) => a - b);
+  const n = tot.length, h = Math.floor(n / 2);
   return Math.sqrt(n % 2 ? tot[h] : 0.5 * (tot[h - 1] + tot[h]));
+}
+
+/* The Nested/Tree inverse, preconditioned per runner as python's
+   races._structure_sweeps is: each log residual is divided by its own
+   log-share slope in the independent race at matched total variances,
+   with the same trust limits and backtracking. One field-wide scalar step
+   could not serve heterogeneous variances, and a self-generated Nested
+   target the reference solves in 250 sweeps exhausted 400 at a 3.1e-3 log
+   residual (#887). Returns invertGenericInfo's shape. */
+function invertStructureInfo(p, forward, s, points, tol, maxIter) {
+  asIterations(maxIter, "abilitiesFromRace", "nIter");
+  asTolerance(tol, "abilitiesFromRace");
+  let pv = asFiniteVector(p, "target", "probability");
+  if (pv.some(v => v <= 0))
+    throw new Error(
+      "all target probabilities must be positive: a zero share has no " +
+      "finite inverse. Pass targetFloor to abilitiesFromRace to floor " +
+      "small entries deliberately.");
+  pv = rescaledTarget(pv);
+  const lt = pv.map(v => Math.log(v));
+  const lm = mean(lt);
+  // the preconditioner's surrogate is python's structure_variances, which
+  // does not centre the coupling; the step scale keeps the #698 centring
+  const tot = structureVariances(s, false);
+  const scale = structureScale(s);
+  let { mu, err, iters } = withTrialMassTolerance(() => {
+    let mu = lt.map(v => -(v - lm) / 2 * scale);
+    let alpha = 0.7, last = Infinity, err = Infinity, iters = 0;
+    for (let it = 0; it < maxIter; it++) {
+      iters = it + 1;
+      const resid = forward(mu).map((v, i) => Math.log(Math.max(v, 1e-300)) - lt[i]);
+      err = Math.max(...resid.map(Math.abs));
+      if (err < tol) break;
+      if (err > last) alpha = Math.max(alpha * 0.5, 0.05);
+      last = err;
+      const { p: ps, slopes } = raceProbabilities(mu, { D: tot, points, returnSlopes: true });
+      mu = mu.map((m, i) => {
+        const dlogp = Math.min(slopes[i] / Math.max(ps[i], 1e-300), -1e-6 / scale);
+        const lim = Math.min(2, 10 * Math.abs(resid[i])) * scale;
+        return m - Math.min(Math.max(alpha * resid[i] / dlogp, -lim), lim);
+      });
+      const mm = mean(mu);
+      mu = mu.map(v => v - mm);
+    }
+    return { mu, err, iters };
+  });
+  if (err < tol) {
+    // the returned state re-priced under the strict mass check (#656)
+    const lp = forward(mu).map(v => Math.log(Math.max(v, 1e-300)));
+    err = Math.max(...lp.map((v, i) => Math.abs(v - lt[i])));
+  }
+  return { mu, converged: err < tol, maxLogResidual: err, iterations: iters };
 }
 
 function dp(mu, s, opts) {
@@ -275,11 +333,11 @@ function da(p, s, opts) {
              iterations: r.iterations };
   }
   if (s.kind === "Nested")
-    return invertGenericInfo(p, m => nestedRaceProbabilities(m, s.cluster, s.loading, s.D,
-      { coupling: s.coupling, gamma: s.gamma, points, qa, qf }), tol, nIter ?? 400, structureScale(s));
+    return invertStructureInfo(p, m => nestedRaceProbabilities(m, s.cluster, s.loading, s.D,
+      { coupling: s.coupling, gamma: s.gamma, points, qa, qf }), s, points, tol, nIter ?? 400);
   if (s.kind === "Tree")
-    return invertGenericInfo(p, m => treeRaceProbabilities(m, treeCluster(s), s.loading, s.D,
-      s.parent, s.strength, { points, qa }), tol, nIter ?? 400, structureScale(s));
+    return invertStructureInfo(p, m => treeRaceProbabilities(m, treeCluster(s), s.loading, s.D,
+      s.parent, s.strength, { points, qa }), s, points, tol, nIter ?? 400);
   throw new Error("unknown structure " + s.kind);
 }
 _setDispatch(dp, da);
@@ -334,32 +392,62 @@ export function asDistanceMatrix(dist, where = "averageLinkage") {
 export function averageLinkage(dist) {
   dist = asDistanceMatrix(dist);
   const n = dist.length;
-  let active = [...Array(n).keys()].map(i => ({ id: i, members: [i] }));
+  // Merge order is the global rescan's, exactly, ties included: the
+  // first pair (i < j) in active order holding the smallest distance,
+  // with each merge appended last. That rescan was Theta(n^3) and froze
+  // the page for seconds at a few hundred leaves (#847). Each active row
+  // now keeps its best partner among the rows after it, so a merge
+  // rescans only the rows whose partner it consumed.
+  const M = 2 * n;
   const D = new Map();
-  const key = (a, b) => (a < b ? a + "_" + b : b + "_" + a);
+  const key = (a, b) => (a < b ? a * M + b : b * M + a);
   for (let i = 0; i < n; i++)
     for (let j = i + 1; j < n; j++) D.set(key(i, j), dist[i][j]);
+  let active = [...Array(n).keys()];
+  const size = new Array(M).fill(1);
+  const best = new Map();                  // id -> {d, id} over later rows
+  const rescan = pos => {
+    const a = active[pos];
+    let d = Infinity, id = -1;
+    for (let q = pos + 1; q < active.length; q++) {
+      const v = D.get(key(a, active[q]));
+      if (v < d) { d = v; id = active[q]; }
+    }
+    best.set(a, { d, id });
+  };
+  for (let p = 0; p < active.length; p++) rescan(p);
   const Z = [];
   let nextId = n;
   while (active.length > 1) {
-    let best = Infinity, bi = 0, bj = 1;
-    for (let i = 0; i < active.length; i++)
-      for (let j = i + 1; j < active.length; j++) {
-        const d = D.get(key(active[i].id, active[j].id));
-        if (d < best) { best = d; bi = i; bj = j; }
-      }
-    const a = active[bi], b = active[bj];
-    Z.push([a.id, b.id, best, a.members.length + b.members.length]);
-    const merged = { id: nextId++, members: a.members.concat(b.members) };
-    const rest = active.filter((_, k) => k !== bi && k !== bj);
-    for (const c of rest) {
-      const da = D.get(key(a.id, c.id)), db = D.get(key(b.id, c.id));
+    let bp = -1, bd = Infinity;
+    for (let p = 0; p < active.length - 1; p++) {
+      const r = best.get(active[p]);
+      if (r.d < bd) { bd = r.d; bp = p; }
+    }
+    if (bp < 0) bp = 0;                    // all distances infinite: first pair, as the rescan
+    const a = active[bp];
+    const b = best.get(a).id >= 0 ? best.get(a).id : active[bp + 1];
+    const na = size[a], nb = size[b];
+    const m = nextId++;
+    size[m] = na + nb;
+    Z.push([a, b, bd === Infinity ? D.get(key(a, b)) : bd, na + nb]);
+    active = active.filter(c => c !== a && c !== b);
+    for (const c of active) {
       // convex weights first: na*da + nb*db overflowed finite distances
       // near 9e307 into an Infinity merge height (#695)
-      const na = a.members.length, nb = b.members.length;
-      D.set(key(merged.id, c.id), (na / (na + nb)) * da + (nb / (na + nb)) * db);
+      D.set(key(m, c), (na / (na + nb)) * D.get(key(a, c)) + (nb / (na + nb)) * D.get(key(b, c)));
     }
-    active = rest.concat([merged]);
+    best.delete(a); best.delete(b);
+    active.push(m);
+    const last = active.length - 1;
+    best.set(m, { d: Infinity, id: -1 });
+    for (let p = 0; p < last; p++) {
+      const c = active[p], r = best.get(c);
+      if (r.id === a || r.id === b) { rescan(p); continue; }
+      // the merged row is the last one, so on a tie the earlier partner stays
+      const v = D.get(key(c, m));
+      if (v < r.d) best.set(c, { d: v, id: m });
+    }
   }
   return Z;
 }
