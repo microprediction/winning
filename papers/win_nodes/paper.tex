@@ -76,8 +76,12 @@ For jointly Gaussian $X=(X_1,\dots,X_n)$ with independent components,
 $p_i=\Pr(X_i=\max_j X_j)$ is a one-dimensional integral, the
 random-utility representation of \citet{domencich1975}. With
 correlated components it becomes an orthant probability in $n-1$
-dimensions, and no earlier method evaluates all $n$ of them
-deterministically in time linear in $n$.
+dimensions. Some special covariances have closed forms: for a
+symmetric Gaussian random walk, $X_t=\sum_{r\le t}\xi_r$, the classical
+results of Sparre Andersen give $p_t=q_{t-1}q_{n-t}$ with
+$q_k=\binom{2k}{k}4^{-k}$, all $n$ of them in $O(n)$ operations. For a
+general factor-structured covariance we know of no earlier method that
+evaluates all $n$ of them deterministically in time linear in $n$.
 
 We show that for factor-structured Gaussian Bayes nets this can be done. We
 add to the Gaussian variables a \emph{win node}, the deterministic
@@ -181,8 +185,10 @@ adjacent finishers; its approximation is the Gaussian moment matching
 of the messages. Observing only the winner is different evidence.
 Section~\ref{sec:observed} gives its likelihood, which is the
 multinomial probit likelihood. At $n=2$ it is the binary probit
-comparison with no draw margin, whose variance is the sum of the two
-performance variances.
+comparison with no draw margin, whose variance is that of the
+performance difference, $d_1+d_2+\lVert b_1-b_2\rVert^2$ in the factor
+model of Section~\ref{sec:factor}; it is the sum of the two
+performance variances only when they are uncorrelated.
 
 Gaussian message-passing systems and GMRF libraries compute marginals,
 free energies and samples for very large models, and offer no
@@ -334,9 +340,13 @@ $O(nLQ)$ on the same lattice, without forming the matrix.
 \citet{muller2019} reach the same identity for general joint laws
 through the surplus function. Equation~\eqref{eq:tie} is the derivative of the
 exact probabilities. The derivative of the computed lattice
-probabilities also carries their normalization and, on an adaptive
-grid, the movement of the grid, so it need not be exactly symmetric
-or have zero row sums \citep[\S\S3.2, 5.2]{cotton2026}.
+probabilities need not be symmetric \citep[\S\S3.2, 5.2]{cotton2026},
+and what else it keeps depends on which derivative is meant. With the
+grid held fixed it carries the normalization, so its columns still sum
+to zero, but it omits the grid's response to a common shift of the
+means, so its rows need not. The full derivative of the adaptive
+evaluator, grid movement included, keeps both null sums wherever the
+evaluator is normalized and unchanged by a common shift.
 
 \subsection{The likelihood of an observed winner}
 \label{sec:observed}
@@ -356,7 +366,8 @@ the average of that product over $z$ and $u$:
 \label{eq:obslik}
 \end{equation}
 
-The score of Equation~\eqref{eq:obslik}, its gradient in $m$, is a
+The score, the gradient in $m$ of the logarithm of
+Equation~\eqref{eq:obslik}, is a
 weighted sum of Mills ratios over the quadrature nodes, the weight of
 each node being its posterior probability given the win. It is
 computed in one extra pass over the arrays the likelihood already
@@ -497,7 +508,7 @@ Equation~\eqref{eq:obslik}.
 
 Write $f_i$ and $\Phi_i$ for the conditional density and distribution
 function of entrant $i$'s performance, and $S_i=1-\Phi_i$. For the set
-$T$ of the first $k$ in unknown order, let $G=\prod_{j\notin T}\Phi_j$
+$T$ of the first $k$ in unknown order, with $1\le k<n$, let $G=\prod_{j\notin T}\Phi_j$
 be the distribution function of the best outsider and
 $H=\prod_{i\in T}S_i$ the probability that every member is above
 $x$. Then
@@ -505,10 +516,14 @@ $x$. Then
 \Pr(\text{first } k = T)\;=\;\int G'(x)\,H(x)\,dx\;=\;-\int G(x)\,H'(x)\,dx .
 \label{eq:topset}
 \end{equation}
-Differentiating either form gives the score as one lattice sum per
-entrant, nonnegative for a member and nonpositive for an outsider;
-the sums total zero because a common shift of every mean changes
-nothing.
+Differentiating either form gives the gradient of this probability
+as one lattice sum per entrant, nonnegative for a member and
+nonpositive for an outsider; the sums total zero because a common
+shift of every mean changes nothing. Dividing by the probability gives
+the score. The restriction $k<n$ matters: at $k=n$ the event has
+probability one and carries no information, while the two integrals,
+which differ by the boundary term $[GH]_{-\infty}^{\infty}$, give $0$
+and $1$.
 
 For the ordered prefix $i_1,\dots,i_k$ with everyone else
 behind, let $N=\{i_1,\dots,i_k\}$ be the named entrants, let
@@ -521,7 +536,9 @@ probability of the prefix is $\int A_1$, which is $k$ cumulative sums
 on one lattice, for any $k$.
 
 The membership of one entrant among the first $k$ is the top-$k$ query of
-\citet{cotton2026} and its Jacobian row is the score. At $k=1$ all
+\citet{cotton2026}; the gradient of the membership probability in
+$m$, divided by that probability, is the score. (The engine's Jacobian
+row is taken in min-wins means and enters with its sign reversed.) At $k=1$ all
 three are the observed winner, and the prefix at $k=n$ is the full
 order; both reductions are checked to the tolerance of the existing
 updates, and every message is checked against rejection-sampled
@@ -949,7 +966,9 @@ cumulative Bayes regret within two percent of Thompson sampling's, in
 an independent regime and in one where each half of the arms shares
 a factor carrying $0.75$ of the prior variance. The paired
 differences, $-3.0\pm12.0$ and $+1.9\pm8.0$ at 95\%, are consistent
-with zero, which is what Lemma~8 requires. Used as the policy, the
+with zero, as expected from the equality of the exact policies
+(Lemma~8 of \citealt{tarbouriech2023}) up to numerical evaluation
+error. Used as the policy, the
 VBOS approximation has ten to twelve percent more regret than
 Thompson sampling, a paired difference of $16.1\pm10.6$ and
 $14.7\pm7.4$, with its action distribution at total-variation
@@ -991,7 +1010,9 @@ the excursion functionals then belong to the sampling methods of
 \citet{bolin2015}.
 
 \emph{Rank.} The error of the marginal approximations can approach one
-half with every marginal held fixed, whatever the factor rank. The
+in total variation with every marginal held fixed, even with a single
+shared factor (the index-fund example of Section~\ref{sec:examples}, with many
+independent funds). The
 comparison with counted posterior draws depends on rank. On the
 posteriors of the two experiments, where the centered loadings have
 rank at most two, one evaluation for a hundred alternatives takes

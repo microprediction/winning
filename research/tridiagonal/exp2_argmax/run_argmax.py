@@ -9,8 +9,10 @@ with A_t(m) = P(left < m | X_t=m) and B_t(m) = P(right < m | X_t=m).
 Each is the total surviving mass of a constrained sub-density
 propagated (t-1) resp. (n-t) steps below m. One constrained
 propagation per peak level m records the survival at every length,
-so all t are priced together -- the argmax vector in O(n L^2), the
-sum-product forward-backward with the order-statistic on top.
+so all t are priced together, the sum-product forward-backward with
+the order statistic on top. The work is done by chain_argmax.py, which
+runs all L thresholds at once with L x L messages: O(n) dense L x L
+products, so O(n L^3) for the whole vector -- linear in n at fixed L.
 """
 import json
 import os
@@ -61,6 +63,8 @@ if __name__ == "__main__":
           "  on both sides. A stationary Kalman filter gives identical\n"
           "  marginals everywhere and cannot see this.\n"
           "  sum(exact) < 1 by the lattice error only.")
-    with open(os.path.join(HERE, "results.json"), "w") as f:
+    with open(os.path.join(HERE, "results.jsonl"), "a") as f:   # append-only record
+        f.write(json.dumps(results) + "\n")
+    with open(os.path.join(HERE, "results.json"), "w") as f:     # latest copy
         json.dump(results, f, indent=2)
     print("wrote results.json")
