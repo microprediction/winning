@@ -18,9 +18,13 @@ winner); research/win_nodes/exp2_place_evidence backs Table 2 (places
 as evidence).
 arXiv kit: arxiv/.
 
-Provenance caveat: research/rs_crn/exp1_stopping/results.json and
-exp2_bandit/results.json record in their own provenance block that they
-were produced by a script version that was uncommitted at the recorded
-commit 81d6402; that version is the one committed in this branch. The
-numbers were not regenerated. Their winning_source field is a path local
-to the machine that ran them.
+Provenance: research/rs_crn/exp1_stopping/results.json and
+exp2_bandit/results.json were regenerated on 2026-11-11 from a clean
+checkout of d072375b (no uncommitted changes; Python 3.12.13, numpy 2.5.4,
+scipy 1.18.1; explicit integer seeds per regime, recorded in each file).
+Every number agrees with the earlier run (from an uncommitted runner at
+81d6402) to within 1e-9 relative; only provenance fields changed. Each
+run's raw rows are in the replications_<run_id>_<pid>.jsonl beside its
+results.json. Rerun: `cd research/rs_crn/exp1_stopping && python
+run_stopping.py` (about 30 minutes on a 28-core machine) and likewise
+`exp2_bandit/run_bandit.py` (about 10 minutes).

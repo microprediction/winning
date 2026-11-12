@@ -1,24 +1,22 @@
 {
   "provenance": {
-    "git_commit": "81d6402cee6897398a0ddc597a70d7f862ff2523",
-    "uncommitted_changes_in_script_dir_or_package": [
-      "M research/rs_crn/exp1_stopping/run_stopping.py"
-    ],
-    "runner_committed_in": "41096d291c51ab107d2d8f937664338daec0b131",
-    "runner_note": "git_commit above is the checkout the run started from; the modified run_stopping.py it lists is the fixed-seed runner (SEEDS below, replacing the earlier hash-derived seeds) and was committed unchanged in runner_committed_in; this results.json was committed in 520a6fd7. The numbers were not regenerated. See papers/win_nodes/README.md.",
-    "winning_source": "/Users/petercotton/github/winning-merge-pom/winning",
+    "git_commit": "d072375bd928689ccb69470226d28a78fe1093c9",
+    "uncommitted_changes_in_script_dir_or_package": [],
+    "winning_source": "/Users/petercotton/github/winning-rscrn-rerun/winning",
     "winning_version": "1.7.0",
     "winning_imported_from_worktree": true,
-    "numpy": "2.5.1",
-    "scipy": "1.18.0",
-    "python": "3.14.6",
+    "numpy": "2.5.4",
+    "scipy": "1.18.1",
+    "python": "3.12.13",
     "seeds": {
       "independent": 20261101,
       "aligned": 20261102,
       "opposed": 20261103
     },
     "script": "run_stopping.py",
-    "wall_seconds": 21154.2
+    "run_id": "20261112T014631",
+    "raw_log": "replications_20261112T014631_50431.jsonl",
+    "wall_seconds": 1895.5
   },
   "independent_c0.0": {
     "exact": {
@@ -36,8 +34,8 @@
       "stopped": 143,
       "mean_n_stopped": 104.52447552447552,
       "pcs": 1.0,
-      "tv_median": 0.06310486662825034,
-      "tv_p90": 0.08207488729064444
+      "tv_median": 0.06310486662825028,
+      "tv_p90": 0.08207488729064438
     },
     "vbos": {
       "mean_n": 252.925,
@@ -45,10 +43,10 @@
       "stopped": 112,
       "mean_n_stopped": 137.36607142857142,
       "pcs": 1.0,
-      "tv_median": 0.09489788808846263,
+      "tv_median": 0.09489788808846268,
       "tv_p90": 0.1277266637703819
     },
-    "mc_certificate_worst_tv": 0.002604048823723748
+    "mc_certificate_worst_tv": 0.0026040488237238824
   },
   "aligned_c0.6": {
     "exact": {
@@ -67,7 +65,7 @@
       "mean_n_stopped": 94.20408163265306,
       "pcs": 1.0,
       "tv_median": 0.11604229124542859,
-      "tv_p90": 0.17370894823328245
+      "tv_p90": 0.17370894823328242
     },
     "vbos": {
       "mean_n": 236.68,
@@ -78,7 +76,7 @@
       "tv_median": 0.13268025969333025,
       "tv_p90": 0.20704302044832185
     },
-    "mc_certificate_worst_tv": 0.001189473192907674
+    "mc_certificate_worst_tv": 0.001189473192907896
   },
   "opposed_c0.6": {
     "exact": {
@@ -96,8 +94,8 @@
       "stopped": 136,
       "mean_n_stopped": 89.125,
       "pcs": 0.9926470588235294,
-      "tv_median": 0.06672040958115605,
-      "tv_p90": 0.15189284480363097
+      "tv_median": 0.06672040958115599,
+      "tv_p90": 0.15189284480363086
     },
     "vbos": {
       "mean_n": 244.15,
@@ -105,9 +103,9 @@
       "stopped": 108,
       "mean_n_stopped": 111.38888888888889,
       "pcs": 1.0,
-      "tv_median": 0.08543078125579305,
+      "tv_median": 0.08543078125579309,
       "tv_p90": 0.1821029601401523
     },
-    "mc_certificate_worst_tv": 0.000738051746562521
+    "mc_certificate_worst_tv": 0.0007380517465627314
   }
 }

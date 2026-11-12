@@ -13,7 +13,7 @@ an underscore are not manuscripts. Sources live here rather than under
 | [`win_nodes`](win_nodes) | Win Nodes for Factor-Structured Gaussian Bayes Nets | The factor win node for Gaussian Bayes nets: forward query, Jacobian, observed winner, a quoted price and published places as evidence; CRN and feature-bandit posteriors of factor form; stopping and bandit applications. Merged with `exact_pom` (2026-11); chain material cut 2026-11-09. arXiv kit in `win_nodes/arxiv/`. Numbers trace to `research/win_nodes/` and `research/rs_crn/`. |
 | [`exact_pom`](exact_pom) | Deterministic Probabilities for Thompson Sampling and Entropy Search | **Merged into `win_nodes` (2026-11).** Kept for the record. Experiments in `research/rs_crn/`; quote-verified sources in `research/rs_crn/NOTES.md`. |
 | [`general_inversion`](general_inversion) | Scalable Inversion of Contests with Correlated Performances, Including Softmax and Multinomial Probit | [arXiv:2609.01133](https://arxiv.org/abs/2609.01133); SSRN doi:10.2139/ssrn.7307363. Claim-to-script manifest in `CLAIMS.md`; tables pinned at tag `paper-r1`. |
-| [`thurstone_humans`](thurstone_humans) | `paper.tex`: Softmax Masking Is a Choice Model … ; `paper_long.tex`: Thurstone is the Model of Choice | |
+| [`thurstone_humans`](thurstone_humans) | `paper.tex`: Think Before Rescaling Probabilities to Unity … ; `paper_long.tex`: Thurstone is the Model of Choice | |
 | [`machine_preference`](machine_preference) | Choice-Set Restriction in Machines and People | |
 | [`chess_ratings`](chess_ratings) | Beating a Deployed Rating System: Partial Pooling Against Per-Category Glicko-2 on Lichess | Experiments in `research/chess/`. |
 | [`f1_ratings`](f1_ratings) | Rating Formula 1: a case for non-Gaussian noise in rating systems | |
