@@ -415,6 +415,21 @@ function _rank1_hermite_rule(sharp)
     return vcat([h.F for h in g]...), vcat([c .* h.W for (h, (_, c)) in zip(g, parts)]...)
 end
 
+function _as_loadings(V, n)
+    # Scalars are common loadings. For a matrix, rows take precedence
+    # when both orientations fit (rank == n).
+    Vm = V isa AbstractMatrix ? Float64.(Matrix(V)) :
+         V isa Number ? fill(Float64(V), n, 1) :
+         reshape(Float64.(collect(V)), :, 1)
+    if size(Vm, 1) != n && size(Vm, 2) == n
+        Vm = permutedims(Vm)
+    end
+    size(Vm, 1) == n || throw(ArgumentError(
+        "V must have one row per contestant; got " *
+        string(size(Vm, 1)) * " for " * string(n)))
+    return Vm
+end
+
 function _race_setup(mu, V, D, F, W, base)
     _refuse_matrix(mu, "mu")                                # (#903)
     mu = Float64.(collect(mu))
@@ -426,22 +441,7 @@ function _race_setup(mu, V, D, F, W, base)
         Fm = zeros(1, 1)
         Wv = [1.0]
     else
-        # a SCALAR V is the same loading for everyone -- the spelling
-        # as_loadings documents, which python and the browser accept
-        # and julia refused (cross-port divergence scan)
-        Vm = V isa AbstractMatrix ? Float64.(Matrix(V)) :
-             (V isa Number ? fill(Float64(V), n, 1) :
-              reshape(Float64.(collect(V)), :, 1))
-        # (rank, n) is the SAME race as (n, rank), which as_loadings
-        # documents. The ambiguity is real only at rank == n, where the
-        # contract wins: n rows is n contestants.
-        if size(Vm, 1) != n && size(Vm, 2) == n
-            Vm = permutedims(Vm)
-        end
-        size(Vm, 1) == n || throw(ArgumentError(
-            "V must have one row per contestant; got " *
-            string(size(Vm, 1)) * " for " * string(n)))
-        Vm = _gauge_center(Vm)                 # common column is gauge (#471)
+        Vm = _gauge_center(_as_loadings(V, n))  # common column is gauge (#471)
         if F === nothing || W === nothing
             sharp = sqrt(2) * maximum(sqrt.(vec(sum(Vm .^ 2, dims = 2))) ./
                                       sqrt.(max.(D, TINY)))
