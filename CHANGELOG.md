@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- `mvn_cdf_fast(sigma=)` (python, vendored `fastmvn`, R `mvtnormfast`,
+  Julia `FactorMvNormalCDF`): `factorize_covariance` no longer accepts a
+  Heywood fit, one whose residual variance sits at the 1e-12 floor. It
+  tries the next rank and otherwise falls back to the dense path. On
+  random 3-5 dimensional Wishart covariances about 20% hit the floor,
+  and their orthants were off by a median of 1.2e-4 and up to 8.5e-4.
+  Covariances that do not hit the floor give bitwise identical results
+  (#1015).
 - Browser `blockRaceProbabilities` with caller-supplied factor nodes
   (`nodes`) adds `loading * f` to each runner, as the grammar
   `Y = mu + loading * f + eps` states; it priced the reflected factor

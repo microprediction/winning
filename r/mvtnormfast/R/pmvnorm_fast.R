@@ -285,7 +285,12 @@ factorize_covariance <- function(sigma, max_rank = 6L, tol = 1e-11,
     idx <- order(e$values, decreasing = TRUE)[seq_len(r)]
     V <- e$vectors[, idx, drop = FALSE] *
       rep(sqrt(pmax(e$values[idx], 0)), each = m)
-    if (max(abs(V %*% t(V) + diag(D, m) - R)) < tol)
+    # a residual pinned at the 1e-12 floor is a Heywood solution: that
+    # coordinate becomes a deterministic function of the factors, a step
+    # integrand the factor quadrature misprices by up to 1e-3 on
+    # well-conditioned matrices (#1015). Refuse it and try the next
+    # rank; with no interior fit the caller falls back to mvtnorm.
+    if (min(D) > 1e-12 && max(abs(V %*% t(V) + diag(D, m) - R)) < tol)
       return(back(V, D))
   }
   NULL
