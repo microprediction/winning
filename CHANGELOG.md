@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- `ranking_loglik_and_score`: rankings of length k >= 2 at rank 1 or 2
+  with loading sharpness s <= 2 and s*sqrt(k) > 2 now use adaptive
+  Gauss-Hermite, the same Qf tensor moved to each ranking's factor
+  posterior mode and scaled by its curvature. The fixed tensor's
+  threshold had been measured on a single choice; a k-stage ranking's
+  posterior is about sqrt(k) times narrower, so full rankings were
+  up to 0.09 nats off at J = 5 and 0.32 at J = 10, with loading scores
+  about half their true value. Worst error over 210 gated fields: 0.077
+  to 3.0e-4 nats, at 2-4x the cost of those observations. Length-1
+  orders, s*sqrt(k) <= 2, the Sobol branch and rank 0 are bitwise
+  unchanged (#1017).
+
 - `tree_race_probabilities` and `tree_race_jacobian` (python and R) now
   centre a single leaf cluster's loading, as the block path and the
   browser tree already did. With one cluster its shock reaches every
