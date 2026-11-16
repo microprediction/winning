@@ -707,6 +707,91 @@ def choice_loglik_and_score(mu, V, choice, D=None, Qf=7, Qz=None):
 _FACTOR_SOBOL_SHARP = 2.0
 
 
+# A RANKING is sharper than the single choice the table above measured:
+# a k-stage order multiplies k softmaxes, so the factor posterior has
+# width about 1/(sharp*sqrt(k)), and the fixed tensor -- centred at the
+# prior mode with prior width -- misses it. J = 5, rank 1, sharpness
+# 1.91, a full order: Qf=7 put the probability 9.4% high (0.090 nats)
+# and the loading score at about half its true value; full orders of 10
+# at sharpness 1.9 were up to 0.32 nats off, against 2e-3 above 2 where
+# Sobol takes over (#1017). So the Gauss-Hermite branch gates on
+# sharp*sqrt(k): above this value the same Qf tensor is moved to the
+# ranking's posterior mode and scaled by its curvature (adaptive
+# Gauss-Hermite). Over 210 gated random fields (rank 1 and 2, 8 seeds)
+# the worst error went from 0.077 to 3.0e-4 nats, at 2-4x the cost of
+# those observations only. Below the gate, and for every length-1
+# order, the rule is the fixed tensor, bitwise unchanged; just under it
+# (k >= 2) the fixed tensor is within 1.4e-3.
+_RANKING_ADAPTIVE_GATE = 2.0
+
+
+def _ranking_mode(mu_t, V, order, tau, iters=30, tol=1e-10):
+    """Mode and Hessian of the log factor posterior of ONE ranking,
+    -|f|^2/2 + log PL(order | f), by backtracking Newton from f = 0.
+
+    Strictly concave: the PL log-likelihood is concave in f (each stage
+    is a log-softmax of an affine map) and the prior term is strictly
+    concave, so the Hessian H = -I - sum_s Cov_s(V/tau) has every
+    eigenvalue at most -1 and the Newton step is always an ascent
+    direction. The k stages are evaluated together, one (k, J) mask of
+    the runners still alive at each stage."""
+    J, r = V.shape
+    k = len(order)
+    order = np.asarray(order)
+    # A loading common to every alternative cancels from each stage's
+    # softmax, so centring is exact here, and it keeps the second moments
+    # below from overflowing on a huge common loading.
+    V = V - V.mean(axis=0)
+    Vt = V / tau
+    alive = np.ones((k, J), dtype=bool)
+    for s in range(1, k):
+        alive[s] = alive[s - 1]
+        alive[s, order[s - 1]] = False
+
+    def evaluate(f):
+        z = (mu_t + V @ f) / tau
+        Z = np.where(alive, z[None, :], -np.inf)
+        m = Z.max(axis=1, keepdims=True)
+        E = np.exp(Z - m)
+        S = E.sum(axis=1, keepdims=True)
+        sm = E / S                                   # (k, J) stage softmaxes
+        lp = z[order].sum() - (m[:, 0] + np.log(S[:, 0])).sum() - 0.5 * f @ f
+        Vbar = sm @ Vt                               # (k, r) stage means
+        g = (Vt[order] - Vbar).sum(axis=0) - f
+        H = -(np.einsum("sj,ja,jb->ab", sm, Vt, Vt) - Vbar.T @ Vbar) - np.eye(r)
+        return lp, g, H
+
+    f = np.zeros(r)
+    lp, g, H = evaluate(f)
+    for _ in range(iters):
+        step = -np.linalg.solve(H, g)
+        a = 1.0
+        while True:
+            f2 = f + a * step
+            lp2, g2, H2 = evaluate(f2)
+            if lp2 >= lp - 1e-12 or a < 1e-6:
+                break
+            a *= 0.5
+        f, lp, g, H = f2, lp2, g2, H2
+        if np.abs(a * step).max() < tol:
+            break
+    return f, H
+
+
+def _ranking_adaptive_nodes(mu_t, V, order, tau, X):
+    """The prior-centred tensor X moved to the ranking's factor
+    posterior: F = f* + X L^T with L L^T = (-H)^{-1}, and the log
+    importance correction phi(F) / N(F; f*, L L^T) to add to the log
+    weights (the Qf weights integrate against N(0, I), so the moved rule
+    integrates against the Laplace proposal)."""
+    fm, H = _ranking_mode(mu_t, V, order, tau)
+    L = np.linalg.cholesky(np.linalg.inv(-H))
+    F = fm + X @ L.T
+    logw = (-0.5 * (F ** 2).sum(axis=1) + 0.5 * (X ** 2).sum(axis=1)
+            + np.log(np.diag(L)).sum())
+    return F, logw
+
+
 def _factor_nodes(r, Qf=7, nodes_log2=10, sharp=0.0):
     """(F, W) over the factor space alone (no own-noise dimension): the
     Gumbel members condition only on f, the winner integral being closed
@@ -762,6 +847,17 @@ def ranking_loglik_and_score(mu, V, orders, temperature=1.0, Qf=7,
         ranking or any top-k prefix.
     temperature : Gumbel scale tau (softmax weights exp(mu/tau)).
 
+    Factor rule: at rank one or two with loading sharpness at most 2 a
+    Qf-node Gauss-Hermite tensor; past that, Sobol. A ranking of length
+    k >= 2 with sharpness * sqrt(k) above 2 moves that tensor to its own
+    factor posterior (adaptive Gauss-Hermite, #1017). The score is the
+    exact derivative of the rule with its nodes held where they were
+    placed; finite differences of the value also move the nodes, and
+    that term is of the size of the quadrature error (measured 5e-4
+    relative on the loading score, 2.4e-4 on the utility score, full
+    rankings of 5 at sharpness in [1, 2), where the old rule's score was
+    19% off the true one).
+
     Returns
     -------
     loglik : float
@@ -800,12 +896,26 @@ def ranking_loglik_and_score(mu, V, orders, temperature=1.0, Qf=7,
     F, W = _factor_nodes(r, Qf=Qf, nodes_log2=nodes_log2, sharp=sharp)
     Q = len(F)
     shift = (F @ V.T)                       # (Q, J)
+    # Order lengths whose ranking posterior is too narrow for the fixed
+    # tensor (#1017): decided once per length, so observations outside
+    # the gate pay one set lookup. Only the Gauss-Hermite branch (rank 1
+    # or 2, sharpness <= 2) is ever adapted; Sobol and rank 0 are not.
+    gh_branch = 0 < r <= 2 and not sharp > _FACTOR_SOBOL_SHARP
+    adaptive = set()
+    if gh_branch:
+        adaptive = {k for k in {len(o) for o in orders}
+                    if k >= 2 and sharp * np.sqrt(k) > _RANKING_ADAPTIVE_GATE}
     loglik = 0.0
     dmu = np.zeros((T, J))
     dV = np.zeros((J, r))
     for t in range(T):
         order = orders[t]
-        z = (mu[t][None, :] + shift) / tau  # (Q, J)
+        if len(order) in adaptive:
+            Ft, logw = _ranking_adaptive_nodes(mu[t], V, order, tau, F)
+            z = (mu[t][None, :] + Ft @ V.T) / tau
+        else:
+            Ft, logw = F, None
+            z = (mu[t][None, :] + shift) / tau  # (Q, J)
         logp_q = np.zeros(Q)
         grad_q = np.zeros((Q, J))
         alive = np.ones(J, dtype=bool)
@@ -819,6 +929,8 @@ def ranking_loglik_and_score(mu, V, orders, temperature=1.0, Qf=7,
             grad_q[:, w] += 1.0
             grad_q -= sm
             alive[w] = False
+        if logw is not None:
+            logp_q = logp_q + logw           # importance-corrected log weights
         mstar = logp_q.max()
         pw = W * np.exp(logp_q - mstar)
         tot = pw.sum()
@@ -826,5 +938,7 @@ def ranking_loglik_and_score(mu, V, orders, temperature=1.0, Qf=7,
         loglik += mstar + np.log(tot)
         g_mu = (omega[:, None] * grad_q).sum(axis=0) / tau
         dmu[t] += g_mu
-        dV += ((omega[:, None] * grad_q).T @ F) / tau
+        # the nodes this observation was integrated on: the score is
+        # exact for them held fixed (see the docstring)
+        dV += ((omega[:, None] * grad_q).T @ Ft) / tau
     return float(loglik), dmu, dV
