@@ -296,6 +296,32 @@ class AbilityTracker:
         self.state: Dict[str, AbilityState] = {}
 
     # -- belief access -------------------------------------------------------
+    def _check_time(self, ids: Sequence[str], t: float, what: str) -> None:
+        """Same clock contract as rate_history / predict_race (#654): each
+        entity's clock only moves forward. An older t was priced as "now"
+        (dt clipped to 0) and then REWOUND that entity's last_time, so the
+        next contest diffused it over the stale interval again -- a
+        zero-information observation moved later predictions. Equal times
+        are fine; a non-finite t is refused. Raises before any state or
+        evidence is touched."""
+        tf = float(t)
+        if not np.isfinite(tf):
+            raise ValueError(f"{what} time t = {t!r} is not finite")
+        for i in ids:
+            s = self.state.get(i)
+            if s is not None and tf < s.last_time:
+                if what == "prediction":
+                    raise ValueError(
+                        f"prediction time t = {t!r} is older than the state of "
+                        f"entity {i!r} (t = {s.last_time!r}); the state "
+                        "already holds later evidence. Predict from a "
+                        "tracker saved before t.")
+                raise ValueError(
+                    f"contest at t = {t!r} is older than the state of "
+                    f"entity {i!r} (t = {s.last_time!r}). A forward filter cannot "
+                    "fold in an out-of-order observation; sort the contests "
+                    "by time, or rerun from a tracker saved before t.")
+
     def _gather(self, ids: Sequence[str], t: float) -> Tuple[np.ndarray, np.ndarray]:
         """Marginals for `ids`, variance grown forward to t (mean pegged)."""
         m = np.empty(len(ids)); v = np.empty(len(ids))
@@ -342,6 +368,7 @@ class AbilityTracker:
         With ``groups`` and rho > 0 the field is priced under the blocked
         model that observe() fits -- the same V, never a different one."""
         require_distinct(ids, "ids")                                # #811
+        self._check_time(ids, t, "prediction")                      # #654
         m, v = self._gather(ids, t)
         V, b2 = self._blocks(groups, len(m))
         if self.base != "normal":
@@ -390,6 +417,7 @@ class AbilityTracker:
         # checked here too: they did raise, but as "operands could not
         # be broadcast together", which names nothing the caller passed.
         require_distinct(ids, "ids")                                # #811
+        self._check_time(ids, t, "contest")                         # #654
         n_ids = len(ids)
         for _name, _seq in (("scores", scores), ("prices", prices)):
             if _seq is None:
