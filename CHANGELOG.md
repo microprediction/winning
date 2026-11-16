@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- `tree_race_probabilities` and `tree_race_jacobian` (python and R) now
+  centre a single leaf cluster's loading, as the block path and the
+  browser tree already did. With one cluster its shock reaches every
+  runner and cancels, but uncentred it widened the lattice: +40 on every
+  loading raised a mass defect, and the Jacobian moved by 0.019. Trees
+  with more than one cluster are bitwise unchanged (#1056).
 - `mvn_cdf_fast(sigma=)` (python, vendored `fastmvn`, R `mvtnormfast`,
   Julia `FactorMvNormalCDF`): `factorize_covariance` no longer accepts a
   Heywood fit, one whose residual variance sits at the 1e-12 floor. It

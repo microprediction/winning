@@ -309,3 +309,21 @@ test_that("block, nested and tree races need one cluster label per contestant (#
   expect_identical(block_race_probabilities(m, c(0, 0, 1, 1), L, o),
                    block_race_probabilities(m, c("x", "x", "y", "y"), L, o))
 })
+
+test_that("a one-leaf tree centres its common loading, as python does (#1056)", {
+  mu <- c(-0.8, -0.3, 0, 0.2, 0.9); L <- c(0.4, 0.2, 0.3, 0.5, 0.1)
+  D <- rep(1, 5); cl <- rep(0, 5)
+  p0 <- tree_race_probabilities(mu, cl, L, D, 0, 0)
+  J0 <- tree_race_jacobian(mu, cl, L, D, 0, 0)
+  for (c in c(40, 50)) {   # uncentred, +40 raised a mass defect
+    expect_lt(max(abs(tree_race_probabilities(mu, cl, L + c, D, 0, 0) - p0)), 1e-12)
+    expect_lt(max(abs(tree_race_jacobian(mu, cl, L + c, D, 0, 0) - J0)), 1e-12)
+  }
+  # python's value on the same field
+  expect_equal(tree_race_probabilities(mu, cl, L + 40, D, 0, 0),
+               c(0.45329174164121638, 0.24112560163758431, 0.15429038412868296,
+                 0.11608246129945646, 0.035209811293059903), tolerance = 1e-13)
+  # several clusters: a common loading part is a real effect, untouched
+  v <- c(40.4, 40.2, 40.3, 40.5)
+  expect_identical(.one_cluster_gauge(c(0, 0, 1, 1), v, 4L), v)
+})

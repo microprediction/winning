@@ -105,6 +105,17 @@
   invisible(cluster)
 }
 
+# With ONE cluster holding every runner its shock reaches everyone and
+# cancels, so only loading differences are identified: the loading is
+# gauge-centred as python's _one_cluster_gauge does (#471). The tree
+# race skipped it and a +40 on every loading raised a mass defect
+# (#1056). Any other loading is returned as given.
+.one_cluster_gauge <- function(cluster, v, n) {
+  if (length(cluster) != n || n < 2L || !all(cluster == cluster[1L]))
+    return(v)
+  as.numeric(.gauge_center(v))
+}
+
 .cluster_index <- function(cluster) {
   lv <- sort(unique(cluster))
   match(cluster, lv)                       # np.unique return_inverse
@@ -457,6 +468,7 @@ tree_race_probabilities <- function(mu, cluster, loading, D, parent,
   lam <- as.numeric(strength)
   n <- length(m)
   .check_cluster(cluster, n)                                 # (#792)
+  v <- .one_cluster_gauge(cluster, v, n)                     # (#1056)
   inv <- .tree_leaf_index(cluster, leaves)            # (#372)
   nC <- max(inv)
   parent <- .validate_tree(parent, lam, nC)        # 0 = root (#517)
@@ -750,6 +762,7 @@ tree_race_jacobian <- function(mu, cluster, loading, D, parent, strength,
   lam <- as.numeric(strength)
   n <- length(m)
   .check_cluster(cluster, n)                                 # (#792)
+  v <- .one_cluster_gauge(cluster, v, n)                     # (#1056)
   inv <- .tree_leaf_index(cluster, leaves)            # (#372)
   nC <- max(inv)
   parent <- .validate_tree(parent, lam, nC)        # 0 = root (#517)
