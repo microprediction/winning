@@ -81,16 +81,16 @@ const POLISH_RACE_OPTS = new Set(["V", "D", "F", "W", "base", "points", "structu
 /* The kink-split race and its Jacobian at m (races.splitRaceJacobian),
    moved to unit scale by an exact power of two far from it, as
    raceJacobianExplicit does (#870). */
-function splitPair(m, V, D, F, W, base, points) {
+function splitPair(m, V, D, F, W, base, points, wantJ = true) {
   const Dv = asIdio(D, m.length);
   const sdMax = Math.sqrt(Math.max(...Dv));
   if (!(sdMax > 0) || !Number.isFinite(sdMax) || (sdMax >= 2 ** -30 && sdMax <= 2 ** 30))
-    return splitRaceJacobian(m, { V, D: Dv, F, W, base, points });
+    return splitRaceJacobian(m, { V, D: Dv, F, W, base, points }, wantJ);
   const c = 2 ** Math.round(Math.log2(sdMax));
   const Vs = V == null ? V : asLoadings(V, m.length).map(row => row.map(v => v / c));
   const r = splitRaceJacobian(m.map(v => v / c),
-    { V: Vs, D: Dv.map(v => v / c / c), F, W, base, points });
-  return { p: r.p, J: r.J.map(row => row.map(v => v / c)) };
+    { V: Vs, D: Dv.map(v => v / c / c), F, W, base, points }, wantJ);
+  return wantJ ? { p: r.p, J: r.J.map(row => row.map(v => v / c)) } : { p: r.p };
 }
 
 /* F0/W0: a caller-supplied factor law. raceProbabilities has always
@@ -357,19 +357,28 @@ export function polishRace(opts = {}) {
   const fnB = typeof base === "function" ? base : BASES[base];
   const split = structure == null && typeof fnB === "function"
     && kinkSplit !== false && !!baseKinks(fnB);
-  let pairAt = null, pairVal = null;
+  // p and J at the last Jacobian point; p alone at the last forward-only
+  // point (line searches and feasibility restoration need no J)
+  let pairAt = null, pairVal = null, pAt = null, pVal = null;
+  const same = (u, m) => u && u.length === m.length && u.every((v, i) => v === m[i]);
   const pairM = m => {
-    if (pairAt && pairAt.length === m.length && pairAt.every((v, i) => v === m[i]))
-      return pairVal;
+    if (same(pairAt, m)) return pairVal;
     pairVal = splitPair(m, V, D, F, W, base, points);
     pairAt = m.slice();
     return pairVal;
+  };
+  const probM = m => {
+    if (same(pairAt, m)) return pairVal.p;
+    if (same(pAt, m)) return pVal;
+    pVal = splitPair(m, V, D, F, W, base, points, false).p;
+    pAt = m.slice();
+    return pVal;
   };
   let { A = null, b = null } = opts;
   // F/W must reach the forward, the jacobian AND the inverse that makes
   // mu0. Polishing under a different factor law than the one the caller
   // priced with silently optimises the wrong model (#209).
-  const fwdM = split ? m => pairM(m).p
+  const fwdM = split ? probM
     : m => raceProbabilities(m, { V, D, F, W, base, points, structure });
   const jacM = split ? m => pairM(m).J
     : m => raceJacobian(m, { V, D, F, W, base, points, structure });
@@ -389,8 +398,17 @@ export function polishRace(opts = {}) {
       // uniform one (its slopes are already split, #267), which is a
       // ~1e-4 start; Newton on the split pair finishes it. J has the
       // gauge 1 as null vector on both sides, so J + 11'/n is regular.
-      const s0 = p0.reduce((u, v) => u + v, 0);
-      const t = Array.from(p0, v => v / s0);
+      // scale-safe as rescaledTarget, and v / s0 as before when the sum is
+      // finite: an all-finite p0 near MAX_VALUE summed to Infinity and
+      // zeroed the target
+      let q = Array.from(p0), s0 = q.reduce((u, v) => u + v, 0);
+      if (!Number.isFinite(s0)) {
+        let mx = 0;
+        for (const v of q) mx = Math.max(mx, v);
+        q = q.map(v => v / mx);
+        s0 = q.reduce((u, v) => u + v, 0);
+      }
+      const t = q.map(v => v / s0);
       const lt = t.map(Math.log);
       const resid = m => Math.max(...fwdM(m).map((v, i) =>
         Math.abs(Math.log(Math.max(v, 1e-300)) - lt[i])));
@@ -398,7 +416,15 @@ export function polishRace(opts = {}) {
       for (; it < 30 && r >= 1e-8; it++) {
         const { p: pm, J } = pairM(m);
         const k = m.length;
-        const d = solve(J.map(row => row.map(v => v + 1 / k)),
+        // the gauge term on J's own scale, as polish_race in R: J is
+        // O(1 / sd), and at D ~ 1e80 J + 1/k rounded to a constant
+        // matrix. Any positive weight gives the same step; 1 on ordinary
+        // races.
+        let sj = 0;
+        for (const row of J) for (const v of row) sj = Math.max(sj, Math.abs(v));
+        const g = sj > 0 && Number.isFinite(sj) && (sj < 2 ** -30 || sj > 2 ** 30)
+          ? 2 ** Math.round(Math.log2(sj)) : 1;
+        const d = solve(J.map(row => row.map(v => v + g / k)),
                         t.map((v, i) => v - pm[i]));
         let step = 1, moved = false;
         for (let h = 0; h < 12; h++, step *= 0.5) {

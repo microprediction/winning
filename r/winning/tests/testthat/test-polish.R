@@ -176,3 +176,25 @@ test_that("a kinked base polishes on the kink-split lattice (#1011)", {
   expect_error(polish_race(mu0 = c(0, 0, 0), D = c(1, 1, 1), base = "laplace",
                            name_caps = 0.5, kink_split = "yes"), "kink_split")
 })
+
+test_that("the split polish keeps scale-extreme inputs (#1011 review)", {
+  # D omitted: D / cc^2 turned NULL into numeric(0), which .as_idio refused
+  r <- polish_race(mu0 = c(0, 0.4, -0.3), base = "laplace", name_caps = 0.4)
+  expect_true(r$info$feasible)
+  # D at 1.5e308: cc^2 = 2^1024 overflowed and zeroed every variance
+  r <- polish_race(mu0 = c(0, 0.4, -0.3), D = rep(1.5e308, 3),
+                   base = "laplace", name_caps = 0.4)
+  expect_equal(r$p, rep(1 / 3, 3), tolerance = 1e-12)
+  # a p0 whose sum overflows: the target was zeroed, the residual Inf
+  expect_no_warning(r <- polish_race(p0 = c(1e308, 8e307, 2e307),
+                                     D = c(1, 0.7, 1.3), base = "laplace",
+                                     A = matrix(c(1, 0, 0), 1), b = 0.99))
+  expect_lt(max(abs(r$p - c(0.5, 0.4, 0.1))), 1e-8)
+  # D ~ 1e80: J ~ 1e-40, and J + 1/n was exactly singular in solve()
+  D <- c(1, 0.7, 1.3) * 1e80
+  q <- .split_race_jacobian(c(0, 0.4, -0.3), NULL, D, NULL, NULL,
+                            "laplace", 501)$p
+  r <- polish_race(p0 = q, D = D, base = "laplace",
+                   A = matrix(c(1, 0, 0), 1), b = 0.99)
+  expect_lt(max(abs(r$p - q)), 1e-8)
+})

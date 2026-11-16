@@ -255,7 +255,9 @@ polish_race <- function(p0 = NULL, mu0 = NULL, V = NULL, D = NULL,
       cc <- if (sd_max > 0 && is.finite(sd_max) &&
                 (sd_max < 2^-30 || sd_max > 2^30)) 2^round(log2(sd_max)) else 1
       Vs <- if (is.null(V)) NULL else V / cc
-      r <- .split_race_jacobian(m / cc, Vs, D / cc^2, F, W, base, points)
+      # NULL keeps the unit default; cc twice, as cc^2 overflows at 2^512
+      Ds <- if (is.null(D)) NULL else D / cc / cc
+      r <- .split_race_jacobian(m / cc, Vs, Ds, F, W, base, points)
       r$J <- r$J / cc
       pair_at <<- m; pair_val <<- r
       r
@@ -269,13 +271,20 @@ polish_race <- function(p0 = NULL, mu0 = NULL, V = NULL, D = NULL,
       # J + 11'/n is regular.
       m <- abilities_from_race(p, V = V, D = D, F = F, W = W, base = base,
                                points = points)
-      t <- p / sum(p)
+      t <- .rescaled_target(p)          # a sum past double.xmax zeroed t
       res <- function(mm) max(abs(log(pmax(forward(mm), 1e-300)) - log(t)))
       r <- res(m)
       for (it in seq_len(30)) {
         if (r < 1e-8) break
         pj <- pair(m)
-        d <- solve(pj$J + 1 / length(m), t - pj$p)
+        # the gauge term on J's own scale: J is O(1 / sd), and at D ~ 1e80
+        # J + 1/n rounded to a constant matrix (exactly singular). The
+        # step is the same for any positive gauge weight; a power of two,
+        # 1 on ordinary races.
+        sj <- max(abs(pj$J))
+        g <- if (sj > 0 && is.finite(sj) && (sj < 2^-30 || sj > 2^30))
+          2^round(log2(sj)) else 1
+        d <- solve(pj$J + g / length(m), t - pj$p)
         moved <- FALSE
         step <- 1
         for (h in seq_len(12)) {

@@ -1044,8 +1044,9 @@ function splitRaceSlopes(mu, { V, D, F, W, base, points }) {
    window slides across every runner's kink, so its derivative carries an
    O(dx) artifact no fixed-grid Jacobian matches and the solver stalled;
    on this lattice the pair is smooth and consistent. Not a public door:
-   the forward maps keep the uniform lattice by default. */
-export function splitRaceJacobian(mu, { V, D, F, W, base, points }) {
+   the forward maps keep the uniform lattice by default. wantJ: false
+   returns p alone, O(n T) rather than O(n^2 T), bitwise the same p. */
+export function splitRaceJacobian(mu, { V, D, F, W, base, points }, wantJ = true) {
   const st = setup(mu, V, D, F, W, base);
   const n = st.mu.length;
   const sd = st.D.map(Math.sqrt);
@@ -1071,6 +1072,15 @@ export function splitRaceJacobian(mu, { V, D, F, W, base, points }) {
         L[t] += li[t];
       }
       logS[i] = li; logf[i] = fi; fpA[i] = fpi;
+    }
+    if (!wantJ) {
+      // the same a[i] sum as below, without the hazards and A
+      for (let i = 0; i < n; i++) {
+        let ai = 0;
+        for (let t = 0; t < T; t++) ai += clip(logf[i][t] + L[t] - logS[i][t]) * ws[t];
+        a[i] += wq * ai;
+      }
+      continue;
     }
     const g = new Array(n), haz = new Array(n), own = new Array(n);
     const G = new Array(T).fill(0);
@@ -1106,6 +1116,7 @@ export function splitRaceJacobian(mu, { V, D, F, W, base, points }) {
   }
   const total = a.reduce((u, v) => u + v, 0);
   const p = a.map(v => v / total);
+  if (!wantJ) return { p };
   const J = A.map((row, i) => row.map((v, j) => (v - p[i] * dT[j]) / total));
   return { p, J };
 }

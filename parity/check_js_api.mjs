@@ -4292,6 +4292,22 @@ rejects(C => demo.fitGrammar(C, 1, 0, { method: "ipaf", tol: 0 }),
         JSON.stringify(rt.p));
   rejects(polish.polishRace, [{ mu0: [0, 0, 0], D: [1, 1, 1], base: "laplace", nameCaps: 0.5, kinkSplit: "yes" }],
           "polishRace rejects a non-boolean kinkSplit", "kinkSplit");
+  // forward-only evaluations skip J and price the same p, bit for bit
+  const spP = races.splitRaceJacobian([0, 0.4, -0.3], { V: null, D: [1, 0.7, 1.3], F: null, W: null, base: "laplace", points: 501 }, false);
+  holds("split p without J is bitwise the paired p (#1011 review)",
+        spP.J === undefined && spP.p.every((v, i) => v === sp.p[i]));
+  // a p0 whose sum overflows was zeroed; at D ~ 1e80, J + 1/n rounded
+  // to a constant matrix and the split Newton could not move
+  const big = polish.polishRace({ p0: [1e308, 8e307, 2e307], D: [1, 0.7, 1.3], base: "laplace", A: [[1, 0, 0]], b: [0.99] });
+  holds("split inverse of a p0 whose sum overflows (#1011 review)",
+        big.info.converged && Math.max(...big.p.map((v, i) => Math.abs(v - [0.5, 0.4, 0.1][i]))) < 1e-8,
+        JSON.stringify(big.p));
+  const D80 = [1e80, 0.7e80, 1.3e80];
+  const q80 = races.splitRaceJacobian([0, 0.4, -0.3].map(v => v * 1e40), { V: null, D: D80, F: null, W: null, base: "laplace", points: 257 }, false).p;
+  const r80 = polish.polishRace({ p0: q80, D: D80, base: "laplace", A: [[1, 0, 0]], b: [0.99] });
+  holds("split inverse at D ~ 1e80 (#1011 review)",
+        r80.info.converged && Math.max(...r80.p.map((v, i) => Math.abs(v - q80[i]))) < 1e-8,
+        JSON.stringify([r80.p, q80]));
 }
 
 // --- tree races warn on sharpness like block/nested (#11)
