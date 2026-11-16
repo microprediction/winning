@@ -44,8 +44,14 @@ prices_from_dividends <- function(dividends, nan_value = 2000) {
 #' @export
 dividends_from_prices <- function(prices, multiplicity = 1.0) {
   .refuse_matrix(prices, "prices")                                # (#903)
-  p <- normalize(prices)
-  ifelse(!is.na(p) & p > 0, 1 / (multiplicity * p), NA_real_)
+  # A zero price -- a scratched runner -- is worth nothing: Inf, which
+  # prices_from_dividends maps back to 0, as ability_implied_dividends
+  # does. NA_real_ was read there as a MISSING quote and priced at
+  # nan_value, reviving the scratch; an all-zero book was all NA (#1009).
+  # NA and a negative price stay NA; positive prices are unchanged.
+  p <- if (isTRUE(all(prices == 0))) prices else normalize(prices)
+  ifelse(!is.na(p) & p > 0, 1 / (multiplicity * p),
+         ifelse(!is.na(p) & p == 0, Inf, NA_real_))
 }
 
 #' Solve the horse race problem: offsets matching given state prices
@@ -127,7 +133,13 @@ solve_for_implied_offsets <- function(prices, density,
     cdfs <- lapply(implied, function(o) shifted_cdf(base, o, L))
   }
   if (exhausted) assess(implied, exact_state_prices_from_cdfs(cdfs))
-  implied <- best
+  # The iteration prices each offset on its own and low_high pins anything
+  # past +/-(L-2), so an iterate can drift beyond the edge unseen; the
+  # public forward translates such a book back first (edge_centred) and
+  # priced a 3.8e-4 calibration 9.4e-2 off (#1046). Return the offsets
+  # the iteration priced, pinned to [-(L-2), L-2]: bitwise the same CDFs,
+  # and an in-range result is unchanged.
+  implied <- pmin(pmax(best, -(L - 2)), L - 2)
   cdfs <- lapply(implied, function(o) shifted_cdf(base, o, L))
   .warn_if_unconverged(exact_state_prices_from_cdfs(cdfs), prices)
   implied

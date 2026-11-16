@@ -388,6 +388,18 @@ test_that("calibration runs through a temporary zero price (#968)", {
   expect_lte(max(abs(state_prices_from_offsets(atoms, a) - target)), 1e-8)
 })
 
+test_that("offsets stay on the lattice, where the public forward agrees (#1046)", {
+  # an iterate past +(L-2) priced 3.8e-4 inside the inverse but 9.4e-2 by
+  # the edge-centring public forward
+  atoms <- numeric(15)
+  atoms[c(0, 1, 9) + 1] <- c(0.5292435891016793, 0.3029411994181423, 0.16781521148017847)
+  target <- state_prices_from_offsets(atoms, c(-3.067361030359437, -2.884203651711936,
+                                               4.646685322840478, -2.6360814331198537))
+  expect_silent(a <- solve_for_implied_offsets(target, atoms))
+  expect_lte(max(abs(a)), implied_L(atoms) - 2)                # was 8.26 at L = 7
+  expect_lt(max(abs(state_prices_from_offsets(atoms, a) - target)), 1e-3)   # was 9.4e-2
+})
+
 test_that("finite dividends whose reciprocals overflow price the relative book (#881)", {
   expect_equal(prices_from_dividends(c(1e-320, 2e-320)), c(2, 1) / 3, tolerance = 1e-12)
   expect_equal(prices_from_dividends(c(1e-320, 0, -1, Inf)), c(1, 0, 0, 0))
@@ -485,4 +497,17 @@ test_that("a unit_ratio that does not coarsen is refused (#899)", {
   d <- skew_normal_density(L = 15, unit = 0.2, scale = 1, a = 1.5)
   for (bad in list(1, 0.6, -2, NaN, Inf, c(2, 3)))
     expect_error(winning:::.state_prices_from_extended_offsets(d, c(-20, -2, 6.5), 3L, bad), "unit_ratio")
+})
+
+test_that("a zero price is an infinite dividend and round-trips to zero (#1009)", {
+  # NA was read by prices_from_dividends as a MISSING quote and priced at
+  # nan_value, reviving the scratch
+  expect_identical(dividends_from_prices(c(0.5, 0.5, 0)), c(2, 2, Inf))
+  p <- c(0.75, 0.25, 0)
+  expect_identical(prices_from_dividends(dividends_from_prices(p)), p)
+  expect_identical(dividends_from_prices(c(0, 0)), c(Inf, Inf))
+  expect_identical(prices_from_dividends(dividends_from_prices(c(0, 0))), c(0, 0))
+  # missing and negative prices keep their meaning
+  expect_true(all(is.na(dividends_from_prices(c(0.5, NA, 0.5)))))
+  expect_true(is.na(dividends_from_prices(c(0.5, -0.1, 0.6))[2]))
 })

@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- `tree_race_probabilities` and `tree_race_jacobian` (python and R) now
+  centre a single leaf cluster's loading, as the block path and the
+  browser tree already did. With one cluster its shock reaches every
+  runner and cancels, but uncentred it widened the lattice: +40 on every
+  loading raised a mass defect, and the Jacobian moved by 0.019. Trees
+  with more than one cluster are bitwise unchanged (#1056).
+- `mvn_cdf_fast(sigma=)` (python, vendored `fastmvn`, R `mvtnormfast`,
+  Julia `FactorMvNormalCDF`): `factorize_covariance` no longer accepts a
+  Heywood fit, one whose residual variance sits at the 1e-12 floor. It
+  tries the next rank and otherwise falls back to the dense path. On
+  random 3-5 dimensional Wishart covariances about 20% hit the floor,
+  and their orthants were off by a median of 1.2e-4 and up to 8.5e-4.
+  Covariances that do not hit the floor give bitwise identical results
+  (#1015).
 - Browser `blockRaceProbabilities` with caller-supplied factor nodes
   (`nodes`) adds `loading * f` to each runner, as the grammar
   `Y = mu + loading * f + eps` states; it priced the reflected factor
@@ -18,6 +32,22 @@
   (browser `kinkSplit: false`) keeps the old lattice. Smooth bases and
   the default `race_probabilities` / `race_jacobian` are bitwise
   unchanged (#1011).
+- `dividends_from_prices` (python `winning.classic`, `StatePricer`, R)
+  maps a zero price -- a scratched runner -- to dividend `inf`, which
+  `prices_from_dividends` maps back to 0; it returned NaN/`NA`, which the
+  round trip read as a missing quote and revived at `nan_value`, so
+  `normalize_dividends` was not idempotent. An all-zero book is all
+  `inf` (python raised `ZeroDivisionError`). Simulated place prices from
+  `skew_normal_place_pricing` are `inf`, not NaN, for runners with zero
+  counts. NaN and negative prices, and all positive prices, are
+  unchanged (#1009).
+- `winning.probit.fit_factor_model` (and so `shares(..., Sigma=, k=)`)
+  finishes fits whose alternation ran out of sweeps with Gauss-Newton on
+  the same projected objective. An exact rank-1-plus-diagonal Sigma at
+  n = 5 was left at projected residuals up to 2e-3 and now fits to
+  rounding. Fits that converged on their own are bitwise unchanged
+  (#1018). `fit_covariance` (behind `cov=`) still runs the capped
+  alternation alone and can stall the same way; tracked in #1051.
 
 ## 1.7.0 (2026-10-31)
 

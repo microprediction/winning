@@ -606,3 +606,16 @@ test_that("a same-length matrix is refused, not flattened column-major (#903)", 
   expect_true(is.finite(pmvnorm_fast(upper = 0, mean = mu, V = V, D = D)))
   expect_true(is.finite(pmvnorm_fast(upper = array(u_vec), mean = mu, V = V, D = D)))
 })
+
+test_that("a Heywood factorization is not accepted as exact (#1015)", {
+  # well-conditioned (min eigenvalue 0.044), but the rank-3 fit pinned
+  # two residual variances at the 1e-12 floor and was accepted: the
+  # factor rule then integrated a step and missed by 3.4e-4
+  C <- matrix(c(0.63, 0.29, 0.11, 0.52, 0.29, 0.86, 0.95, 0.16,
+                0.11, 0.95, 2.15, 1.28, 0.52, 0.16, 1.28, 2.45), 4)
+  fd <- factorize_covariance(C)
+  if (!is.null(fd)) expect_gt(min(fd$D / diag(C)), 1e-12)
+  set.seed(1015)
+  p <- pmvnorm_fast(upper = rep(0, 4), sigma = C, abseps = 1e-5)
+  expect_lt(abs(as.numeric(p) - 0.17598987098345426), 5e-5)
+})

@@ -211,6 +211,76 @@ def test_sharp_blocks_warn_that_gh_cannot_converge():
         assert not any("sharpness" in str(x.message) for x in w)
 
 
+
+_TREE_MU = np.array([-0.35221016127616167, -0.1465622573159635,
+                     -0.06922290846705437, -0.7895801779814065,
+                     0.5263814451172948, -0.45293018920347095,
+                     0.8489520382136106, 0.3635434559546411])
+_TREE_V = np.array([-1.4273646213114262, -2.2077446188777685,
+                    3.776806265115738, -1.663014443591237,
+                    0.7718250788748264, -3.9720420967787504,
+                    -1.48259686678648, -1.66114398278296])
+# sharpness 17.76 raw, 21.29 once the one-cluster loading is centred
+_TREE_SHARP = 21.287213643680218
+
+
+def test_sharp_tree_warns_and_the_error_is_material():
+    """#11: the tree kernel runs the same fixed Gauss-Hermite rule as the
+    block kernel but skipped its sharpness warning. A one-leaf tree is
+    the one-block race, so the sharp block fixture isolates it: 9 nodes
+    put a share 0.218 off the factor reference, normalized, silently."""
+    import warnings
+    from winning.factor.blocks import (tree_race_probabilities,
+                                       tree_race_jacobian)
+    from winning.factor.races import race_probabilities
+
+    D = np.full(8, 0.05); cl = np.zeros(8, int)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        ref = race_probabilities(_TREE_MU, V=_TREE_V, D=D, points=1025)
+    with pytest.warns(RuntimeWarning, match="sharpness is 21.3"):
+        p = tree_race_probabilities(_TREE_MU, cl, _TREE_V, D, [-1], [0.0],
+                                    points=1025, qa=9)
+    assert abs(p.sum() - 1.0) < 1e-12
+    assert np.max(np.abs(p - ref)) > 0.2
+    with pytest.warns(RuntimeWarning, match="sharpness"):
+        tree_race_jacobian(_TREE_MU, cl, _TREE_V, D, [-1], [0.0])
+    # either side of the threshold on the leaf loading alone (the common
+    # part cancels with one cluster, so sharpness is measured centred,
+    # as the block path and the browser port measure it)
+    s0 = _TREE_SHARP
+    with pytest.warns(RuntimeWarning, match="sharpness is 3.1"):
+        tree_race_probabilities(_TREE_MU, cl, _TREE_V * 3.1 / s0, D,
+                                [-1], [0.0])
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        tree_race_probabilities(_TREE_MU, cl, _TREE_V * 2.9 / s0, D,
+                                [-1], [0.0])
+        tree_race_jacobian(_TREE_MU, cl, _TREE_V * 2.9 / s0, D,
+                           [-1], [0.0])
+    assert not any("sharpness" in str(x.message) for x in w)
+
+
+def test_sharp_tree_ancestor_strength_warns():
+    """An ancestor strength is integrated on the same fixed rule as the
+    leaf loading, so it counts toward the runner's sharpness
+    sqrt(v^2 + path variance) / sd: leaf loadings 0.1 with strength 1.0
+    over two of three leaves (sharpness 4.5) measured 1.2e-2 max error
+    against the factor reference; strength 0.6 (2.7) stays quiet."""
+    import warnings
+    from winning.factor.blocks import tree_race_probabilities
+
+    mu = np.array([0.1, -0.2, 0.05, 0.3, -0.1, 0.0])
+    cl = np.array([0, 0, 1, 1, 2, 2])
+    v = np.full(6, 0.1); D = np.full(6, 0.05)
+    parent = [3, 3, 4, 4, -1]
+    with pytest.warns(RuntimeWarning, match="sharpness is 4.5"):
+        tree_race_probabilities(mu, cl, v, D, parent, [0, 0, 0, 1.0, 0])
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        tree_race_probabilities(mu, cl, v, D, parent, [0, 0, 0, 0.6, 0])
+    assert not any("sharpness" in str(x.message) for x in w)
+
 def test_window_covers_near_common_shock_winner_mass():
     """Fourteenth review's blocker: a 400-runner single cluster at
     correlation ~0.99, split into loadings 1.0 and 0.9 with equal mu.
@@ -421,6 +491,60 @@ def test_single_cluster_common_loading_is_a_gauge_471(c):
     assert np.abs(block_race_probabilities(mu, cl, L + c, D) - p0).max() < tol
     assert np.abs(block_race_jacobian(mu, cl, L + c, D) - J0).max() < tol
     assert np.abs(abilities_from_block_race(p0, cl, L + c, D)[0] - a0).max() < 1e-8
+
+
+# --- #1056: a one-leaf tree centres its loading, as the block path does ---
+
+_ONE_LEAF_TREES = [([-1], [0.0], None),          # the bare one-block race
+                   ([1, -1], [0.0, 0.8], None),  # a common root above it
+                   ([-1], [0.0], [7])]           # a named leaf label
+
+
+@pytest.mark.parametrize("c", [40.0, 50.0, 1e6])
+@pytest.mark.parametrize("parent,strength,leaves", _ONE_LEAF_TREES)
+def test_one_leaf_tree_common_loading_is_a_gauge_1056(c, parent, strength,
+                                                      leaves):
+    """With one leaf cluster its loading shock reaches every runner and
+    cancels. The block path and the browser's tree centred it (#471);
+    the python tree did not, so +40 on every loading raised a mass
+    defect (1.0094 at 40, 1071 at 1e6) and the Jacobian moved by 0.019."""
+    from winning.factor.blocks import tree_race_probabilities as F
+    from winning.factor.blocks import tree_race_jacobian as J
+    mu = np.array([-0.8, -0.3, 0.0, 0.2, 0.9])
+    cl, D = [7] * 5 if leaves else [0] * 5, [1.0] * 5
+    L = np.array([0.4, 0.2, 0.3, 0.5, 0.1])
+    kw = dict(leaves=leaves)
+    p0 = F(mu, cl, L, D, parent, strength, **kw)
+    J0 = J(mu, cl, L, D, parent, strength, **kw)
+    tol = 1e-12 if c < 100 else 1e-9   # L + 1e6 itself rounds L by 1e-10
+    p = F(mu, cl, L + c, D, parent, strength, **kw)
+    Jc = J(mu, cl, L + c, D, parent, strength, **kw)
+    assert np.abs(p - p0).max() < tol
+    assert np.abs(Jc - J0).max() < tol
+    # the one-block race it is, priced by the (already gauged) block path
+    assert np.abs(p - block_race_probabilities(mu, cl, L + c, D)).max() < 1e-14
+    assert np.abs(Jc - block_race_jacobian(mu, cl, L + c, D)).max() < 1e-14
+
+
+def test_one_leaf_tree_matches_dense_factor_reference_1056():
+    """Independent check: the centred one-leaf tree is the rank-one factor
+    race with the same covariance."""
+    from winning.factor.blocks import tree_race_probabilities
+    from winning.factor.races import race_probabilities
+    mu = np.array([-0.8, -0.3, 0.0, 0.2, 0.9])
+    L = np.array([0.4, 0.2, 0.3, 0.5, 0.1])
+    p = tree_race_probabilities(mu, [0] * 5, L + 40.0, [1.0] * 5, [-1], [0.0])
+    ref = race_probabilities(mu, V=(L - L.mean())[:, None], D=np.ones(5),
+                             points=4001)
+    assert np.abs(p - ref).max() < 1e-12
+
+
+def test_tree_gauge_leaves_several_clusters_alone_1056():
+    """With several leaf clusters a common loading part is a real
+    between-cluster effect: the gauge must not touch it."""
+    from winning.factor.blocks import _one_cluster_gauge
+    v = np.array([40.4, 40.2, 40.3, 40.5])
+    assert _one_cluster_gauge(np.array([0, 0, 1, 1]), v, 4) is v
 
 
 # --- #780: a scalar tree leaf loading is one loading for every runner ---

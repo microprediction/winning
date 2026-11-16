@@ -229,8 +229,21 @@ def prices_from_dividends(dividends, nan_value=NAN_DIVIDEND):
 
 
 def dividends_from_prices(prices, multiplicity=1.0):
-    """ Australian style "dividends" """
-    return [1.0 / (multiplicity * d) if not (np.isnan(d)) and d > 0 else np.nan for d in normalize(prices)]
+    """ Australian style "dividends"
+
+    A price of exactly zero -- a scratched runner -- is worth nothing and
+    gets dividend +inf, which prices_from_dividends maps back to 0, as
+    ability_implied_dividends does (#665). NaN (a missing quote) and a
+    negative price stay NaN. An all-zero book is all +inf. A zero price
+    became NaN, which prices_from_dividends read as a MISSING quote and
+    priced at nan_value, so normalize_dividends revived a scratch and an
+    all-zero book raised ZeroDivisionError (#1009). Positive prices are
+    unchanged.
+    """
+    p = list(prices) if all(x == 0 for x in prices) else normalize(prices)
+    return [np.nan if np.isnan(d) else
+            (1.0 / (multiplicity * d) if d > 0 else (math.inf if d == 0 else np.nan))
+            for d in p]
 
 
 def normalize_dividends(dividends):
@@ -363,7 +376,17 @@ def solve_for_implied_offsets(prices, density, offset_samples=None,
                                np.round(exact_state_prices_from_cdfs(cdfs), 3)))[:5])
         else:
             assess(implied_offsets, exact_state_prices_from_cdfs(cdfs))
-    implied_offsets = best_offsets
+    # The iteration prices each offset on its own, and _low_high pins
+    # anything past +/-(L-2) to the edge, so an iterate can drift beyond
+    # it with no change in its own reprice. The public forward first
+    # translates such a book back in range (_edge_centred, #585): only
+    # differences matter there. Translating [-2.4, -2.2, 8.3, -2.0] (L=7)
+    # pinned the other three runners together at -(L-2), and a calibration
+    # scored 3.8e-4 by the iteration repriced 9.4e-2 off (#1046). Returning
+    # the offsets the iteration actually priced, pinned to [-(L-2), L-2],
+    # makes the two pricings agree: the CDFs are bitwise those it assessed,
+    # and an in-range result is returned unchanged.
+    implied_offsets = np.clip(best_offsets, -(L - 2), L - 2)
 
     _warn_if_unconverged(state_prices_from_offsets(density, implied_offsets), prices)
     return implied_offsets

@@ -47,7 +47,7 @@ def _native_raw(fn, *args):
         return fn(*args)
 
 
-def _warn_if_sharp(v, sd, qa, threshold=3.0):
+def _warn_if_sharp(v, sd, qa, threshold=3.0, stacklevel=4):
     """The factor grammar escalates its quadrature past sharpness 3 and
     refines its lattice; these hierarchical kernels do not yet, and at a
     fixed 9-node rule a cluster with loading 4 and idiosyncratic sd 0.22
@@ -72,7 +72,7 @@ def _warn_if_sharp(v, sd, qa, threshold=3.0):
             "tails. Restructure sharp shared effects into the factor "
             "grammar, which escalates its node family automatically; "
             "raising qa= does not fix this.",
-            RuntimeWarning, stacklevel=4)
+            RuntimeWarning, stacklevel=stacklevel)
 
 
 def _window_nodes(mu, sd, amp, delta=1e-12, pad_sds=2.0):
@@ -830,6 +830,23 @@ def _tree_leaf_index(cluster, leaves=None):
     return out
 
 
+def _warn_if_tree_sharp(v, c, path_var, sd, qa):
+    """_warn_if_sharp for a tree: a runner's shared effect is its leaf
+    loading plus every ancestor strength on its path (the common root
+    already removed), each integrated by the same fixed Gauss-Hermite
+    rule, so its row is the block row [v_i, ancestor strengths] and the
+    sharpness is sqrt(v_i^2 + path_var) / sd_i. With one leaf cluster
+    its common part cancels, so the loading is gauge-centred first, as
+    the block path and the browser port measure it. A one-leaf tree is
+    the one-block race: at sharpness 21.3 it priced a share 0.218 off the
+    factor reference with no warning (#11). Called from the public tree
+    functions, so stacklevel 4 names their caller."""
+    v = np.asarray(_one_cluster_gauge(c, v, len(v)), float).reshape(-1)
+    _warn_if_sharp(np.c_[v,
+                         np.sqrt(np.asarray(path_var, float))],
+                   sd, qa, stacklevel=4)
+
+
 def tree_race_probabilities(mu, cluster, loading, D, parent, strength,
                             points=257, qa=9, leaves=None):
     """P(i wins | min-wins) under a hierarchy of uniform shared effects.
@@ -851,6 +868,10 @@ def tree_race_probabilities(mu, cluster, loading, D, parent, strength,
     v = _scalar_loading(loading, "tree races", len(mu))
     cluster = np.asarray(cluster)
     _check_cluster(cluster, len(mu))                 # (#792)
+    # one leaf cluster: its common loading cancels, as in the block path;
+    # a +40 on every loading raised a mass defect (#1056)
+    v = np.asarray(_one_cluster_gauge(cluster, v, len(mu)),
+                   float).reshape(-1)
     parent = _as_parent(parent); lam = np.asarray(strength, float)
     n = len(m); nT = len(parent)
     _, inv = np.unique(cluster, return_inverse=True)
@@ -875,6 +896,7 @@ def tree_race_probabilities(mu, cluster, loading, D, parent, strength,
         while parent[u] >= 0:
             s_ += lam[parent[u]] ** 2; u = parent[u]
         path_var[c] = s_
+    _warn_if_tree_sharp(v_o, c_o, path_var[c_o], sd_o, qa)
     amp = (np.abs(v_o) + depth_shift[c_o]) * float(np.max(np.abs(an)))
     lo, hi = _window_nodes(mu_o, sd_o, amp)
     if _HAVE_RUST and hasattr(_fastrace, "tree_race"):
@@ -960,6 +982,10 @@ def tree_race_jacobian(mu, cluster, loading, D, parent, strength,
     v = _scalar_loading(loading, "tree races", len(mu))
     cluster = np.asarray(cluster)
     _check_cluster(cluster, len(mu))                 # (#792)
+    # one leaf cluster: its common loading cancels, as in the block path;
+    # a +40 on every loading raised a mass defect (#1056)
+    v = np.asarray(_one_cluster_gauge(cluster, v, len(mu)),
+                   float).reshape(-1)
     parent = _as_parent(parent); lam = np.asarray(strength, float)
     n = len(m); nT = len(parent)
     _, inv = np.unique(cluster, return_inverse=True)
@@ -1001,6 +1027,7 @@ def tree_race_jacobian(mu, cluster, loading, D, parent, strength,
         while parent[u] >= 0:
             s_ += lam[parent[u]] ** 2; u = parent[u]
         path_var[c] = s_
+    _warn_if_tree_sharp(v_o, c_o, path_var[c_o], sd_o, qa)
     amp = (np.abs(v_o) + depth_shift[c_o]) * float(np.max(np.abs(an)))
     lo, hi = _window_nodes(mu_o, sd_o, amp)
     x = np.linspace(lo, hi, points); dx = x[1] - x[0]
