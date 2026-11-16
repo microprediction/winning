@@ -527,3 +527,14 @@ end
     @test mvn_cdf_fast(upper = (0.0, 1.0, 2.0, 3.0), mean = mu, V = V, D = D) ==
           mvn_cdf_fast(upper = u_vec, mean = mu, V = V, D = D)
 end
+
+@testset "a Heywood factorization is not accepted as exact (#1015)" begin
+    # well-conditioned (min eigenvalue 0.044), but the rank-3 fit pinned
+    # two residual variances at the 1e-12 floor and was accepted
+    C = [0.63 0.29 0.11 0.52; 0.29 0.86 0.95 0.16;
+         0.11 0.95 2.15 1.28; 0.52 0.16 1.28 2.45]
+    fd = factorize_covariance(C)
+    # tolerance above the floor: main's round trip D .* d[pos] ./ C[i,i]
+    # can land a floored entry an ulp above 1e-12
+    @test fd === nothing || minimum(fd[2] ./ [C[i, i] for i in 1:4]) > 1e-11
+end

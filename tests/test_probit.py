@@ -143,3 +143,28 @@ def test_sigma_path_forward_and_inverse_round_trip():
     Vf, Df = fit_factor_model(Sigma, 2)
     P = np.eye(len(u)) - np.ones((len(u), len(u))) / len(u)
     assert np.abs(P @ (Vf @ Vf.T + np.diag(Df) - Sigma) @ P).max() < 1e-6
+
+
+def test_exact_rank_one_plus_diagonal_is_fitted_exactly():
+    # issue #1018: the alternation converges linearly and, for a rank-1
+    # fit at n = 5, 60 sweeps stopped with projected residuals up to
+    # 2e-3 (seed 6; fitted D[2] = 1.20 where the truth is 0.42), and
+    # shares(u, Sigma=S, k=1) then disagreed with shares(u, V, D) by
+    # up to 2e-3. A fit that runs out of sweeps is now finished by
+    # Gauss-Newton on the same objective.
+    n = 5
+    P = np.eye(n) - np.ones((n, n)) / n
+    worst = 0.0
+    for seed in range(40):
+        rng = np.random.default_rng(seed)
+        V = rng.standard_normal((n, 1))
+        D = rng.uniform(0.2, 2.0, n)
+        Sigma = V @ V.T + np.diag(D)
+        Vf, Df = fit_factor_model(Sigma, 1)
+        worst = max(worst, np.abs(P @ (Vf @ Vf.T + np.diag(Df) - Sigma) @ P).max())
+        if seed == 6:
+            # the identified rank-1 model recovers D itself
+            assert np.abs(Df - D).max() < 1e-8
+            u = np.array([0.3, -0.2, 0.5, 0.0, -0.6])
+            assert np.abs(shares(u, Sigma=Sigma, k=1) - shares(u, V=V, D=D)).max() < 1e-9
+    assert worst < 1e-10

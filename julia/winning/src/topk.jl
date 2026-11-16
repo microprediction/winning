@@ -397,8 +397,8 @@ end
 const _TOPK_QMC_NODES = 1024
 
 function _topk_factor_nodes(V, n, qa, caller, D = nothing)
-    Vm = V isa AbstractMatrix ? Float64.(Matrix(V)) :
-         reshape(Float64.(collect(V)), :, 1)
+    # Orient before counting factors or centering over contestants.
+    Vm = _as_loadings(V, n)
     r = size(Vm, 2)
     r > 2 && error("$caller is implemented for factor rank <= 2")
     Vm = _gauge_center(Vm)                     # scale-safe (#471)

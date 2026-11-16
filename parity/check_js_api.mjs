@@ -4263,5 +4263,56 @@ rejects(C => demo.fitGrammar(C, 1, 0, { method: "ipaf", tol: 0 }),
 }
 
 
+// --- tree races warn on sharpness like block/nested (#11)
+{
+  // a one-leaf tree is the one-block race; at sharpness 21.3 (17.8 before
+  // the one-cluster loading is centred) the fixed 9-node rule prices a
+  // share 0.218 off the factor reference, normalized
+  const mu = [-0.35221016127616167, -0.1465622573159635, -0.06922290846705437,
+    -0.7895801779814065, 0.5263814451172948, -0.45293018920347095,
+    0.8489520382136106, 0.3635434559546411];
+  const v = [-1.4273646213114262, -2.2077446188777685, 3.776806265115738,
+    -1.663014443591237, 0.7718250788748264, -3.9720420967787504,
+    -1.48259686678648, -1.66114398278296];
+  const D = Array(8).fill(0.05), cl = Array(8).fill(0);
+  const warned = [];
+  const keep = console.warn;
+  console.warn = m => warned.push(String(m));
+  const sharpWarns = () => warned.filter(m => m.includes("sharpness")).length;
+  try {
+    const ref = races.raceProbabilities(mu, { V: v, D, points: 1025 });
+    warned.length = 0;
+    const p9 = blocks.treeRaceProbabilities(mu, cl, v, D, [-1], [0], { points: 1025, qa: 9 });
+    const err = Math.max(...p9.map((x, i) => Math.abs(x - ref[i])));
+    holds("sharp one-leaf tree warns (#11)",
+          sharpWarns() === 1 && warned[0].includes("sharpness is 21"), JSON.stringify(warned));
+    holds("the warning guards a material normalized error (#11)",
+          err > 0.2 && Math.abs(p9.reduce((a, b) => a + b, 0) - 1) < 1e-12, String(err));
+    // the same field scaled to sharpness 2.9 is under the threshold
+    warned.length = 0;
+    const v29 = v.map(x => x * 2.9 / 21.287214);
+    blocks.treeRaceProbabilities(mu, cl, v29, D, [-1], [0], { points: 257, qa: 9 });
+    // a common loading shift is gauge with one cluster
+    blocks.treeRaceProbabilities(mu, cl, v29.map(x => x + 40), D, [-1], [0], { points: 257, qa: 9 });
+    holds("tree under sharpness 3 does not warn (#11)", sharpWarns() === 0, JSON.stringify(warned));
+    // just over: the leaf loading alone at 3.1
+    warned.length = 0;
+    const v31 = v.map(x => x * 3.1 / 21.287214);
+    blocks.treeRaceProbabilities(mu, cl, v31, D, [-1], [0], { points: 257, qa: 9 });
+    holds("tree just over sharpness 3 warns (#11)", sharpWarns() === 1, JSON.stringify(warned));
+    // an ancestor strength is on the same fixed rule: leaf loadings 0.1
+    // but strength 1 over two of three leaves is sharpness 4.5
+    warned.length = 0;
+    const tm = [0.1, -0.2, 0.05, 0.3, -0.1, 0.0], tc = [0, 0, 1, 1, 2, 2];
+    const tv = Array(6).fill(0.1), tD = Array(6).fill(0.05);
+    blocks.treeRaceProbabilities(tm, tc, tv, tD, [3, 3, 4, 4, -1], [0, 0, 0, 1.0, 0], { points: 257 });
+    holds("sharp ancestor strength warns (#11)", sharpWarns() === 1, JSON.stringify(warned));
+    warned.length = 0;
+    blocks.treeRaceProbabilities(tm, tc, tv, tD, [3, 3, 4, 4, -1], [0, 0, 0, 0.6, 0], { points: 257 });
+    holds("moderate ancestor strength does not warn (#11)", sharpWarns() === 0, JSON.stringify(warned));
+  } finally { console.warn = keep; }
+}
+
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");

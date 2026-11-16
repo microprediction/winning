@@ -533,7 +533,13 @@ export function solveForImpliedOffsets(prices, density, opts = {}) {
     cdfs = implied.map(o => shiftedCdf(base, o, L));
   }
   if (it === nIter) assess(implied, exactStatePrices(cdfs));
-  implied = best;
+  // The iteration prices each offset on its own and lowHigh pins anything
+  // past +/-(L-2), so an iterate can drift beyond the edge unseen; the
+  // public forward translates such a book back first (edgeCentred) and
+  // priced a 3.8e-4 calibration 9.4e-2 off (#1046). Return the offsets
+  // the iteration priced, pinned to [-(L-2), L-2]: bitwise the same CDFs,
+  // and an in-range result is unchanged.
+  implied = best.map(o => Math.min(Math.max(o, -(L - 2)), L - 2));
   warnIfUnconverged(exactStatePrices(implied.map(o => shiftedCdf(base, o, L))), prices);
   return implied;
 }
