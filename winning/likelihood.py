@@ -738,6 +738,10 @@ def _ranking_mode(mu_t, V, order, tau, iters=30, tol=1e-10):
     J, r = V.shape
     k = len(order)
     order = np.asarray(order)
+    # A loading common to every alternative cancels from each stage's
+    # softmax, so centring is exact here, and it keeps the second moments
+    # below from overflowing on a huge common loading.
+    V = V - V.mean(axis=0)
     Vt = V / tau
     alive = np.ones((k, J), dtype=bool)
     for s in range(1, k):

@@ -171,3 +171,16 @@ def test_gate_is_per_order_length_1017(monkeypatch):
     orders = [order[:1], order[:2], order[:3], order]
     ranking_loglik_and_score(np.tile(mu, (4, 1)), V, orders)
     assert seen == [3, 8]
+
+
+def test_mode_hessian_ignores_a_huge_common_loading():
+    # a loading shared by every alternative cancels from each stage; the
+    # posterior Hessian must not overflow on it (review on #1061)
+    from winning.likelihood import _ranking_mode
+    mu = np.zeros(4)
+    V0 = np.array([[0, -1], [0, -.5], [0, .5], [0, 1.]])
+    V = V0 + np.array([2.0 ** 600, 0.0])
+    _, H = _ranking_mode(mu, V, [0, 1, 2, 3], 1.0)
+    _, H0 = _ranking_mode(mu, V0, [0, 1, 2, 3], 1.0)
+    assert np.all(np.isfinite(H))
+    np.testing.assert_allclose(H, H0, atol=1e-12)
