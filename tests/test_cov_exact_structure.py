@@ -25,6 +25,14 @@ Resolved by routing, not by fixing the fit: cov= sends the forward
 normal race to scrambled-Sobol GHK when the fit degenerates, so the
 first test now passes to GHK's accuracy. The second pins that the fit
 itself is unchanged, so the routing stays necessary.
+
+#1051 (2026-11-16): for r = 1 and 3 the degeneration was not the
+staging but the stage-one alternation stalling at its sweep cap with a
+residual the promoted eigendirections then chased to full rank. With
+capped fits finished by Gauss-Newton the fit recovers the true rank and
+D exactly, is not degraded, and is priced on the factor lattice (to its
+2^11-node quadrature, within the first test's 2e-3). r = 5 exceeds the
+default k = 3 and still degenerates; it stays pinned and routed.
 """
 import warnings
 
@@ -51,10 +59,11 @@ def exact_correlation(r, seed):
 
 @pytest.mark.parametrize("r", [1, 3, 5])
 def test_cov_reproduces_an_exactly_structured_correlation(r):
-    """The fit still degenerates (pinned below); cov= now routes the
+    """r = 5: the fit still degenerates (pinned below); cov= routes the
     forward normal race to scrambled-Sobol GHK instead of using it, so
     the answer is within GHK's 1024-node accuracy (~5e-4) of the exact
-    V/D lattice rather than 5-8e-3 off it."""
+    V/D lattice rather than 5-8e-3 off it. r = 1, 3: the fit is exact
+    since #1051 and priced on the factor lattice."""
     V, D, C = exact_correlation(r, seed=5 + r)
     with warnings.catch_warnings():
         warnings.simplefilter("error")                 # routed: no warning
@@ -72,6 +81,13 @@ def test_the_defect_is_the_fit_not_the_race(r):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         Vf, Df, F, W, rep = fit_covariance(C, return_report=True)
+    if r <= 3:
+        # #1051: within the default k = 3 the fit is now exact -- the
+        # true rank, the true D -- and the mechanism below is gone
+        assert rep["rank"] == r
+        assert np.abs(Df - D).max() < 1e-10
+        assert rep["projected_residual_max"] < 1e-12
+        return
     assert rep["rank"] == N, "no longer full rank: the xfail above may lift"
     assert Df.min() < 1e-5, "D no longer on the floor: the xfail above may lift"
     assert rep["projected_residual_max"] < 1e-4, \

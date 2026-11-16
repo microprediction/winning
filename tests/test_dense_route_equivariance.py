@@ -151,7 +151,10 @@ def test_the_degeneration_warning_names_a_recipe_that_runs():
     attribute) with V=chol(cov) and no D (TypeError). Whatever it names
     now must execute as written."""
     import re
-    C = _exact_correlation(8, 3, 3)
+    # exactly 5-factor: the 3-factor field this test used degenerated only
+    # because the fit stalled at its sweep cap, and since #1051 it is
+    # fitted exactly at rank 3 with no warning to read
+    C = _exact_correlation(8, 5, 3)
     mu = np.linspace(-0.5, 0.5, 8)
     with pytest.warns(RuntimeWarning) as rec:
         wf.race_probabilities(mu, cov=C, return_slopes=True)

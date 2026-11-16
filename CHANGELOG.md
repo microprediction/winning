@@ -21,8 +21,22 @@
   the same projected objective. An exact rank-1-plus-diagonal Sigma at
   n = 5 was left at projected residuals up to 2e-3 and now fits to
   rounding. Fits that converged on their own are bitwise unchanged
-  (#1018). `fit_covariance` (behind `cov=`) still runs the capped
-  alternation alone and can stall the same way; tracked in #1051.
+  (#1018).
+- `fit_covariance` (python and R; behind `race_probabilities(cov=)`,
+  the posterior refit and `top_k` intake) applies the same polish to a
+  stage-one start that ran out of sweeps. The polished start replaces
+  the fit only if the final projected residual is strictly lower in its
+  largest entry and no higher in Frobenius norm; otherwise, and for
+  every start that stopped on its own, the fit is bitwise unchanged. An
+  exact rank-1-plus-diagonal C at n = 5 was left at projected residuals
+  up to 1.5e-3 and now fits to rounding, with python and R agreeing to
+  1e-14. Some small exact fields that used to stall into a degraded
+  full-rank fit (the #118 n = 8 rank-3 correlation among them) are now
+  fitted exactly at their true rank. They are no longer routed to GHK
+  and are priced on the factor lattice at the default 2^11 nodes: on a
+  360-covariance sweep the 42 such fields moved from a median 1e-5 (max
+  4.5e-5) off a 2^21-node GHK reference to a median 8e-5 (max 5.7e-4),
+  the lattice's quadrature error on the true V and D (#1051).
 
 ## 1.7.0 (2026-10-31)
 

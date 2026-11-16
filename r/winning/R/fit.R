@@ -67,6 +67,7 @@
   G <- P * P
   W <- matrix(0, n - 1, k)
   best <- list(W = W, D = D, obj = Inf)
+  hit_cap <- TRUE
   for (it in seq_len(n_outer)) {
     R <- S - t(B * D) %*% B
     e <- eigen(R, symmetric = TRUE)
@@ -78,16 +79,102 @@
     # descent enforced, as python: a sweep that does not improve the
     # objective is discarded and the alternation stops at the best iterate
     obj <- .projected_sq(C, B %*% W, D_new)
-    if (obj > best$obj * (1 + 1e-12)) { W <- best$W; D <- best$D; break }
+    if (obj > best$obj * (1 + 1e-12)) {
+      W <- best$W; D <- best$D; hit_cap <- FALSE; break
+    }
     best <- list(W = W, D = D_new, obj = obj)
-    if (max(abs(D_new - D)) < 1e-12) { D <- D_new; break }
+    if (max(abs(D_new - D)) < 1e-12) { D <- D_new; hit_cap <- FALSE; break }
     D <- D_new
   }
-  # RELATIVE floor, as python's factor_model_projected: an absolute 1e-8
-  # inflates a tiny variance (C = 1e-12 I) by orders of magnitude
+  # hit_cap: the alternation ran out of sweeps rather than stopping on
+  # its own rule (#1051), so fit_covariance may finish it
+  list(V = B %*% W, D = .projected_floor(C, D), hit_cap = hit_cap)
+}
+
+# RELATIVE floor, as python's factor_model_projected: an absolute 1e-8
+# inflates a tiny variance (C = 1e-12 I) by orders of magnitude
+.projected_floor <- function(C, D) {
   dc <- diag(C)
   floor <- 1e-8 * pmax(dc, 1e-6 * max(mean(dc), 1e-300))
-  list(V = B %*% W, D = pmax(D, floor))
+  pmax(D, floor)
+}
+
+# Finish a projected factor fit the alternation left unconverged: port of
+# python's core._polish_projected (#1018, #1051). The alternation is
+# block coordinate descent and converges linearly; on an EXACT
+# rank-1-plus-diagonal C at n = 5 its 60 sweeps stop with projected
+# residuals up to 1.5e-3. This is Gauss-Newton on the variable-projection
+# objective f(D) = min_V ||P (C - V V' - diag D) P||_F^2: with N spanning
+# the eigenvectors of S - B' diag(D) B the top-k PSD fit does not keep
+# (eigenvalues l) and X = B N, the step solves (Pi o Pi) delta =
+# (X o X) l, Pi = X X' -- the alternation's own D-step with P o P
+# replaced by the projector that also removes the factor directions.
+# Quadratic at zero residual. D stays nonnegative (bound variables with
+# an outward step are frozen, then the step is clipped), a step is taken
+# only if it lowers f (halving otherwise), and at most max_eval
+# eigendecompositions are spent. Returns list(V, D, f) with D before the
+# variance floor; the caller keeps it only if it lowers the objective.
+.polish_projected <- function(C, k, D, max_eval = 60L) {
+  n <- nrow(C)
+  # orthonormal Helmert basis of the mean-zero subspace, as python
+  B <- matrix(0, n, n - 1L)
+  for (j in seq_len(n - 1L)) {
+    B[seq_len(j), j] <- 1
+    B[j + 1L, j] <- -j
+    B[, j] <- B[, j] / sqrt(j * (j + 1))
+  }
+  S <- t(B) %*% C %*% B
+  budget <- max_eval
+  evaluate <- function(D) {
+    budget <<- budget - 1L
+    e <- eigen(S - t(B * D) %*% B, symmetric = TRUE)
+    lam <- e$values
+    U <- e$vectors
+    keep <- rep(FALSE, length(lam))
+    kk <- min(k, length(lam))
+    if (kk > 0) keep[seq_len(kk)] <- lam[seq_len(kk)] > 0
+    lc <- lam[!keep]
+    V <- B %*% (U[, seq_len(kk), drop = FALSE] *
+                  rep(sqrt(pmax(lam[seq_len(kk)], 0)), each = n - 1L))
+    if (ncol(V) < k) V <- cbind(V, matrix(0, n, k - ncol(V)))
+    list(f = sum(lc * lc), lc = lc, X = B %*% U[, !keep, drop = FALSE],
+         V = V)
+  }
+  D <- pmax(as.numeric(D), 0)
+  cur <- evaluate(D)
+  while (budget > 0 && cur$f > 0) {
+    H <- (cur$X %*% t(cur$X))^2
+    h <- as.numeric((cur$X^2) %*% cur$lc)
+    free <- rep(TRUE, n)
+    for (pass in 1:3) {
+      d <- rep(0, n)
+      if (any(free)) {
+        Hf <- H[free, free, drop = FALSE]
+        # minimum-norm least squares, as numpy's lstsq
+        sv <- svd(Hf)
+        tol <- max(dim(Hf)) * .Machine$double.eps * max(sv$d)
+        dinv <- ifelse(sv$d > tol, 1 / sv$d, 0)
+        d[free] <- sv$v %*% (dinv * (t(sv$u) %*% h[free]))
+      }
+      blocked <- free & (D <= 0) & (d < 0)
+      if (!any(blocked)) break
+      free <- free & !blocked
+    }
+    t_ <- 1
+    accepted <- FALSE
+    while (budget > 0) {
+      Dn <- pmax(D + t_ * d, 0)
+      nxt <- evaluate(Dn)
+      if (nxt$f < cur$f) { accepted <- TRUE; break }
+      t_ <- t_ * 0.5
+    }
+    if (!accepted) break
+    gain <- (cur$f - nxt$f) / cur$f
+    D <- Dn
+    cur <- nxt
+    if (gain < 1e-10) break
+  }
+  list(V = cur$V, D = D, f = cur$f)
 }
 
 # Warn when the rank cuts through a degenerate eigenvalue of the
@@ -230,42 +317,34 @@ fit_covariance <- function(C, k = 3L, m = 5L, blocks = NULL,
       if (o2 < obj0) { fit <- f2; obj0 <- o2 }
     }
   }
-  V <- fit$V
+  # #1051, python parity (#1018): the alternation converges linearly,
+  # and on an EXACT rank-1-plus-diagonal C at n = 5 every start ran out of
+  # sweeps with projected residuals up to 1.5e-3. A kept start that hit
+  # the sweep cap is finished by Gauss-Newton on the same objective; the
+  # polished start is a candidate only if it lowers that objective by more
+  # than a relative 1e-10, and replaces the fit only if the FINAL
+  # choice-relevant residual is strictly lower in its largest entry and
+  # no higher in Frobenius norm. A start that stopped on its own rule is
+  # untouched.
+  polished <- NULL
+  if (isTRUE(fit$hit_cap) && n >= 3L && n <= 800L) {
+    pz <- .polish_projected(C, kk, fit$D)
+    D1 <- .projected_floor(C, pz$D)
+    if (.projected_sq(C, pz$V, D1) <
+        .projected_sq(C, fit$V, fit$D) * (1 - 1e-10))
+      polished <- list(V = pz$V, D = D1)
+  }
   if (is.null(blocks)) blocks <- max(2L, min(n %/% 5L, 20L))
   P <- diag(n) - 1 / n
-  R <- P %*% (C - V %*% t(V) - diag(fit$D)) %*% P
   cluster <- rep(0L, n)
-  v <- rep(0, n)
-  if (n >= 3L && blocks >= 2L) {
+  use_blocks <- n >= 3L && blocks >= 2L
+  if (use_blocks) {
     dm <- stats::as.dist(sqrt(pmin(pmax(0.5 * (1 - corr), 0), 1)))
     cluster <- stats::cutree(stats::hclust(dm, method = "average"),
                              k = blocks) - 1L
-    for (cc in unique(cluster)) {
-      idx <- which(cluster == cc)
-      if (length(idx) < 2L) next
-      Rb <- R[idx, idx, drop = FALSE]
-      diag(Rb) <- 0
-      e <- eigen(Rb, symmetric = TRUE)
-      if (e$values[1] > 0)
-        v[idx] <- e$vectors[, 1] * sqrt(e$values[1])
-    }
   }
   uc <- unique(cluster)
-  BD <- matrix(0, n, length(uc))
-  for (j in seq_along(uc)) {
-    idx <- which(cluster == uc[j])
-    BD[idx, j] <- v[idx]
-  }
-  E <- R - BD %*% t(BD)
-  diag(E) <- 0
-  e <- eigen(E, symmetric = TRUE)
   m_eff <- min(m, n)
-  Vres <- e$vectors[, seq_len(m_eff), drop = FALSE] *
-    rep(sqrt(pmax(e$values[seq_len(m_eff)], 0)), each = n)
-  Vall <- cbind(V, Vres, BD)
-  keep <- colSums(Vall ^ 2) > 1e-10 * sum(diag(C)) / n
-  if (!any(keep)) keep[1] <- TRUE
-  Vall <- Vall[, keep, drop = FALSE]
   # The floor is RELATIVE to each runner's own variance, as python's
   # _close. The absolute 1e-3 * mean(diag(C)) floor destroyed near-singular
   # contrasts: on diag(1e-8, 1e-8, 1) Var(X1 - X2) >= D1 + D2 >= 6.7e-4
@@ -304,7 +383,6 @@ fit_covariance <- function(C, k = 3L, m = 5L, blocks = NULL,
     Rm <- P %*% (C - Vc %*% t(Vc) - diag(Dc)) %*% P
     list(D = Dc, res = max(abs(Rm)))
   }
-  a1 <- close_fit(Vall)
   # second arm: pure eigen fit at the same total rank (greedy
   # factor+blocks allocation is the wrong shape for globally smooth
   # covariance); smaller choice-relevant residual wins, pipeline on ties
@@ -314,12 +392,53 @@ fit_covariance <- function(C, k = 3L, m = 5L, blocks = NULL,
   # _top_eigen truncates silently where seq_len() here ran off the end
   # of eC$vectors ("subscript out of bounds", an n=8 exact-rank-3
   # correlation, the #118 fixture)
-  rank <- min(ncol(Vall), n)
-  eC <- eigen(C, symmetric = TRUE)
-  Veig <- eC$vectors[, seq_len(rank), drop = FALSE] *
-    rep(sqrt(pmax(eC$values[seq_len(rank)], 0)), each = n)
-  a2 <- close_fit(Veig)
-  if (a2$res < a1$res) { Vall <- Veig; D <- a2$D } else D <- a1$D
+  eC <- NULL
+  stages <- function(V, D0) {
+    R <- P %*% (C - V %*% t(V) - diag(D0)) %*% P
+    v <- rep(0, n)
+    if (use_blocks) {
+      for (cc in uc) {
+        idx <- which(cluster == cc)
+        if (length(idx) < 2L) next
+        Rb <- R[idx, idx, drop = FALSE]
+        diag(Rb) <- 0
+        e <- eigen(Rb, symmetric = TRUE)
+        if (e$values[1] > 0)
+          v[idx] <- e$vectors[, 1] * sqrt(e$values[1])
+      }
+    }
+    BD <- matrix(0, n, length(uc))
+    for (j in seq_along(uc)) {
+      idx <- which(cluster == uc[j])
+      BD[idx, j] <- v[idx]
+    }
+    E <- R - BD %*% t(BD)
+    diag(E) <- 0
+    e <- eigen(E, symmetric = TRUE)
+    Vres <- e$vectors[, seq_len(m_eff), drop = FALSE] *
+      rep(sqrt(pmax(e$values[seq_len(m_eff)], 0)), each = n)
+    Vall <- cbind(V, Vres, BD)
+    keep <- colSums(Vall ^ 2) > 1e-10 * sum(diag(C)) / n
+    if (!any(keep)) keep[1] <- TRUE
+    Vall <- Vall[, keep, drop = FALSE]
+    a1 <- close_fit(Vall)
+    rank <- min(ncol(Vall), n)
+    if (is.null(eC)) eC <<- eigen(C, symmetric = TRUE)
+    Veig <- eC$vectors[, seq_len(rank), drop = FALSE] *
+      rep(sqrt(pmax(eC$values[seq_len(rank)], 0)), each = n)
+    a2 <- close_fit(Veig)
+    if (a2$res < a1$res) list(V = Veig, D = a2$D, res = a2$res)
+    else list(V = Vall, D = a1$D, res = a1$res)
+  }
+  fro <- function(st) sqrt(sum((P %*% (C - st$V %*% t(st$V) -
+                                         diag(st$D, n)) %*% P)^2))
+  st <- stages(fit$V, fit$D)
+  if (!is.null(polished)) {
+    st1 <- stages(polished$V, polished$D)
+    if (st1$res < st$res && fro(st1) <= fro(st)) st <- st1
+  }
+  Vall <- st$V
+  D <- st$D
   hw <- .halton_normal_nodes(ncol(Vall), nodes)
   # The two failure classes the python reference keys on, reported so a
   # caller can see them: the fit degenerates to full rank or drives D onto
@@ -338,7 +457,7 @@ fit_covariance <- function(C, k = 3L, m = 5L, blocks = NULL,
   cv_true <- outer(diag(C), diag(C), "+") - 2 * C
   scale_cv <- pmax(cv_true, 1e-12 * mean(diag(C)))
   contrast_res <- max(abs(cv_fit - cv_true) / scale_cv)
-  residual <- min(a1$res, a2$res)
+  residual <- st$res
   list(V = Vall, D = D, F = hw$F, W = hw$W,
        rank = ncol(Vall), n = n,
        bound = bound,

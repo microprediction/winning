@@ -147,11 +147,11 @@ def factor_model_contrast(C: np.ndarray, k: int, n_iter: int = 200,
     resulting race is materially correlated (shares off by 0.03-0.05).
     The public covariance intake (winning.probit.fit_factor_model,
     fit_covariance) uses factor_model_projected, which minimises the
-    projected residual instead (to its sweep cap: a fit that hits the
-    cap can stop short, #1018; fit_factor_model polishes such fits,
-    fit_covariance does not yet, #1051). This function is retained because the
-    boundary experiments (research/experiments/exp14_boundaries) cite
-    it; prefer factor_model_projected for anything new.
+    projected residual instead (both finish a fit that hits the sweep
+    cap with a Gauss-Newton polish, #1018, #1051). This function is
+    retained because the boundary experiments
+    (research/experiments/exp14_boundaries) cite it; prefer
+    factor_model_projected for anything new.
     """
     C = np.asarray(C, dtype=float)
     n = len(C)
@@ -668,7 +668,9 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
     Stages (the paper's dense-Sigma pipeline, validated against the
     randomcov ensemble battery): (1) k global factors by the certified
     quotient-space fit -- only P Sigma P is choice-relevant, so the fit
-    minimizes the projected residual, not the raw one; (2) average-linkage
+    minimizes the projected residual, not the raw one; a start that runs
+    out of alternation sweeps is finished by Gauss-Newton and kept only
+    if the final residual improves (#1051); (2) average-linkage
     clustering of the residual correlation into blocks, one rank-1 loading
     per block from the off-diagonal residual; (3) the remaining
     off-diagonal residual's top-m eigendirections promoted to further
@@ -752,7 +754,7 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
     s = np.sqrt(np.clip(np.diag(C), 1e-12, None))
     corr = C / np.outer(s, s)
     kk = min(k, n - 1)
-    V, D0 = factor_model_projected(C, kk)
+    V, D0, hit_cap = _factor_model_projected_run(C, kk)
     # The alternation is nonconvex and its default start can stall at a
     # nonglobal stationary point precisely on EASY inputs: an exactly
     # in-grammar matrix at small n with idiosyncratic variances spread
@@ -767,23 +769,30 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
         lam_top = np.sort(np.linalg.eigvalsh(C))[::-1][:kk].sum() / n
         for D_start in (0.9 * np.diag(C),
                         np.maximum(np.diag(C) - lam_top, 1e-3)):
-            V2, D2 = factor_model_projected(C, kk, D0=D_start)
+            V2, D2, cap2 = _factor_model_projected_run(C, kk, D0=D_start)
             if _projected_sq(C, V2, D2) < _projected_sq(C, V, D0):
-                V, D0 = V2, D2
+                V, D0, hit_cap = V2, D2, cap2
+    # #1051, the rule fit_factor_model follows (#1018): the alternation
+    # converges linearly, and on an EXACT rank-1-plus-diagonal C at n = 5
+    # all 100 seeds ran out of sweeps and the final fit kept projected
+    # residuals up to 1.5e-3. If the start kept here hit the sweep cap it
+    # is finished by Gauss-Newton on the same projected objective, and the
+    # polished start is a candidate only if it lowers that objective by
+    # more than a relative 1e-10. A start that stopped on its own rule is
+    # untouched, so such fits are bitwise as before.
     V = np.asarray(V, dtype=float)
-    _warn_if_rank_splits_a_tie(C, D0, kk)
+    polished = None
+    if hit_cap and 3 <= n <= 800:
+        V1, D1, _ = _polish_projected(C, kk, D0)
+        D1 = _projected_floor(C, D1)
+        if _projected_sq(C, V1, D1) < _projected_sq(C, V, D0) * (1.0 - 1e-10):
+            polished = (np.asarray(V1, dtype=float), D1)
     if blocks is None:
         blocks = max(2, min(n // 5, 20))
     block_source = "none"
-    # everything downstream fits the CHOICE-RELEVANT residual: the raw
-    # residual C - VV' - D0 contains a common component the quotient fit
-    # rightly ignored; chasing it with block loadings would trade real
-    # projected error for irrelevant reconstruction (in-grammar inputs
-    # would come back distorted). Project it out once, here.
-    R = _center2(C - V @ V.T - np.diag(D0))
-    v = np.zeros(n)
     cluster = np.zeros(n, dtype=int)
-    if labels is not None or (n >= 3 and blocks >= 2):
+    use_blocks = labels is not None or (n >= 3 and blocks >= 2)
+    if use_blocks:
         if labels is not None:
             # the caller's membership replaces the clustering stage and
             # nothing else: the per-block rank-1 loadings below are fitted
@@ -795,30 +804,8 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
             Z = linkage(squareform(d, checks=False), method="average")
             cluster = fcluster(Z, blocks, criterion="maxclust") - 1
             block_source = "clustered"
-        for c in np.unique(cluster):
-            idx = np.where(cluster == c)[0]
-            if len(idx) < 2:
-                continue
-            Rb = R[np.ix_(idx, idx)].copy()
-            np.fill_diagonal(Rb, 0.0)
-            wb, Ub = np.linalg.eigh(Rb)
-            if wb[-1] > 0:
-                v[idx] = Ub[:, -1] * np.sqrt(wb[-1])
     uniq = np.unique(cluster)
-    BD = np.zeros((n, len(uniq)))
-    for j, c in enumerate(uniq):
-        idx = np.where(cluster == c)[0]
-        BD[idx, j] = v[idx]
-    E = R - BD @ BD.T
-    np.fill_diagonal(E, 0.0)
     m_eff = min(m, n)
-    lamE, UE, _ = _top_eigen(E, m_eff)
-    Vres = UE * np.sqrt(np.maximum(lamE, 0.0))
-    Vall = np.hstack([V, Vres, BD])
-    keep = (Vall ** 2).sum(axis=0) > 1e-10 * np.trace(C) / n
-    if not keep.any():
-        keep[0] = True
-    Vall = Vall[:, keep]
 
     def _close(Vc):
         # closing D solve: min over d of ||P(C - Vc Vc' - diag(d))P||_F.
@@ -857,20 +844,77 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
         Rm = _center2(C - Vc @ Vc.T - np.diag(Dc))
         return Dc, float(np.abs(Rm).max())
 
-    D, res_pipe = _close(Vall)
-    # second arm: a pure eigen fit at the same total rank. Greedy
-    # factor+blocks allocation is the wrong shape for globally smooth
-    # covariance (measured: smooth RBF kernels at rank 27 hold to 1e-3
-    # under eigen, 0.14 under the pipeline); keep whichever leaves the
-    # smaller choice-relevant residual, pipeline winning ties.
-    rank = Vall.shape[1]
-    lamC, UC, _ = _top_eigen(C, rank, pad=10, sweeps=40)
-    Veig = UC * np.sqrt(np.maximum(lamC, 0.0))
-    Deig, res_eig = _close(Veig)
-    arm = "pipeline"
-    if res_eig < res_pipe:
-        Vall, D, res_pipe = Veig, Deig, res_eig
-        arm = "eigen"
+    eigen_arms = {}
+
+    def _stages(V, D0):
+        # everything downstream fits the CHOICE-RELEVANT residual: the raw
+        # residual C - VV' - D0 contains a common component the quotient
+        # fit rightly ignored; chasing it with block loadings would trade
+        # real projected error for irrelevant reconstruction (in-grammar
+        # inputs would come back distorted). Project it out once, here.
+        R = _center2(C - V @ V.T - np.diag(D0))
+        v = np.zeros(n)
+        if use_blocks:
+            for c in uniq:
+                idx = np.where(cluster == c)[0]
+                if len(idx) < 2:
+                    continue
+                Rb = R[np.ix_(idx, idx)].copy()
+                np.fill_diagonal(Rb, 0.0)
+                wb, Ub = np.linalg.eigh(Rb)
+                if wb[-1] > 0:
+                    v[idx] = Ub[:, -1] * np.sqrt(wb[-1])
+        BD = np.zeros((n, len(uniq)))
+        for j, c in enumerate(uniq):
+            idx = np.where(cluster == c)[0]
+            BD[idx, j] = v[idx]
+        E = R - BD @ BD.T
+        np.fill_diagonal(E, 0.0)
+        lamE, UE, _ = _top_eigen(E, m_eff)
+        Vres = UE * np.sqrt(np.maximum(lamE, 0.0))
+        Vall = np.hstack([V, Vres, BD])
+        keep = (Vall ** 2).sum(axis=0) > 1e-10 * np.trace(C) / n
+        if not keep.any():
+            keep[0] = True
+        Vall = Vall[:, keep]
+        D, res_pipe = _close(Vall)
+        # second arm: a pure eigen fit at the same total rank. Greedy
+        # factor+blocks allocation is the wrong shape for globally smooth
+        # covariance (measured: smooth RBF kernels at rank 27 hold to 1e-3
+        # under eigen, 0.14 under the pipeline); keep whichever leaves the
+        # smaller choice-relevant residual, pipeline winning ties. It
+        # depends on the rank alone, so a second candidate start at the
+        # same rank reuses it.
+        rank = Vall.shape[1]
+        if rank not in eigen_arms:
+            lamC, UC, _ = _top_eigen(C, rank, pad=10, sweeps=40)
+            Veig = UC * np.sqrt(np.maximum(lamC, 0.0))
+            eigen_arms[rank] = (Veig,) + _close(Veig)
+        Veig, Deig, res_eig = eigen_arms[rank]
+        if res_eig < res_pipe:
+            return Veig, Deig, res_eig, "eigen"
+        return Vall, D, res_pipe, "pipeline"
+
+    Vall, D, res_pipe, arm = _stages(V, D0)
+    if polished is not None:
+        # The polished start lowers the stage-one objective, but blocks,
+        # promotion and the closing solve are greedy and can, rarely, end
+        # a hair worse from the better start (relative residual 0.0757 vs
+        # 0.0763 on a 12-runner Wishart). Keep it only if the FINAL
+        # choice-relevant residual is strictly lower in its largest entry
+        # (the criterion that picks the arm) and no higher in Frobenius
+        # norm (the report's projected_residual_rel); otherwise the fit
+        # is bitwise as before.
+        out1 = _stages(*polished)
+
+        def _fro(Vc, Dc):
+            return float(np.linalg.norm(_center2(C - Vc @ Vc.T
+                                                 - np.diag(Dc))))
+        if out1[2] < res_pipe and \
+                _fro(out1[0], out1[1]) <= _fro(Vall, D):
+            Vall, D, res_pipe, arm = out1
+            V, D0 = polished
+    _warn_if_rank_splits_a_tie(C, D0, kk)
     # the nodes are not rotation or sign invariant, so the basis they
     # meet must be a function of V V' alone, not of LAPACK's choices (#745)
     Vall = _canonical_factor_basis(Vall)
