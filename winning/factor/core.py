@@ -147,7 +147,9 @@ def factor_model_contrast(C: np.ndarray, k: int, n_iter: int = 200,
     resulting race is materially correlated (shares off by 0.03-0.05).
     The public covariance intake (winning.probit.fit_factor_model,
     fit_covariance) uses factor_model_projected, which minimises the
-    projected residual exactly. This function is retained because the
+    projected residual instead (to its sweep cap: a fit that hits the
+    cap can stop short, #1018; fit_factor_model polishes such fits,
+    fit_covariance does not yet, #1051). This function is retained because the
     boundary experiments (research/experiments/exp14_boundaries) cite
     it; prefer factor_model_projected for anything new.
     """
@@ -179,8 +181,23 @@ def factor_model_projected(C: np.ndarray, k: int, n_outer: int = 60,
     heuristic, so the heuristic is not the binding constraint; this exists
     to certify that.
     """
+    V, D, _ = _factor_model_projected_run(C, k, n_outer=n_outer, D0=D0)
+    return V, D
+
+
+def _factor_model_projected_run(C, k, n_outer=60, D0=None):
+    """factor_model_projected, also reporting whether the alternation
+    ran out of sweeps (True) rather than stopping on its own rule.
+
+    The alternation converges only linearly, and on small, barely
+    overdetermined fits (rank 1 at n = 5: 9 parameters, 10 equations)
+    the rate can be so close to one that 60 sweeps leave a residual of
+    1e-3 on an exactly representable covariance (#1018). The flag lets
+    a caller finish those fits without touching the ones that stopped
+    on their own."""
     C = np.asarray(C, dtype=float)
     n = len(C)
+    hit_cap = True
     # D0 exists for multistart. The objective is nonconvex in (V, D), so
     # the paper offers dispersion across starts as the cheap diagnostic;
     # that diagnostic needs a way to start somewhere else.
@@ -211,10 +228,12 @@ def factor_model_projected(C: np.ndarray, k: int, n_outer: int = 60,
         obj = _projected_sq(C, V, D_new)
         if obj > best[2] * (1.0 + 1e-12):
             V, D = best[0], best[1]
+            hit_cap = False
             break
         best = (V, D_new, obj)
         if np.abs(D_new - D).max() < 1e-12:
             D = D_new
+            hit_cap = False
             break
         D = D_new
     # RELATIVE to each runner's own variance, the rule fit_covariance
@@ -228,9 +247,101 @@ def factor_model_projected(C: np.ndarray, k: int, n_outer: int = 60,
     # floor it has always been; only its covariance under rescaling is
     # new. The inner term keeps the floor positive for a runner whose
     # own variance is zero.
+    return V, _projected_floor(C, D), hit_cap
+
+
+def _projected_floor(C, D):
+    """The relative variance floor factor_model_projected applies."""
     dc = np.diag(np.asarray(C, dtype=float))
     floor = 1e-8 * np.maximum(dc, 1e-6 * max(float(np.mean(dc)), 1e-300))
-    return V, np.maximum(D, floor)
+    return np.maximum(D, floor)
+
+
+def _polish_projected(C, k, D, max_eval=60):
+    """Finish a projected factor fit the alternation left unconverged.
+
+    The alternation in factor_model_projected is block coordinate
+    descent and converges linearly; in a flat valley the rate is close
+    to one. For an EXACT rank-1-plus-diagonal Sigma at n = 5 it leaves
+    projected residuals up to 2e-3 after its 60 sweeps, and one seed
+    still sits at 5e-7 after 100,000 sweeps (#1018). That is not a
+    local minimum: the iterates are still descending towards the true D.
+    The D-step cannot see that V will move in response, and that
+    coupling is what makes the valley flat.
+
+    This is Gauss-Newton on the variable-projection objective
+    f(D) = min_V ||P (C - V V' - diag D) P||_F^2, the alternation's own
+    objective with V eliminated. In the reduced basis B, let N span the
+    eigenvectors of S - B' diag(D) B that the top-k PSD fit does not
+    keep, with eigenvalues l. The residual is diag(l) in that basis, its
+    Jacobian in D_j is -(N'b_j)(N'b_j)', and the Gauss-Newton system is
+    (Pi o Pi) delta = (X o X) l with X = B N and Pi = X X'. That is the
+    alternation's own D-step with P o P replaced by Pi o Pi: the
+    projector with the factor directions removed. At zero residual the
+    convergence is quadratic (5-12 steps on the #1018 sweep).
+
+    Each step costs one n x n eigh, the same as an alternation sweep,
+    and at most max_eval of them are spent, so a polish costs no more
+    than one of the two starts. D stays nonnegative (variables at the
+    bound with an outward step are frozen, then the step is clipped),
+    and a step is taken only if it lowers f (halving otherwise).
+    Returns (V, D, f) with D before the variance floor; the caller keeps
+    it only if it lowers the floored objective."""
+    C = np.asarray(C, dtype=float)
+    n = len(C)
+    # orthonormal basis of the mean-zero subspace (Helmert), so that
+    # ||B' M B||_F = ||P M P||_F and the objective is the same one
+    B = np.zeros((n, n - 1))
+    for j in range(1, n):
+        B[:j, j - 1] = 1.0
+        B[j, j - 1] = -float(j)
+        B[:, j - 1] /= np.sqrt(j * (j + 1.0))
+    S = B.T @ C @ B
+    budget = [max_eval]
+
+    def evaluate(D):
+        budget[0] -= 1
+        lam, U = np.linalg.eigh(S - (B.T * D) @ B)
+        order = np.argsort(lam)[::-1]
+        lam, U = lam[order], U[:, order]
+        keep = np.zeros(len(lam), dtype=bool)
+        keep[:k] = lam[:k] > 0
+        lc = lam[~keep]
+        V = B @ (U[:, :k] * np.sqrt(np.maximum(lam[:k], 0.0)))
+        if V.shape[1] < k:                     # k >= n - 1
+            V = np.hstack([V, np.zeros((n, k - V.shape[1]))])
+        return float(lc @ lc), lc, B @ U[:, ~keep], V
+
+    D = np.maximum(np.asarray(D, dtype=float), 0.0)
+    f, lc, X, V = evaluate(D)
+    while budget[0] > 0 and f > 0.0:
+        H = (X @ X.T) ** 2
+        h = (X ** 2) @ lc
+        free = np.ones(n, dtype=bool)
+        for _ in range(3):
+            d = np.zeros(n)
+            d[free] = np.linalg.lstsq(H[np.ix_(free, free)], h[free],
+                                      rcond=None)[0]
+            blocked = free & (D <= 0.0) & (d < 0.0)
+            if not blocked.any():
+                break
+            free &= ~blocked
+        t = 1.0
+        while budget[0] > 0:
+            Dn = np.maximum(D + t * d, 0.0)
+            fn, lcn, Xn, Vn = evaluate(Dn)
+            if fn < f:
+                break
+            t *= 0.5
+        else:
+            break
+        if not fn < f:
+            break
+        gain = (f - fn) / f
+        D, f, lc, X, V = Dn, fn, lcn, Xn, Vn
+        if gain < 1e-10:
+            break
+    return V, D, f
 
 
 def _projected_sq(C, V, D):

@@ -22,7 +22,7 @@ import numpy as np
 from ..shapes import as_idio, as_loadings
 
 
-from ..factor.core import factor_model_projected
+from ..factor.core import factor_model_projected  # noqa: F401
 from ..factor.races import abilities_from_race, race_probabilities
 
 __all__ = ["shares", "utilities_from_shares", "calibrate_utilities",
@@ -52,10 +52,27 @@ def fit_factor_model(Sigma, k):
     # 3e-3 on ubuntu, 1e-15 on macOS); starting from D0 = diag(Sigma)
     # reaches a diagonal exactly in one sweep, so both starts are run
     # and the lower projected residual kept
-    from ..factor.core import _projected_sq
-    fits = [factor_model_projected(Sigma, k, D0=np.diag(Sigma)),
-            factor_model_projected(Sigma, k)]
-    V, D = min(fits, key=lambda vd: _projected_sq(Sigma, vd[0], vd[1]))
+    from ..factor.core import (_projected_sq, _factor_model_projected_run,
+                               _polish_projected, _projected_floor)
+    fits = [_factor_model_projected_run(Sigma, k, D0=np.diag(Sigma)),
+            _factor_model_projected_run(Sigma, k)]
+    V, D, hit_cap = min(fits,
+                        key=lambda f: _projected_sq(Sigma, f[0], f[1]))
+    # #1018: the alternation converges linearly, and in a flat valley 60
+    # sweeps stop well short (projected residual 2e-3 on an EXACT
+    # rank-1-plus-diagonal Sigma at n = 5). A fit that ran out of sweeps
+    # is finished by Gauss-Newton on the same objective, and the result
+    # kept only if it is lower; a fit that stopped on its own rule is
+    # returned bitwise as before. n <= 800 is where the alternation uses
+    # an exact eigh, so the polish costs at most one more start there.
+    if hit_cap and 3 <= n <= 800:
+        V1, D1, _ = _polish_projected(Sigma, k, D)
+        D1 = _projected_floor(Sigma, D1)
+        # a real decrease, not a rounding-level tie that would churn
+        # the output for nothing
+        obj = _projected_sq(Sigma, V, D)
+        if _projected_sq(Sigma, V1, D1) < obj * (1.0 - 1e-10):
+            V, D = V1, D1
     P = np.eye(n) - np.ones((n, n)) / n
     V = P @ V
     A, sv, _ = np.linalg.svd(V, full_matrices=False)

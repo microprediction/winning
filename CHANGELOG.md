@@ -16,6 +16,13 @@
   law, which moves asymmetric rules by up to 0.92 of a share. Callers who
   reflected their nodes to compensate must remove that reflection.
   Automatic node rules are unchanged (#909).
+- `winning.probit.fit_factor_model` (and so `shares(..., Sigma=, k=)`)
+  finishes fits whose alternation ran out of sweeps with Gauss-Newton on
+  the same projected objective. An exact rank-1-plus-diagonal Sigma at
+  n = 5 was left at projected residuals up to 2e-3 and now fits to
+  rounding. Fits that converged on their own are bitwise unchanged
+  (#1018). `fit_covariance` (behind `cov=`) still runs the capped
+  alternation alone and can stall the same way; tracked in #1051.
 
 ## 1.7.0 (2026-10-31)
 
