@@ -75,4 +75,9 @@ def test_unit_scale_is_untouched():
     A = rng.normal(size=(5, 5))
     C = A @ A.T / 5 + np.eye(5)
     V, D = fit_factor_model(C, 2)
-    assert float(D.sum()) == pytest.approx(4.8501821493, abs=1e-8)
+    # Re-pinned for #1018. The old value 4.8501821493 was where the
+    # alternation ran out of sweeps (projected residual 6e-12); the fit
+    # is now finished (residual 9e-31). A rank-2 fit at n = 5 has more
+    # parameters than equations, so exact solutions form a family and
+    # D.sum() moves by 2.5e-6 within it; the floor is not involved.
+    assert float(D.sum()) == pytest.approx(4.8501846385, abs=1e-8)
