@@ -363,7 +363,17 @@ def solve_for_implied_offsets(prices, density, offset_samples=None,
                                np.round(exact_state_prices_from_cdfs(cdfs), 3)))[:5])
         else:
             assess(implied_offsets, exact_state_prices_from_cdfs(cdfs))
-    implied_offsets = best_offsets
+    # The iteration prices each offset on its own, and _low_high pins
+    # anything past +/-(L-2) to the edge, so an iterate can drift beyond
+    # it with no change in its own reprice. The public forward first
+    # translates such a book back in range (_edge_centred, #585): only
+    # differences matter there. Translating [-2.4, -2.2, 8.3, -2.0] (L=7)
+    # pinned the other three runners together at -(L-2), and a calibration
+    # scored 3.8e-4 by the iteration repriced 9.4e-2 off (#1046). Returning
+    # the offsets the iteration actually priced, pinned to [-(L-2), L-2],
+    # makes the two pricings agree: the CDFs are bitwise those it assessed,
+    # and an in-range result is returned unchanged.
+    implied_offsets = np.clip(best_offsets, -(L - 2), L - 2)
 
     _warn_if_unconverged(state_prices_from_offsets(density, implied_offsets), prices)
     return implied_offsets

@@ -127,7 +127,13 @@ solve_for_implied_offsets <- function(prices, density,
     cdfs <- lapply(implied, function(o) shifted_cdf(base, o, L))
   }
   if (exhausted) assess(implied, exact_state_prices_from_cdfs(cdfs))
-  implied <- best
+  # The iteration prices each offset on its own and low_high pins anything
+  # past +/-(L-2), so an iterate can drift beyond the edge unseen; the
+  # public forward translates such a book back first (edge_centred) and
+  # priced a 3.8e-4 calibration 9.4e-2 off (#1046). Return the offsets
+  # the iteration priced, pinned to [-(L-2), L-2]: bitwise the same CDFs,
+  # and an in-range result is unchanged.
+  implied <- pmin(pmax(best, -(L - 2)), L - 2)
   cdfs <- lapply(implied, function(o) shifted_cdf(base, o, L))
   .warn_if_unconverged(exact_state_prices_from_cdfs(cdfs), prices)
   implied
