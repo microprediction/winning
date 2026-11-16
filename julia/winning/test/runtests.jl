@@ -778,3 +778,31 @@ end
     m = r isa Tuple || r isa NamedTuple ? r[1] : r
     @test maximum(abs.(top_k_probabilities(m, 1; D = D, base = "laplace", points = 513) .- q)) < 1e-8
 end
+
+@testset "top-k Jsigma carries the moving rule weights (#783)" begin
+    # inside the smooth intervals of the automatic rank-one rule its
+    # weights move with sharp = sqrt(2) max |V_i| / sigma_i, so Jsigma must
+    # match a central difference of the forward: 5.5 the sliding pair, 8.95
+    # the hand-back to GH(72), 9.5 the Gauss-Hermite/midpoint blend
+    mu = [-0.7, -0.1, 0.2, 0.8]
+    h = 1e-6
+    for s in (5.5, 8.95, 9.5)
+        a = s / sqrt(2); V = reshape([-a, a / 3, a / 3, a / 3], :, 1)
+        Js = winning.top_k_jacobians(mu, 2; D = ones(4), V = V).Jsigma
+        for j in 1:4
+            P(e) = winning.top_k_probabilities(mu, 2; V = V,
+                       D = [i == j ? (1 + e)^2 : 1.0 for i in 1:4])
+            @test maximum(abs.(Js[:, j] .- (P(h) .- P(-h)) ./ (2h))) < 1e-7
+        end
+    end
+    # an explicit qa is a fixed rule: the node mixture alone, already exact
+    a = 9.5 / sqrt(2); V = reshape([-a, a / 3, a / 3, a / 3], :, 1)
+    Js = winning.top_k_jacobians(mu, 2; D = ones(4), V = V, qa = 15).Jsigma
+    Pq(e) = winning.top_k_probabilities(mu, 2; V = V, D = [(1 + e)^2, 1, 1, 1],
+                                        qa = 15)
+    @test maximum(abs.(Js[:, 1] .- (Pq(h) .- Pq(-h)) ./ (2h))) < 1e-7
+    # a tie for the max goes to the first runner attaining it
+    Vt = reshape([-a, a, 0.0, 0.0], :, 1)
+    @test winning._rank1_rule_sigma_slope(Vt, ones(4)).j == 1
+    @test winning._rank1_rule_sigma_slope(Vt ./ 2.5, ones(4)) === nothing
+end

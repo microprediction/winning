@@ -238,16 +238,34 @@ function midpointRule(Q) {
    each order is the one its side uses at the band's edge, so the band
    meets the unchanged rule outside it continuously at both ends. */
 const R1_BLEND_LO = 9.0, R1_BLEND_HI = 10.0;
-function rank1BlendRule(sharp) {
+/* The C1 smoothstep S(t) = t^2 (3 - 2t) and its slope 6 t (1 - t). */
+function smoothstep(t) {
+  return [t * t * (3.0 - 2.0 * t), 6.0 * t * (1.0 - t)];
+}
+/* slope: also dW/dsharp, node for node -- the weights move with the
+   sharpness and so with the sd that sets it (#783). A component of
+   mixture coefficient exactly zero is left out, as python's
+   as_factor_law drops it: its no-op nodes widened the race window and
+   at sharpness exactly 10 moved a share by 2.9 points (#783). */
+function rank1BlendRule(sharp, slope = false) {
   const t = (sharp - R1_BLEND_LO) / (R1_BLEND_HI - R1_BLEND_LO);
-  const w = t * t * (3.0 - 2.0 * t);
+  const [w, dS] = smoothstep(t);
   const g = hermiteNodes(1, 8 * R1_BLEND_LO);
   const m = midpointRule(8 * R1_BLEND_HI + 1);
-  return {
+  const dw = dS / (R1_BLEND_HI - R1_BLEND_LO);
+  const Q = m.W.length;
+  // kept in V's own axes, as python builds it
+  if (w === 1)
+    return { F: m.F, W: m.W, hermite: true, ...(slope && { dW: m.W.map(() => dw / Q) }) };
+  if (w === 0)
+    return { F: g.F, W: g.W, hermite: true, ...(slope && { dW: g.W.map(x => -dw * x) }) };
+  const rule = {
     F: g.F.concat(m.F),
-    W: g.W.map(x => (1.0 - w) * x).concat(m.W.map(() => w / m.W.length)),
-    hermite: true,   // kept in V's own axes, as python builds it
+    W: g.W.map(x => (1.0 - w) * x).concat(m.W.map(() => w / Q)),
+    hermite: true,
   };
+  if (slope) rule.dW = g.W.map(x => -dw * x).concat(m.W.map(() => dw / Q));
+  return rule;
 }
 
 /* Below the band the rank-one rule was Gauss-Hermite of order ceil(8 sharp),
@@ -258,35 +276,77 @@ function rank1BlendRule(sharp) {
    on (24, 25] GH(24) takes on GH(23) up to half weight; past 25 the
    parity-balanced pair GH(m-1)/2 + GH(m)/2 at order y = 5 sharp in
    [24, 34], sliding its lower half to GH(m+1) as y crosses (m, m+1); on
-   (71, 72] handed back to GH(72), the band's lower edge. */
+   (71, 72] handed back to GH(72), the band's lower edge. Each part is
+   (order, coefficient, d coefficient / d sharp); slope also returns
+   dW/dsharp (#783), zero where y is held at a clamp. */
 const R1_PAIR_FROM = 24, R1_PAIR_PER_SHARP = 5.0, R1_PAIR_CAP = 34;
-function rank1HermiteRule(sharp) {
-  const S = t => t * t * (3.0 - 2.0 * t);
+function rank1HermiteRule(sharp, slope = false) {
   const x = 8 * sharp, lo = R1_PAIR_FROM;
   let parts;
   if (x <= lo) {
-    const m = Math.floor(x), w = S(x - m);
-    parts = [[m, 1.0 - w], [m + 1, w]];
+    const m = Math.floor(x), [w, dS] = smoothstep(x - m), dw = 8 * dS;
+    parts = [[m, 1.0 - w, -dw], [m + 1, w, dw]];
   } else if (x <= lo + 1) {
-    const w = S(x - lo);
-    parts = [[lo - 1, 0.5 * w], [lo, 1.0 - 0.5 * w]];
+    const [w, dS] = smoothstep(x - lo), dw = 8 * dS;
+    parts = [[lo - 1, 0.5 * w, 0.5 * dw], [lo, 1.0 - 0.5 * w, -0.5 * dw]];
   } else {
-    const y = Math.min(Math.max(R1_PAIR_PER_SHARP * sharp, lo), R1_PAIR_CAP);
-    const m = Math.floor(y), w = S(y - m);
-    parts = [[m - 1, 0.5 * (1.0 - w)], [m, 0.5], [m + 1, 0.5 * w]];
+    const yRaw = R1_PAIR_PER_SHARP * sharp;
+    const y = Math.min(Math.max(yRaw, lo), R1_PAIR_CAP);
+    const dy = lo < yRaw && yRaw < R1_PAIR_CAP ? R1_PAIR_PER_SHARP : 0.0;
+    const m = Math.floor(y), [w, dS] = smoothstep(y - m), dw = dy * dS;
+    parts = [[m - 1, 0.5 * (1.0 - w), -0.5 * dw], [m, 0.5, 0.0],
+             [m + 1, 0.5 * w, 0.5 * dw]];
     const top = 8 * R1_BLEND_LO;
     if (x > top - 1) {
-      const v = S(x - (top - 1));
-      parts = parts.map(([q, c]) => [q, c * (1.0 - v)]).concat([[top, v]]);
+      const [v, dS2] = smoothstep(x - (top - 1)), dv = 8 * dS2;
+      parts = parts.map(([q, c, dc]) => [q, c * (1.0 - v), dc * (1.0 - v) - c * dv])
+        .concat([[top, v, dv]]);
     }
   }
-  const F = [], W = [];
-  for (const [q, c] of parts) {
+  // a part of zero coefficient has zero slope too (S is flat at both ends)
+  const F = [], W = [], dW = [];
+  for (const [q, c, dc] of parts) {
     if (!(c > 0.0)) continue;
     const g = hermiteNodes(1, q);
-    for (let i = 0; i < g.W.length; i++) { F.push(g.F[i]); W.push(c * g.W[i]); }
+    for (let i = 0; i < g.W.length; i++) {
+      F.push(g.F[i]); W.push(c * g.W[i]); dW.push(dc * g.W[i]);
+    }
   }
-  return { F, W, hermite: true };   // kept in V's own axes, as python builds it
+  // kept in V's own axes, as python builds it
+  return slope ? { F, W, hermite: true, dW } : { F, W, hermite: true };
+}
+
+/* How the AUTOMATIC rank-one rule moves with the sds (#783), python's
+   races._rank1_rule_sigma_slope. V gauge-centred and D validated, as
+   canonicalRule sees them. The nodes are fixed, but inside the smooth
+   intervals of the two rules above the weights W(sharp) move with
+   sharp = sqrt(2) max_i |V_i| / sigma_i, so with the sd of the runner j
+   attaining the max: dsharp/dsigma_j = -sharp/sigma_j, zero for the
+   rest. Returns { j, dsharp, F, dW } over the nodes whose weight moves,
+   or null where the rule is piecewise constant in sharp. A tie for the
+   max is a kink: the term goes to the FIRST runner attaining it (its
+   one-sided derivative as its sd falls; each other tied runner's column
+   is its one-sided derivative as its sd rises). */
+export function _autoRuleSigmaSlope(V, D) {
+  const n = V.length;
+  if (V[0].length !== 1) return null;
+  let sharp = 0, j = 0;
+  for (let i = 0; i < n; i++) {
+    const nv = Math.sqrt(V[i].reduce((a, b) => a + b * b, 0));
+    const ri = nv / Math.sqrt(Math.max(D[i], 1e-300));
+    if (ri > sharp) j = i;
+    sharp = Math.max(sharp, ri);
+  }
+  sharp *= Math.SQRT2;
+  let rule;
+  if (sharp > R1_BLEND_LO && sharp <= R1_BLEND_HI) rule = rank1BlendRule(sharp, true);
+  else if (Math.ceil(8 * sharp) > 80 || !(8 * sharp > 15)) return null;
+  else rule = rank1HermiteRule(sharp, true);
+  const F = [], dW = [];
+  for (let q = 0; q < rule.dW.length; q++)
+    if (rule.dW[q] !== 0) { F.push(rule.F[q]); dW.push(rule.dW[q]); }
+  if (!F.length) return null;
+  return { j, dsharp: -sharp / Math.sqrt(D[j]), F, dW };
 }
 
 function ruleFamily(V, D) {

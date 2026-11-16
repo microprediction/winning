@@ -4361,5 +4361,63 @@ rejects(C => demo.fitGrammar(C, 1, 0, { method: "ipaf", tol: 0 }),
 }
 
 
+// #783: the automatic rank-one rule's weights move with the sharpness
+// sqrt(2) max |V_i| / sigma_i, so topKJacobians' Jsigma carries
+// (dsharp/dsigma_j) sum_q (dW_q/dsharp) q_ind(mu + V f_q) for the runner
+// setting it. Without it Jsigma sat far from the forward's own central
+// difference inside the moving intervals (sharpness 8.9: -0.0024 against
+// +0.187). 5.5: the sliding GH pair; 8.95: the hand-back to GH(72); 9.5:
+// the GH/midpoint blend.
+{
+  const mu = [-0.7, -0.1, 0.2, 0.8], k = 2, h = 1e-6;
+  for (const s of [5.5, 8.95, 9.5]) {
+    const a = s / Math.SQRT2, V = [[-a], [a / 3], [a / 3], [a / 3]];
+    const Js = topk.topKJacobians(mu, k, { V, D: [1, 1, 1, 1] }).Jsigma;
+    let err = 0;
+    for (let j = 0; j < 4; j++) {
+      const P = e => topk.topKProbabilities(mu, k,
+        { V, D: [1, 1, 1, 1].map((d, i) => i === j ? (1 + e) ** 2 : d) });
+      const pp = P(h), pm = P(-h);
+      for (let i = 0; i < 4; i++)
+        err = Math.max(err, Math.abs(Js[i][j] - (pp[i] - pm[i]) / (2 * h)));
+    }
+    holds(`topKJacobians Jsigma matches central differences at sharpness ${s} (#783)`,
+          err < 1e-7, err.toExponential(2));
+  }
+  // an explicit qa is a fixed rule: no moving-weight term
+  const a = 9.5 / Math.SQRT2, V = [[-a], [a / 3], [a / 3], [a / 3]];
+  const Js = topk.topKJacobians(mu, k, { V, D: [1, 1, 1, 1], qa: 15 }).Jsigma;
+  const P = e => topk.topKProbabilities(mu, k, { V, D: [(1 + e) ** 2, 1, 1, 1], qa: 15 });
+  const pp = P(h), pm = P(-h);
+  const err = Math.max(...Js.map((r, i) => Math.abs(r[0] - (pp[i] - pm[i]) / (2 * h))));
+  holds("topKJacobians qa=15 Jsigma matches central differences (#783)", err < 1e-7,
+        err.toExponential(2));
+}
+
+// #783 residual: at the blend's upper end (w === 1) the automatic rule
+// kept 72 zero-weight Gauss-Hermite nodes, which widened the race window;
+// the issue's field moved a share by 2.9 points under a 1e-8 rescale.
+// Python drops a zero-weight component, and now so does the browser.
+{
+  const a = 10 / Math.SQRT2, V = [[-a], [a / 3], [a / 3], [a / 3]];
+  const rule = races._factorNodeRule(V, [1, 1, 1, 1]);
+  holds("rank-one rule at sharpness 10 has no zero-weight nodes (#783)",
+        rule.W.length === 81 && rule.W.every(w => w > 0), String(rule.W.length));
+  const mu = [-5.148293764259799, -5.258210118723348,
+              -1.2067824387413566, -5.763490194126493];
+  const v = [-0.7382523001151761, 0.08735318946768714,
+             0.8241506923953589, -0.17325158174786998];
+  const D = [0.010900329172506966, 0.013048311261529891,
+             95.08431527274655, 4.291288968615204];
+  const keep = console.warn;
+  console.warn = () => {};
+  try {
+    const p0 = races.raceProbabilities(mu, { V: v.map(x => [x]), D });
+    const p1 = races.raceProbabilities(mu, { V: v.map(x => [(1 + 1e-8) * x]), D });
+    const d = Math.max(...p0.map((x, i) => Math.abs(x - p1[i])));
+    holds("race at the blend's upper end is continuous (#783)", d < 1e-7, d.toExponential(2));
+  } finally { console.warn = keep; }
+}
+
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }
 console.log("browser API guards behave");

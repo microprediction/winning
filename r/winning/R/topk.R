@@ -505,7 +505,8 @@ top_k_jacobians <- function(mu, k, D = NULL, base = "normal",
   k <- .as_depth(k, n)
   mu <- .translated_home(mu, .as_idio(D, n))     # (#477)
   if (!is.null(V)) {
-    # exact node mixture: the factor shift commutes with d/dmu, d/dsigma
+    # node mixture: given the nodes the factor shift commutes with d/dmu,
+    # d/dsigma (the moving rule weights are added below, #783)
     fac <- .topk_factor_nodes(V, n, qa, D)
     Jm <- matrix(0, n, n)
     Js <- matrix(0, n, n)
@@ -515,6 +516,27 @@ top_k_jacobians <- function(mu, k, D = NULL, base = "normal",
                               points = points)
       Jm <- Jm + fac$w[q] * node$Jmu
       Js <- Js + fac$w[q] * node$Jsigma
+    }
+    # The automatic rule's weights move with the sharpness, and so with
+    # the sd that sets it (#783): column j also carries
+    # (dsharp/dsigma_j) sum_q (dW_q/dsharp) q_ind(mu + V f_q), the
+    # conditional memberships taken as the forward's raw mixture takes
+    # them. Nothing to add where the rule is piecewise constant, or for an
+    # explicit qa (a fixed rule). As python's _add_rule_sigma_slope.
+    if (is.null(qa)) {
+      Dv <- .as_idio(D, n, positive = TRUE)
+      sl <- .rank1_rule_sigma_slope(.gauge_center(fac$Vm), Dv)
+      if (!is.null(sl)) {
+        sd <- sqrt(Dv)
+        fn <- if (is.function(base)) base else .BASES[[base]]
+        dq <- rep(0, n)
+        for (q in seq_len(nrow(sl$F))) {
+          shift <- as.vector(fac$Vm %*% sl$F[q, ])
+          dq <- dq + sl$dW[q] *
+            .topk_with_slopes(mu + shift, sd, k, fn, points)$q
+        }
+        Js[, sl$j] <- Js[, sl$j] + sl$dsharp * dq
+      }
     }
     return(list(Jmu = Jm, Jsigma = Js))
   }
