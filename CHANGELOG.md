@@ -13,7 +13,8 @@
   the same projected objective. An exact rank-1-plus-diagonal Sigma at
   n = 5 was left at projected residuals up to 2e-3 and now fits to
   rounding. Fits that converged on their own are bitwise unchanged
-  (#1018).
+  (#1018). `fit_covariance` (behind `cov=`) still runs the capped
+  alternation alone and can stall the same way; tracked in #1051.
 
 ## 1.7.0 (2026-10-31)
 
