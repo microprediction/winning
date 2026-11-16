@@ -327,7 +327,7 @@ function warnIfSharp(V, sd, qa, threshold = 3.0) {
   if (!(s > threshold) || SHARP_WARNED.has(key) || typeof console === "undefined") return;
   SHARP_WARNED.add(key);
   console.warn(
-    `block/nested quadrature is a fixed ${qa}-node Gauss-Hermite rule and ` +
+    `block/nested/tree quadrature is a fixed ${qa}-node Gauss-Hermite rule and ` +
     `this field's cluster sharpness is ${s.toPrecision(2)} (loading over ` +
     `idiosyncratic sd); past ${threshold} the conditional integrand is a ` +
     "near-step and Gauss-Hermite fails at any order, on group shares. " +
@@ -609,6 +609,12 @@ function treeInternals(mu, cluster, loading, D, parent, strength, points, qa) {
     while (par[u] >= 0) { s += lam[par[u]] * lam[par[u]]; u = par[u]; }
     pathVar[c] = s;
   }
+  // python's _warn_if_tree_sharp: a runner's shared effect is its leaf
+  // loading plus the ancestor strengths on its path, all on the same
+  // fixed rule, so its block row is [v_i, sqrt(pathVar)]. A one-leaf tree
+  // is the one-block race and priced a share 0.218 off at sharpness 21.3
+  // with no warning (#11).
+  warnIfSharp(vO.map((vi, i) => [vi, Math.sqrt(pathVar[cO[i]])]), sdO, qa);
   const maxAn = Math.max(...an.map(Math.abs));
   const amp = muO.map((mm, i) => (Math.abs(vO[i]) + depth[cO[i]]) * maxAn);
   const [lo, hi] = windowNodes(muO, sdO, amp);

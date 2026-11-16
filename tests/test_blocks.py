@@ -211,6 +211,76 @@ def test_sharp_blocks_warn_that_gh_cannot_converge():
         assert not any("sharpness" in str(x.message) for x in w)
 
 
+
+_TREE_MU = np.array([-0.35221016127616167, -0.1465622573159635,
+                     -0.06922290846705437, -0.7895801779814065,
+                     0.5263814451172948, -0.45293018920347095,
+                     0.8489520382136106, 0.3635434559546411])
+_TREE_V = np.array([-1.4273646213114262, -2.2077446188777685,
+                    3.776806265115738, -1.663014443591237,
+                    0.7718250788748264, -3.9720420967787504,
+                    -1.48259686678648, -1.66114398278296])
+# sharpness 17.76 raw, 21.29 once the one-cluster loading is centred
+_TREE_SHARP = 21.287213643680218
+
+
+def test_sharp_tree_warns_and_the_error_is_material():
+    """#11: the tree kernel runs the same fixed Gauss-Hermite rule as the
+    block kernel but skipped its sharpness warning. A one-leaf tree is
+    the one-block race, so the sharp block fixture isolates it: 9 nodes
+    put a share 0.218 off the factor reference, normalized, silently."""
+    import warnings
+    from winning.factor.blocks import (tree_race_probabilities,
+                                       tree_race_jacobian)
+    from winning.factor.races import race_probabilities
+
+    D = np.full(8, 0.05); cl = np.zeros(8, int)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        ref = race_probabilities(_TREE_MU, V=_TREE_V, D=D, points=1025)
+    with pytest.warns(RuntimeWarning, match="sharpness is 21.3"):
+        p = tree_race_probabilities(_TREE_MU, cl, _TREE_V, D, [-1], [0.0],
+                                    points=1025, qa=9)
+    assert abs(p.sum() - 1.0) < 1e-12
+    assert np.max(np.abs(p - ref)) > 0.2
+    with pytest.warns(RuntimeWarning, match="sharpness"):
+        tree_race_jacobian(_TREE_MU, cl, _TREE_V, D, [-1], [0.0])
+    # either side of the threshold on the leaf loading alone (the common
+    # part cancels with one cluster, so sharpness is measured centred,
+    # as the block path and the browser port measure it)
+    s0 = _TREE_SHARP
+    with pytest.warns(RuntimeWarning, match="sharpness is 3.1"):
+        tree_race_probabilities(_TREE_MU, cl, _TREE_V * 3.1 / s0, D,
+                                [-1], [0.0])
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        tree_race_probabilities(_TREE_MU, cl, _TREE_V * 2.9 / s0, D,
+                                [-1], [0.0])
+        tree_race_jacobian(_TREE_MU, cl, _TREE_V * 2.9 / s0, D,
+                           [-1], [0.0])
+    assert not any("sharpness" in str(x.message) for x in w)
+
+
+def test_sharp_tree_ancestor_strength_warns():
+    """An ancestor strength is integrated on the same fixed rule as the
+    leaf loading, so it counts toward the runner's sharpness
+    sqrt(v^2 + path variance) / sd: leaf loadings 0.1 with strength 1.0
+    over two of three leaves (sharpness 4.5) measured 1.2e-2 max error
+    against the factor reference; strength 0.6 (2.7) stays quiet."""
+    import warnings
+    from winning.factor.blocks import tree_race_probabilities
+
+    mu = np.array([0.1, -0.2, 0.05, 0.3, -0.1, 0.0])
+    cl = np.array([0, 0, 1, 1, 2, 2])
+    v = np.full(6, 0.1); D = np.full(6, 0.05)
+    parent = [3, 3, 4, 4, -1]
+    with pytest.warns(RuntimeWarning, match="sharpness is 4.5"):
+        tree_race_probabilities(mu, cl, v, D, parent, [0, 0, 0, 1.0, 0])
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        tree_race_probabilities(mu, cl, v, D, parent, [0, 0, 0, 0.6, 0])
+    assert not any("sharpness" in str(x.message) for x in w)
+
 def test_window_covers_near_common_shock_winner_mass():
     """Fourteenth review's blocker: a 400-runner single cluster at
     correlation ~0.99, split into loadings 1.0 and 0.9 with equal mu.
