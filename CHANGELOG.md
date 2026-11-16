@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- `top_k_jacobians(V=...)` (python, browser `topKJacobians`, R, Julia)
+  differentiates the automatic rank-one factor rule's weights. Those
+  weights move with the sharpness sqrt(2) max_i |V_i| / sigma_i on
+  15/8 < sharp <= 10 (#850 interpolation and pair, #783 blend), so
+  `Jsigma` was missing a term there and disagreed with finite differences
+  of the forward (sharpness 8.9: -0.0024 against +0.187). It now matches
+  them to about 1e-9 in the column of the runner that sets the sharpness
+  (the first such runner at a tie). Forward prices, `Jmu`, inverses,
+  calls with an explicit `qa`, and `Jsigma` outside those intervals are
+  bitwise unchanged; inside them the Jacobian costs up to about two-thirds
+  more.
+  The browser rank-one blend also drops a component whose weight is
+  exactly zero, as python does: at sharpness exactly 10 its 72
+  zero-weight Gauss-Hermite nodes widened the race window, and a 1e-8
+  rescale of the loadings moved a race share by 2.9 points (#783).
+
 - `tree_race_probabilities` and `tree_race_jacobian` (python and R) now
   centre a single leaf cluster's loading, as the block path and the
   browser tree already did. With one cluster its shock reaches every

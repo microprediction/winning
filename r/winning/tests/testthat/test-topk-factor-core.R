@@ -101,3 +101,31 @@ test_that("the rank-one Gauss-Hermite order is continuous (#850)", {
   expect_equal(nw(8.0), 33L + 34L)         # held at the cap
   expect_identical(.rank1_hermite_rule(9.0)$W, hermite_nodes(1, order = 72L)$W)
 })
+
+test_that("top-k Jsigma carries the moving rule weights (#783)", {
+  # inside the smooth intervals of the automatic rank-one rule its weights
+  # move with sharp = sqrt(2) max |V_i| / sigma_i, so Jsigma must match a
+  # central difference of the forward: 5.5 the sliding pair, 8.95 the
+  # hand-back to GH(72), 9.5 the Gauss-Hermite/midpoint blend
+  mu <- c(-0.7, -0.1, 0.2, 0.8)
+  h <- 1e-6
+  for (s in c(5.5, 8.95, 9.5)) {
+    a <- s / sqrt(2); V <- matrix(c(-a, a / 3, a / 3, a / 3), ncol = 1)
+    Js <- top_k_jacobians(mu, 2, D = rep(1, 4), V = V)$Jsigma
+    for (j in 1:4) {
+      P <- function(e) { D <- rep(1, 4); D[j] <- (1 + e)^2
+                         top_k_probabilities(mu, 2, V = V, D = D) }
+      expect_lt(max(abs(Js[, j] - (P(h) - P(-h)) / (2 * h))), 1e-7)
+    }
+  }
+  # an explicit qa is a fixed rule: the node mixture alone, already exact
+  a <- 9.5 / sqrt(2); V <- matrix(c(-a, a / 3, a / 3, a / 3), ncol = 1)
+  Js <- top_k_jacobians(mu, 2, D = rep(1, 4), V = V, qa = 15)$Jsigma
+  P <- function(e) top_k_probabilities(mu, 2, V = V, D = c((1 + e)^2, 1, 1, 1),
+                                       qa = 15)
+  expect_lt(max(abs(Js[, 1] - (P(h) - P(-h)) / (2 * h))), 1e-7)
+  # a tie for the max goes to the first runner attaining it
+  V <- matrix(c(-a, a, 0, 0), ncol = 1)
+  expect_equal(.rank1_rule_sigma_slope(V, rep(1, 4))$j, 1L)
+  expect_null(.rank1_rule_sigma_slope(V / 2.5, rep(1, 4)))   # sharp 3.8: held
+})

@@ -611,15 +611,27 @@ GH_RULE_DEFAULT = (15, 3.0)
 _R1_BLEND_LO, _R1_BLEND_HI = 9.0, 10.0
 
 
-def _rank1_blend_rule(sharp):
-    """The rank-one rule on (_R1_BLEND_LO, _R1_BLEND_HI] (#783)."""
+def _smoothstep(t):
+    """The C1 smoothstep S(t) = t^2 (3 - 2t) and its slope 6 t (1 - t)."""
+    return t * t * (3.0 - 2.0 * t), 6.0 * t * (1.0 - t)
+
+
+def _rank1_blend_rule(sharp, slope=False):
+    """The rank-one rule on (_R1_BLEND_LO, _R1_BLEND_HI] (#783).
+
+    slope=True also returns dW/dsharp, node for node: the weights move
+    with the sharpness, and so with every sigma that sets it (#783)."""
     t = (sharp - _R1_BLEND_LO) / (_R1_BLEND_HI - _R1_BLEND_LO)
-    w = t * t * (3.0 - 2.0 * t)
+    w, dw = _smoothstep(t)
     Fg, Wg = hermite_nodes(1, Q=int(8 * _R1_BLEND_LO))
     Q = int(8 * _R1_BLEND_HI) + 1
     Fm = ndtri((np.arange(Q) + 0.5) / Q)[:, None]
-    return (np.concatenate([Fg, Fm]),
-            np.concatenate([(1.0 - w) * Wg, np.full(Q, w / Q)]))
+    F = np.concatenate([Fg, Fm])
+    W = np.concatenate([(1.0 - w) * Wg, np.full(Q, w / Q)])
+    if not slope:
+        return F, W
+    dw = dw / (_R1_BLEND_HI - _R1_BLEND_LO)
+    return F, W, np.concatenate([-dw * Wg, np.full(Q, dw / Q)])
 
 
 # Below the band the rank-one rule was Gauss-Hermite of order
@@ -650,32 +662,92 @@ def _rank1_blend_rule(sharp):
 _R1_PAIR_FROM, _R1_PAIR_PER_SHARP, _R1_PAIR_CAP = 24, 5.0, 34
 
 
-def _rank1_hermite_rule(sharp):
-    """The rank-one rule on 15/8 < sharp <= _R1_BLEND_LO (#850)."""
-    def S(t):
-        return t * t * (3.0 - 2.0 * t)
+def _rank1_hermite_rule(sharp, slope=False):
+    """The rank-one rule on 15/8 < sharp <= _R1_BLEND_LO (#850).
+
+    slope=True also returns dW/dsharp, node for node (#783). Each part
+    carries (order, coefficient, d coefficient / d sharp); the
+    coefficients are computed exactly as before, so the rule is
+    unchanged. The pair order y is clamped to [24, 34], and where it is
+    held there (or exactly on a clamp) its slope is taken as zero."""
     x = 8.0 * sharp
     lo = _R1_PAIR_FROM
     if x <= lo:
         m = int(np.floor(x))
-        w = S(x - m)
-        parts = [(m, 1.0 - w), (m + 1, w)]
+        w, dw = _smoothstep(x - m)
+        dw = 8.0 * dw
+        parts = [(m, 1.0 - w, -dw), (m + 1, w, dw)]
     elif x <= lo + 1:
-        w = S(x - lo)
-        parts = [(lo - 1, 0.5 * w), (lo, 1.0 - 0.5 * w)]
+        w, dw = _smoothstep(x - lo)
+        dw = 8.0 * dw
+        parts = [(lo - 1, 0.5 * w, 0.5 * dw), (lo, 1.0 - 0.5 * w, -0.5 * dw)]
     else:
-        y = min(max(_R1_PAIR_PER_SHARP * sharp, float(lo)),
-                float(_R1_PAIR_CAP))
+        y_raw = _R1_PAIR_PER_SHARP * sharp
+        y = min(max(y_raw, float(lo)), float(_R1_PAIR_CAP))
+        dy = _R1_PAIR_PER_SHARP if lo < y_raw < _R1_PAIR_CAP else 0.0
         m = int(np.floor(y))
-        w = S(y - m)
-        parts = [(m - 1, 0.5 * (1.0 - w)), (m, 0.5), (m + 1, 0.5 * w)]
+        w, dw = _smoothstep(y - m)
+        dw = dy * dw
+        parts = [(m - 1, 0.5 * (1.0 - w), -0.5 * dw), (m, 0.5, 0.0),
+                 (m + 1, 0.5 * w, 0.5 * dw)]
         top = int(8 * _R1_BLEND_LO)
         if x > top - 1:
-            v = S(x - (top - 1))
-            parts = [(q, c * (1.0 - v)) for q, c in parts] + [(top, v)]
-    rules = [(hermite_nodes(1, Q=q), c) for q, c in parts if c > 0.0]
-    return (np.concatenate([F for (F, _), _ in rules]),
-            np.concatenate([c * W for (_, W), c in rules]))
+            v, dv = _smoothstep(x - (top - 1))
+            dv = 8.0 * dv
+            parts = ([(q, c * (1.0 - v), dc * (1.0 - v) - c * dv)
+                      for q, c, dc in parts] + [(top, v, dv)])
+    # a part of zero coefficient also has zero slope (S is C1, flat at
+    # both ends), so dropping it loses nothing from dW either
+    rules = [(hermite_nodes(1, Q=q), c, dc) for q, c, dc in parts if c > 0.0]
+    F = np.concatenate([F for (F, _), _, _ in rules])
+    W = np.concatenate([c * W for (_, W), c, _ in rules])
+    if not slope:
+        return F, W
+    return F, W, np.concatenate([dc * W for (_, W), _, dc in rules])
+
+
+def _rule_ratios(V, D):
+    """|(PV)_i| / sqrt(D_i), whose max times sqrt(2) is the sharpness
+    the automatic factor rule dispatches on (see _setup)."""
+    with np.errstate(over="ignore"):     # inf is sharp (#86)
+        return (np.sqrt((V ** 2).sum(axis=1))
+                / np.sqrt(np.maximum(D, 1e-300)))
+
+
+def _rank1_rule_sigma_slope(V, D):
+    """How the AUTOMATIC rank-one rule moves with the sds (#783).
+
+    V, D as _setup sees them (gauge-centred loadings, validated
+    variances). The rule's nodes are fixed but, inside the smooth
+    intervals of _rank1_hermite_rule and _rank1_blend_rule, its weights
+    W(sharp) move with sharp = sqrt(2) max_i |V_i| / sigma_i, and so
+    with the sd of the runner attaining the max:
+    dsharp/dsigma_j = -sharp / sigma_j for that runner, zero for the
+    rest. Returns (j, -sharp / sigma_j, F, dW) with F, dW the nodes
+    whose weight moves and dW/dsharp there, or None where the rule is
+    piecewise constant in sharp (rank above one, sharp <= 15/8, the
+    clamped stretches of the pair order, the midpoint grid past the
+    band). A tie for the max is a kink of the sharpness: the term goes
+    to the FIRST runner attaining it and none to the rest, so that
+    runner's column is its one-sided derivative as its sd falls and
+    each other tied runner's is its one-sided derivative as its sd
+    rises (in both cases the first runner sets the sharpness)."""
+    if V.shape[1] != 1:
+        return None
+    ratio = _rule_ratios(V, D)
+    with np.errstate(over="ignore"):
+        sharp = float(np.sqrt(2.0) * np.max(ratio))
+    if _R1_BLEND_LO < sharp <= _R1_BLEND_HI:
+        F, _, dW = _rank1_blend_rule(sharp, slope=True)
+    elif np.ceil(8.0 * sharp) > 80 or not 8.0 * sharp > 15:
+        return None
+    else:
+        F, _, dW = _rank1_hermite_rule(sharp, slope=True)
+    keep = dW != 0.0
+    if not keep.any():
+        return None
+    j = int(np.argmax(ratio))
+    return j, -sharp / float(np.sqrt(D[j])), F[keep], dW[keep]
 
 
 def _translated_home(mu, D):
@@ -808,9 +880,7 @@ def _setup(mu, V, D, F, W, base):
             # (triangle inequality on centered rows), which cannot miss
             # a sharp pair; its false positives cost nodes, not error.
             with np.errstate(over="ignore"):     # inf is sharp (#86)
-                sharp = float(np.sqrt(2.0)
-                              * np.max(np.sqrt((V ** 2).sum(axis=1))
-                                       / np.sqrt(np.maximum(D, 1e-300))))
+                sharp = float(np.sqrt(2.0) * np.max(_rule_ratios(V, D)))
             r = V.shape[1]
             cap, sharp_max = GH_RULE.get(r, GH_RULE_DEFAULT)
             if r >= 2 and sharp > sharp_max:

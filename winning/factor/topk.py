@@ -1013,6 +1013,32 @@ def top_k_jacobian_row_sigma(mu, i, k, D=None, base="normal", points=513):
     return row_mu, row_sd
 
 
+def _add_rule_sigma_slope(Js, mu, k, Vm, D, base, points, kink_split):
+    """Add to Js the sigma-dependence of the automatic rank-one rule's
+    weights (#783): column j gets
+    (dsharp/dsigma_j) sum_q (dW_q/dsharp) q_ind(mu + V f_q, sigma)
+    for the runner j that sets the sharpness, the conditional
+    memberships taken exactly as the forward's raw mixture takes them.
+    A no-op wherever the rule is piecewise constant in sharp."""
+    from .core import _gauge_center
+    from .races import _rank1_rule_sigma_slope
+    n = len(mu)
+    # V and D exactly as races._setup sees them when it builds the rule
+    Dv = np.ones(n) if D is None else as_idio(D, n, positive=True)
+    found = _rank1_rule_sigma_slope(_gauge_center(as_loadings(Vm, n)), Dv)
+    if found is None:
+        return
+    j, dsharp, F, dW = found
+    sd = np.sqrt(Dv)
+    base_rows = BASES[base] if not callable(base) else base
+    dq = np.zeros(n)
+    for q in range(len(F)):
+        dq += dW[q] * _topk_independent(mu + Vm @ F[q], sd, k, base_rows,
+                                        points, is_normal=(base == "normal"),
+                                        kink_split=kink_split)
+    Js[:, j] += dsharp * dq
+
+
 def top_k_jacobians(mu, k, D=None, base="normal", points=513, V=None,
                     qa=None, kink_split=False):
     """Full (n, n) matrices (dq/dmu, dq/dsigma). The lattice, the
@@ -1021,11 +1047,23 @@ def top_k_jacobians(mu, k, D=None, base="normal", points=513, V=None,
     at n = 150 spent more time on redundant count programs than on the
     pair terms themselves.
 
-    V= (any rank) is EXACT given the nodes: conditional on the factor
-    draw the race is independent and the shift by V f_q leaves d/dmu and
-    d/dsigma untouched, so the correlated Jacobians are the same node
-    mixture as the forward pass,
+    V= (any rank): conditional on the factor draw the race is
+    independent and the shift by V f_q leaves d/dmu and d/dsigma
+    untouched, so given the nodes the correlated Jacobians are the same
+    node mixture as the forward pass,
     J = sum_q w_q J_ind(mu + V f_q, sigma).
+    The automatic rule (qa=None) is not fixed in sigma, though: at rank
+    one its weights are smooth functions of the sharpness
+    sqrt(2) max_i |V_i| / sigma_i on 15/8 < sharp <= 10 (the order
+    interpolation and pair of #850, the Gauss-Hermite/midpoint blend of
+    #783), so dq/dsigma also carries
+    sum_q (dw_q/dsharp) q_ind(mu + V f_q, sigma) * dsharp/dsigma_j,
+    which is nonzero only in column j of the runner attaining the max
+    (dsharp/dsigma_j = -sharp/sigma_j). That term is added here; dq/dmu
+    and every Jsigma column outside those intervals are the node
+    mixture alone. At a tie for the max the term goes to the first
+    runner attaining it (see races._rank1_rule_sigma_slope). An explicit
+    qa= is a fixed rule and takes no such term.
 
     kink_split: opt-in, default False. True differentiates the split
     lattice top_k_probabilities(..., kink_split=True) integrates on. For
@@ -1047,6 +1085,9 @@ def top_k_jacobians(mu, k, D=None, base="normal", points=513, V=None,
                                          kink_split=kink_split)
             Jm += w[j] * Jm_q
             Js += w[j] * Js_q
+        if qa is None:
+            _add_rule_sigma_slope(Js, mu, k, Vm, D, base, points,
+                                  kink_split)
         return Jm, Js
     D = np.ones(n) if D is None else as_idio(D, n, positive=True)
     # scalar, length-n, and no

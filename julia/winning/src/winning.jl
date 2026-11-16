@@ -369,13 +369,21 @@ end
 # unchanged rule outside it continuously at both ends.
 const R1_BLEND_LO = 9.0
 const R1_BLEND_HI = 10.0
-function _rank1_blend_rule(sharp)
+# The C1 smoothstep S(t) = t^2 (3 - 2t) and its slope 6 t (1 - t).
+_smoothstep(t) = (t * t * (3.0 - 2.0 * t), 6.0 * t * (1.0 - t))
+
+# slope = true also returns dW/dsharp node for node: the weights move with
+# the sharpness and so with the sd that sets it (#783).
+function _rank1_blend_rule(sharp; slope = false)
     t = (sharp - R1_BLEND_LO) / (R1_BLEND_HI - R1_BLEND_LO)
-    w = t * t * (3.0 - 2.0 * t)
+    w, dS = _smoothstep(t)
     g = hermite_nodes(1, Int(8 * R1_BLEND_LO))
     Q = Int(8 * R1_BLEND_HI) + 1
     Fm = reshape(qnorm.(((1:Q) .- 0.5) ./ Q), :, 1)
-    return vcat(g.F, Fm), vcat((1.0 - w) .* g.W, fill(w / Q, Q))
+    F, W = vcat(g.F, Fm), vcat((1.0 - w) .* g.W, fill(w / Q, Q))
+    slope || return F, W
+    dw = dS / (R1_BLEND_HI - R1_BLEND_LO)
+    return F, W, vcat(-dw .* g.W, fill(dw / Q, Q))
 end
 
 # Below the band the rank-one rule was Gauss-Hermite of order
@@ -390,29 +398,66 @@ end
 const R1_PAIR_FROM = 24
 const R1_PAIR_PER_SHARP = 5.0
 const R1_PAIR_CAP = 34
-function _rank1_hermite_rule(sharp)
-    S(t) = t * t * (3.0 - 2.0 * t)
+function _rank1_hermite_rule(sharp; slope = false)
+    # each part: (order, coefficient, d coefficient / d sharp) (#783); the
+    # pair order y is clamped to [24, 34], and held there its slope is zero
     x = 8.0 * sharp
     lo = R1_PAIR_FROM
     if x <= lo
-        m = floor(x); w = S(x - m)
-        parts = [(Int(m), 1.0 - w), (Int(m) + 1, w)]
+        m = floor(x); w, dS = _smoothstep(x - m); dw = 8.0 * dS
+        parts = [(Int(m), 1.0 - w, -dw), (Int(m) + 1, w, dw)]
     elseif x <= lo + 1
-        w = S(x - lo)
-        parts = [(lo - 1, 0.5 * w), (lo, 1.0 - 0.5 * w)]
+        w, dS = _smoothstep(x - lo); dw = 8.0 * dS
+        parts = [(lo - 1, 0.5 * w, 0.5 * dw), (lo, 1.0 - 0.5 * w, -0.5 * dw)]
     else
-        y = min(max(R1_PAIR_PER_SHARP * sharp, Float64(lo)), Float64(R1_PAIR_CAP))
-        m = floor(y); w = S(y - m)
-        parts = [(Int(m) - 1, 0.5 * (1.0 - w)), (Int(m), 0.5), (Int(m) + 1, 0.5 * w)]
+        y_raw = R1_PAIR_PER_SHARP * sharp
+        y = min(max(y_raw, Float64(lo)), Float64(R1_PAIR_CAP))
+        dy = lo < y_raw < R1_PAIR_CAP ? R1_PAIR_PER_SHARP : 0.0
+        m = floor(y); w, dS = _smoothstep(y - m); dw = dy * dS
+        parts = [(Int(m) - 1, 0.5 * (1.0 - w), -0.5 * dw), (Int(m), 0.5, 0.0),
+                 (Int(m) + 1, 0.5 * w, 0.5 * dw)]
         top = Int(8 * R1_BLEND_LO)
         if x > top - 1
-            v = S(x - (top - 1))
-            parts = vcat([(q, c * (1.0 - v)) for (q, c) in parts], [(top, v)])
+            v, dS2 = _smoothstep(x - (top - 1)); dv = 8.0 * dS2
+            parts = vcat([(q, c * (1.0 - v), dc * (1.0 - v) - c * dv)
+                          for (q, c, dc) in parts], [(top, v, dv)])
         end
     end
-    parts = [(q, c) for (q, c) in parts if c > 0.0]
-    g = [hermite_nodes(1, q) for (q, _) in parts]
-    return vcat([h.F for h in g]...), vcat([c .* h.W for (h, (_, c)) in zip(g, parts)]...)
+    # a part of zero coefficient has zero slope too (S is flat at both ends)
+    parts = [(q, c, dc) for (q, c, dc) in parts if c > 0.0]
+    g = [hermite_nodes(1, q) for (q, _, _) in parts]
+    F = vcat([h.F for h in g]...)
+    W = vcat([c .* h.W for (h, (_, c, _)) in zip(g, parts)]...)
+    slope || return F, W
+    return F, W, vcat([dc .* h.W for (h, (_, _, dc)) in zip(g, parts)]...)
+end
+
+# How the AUTOMATIC rank-one rule moves with the sds (#783), as python's
+# races._rank1_rule_sigma_slope. V gauge-centred and D validated, as
+# _race_setup sees them. The nodes are fixed, but inside the smooth
+# intervals of the two rules above the weights W(sharp) move with
+# sharp = sqrt(2) max_i |V_i| / sigma_i, so with the sd of the runner j
+# attaining the max: dsharp/dsigma_j = -sharp / sigma_j, zero for the rest.
+# Returns (j, dsharp, F, dW) over the nodes whose weight moves, or nothing
+# where the rule is piecewise constant in sharp. A tie for the max is a
+# kink: the term goes to the FIRST runner attaining it (its one-sided
+# derivative as its sd falls; each other tied runner's column is its
+# one-sided derivative as its sd rises).
+function _rank1_rule_sigma_slope(V, D)
+    size(V, 2) == 1 || return nothing
+    ratio = sqrt.(vec(sum(V .^ 2, dims = 2))) ./ sqrt.(max.(D, TINY))
+    sharp = sqrt(2) * maximum(ratio)
+    if R1_BLEND_LO < sharp <= R1_BLEND_HI
+        F, _, dW = _rank1_blend_rule(sharp; slope = true)
+    elseif ceil(8 * sharp) > 80 || !(8 * sharp > 15)
+        return nothing
+    else
+        F, _, dW = _rank1_hermite_rule(sharp; slope = true)
+    end
+    keep = dW .!= 0.0
+    any(keep) || return nothing
+    j = argmax(ratio)
+    return (j = j, dsharp = -sharp / sqrt(D[j]), F = F[keep, :], dW = dW[keep])
 end
 
 function _as_loadings(V, n)
