@@ -44,8 +44,15 @@ prices_from_dividends <- function(dividends, nan_value = 2000) {
 #' @export
 dividends_from_prices <- function(prices, multiplicity = 1.0) {
   .refuse_matrix(prices, "prices")                                # (#903)
-  p <- normalize(prices)
-  ifelse(!is.na(p) & p > 0, 1 / (multiplicity * p), NA_real_)
+  # A zero price -- a scratched runner -- is worth nothing: Inf, which
+  # prices_from_dividends maps back to 0, as ability_implied_dividends
+  # does. NA_real_ was read there as a MISSING quote and priced at
+  # nan_value, reviving the scratch; an all-zero book was all NA (#1009).
+  # NA and a negative price stay NA; positive prices are unchanged.
+  s <- sum(prices)
+  p <- if (isTRUE(s == 0)) prices else normalize(prices)
+  ifelse(!is.na(p) & p > 0, 1 / (multiplicity * p),
+         ifelse(!is.na(p) & p == 0, Inf, NA_real_))
 }
 
 #' Solve the horse race problem: offsets matching given state prices

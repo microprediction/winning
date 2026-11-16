@@ -8,6 +8,15 @@
   law, which moves asymmetric rules by up to 0.92 of a share. Callers who
   reflected their nodes to compensate must remove that reflection.
   Automatic node rules are unchanged (#909).
+- `dividends_from_prices` (python `winning.classic`, `StatePricer`, R)
+  maps a zero price -- a scratched runner -- to dividend `inf`, which
+  `prices_from_dividends` maps back to 0; it returned NaN/`NA`, which the
+  round trip read as a missing quote and revived at `nan_value`, so
+  `normalize_dividends` was not idempotent. An all-zero book is all
+  `inf` (python raised `ZeroDivisionError`). Simulated place prices from
+  `skew_normal_place_pricing` are `inf`, not NaN, for runners with zero
+  counts. NaN and negative prices, and all positive prices, are
+  unchanged (#1009).
 
 ## 1.7.0 (2026-10-31)
 

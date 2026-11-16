@@ -486,3 +486,16 @@ test_that("a unit_ratio that does not coarsen is refused (#899)", {
   for (bad in list(1, 0.6, -2, NaN, Inf, c(2, 3)))
     expect_error(winning:::.state_prices_from_extended_offsets(d, c(-20, -2, 6.5), 3L, bad), "unit_ratio")
 })
+
+test_that("a zero price is an infinite dividend and round-trips to zero (#1009)", {
+  # NA was read by prices_from_dividends as a MISSING quote and priced at
+  # nan_value, reviving the scratch
+  expect_identical(dividends_from_prices(c(0.5, 0.5, 0)), c(2, 2, Inf))
+  p <- c(0.75, 0.25, 0)
+  expect_identical(prices_from_dividends(dividends_from_prices(p)), p)
+  expect_identical(dividends_from_prices(c(0, 0)), c(Inf, Inf))
+  expect_identical(prices_from_dividends(dividends_from_prices(c(0, 0))), c(0, 0))
+  # missing and negative prices keep their meaning
+  expect_true(all(is.na(dividends_from_prices(c(0.5, NA, 0.5)))))
+  expect_true(is.na(dividends_from_prices(c(0.5, -0.1, 0.6))[2]))
+})

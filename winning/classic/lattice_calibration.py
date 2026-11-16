@@ -229,8 +229,21 @@ def prices_from_dividends(dividends, nan_value=NAN_DIVIDEND):
 
 
 def dividends_from_prices(prices, multiplicity=1.0):
-    """ Australian style "dividends" """
-    return [1.0 / (multiplicity * d) if not (np.isnan(d)) and d > 0 else np.nan for d in normalize(prices)]
+    """ Australian style "dividends"
+
+    A price of exactly zero -- a scratched runner -- is worth nothing and
+    gets dividend +inf, which prices_from_dividends maps back to 0, as
+    ability_implied_dividends does (#665). NaN (a missing quote) and a
+    negative price stay NaN. An all-zero book is all +inf. A zero price
+    became NaN, which prices_from_dividends read as a MISSING quote and
+    priced at nan_value, so normalize_dividends revived a scratch and an
+    all-zero book raised ZeroDivisionError (#1009). Positive prices are
+    unchanged.
+    """
+    p = list(prices) if sum(prices) == 0 else normalize(prices)
+    return [np.nan if np.isnan(d) else
+            (1.0 / (multiplicity * d) if d > 0 else (math.inf if d == 0 else np.nan))
+            for d in p]
 
 
 def normalize_dividends(dividends):
