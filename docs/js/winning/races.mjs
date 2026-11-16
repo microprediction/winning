@@ -1035,6 +1035,81 @@ function splitRaceSlopes(mu, { V, D, F, W, base, points }) {
   return slope.map(v => v / total);
 }
 
+/* The race AND its Jacobian on the kink-split lattice, one pass: python's
+   race_probabilities(..., kink_split=True) and
+   race_jacobian(..., kink_split=True) (polish._raw_and_derivative's
+   split branch). Raw masses a, A = da/dmu with the own coordinate
+   integrated, dT = column sums of A; p = a / T and J = (A - p dT') / T.
+   For polishRace on a kinked base only (#1011): the uniform lattice's
+   window slides across every runner's kink, so its derivative carries an
+   O(dx) artifact no fixed-grid Jacobian matches and the solver stalled;
+   on this lattice the pair is smooth and consistent. Not a public door:
+   the forward maps keep the uniform lattice by default. */
+export function splitRaceJacobian(mu, { V, D, F, W, base, points }) {
+  const st = setup(mu, V, D, F, W, base);
+  const n = st.mu.length;
+  const sd = st.D.map(Math.sqrt);
+  const Mall = condMeans(st.mu, st.V, st.F);
+  const { x } = forwardGrid(Mall, sd, st, points, "bulk", 1e-12);
+  const kinks = baseKinks(st.fn);
+  const a = new Array(n).fill(0), dT = new Array(n).fill(0);
+  const A = Array.from({ length: n }, () => new Array(n).fill(0));
+  const clip = v => Math.exp(Math.min(Math.max(v, -745), 40));
+  for (let q = 0; q < st.F.length; q++) {
+    const Mq = Mall[q], wq = st.W[q];
+    const { xs, ws } = kinkLattice(x, Mq, sd, kinks);
+    const T = xs.length;
+    const L = new Array(T).fill(0);
+    const logS = new Array(n), logf = new Array(n), fpA = new Array(n);
+    for (let i = 0; i < n; i++) {
+      const li = new Array(T), fi = new Array(T), fpi = new Array(T);
+      for (let t = 0; t < T; t++) {
+        const [S, f, fp] = st.fn((xs[t] - Mq[i]) / sd[i]);
+        li[t] = Math.log(Math.max(S, 1e-300));
+        fi[t] = Math.log(Math.max(f / sd[i], 1e-300));
+        fpi[t] = fp;
+        L[t] += li[t];
+      }
+      logS[i] = li; logf[i] = fi; fpA[i] = fpi;
+    }
+    const g = new Array(n), haz = new Array(n), own = new Array(n);
+    const G = new Array(T).fill(0);
+    for (let i = 0; i < n; i++) {
+      const gi = new Array(T), hi = new Array(T), oi = new Array(T);
+      const sd2 = sd[i] * sd[i];
+      for (let t = 0; t < T; t++) {
+        gi[t] = clip(logf[i][t] + L[t] - logS[i][t]);
+        hi[t] = clip(logf[i][t] - logS[i][t]);
+        oi[t] = -fpA[i][t] / sd2 * clip(L[t] - logS[i][t]);
+        G[t] += gi[t];
+      }
+      g[i] = gi; haz[i] = hi; own[i] = oi;
+    }
+    for (let i = 0; i < n; i++) {
+      let ai = 0, oi = 0, gh = 0, d = 0;
+      for (let t = 0; t < T; t++) {
+        ai += g[i][t] * ws[t];
+        oi += own[i][t] * ws[t];
+        gh += g[i][t] * haz[i][t] * ws[t];
+        d += ((G[t] - g[i][t]) * haz[i][t] + own[i][t]) * ws[t];
+      }
+      a[i] += wq * ai;
+      dT[i] += wq * d;
+      for (let j = 0; j < n; j++) {
+        let s = 0;
+        for (let t = 0; t < T; t++) s += g[i][t] * ws[t] * haz[j][t];
+        A[i][j] += wq * s;
+      }
+      // own coordinate, differentiated rather than imposed
+      A[i][i] += wq * (oi - gh);
+    }
+  }
+  const total = a.reduce((u, v) => u + v, 0);
+  const p = a.map(v => v / total);
+  const J = A.map((row, i) => row.map((v, j) => (v - p[i] * dT[j]) / total));
+  return { p, J };
+}
+
 /* One exit for every inversion path, as python's _inverse_return: warn
    on non-convergence unless the caller asked for the diagnostics, and
    report the iteration actually reached. Without it a starved solve came

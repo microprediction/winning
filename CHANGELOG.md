@@ -8,6 +8,16 @@
   law, which moves asymmetric rules by up to 0.92 of a share. Callers who
   reflected their nodes to compensate must remove that reflection.
   Automatic node rules are unchanged (#909).
+- `polish_race` (python, browser `polishRace`, R) on a kinked base
+  (laplace, `exponential_power_base` with beta < 2, a callable declaring
+  `kinks`) runs its forward, Jacobian and inversion of `p0` on the
+  kink-split lattice. On the uniform lattice the Jacobian was first-order
+  wrong, and SLSQP hit its iteration limit with `converged=False` on 4 of 6
+  capped laplace fields. The returned `p` is now
+  `race_probabilities(mu, ..., kink_split=True)`; `kink_split=False`
+  (browser `kinkSplit: false`) keeps the old lattice. Smooth bases and
+  the default `race_probabilities` / `race_jacobian` are bitwise
+  unchanged (#1011).
 
 ## 1.7.0 (2026-10-31)
 

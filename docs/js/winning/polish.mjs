@@ -2,10 +2,11 @@
 // (augmented Lagrangian with a compact BFGS inner solver standing in for
 // SLSQP; agrees with the reference optimum to optimizer tolerance).
 import { mean, checkOpts, OPT_HINTS, asLoadings, gaugeCenter, asAbilities,
-         asIdio, isVector, baseSpan } from "./core.mjs";
+         asIdio, isVector, baseSpan, baseKinks, solve } from "./core.mjs";
 import { raceProbabilities, abilitiesFromRace, BASES, SPANS,
          forwardGrid, factorRule, requireWholeRule, asWindow, asDelta,
-         collapseStructure, translatedHome } from "./races.mjs";
+         collapseStructure, translatedHome,
+         splitRaceJacobian } from "./races.mjs";
 import { blockRaceJacobian, nestedRaceJacobian, treeRaceJacobian, treeCluster,
          pairFactor } from "./blocks.mjs";
 
@@ -75,7 +76,22 @@ export function raceJacobian(mu, opts = {}) {
 /* Each exported call declares its own option keys; see checkOpts in
    core.mjs for why an options object needs this at all. */
 const RACE_JACOBIAN_OPTS = new Set(["V", "D", "F", "W", "base", "points", "qa", "qf", "structure", "window", "delta"]);
-const POLISH_RACE_OPTS = new Set(["V", "D", "F", "W", "base", "points", "structure", "A", "b", "groups", "nameCaps", "p0", "mu0", "fdFallback"]);
+const POLISH_RACE_OPTS = new Set(["V", "D", "F", "W", "base", "points", "structure", "A", "b", "groups", "nameCaps", "p0", "mu0", "fdFallback", "kinkSplit"]);
+
+/* The kink-split race and its Jacobian at m (races.splitRaceJacobian),
+   moved to unit scale by an exact power of two far from it, as
+   raceJacobianExplicit does (#870). */
+function splitPair(m, V, D, F, W, base, points) {
+  const Dv = asIdio(D, m.length);
+  const sdMax = Math.sqrt(Math.max(...Dv));
+  if (!(sdMax > 0) || !Number.isFinite(sdMax) || (sdMax >= 2 ** -30 && sdMax <= 2 ** 30))
+    return splitRaceJacobian(m, { V, D: Dv, F, W, base, points });
+  const c = 2 ** Math.round(Math.log2(sdMax));
+  const Vs = V == null ? V : asLoadings(V, m.length).map(row => row.map(v => v / c));
+  const r = splitRaceJacobian(m.map(v => v / c),
+    { V: Vs, D: Dv.map(v => v / c / c), F, W, base, points });
+  return { p: r.p, J: r.J.map(row => row.map(v => v / c)) };
+}
 
 /* F0/W0: a caller-supplied factor law. raceProbabilities has always
    accepted one, and this always built its own standard-normal Hermite
@@ -323,15 +339,40 @@ export function polishRace(opts = {}) {
   const { p0 = null, mu0: mu0In = null, V = null, D = null, F = null,
           W = null, base: base0 = "normal",
           points = 257, nameCaps = null, groups = null,
-          structure = null, fdFallback = true } = opts;
+          structure = null, fdFallback = true, kinkSplit = null } = opts;
   // Keep the forward, inverse and derivative closures on the same law (#912).
   const base = base0 === BASES.normal ? "normal" : base0;
+  // A kinked base (laplace, a callable declaring kinks) polishes on the
+  // kink-split lattice: the forward, its Jacobian and the inversion of p0
+  // all on one smooth map. On the uniform lattice the window slides with
+  // mu across every runner's kink, so the map's derivative carries an
+  // O(dx) artifact no fixed-grid Jacobian matches, and the solve came back
+  // converged: false (python's polish_race, #1011). kinkSplit: null
+  // chooses by the base; false keeps the uniform lattice; a smooth base is
+  // unchanged either way. structure= races are Gaussian and take neither.
+  if (kinkSplit !== null && typeof kinkSplit !== "boolean")
+    throw new Error(`polishRace: kinkSplit must be null, true or false; got ${String(kinkSplit)}`);
+  if (structure != null && kinkSplit)
+    throw new Error("polishRace: kinkSplit applies to the factor lattice (V/D), not to structure");
+  const fnB = typeof base === "function" ? base : BASES[base];
+  const split = structure == null && typeof fnB === "function"
+    && kinkSplit !== false && !!baseKinks(fnB);
+  let pairAt = null, pairVal = null;
+  const pairM = m => {
+    if (pairAt && pairAt.length === m.length && pairAt.every((v, i) => v === m[i]))
+      return pairVal;
+    pairVal = splitPair(m, V, D, F, W, base, points);
+    pairAt = m.slice();
+    return pairVal;
+  };
   let { A = null, b = null } = opts;
   // F/W must reach the forward, the jacobian AND the inverse that makes
   // mu0. Polishing under a different factor law than the one the caller
   // priced with silently optimises the wrong model (#209).
-  const fwdM = m => raceProbabilities(m, { V, D, F, W, base, points, structure });
-  const jacM = m => raceJacobian(m, { V, D, F, W, base, points, structure });
+  const fwdM = split ? m => pairM(m).p
+    : m => raceProbabilities(m, { V, D, F, W, base, points, structure });
+  const jacM = split ? m => pairM(m).J
+    : m => raceJacobian(m, { V, D, F, W, base, points, structure });
   let mu0 = mu0In != null ? asAbilities(mu0In, "mu0") : null;
   // A p0 call is only as good as its inversion: a failed one is not the
   // caller's race, and certifying the polish of it converged was a false
@@ -343,6 +384,37 @@ export function polishRace(opts = {}) {
                                         returnInfo: true });
     mu0 = inv.mu;
     invConverged = inv.converged;
+    if (split) {
+      // the inverse of the SPLIT map: abilitiesFromRace inverts the
+      // uniform one (its slopes are already split, #267), which is a
+      // ~1e-4 start; Newton on the split pair finishes it. J has the
+      // gauge 1 as null vector on both sides, so J + 11'/n is regular.
+      const s0 = p0.reduce((u, v) => u + v, 0);
+      const t = Array.from(p0, v => v / s0);
+      const lt = t.map(Math.log);
+      const resid = m => Math.max(...fwdM(m).map((v, i) =>
+        Math.abs(Math.log(Math.max(v, 1e-300)) - lt[i])));
+      let m = mu0.slice(), r = resid(m), it = 0;
+      for (; it < 30 && r >= 1e-8; it++) {
+        const { p: pm, J } = pairM(m);
+        const k = m.length;
+        const d = solve(J.map(row => row.map(v => v + 1 / k)),
+                        t.map((v, i) => v - pm[i]));
+        let step = 1, moved = false;
+        for (let h = 0; h < 12; h++, step *= 0.5) {
+          const mN = m.map((v, i) => v + step * d[i]);
+          const mm = mean(mN);
+          const mC = mN.map(v => v - mm);
+          const rN = resid(mC);
+          if (rN < r) { m = mC; r = rN; moved = true; break; }
+        }
+        if (!moved) break;
+      }
+      mu0 = m;
+      invConverged = r < 1e-8;
+      inv.maxLogResidual = r;
+      inv.iterations += it;
+    }
     if (!invConverged && typeof console !== "undefined")
       console.warn(
         "polishRace: abilitiesFromRace did not converge on p0: max |log " +

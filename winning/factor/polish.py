@@ -23,7 +23,7 @@ from __future__ import annotations
 import numpy as np
 
 from .races import (race_probabilities, abilities_from_race, _setup,
-                    forward_grid, kink_lattice, _base_kinks)
+                    forward_grid, kink_lattice, _base_kinks, BASES)
 
 
 def _raw_and_derivative(mu, V, D, F, W, fn, sd, x, dx, rows=None,
@@ -127,6 +127,18 @@ def race_jacobian(mu, V=None, D=None, F=None, W=None, base="normal",
     lattice race_probabilities(..., kink_split=True) integrates on for a
     kinked base (laplace, exponential power with beta < 2); see there.
     False, or a smooth base, is the uniform lattice unchanged.
+
+    For a kinked base the default (False) is NOT within the grid-motion
+    bound above: the omitted term is first order in the spacing, not
+    spectrally small. The window slides with mu, every runner's kink
+    moves across the fixed rectangle nodes, and the uniform map's own
+    derivative carries an O(dx) lattice artifact. At mu = [0, .4, -.3],
+    D = [1, .7, 1.3], laplace, 501 points, this J is 1.2e-2 from the
+    split one (rows sum to 1e-2, not 0) and 5e-3 from central
+    differences of the uniform forward (#1011). With kink_split=True the
+    pair (forward, J) is smooth and agrees with central differences to
+    ~4e-11. Anything that iterates on this derivative -- polish_race
+    does -- should use the split pair for a kinked base.
 
     The race is unchanged when abilities, loadings and sds are scaled by a
     common c, and J scales by 1/c. Far from unit scale (an sd outside
@@ -266,7 +278,8 @@ def concentration_matrix(n, name_caps=None, groups=None):
 
 def polish_race(p0=None, mu0=None, V=None, D=None, F=None, W=None,
                 base="normal", points=257, name_caps=None, groups=None,
-                A=None, b=None, tol=1e-9, max_iter=60, structure=None):
+                A=None, b=None, tol=1e-9, max_iter=60, structure=None,
+                kink_split=None):
     """Nearest race satisfying concentration constraints.
 
     Give either the current weights p0 (inverted to abilities internally) or
@@ -277,19 +290,55 @@ def polish_race(p0=None, mu0=None, V=None, D=None, F=None, W=None,
 
     Solved by SLSQP on mu with the exact race Jacobian supplying constraint
     gradients A J(mu); the mean-zero gauge is an equality constraint.
+
+    kink_split: None (default) chooses it from the base -- True for a base
+    that declares kinks (laplace, exponential_power_base with beta < 2),
+    False otherwise, so a smooth base runs exactly as before. For a kinked
+    base the uniform lattice is not a usable optimisation pair: its
+    window slides with mu across every runner's kink, so the map's
+    derivative carries an O(dx) lattice artifact that no fixed-grid
+    Jacobian matches (race_jacobian was 1.2e-2 off; the exact derivative
+    would have to differentiate the window's bisected quantiles, and is
+    then the derivative of that artifact), and SLSQP stopped at its
+    iteration limit, converged=False (#1011). The split lattice
+    (race_probabilities(..., kink_split=True)) is smooth, its forward and
+    Jacobian are a consistent pair, and the inversion of p0 uses the same
+    map. So for a kinked base the returned p is
+    race_probabilities(mu, ..., kink_split=True) -- the more accurate race
+    (a four-runner laplace race is ~4e-15 off there, 4e-4 off on the
+    uniform lattice at 257 points; see race_probabilities) -- and
+    info["kink_split"] says so. Pass False for the uniform lattice
+    throughout (the pre-#1011 behaviour), True to ask for the split pair
+    explicitly (a no-op for a smooth base). structure= races are Gaussian
+    and take neither.
     """
     from scipy.optimize import minimize, NonlinearConstraint, LinearConstraint
+    if kink_split is not None and not isinstance(kink_split, (bool, np.bool_)):
+        raise TypeError(f"kink_split must be None, True or False; got "
+                        f"{kink_split!r}")
     if structure is not None:
+        if kink_split:
+            raise ValueError("kink_split applies to the factor lattice "
+                             "(V=/D=), not to structure=")
+        split = False
         forward, jac, invert = _structure_engines(structure, points)
     else:
+        if kink_split is None:
+            # an unknown name is left for race_probabilities to refuse
+            fn = base if callable(base) else BASES.get(base)
+            split = fn is not None and bool(_base_kinks(fn))
+        else:
+            split = bool(kink_split)
         forward = lambda m: race_probabilities(m, V=V, D=D, F=F, W=W,
-                                               base=base, points=points)
+                                               base=base, points=points,
+                                               kink_split=split)
         jac = lambda m: race_jacobian(m, V=V, D=D, F=F, W=W, base=base,
-                                      points=points)
+                                      points=points, kink_split=split)
         invert = lambda p: abilities_from_race(np.asarray(p, float), V=V,
                                                D=D, F=F, W=W, base=base,
                                                points=points,
-                                               return_info=True)
+                                               return_info=True,
+                                               kink_split=split)
     # A p0 call is only as good as its inversion: a failed one is not the
     # caller's race, and certifying the polish of it converged was a false
     # certificate (#805). Its verdict is carried to info["converged"].
@@ -327,7 +376,7 @@ def polish_race(p0=None, mu0=None, V=None, D=None, F=None, W=None,
         return forward(mu0), mu0, {"active": [], "nit": 0,
                                    "max_violation": 0.0, "mu_distance": 0.0,
                                    "converged": inv_converged,
-                                   "feasible": True,
+                                   "feasible": True, "kink_split": split,
                                    "status": 0, "message": "unconstrained"}
 
     def p_of(m):
@@ -437,7 +486,7 @@ def polish_race(p0=None, mu0=None, V=None, D=None, F=None, W=None,
                    "mu_distance": float(np.linalg.norm(mu - mu0)),
                    "converged": bool(feasible_out and res.success
                                      and inv_converged),
-                   "feasible": bool(feasible_out),
+                   "feasible": bool(feasible_out), "kink_split": split,
                    "status": int(res.status), "message": str(res.message)}
 
 

@@ -148,3 +148,31 @@ test_that("the race Jacobian scales as 1/c at any unit (#870)", {
     expect_lt(max(abs(J1 - cc * Jc)) / max(abs(J1)), 1e-12)
   }
 })
+
+test_that("a kinked base polishes on the kink-split lattice (#1011)", {
+  # python's race_jacobian(..., kink_split = TRUE) at the issue's race
+  sp <- .split_race_jacobian(c(0, 0.4, -0.3), NULL, c(1, 0.7, 1.3), NULL,
+                             NULL, "laplace", 501)
+  expect_lt(max(abs(rowSums(sp$J))), 1e-12)
+  expect_equal(sp$J[1, 3], 0.229670997488052, tolerance = 1e-10)
+  mu0 <- c(0.101, -0.106, 0.512, 0.084, -0.429, 0.289, 1.043, 0.758, -0.563, -1.012)
+  D <- c(1.316, 0.503, 1.357, 0.534, 1.23, 0.676, 1.363, 1.041, 0.8, 0.923)
+  r <- polish_race(mu0 = mu0, D = D, base = "laplace", name_caps = 0.2)
+  expect_true(r$info$feasible)
+  expect_lte(max(r$p), 0.2 + 1e-6)
+  # the returned p is the split race at mu
+  expect_equal(r$p, .split_race_jacobian(r$mu, NULL, D, NULL, NULL,
+                                         "laplace", 257)$p, tolerance = 1e-14)
+  # a smooth base ignores kink_split
+  a <- polish_race(mu0 = mu0, D = D, base = "normal", name_caps = 0.2)
+  b <- polish_race(mu0 = mu0, D = D, base = "normal", name_caps = 0.2,
+                   kink_split = FALSE)
+  expect_identical(a$p, b$p)
+  expect_identical(a$mu, b$mu)
+  # p0 round-trips through the split inverse under a slack cap
+  rt <- polish_race(p0 = sp$p, D = c(1, 0.7, 1.3), base = "laplace",
+                    A = matrix(c(1, 0, 0), 1), b = 0.99)
+  expect_lt(max(abs(rt$p - sp$p)), 1e-8)
+  expect_error(polish_race(mu0 = c(0, 0, 0), D = c(1, 1, 1), base = "laplace",
+                           name_caps = 0.5, kink_split = "yes"), "kink_split")
+})
