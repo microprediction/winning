@@ -118,7 +118,8 @@ rprobit_fast <- function(df, covariates, r = NULL, Qf = 7L, Qz = NULL,
   for (col in seq_len(r)) for (row in col + seq_len(J - col)) {
     V[row, col] <- fit$par[nb + ki]; ki <- ki + 1L
   }
-  lab <- .loading_labels(fit$par[-seq_len(nb)], J, r, levels(alt_f))
+  lab <- .loading_labels(fit$par[nb + seq_len(length(fit$par) - nb)], J, r,
+                        levels(alt_f))       # a tail slice (#949)
   structure(list(coefficients = beta,
                  covariance_par = lab$par,
                  loadings = lab$V,

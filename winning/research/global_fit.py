@@ -30,7 +30,9 @@ def _interp_price_and_slope_2d(
         return _interp_price_and_slope_1d(cal, mu)
     scales = sorted(cal.lookup_curves_2d_prices.keys())
     s_arr = np.array(scales, dtype=float)
-    if scale in cal.lookup_curves_2d_prices:
+    if scale in cal.lookup_curves_2d_prices or len(s_arr) == 1:
+        # one cached scale is the only curve there is: s_arr[-2] raised (#880)
+        scale = float(scale) if scale in cal.lookup_curves_2d_prices else float(s_arr[0])
         locs, prices = cal.lookup_curves_2d_prices[float(scale)]
         dprices = np.gradient(prices, locs)
         mu_c = float(np.clip(mu, locs.min(), locs.max()))
@@ -92,19 +94,24 @@ class GlobalAbilityCalibrator:
         scales: Optional[Sequence[float]] = None,
     ) -> None:
         prices_arr = np.asarray(prices, dtype=float)
+        mu = [float(self.theta.get(hid, 0.0)) for hid in horse_ids]
         if scales is None:
             scales_arr = None
-            if (calibrator.lookup_curve_1d_prices is None) and (
-                not calibrator.lookup_curves_2d_prices
-            ):
-                calibrator.solve_from_prices(prices_arr)
+            if calibrator.lookup_curve_1d_prices is None:
+                if not calibrator.lookup_curves_2d_prices:
+                    calibrator.solve_from_prices(prices_arr)
+                else:
+                    # a scaled race came first: fit() reads this one's 1-D
+                    # curve, which nothing had built (#880)
+                    calibrator.rebuild_curves_from_field_1d(mu)
         else:
             scales_arr = _validated_scales(scales, len(prices_arr))
             # fit() reads the 2-D curves at this race's scales; build them if absent,
-            # against the field at the current parameters as rebuild_all_curves does (#841).
+            # against the field at the current parameters as rebuild_all_curves does (#841),
+            # keeping every scale the calibrator's other races read (#880).
             if any(float(s) not in calibrator.lookup_curves_2d_prices for s in scales_arr):
-                mu = [float(self.theta.get(hid, 0.0)) for hid in horse_ids]
-                calibrator.rebuild_curves_from_field_2d(mu, scales_arr)
+                calibrator.rebuild_curves_from_field_2d(
+                    mu, scales_arr, extra_scales=self._scales_of(calibrator))
         self.races.append(
             RaceSpec(
                 calibrator=calibrator,
@@ -163,11 +170,18 @@ class GlobalAbilityCalibrator:
         p_hat, _ = self._predict_and_slopes_for_race(r_idx)
         return p_hat
 
+    def _scales_of(self, calibrator: AbilityCalibrator) -> List[float]:
+        """Every scale a registered race reads from this calibrator's cache."""
+        return sorted({float(s) for spec in self.races
+                       if spec.calibrator is calibrator and spec.scales is not None
+                       for s in spec.scales})
+
     def rebuild_all_curves(self) -> None:
         for r, spec in enumerate(self.races):
             mu_r = [float(self.theta[hid] + self.biases[r]) for hid in spec.horse_ids]
             if spec.scales is not None and len(mu_r) == len(spec.scales):
-                spec.calibrator.rebuild_curves_from_field_2d(mu_r, spec.scales)
+                spec.calibrator.rebuild_curves_from_field_2d(
+                    mu_r, spec.scales, extra_scales=self._scales_of(spec.calibrator))
             else:
                 spec.calibrator.rebuild_curves_from_field_1d(mu_r)
 

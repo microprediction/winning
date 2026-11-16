@@ -196,6 +196,28 @@ end
         @test expected_max(g) === expected_max(ref)
     end
     @test abs(max_cdf(base, 0.0) - 0.25) < 1e-8
+
+    # a MetaGMRF wrapper forwards mean and precision_matrix, so it reached
+    # the generic conversion and priced the dropped constraint (#885)
+    struct _TestMeta885 <: GMF.GMRFMetadata end
+    for inner in (cg, wg)
+        for g in (GMF.MetaGMRF(inner, _TestMeta885()),
+                  GMF.MetaGMRF(GMF.MetaGMRF(inner, _TestMeta885()), _TestMeta885()))
+            @test_throws ArgumentError GaussMarkovChain(g)
+            @test_throws ArgumentError max_cdf(g, 0.0)
+            @test_throws ArgumentError excursion_probability(g, 0.0)
+            @test_throws ArgumentError first_passage(g, 0.0)
+            @test_throws ArgumentError argmax_marginals(g)
+            @test_throws ArgumentError expected_max(g)
+        end
+    end
+    # and an unconstrained one prices exactly as its inner model
+    for inner in (base, wg0)
+        g = GMF.MetaGMRF(inner, _TestMeta885())
+        @test max_cdf(g, 0.0) === max_cdf(inner, 0.0)
+        @test first_passage(g, 0.0) == first_passage(inner, 0.0)
+        @test expected_max(g) === expected_max(inner)
+    end
 end
 
 # --- a transition narrower than the lattice spacing (#244) -------------

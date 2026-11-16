@@ -7,6 +7,8 @@ max-wins arena interface."""
 
 from __future__ import annotations
 
+from numbers import Integral
+
 import numpy as np
 from scipy.special import log_ndtr, ndtr, ndtri
 
@@ -520,6 +522,32 @@ def _without_common_shift(C):
     return B
 
 
+def _as_fit_rank(value, name):
+    """A scalar count, never a negative slice endpoint (#958)."""
+    def refuse():
+        # built only on refusal: formatting a 5000-digit int that would
+        # clip to the field's rank trips Python's int-to-str digit limit
+        return ValueError(f"{name} must be a non-negative integer; got "
+                          f"{type(value).__name__}")
+    # numpy registers timedelta64 as an Integral: a duration is not a count
+    # whatever its unit (1 ns became rank 1; 1 D leaked a TypeError)
+    if (np.ma.is_masked(value) or isinstance(value, (bool, np.bool_))
+            or isinstance(value, (np.timedelta64, np.datetime64))):
+        raise refuse()
+    if isinstance(value, Integral):
+        rank = int(value)  # preserve large integers; the field caps the rank
+    else:
+        v = np.asarray(value)
+        if (v.ndim != 0 or v.dtype.kind not in "iuf"
+                or not np.isfinite(v) or v != np.floor(v)):
+            raise refuse()
+        rank = int(v)
+    if rank < 0:
+        raise ValueError(f"{name} must be a non-negative integer; got a "
+                         "negative one")
+    return rank
+
+
 def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
                    blocks=None, nodes_log2: int = 11,
                    seed: int = 0, return_report: bool = False):
@@ -538,6 +566,9 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
     honest. Works on covariances; correlation matrices are the special
     case with unit diagonal.
 
+    k and m: non-negative integer counts (integer-valued real scalars are
+    accepted). Counts above the field size are capped as before.
+
     blocks: None (a count chosen from n), an integer count for stage (2)'s
     clustering, or a length-n integer label array giving the block
     membership directly -- for entrants whose families are known (siblings
@@ -554,6 +585,8 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
     from scipy.cluster.hierarchy import fcluster, linkage
     from scipy.spatial.distance import squareform
 
+    k = _as_fit_rank(k, "k")
+    m = _as_fit_rank(m, "m")
     C = _validate_covariance(C)
     # a common shift cancels from every contrast: fit the representative
     # without it, so C and C + a 11' are fitted identically (#465)
@@ -1061,7 +1094,7 @@ def fit_tree(C, parent, k: int = 0, max_n: int = 2000):
 _CONTRAST_WARN = 1.0
 
 
-def _worst_contrast_ratio(C, R, cap_n=4000):
+def _worst_contrast_ratio(C, R, block_rows=128):
     """max over pairs of |contrast residual| / contrast variance.
 
     A Frobenius or max-entry residual normalized by the average variance
@@ -1073,25 +1106,25 @@ def _worst_contrast_ratio(C, R, cap_n=4000):
     residual where choices actually live, pair by pair:
     (e_i - e_j)' R (e_i - e_j) over (e_i - e_j)' C (e_i - e_j).
 
-    O(n^2) memory, so past cap_n it restricts to the cap_n smallest
-    variances, which is where dangerous pairs live (a tiny difference
-    variance needs both variances small or correlation near one, and the
-    former dominates in practice).
+    Scan every pair in row blocks to bound temporary memory. A pair
+    with high marginal variances can still have a tiny contrast variance
+    when its correlation is close to one.
     """
     n = len(C)
-    if n > cap_n:
-        idx = np.argsort(np.diag(C))[:cap_n]
-        C = C[np.ix_(idx, idx)]
-        R = R[np.ix_(idx, idx)]
-        n = cap_n
     dC = np.diag(C)
-    varC = dC[:, None] + dC[None, :] - 2.0 * C
     dR = np.diag(R)
-    varR = np.abs(dR[:, None] + dR[None, :] - 2.0 * R)
     tiny = 1e-12 * max(float(dC.mean()), 1e-300)
-    np.fill_diagonal(varR, 0.0)
-    ratio = varR / np.maximum(varC, tiny)
-    return float(ratio.max())
+    worst = 0.0
+    for start in range(0, n, block_rows):
+        stop = min(start + block_rows, n)
+        varC = dC[start:stop, None] + dC[None, :] - 2.0 * C[start:stop]
+        varR = dR[start:stop, None] + dR[None, :] - 2.0 * R[start:stop]
+        np.abs(varR, out=varR)
+        varR[np.arange(stop - start), np.arange(start, stop)] = 0.0
+        np.maximum(varC, tiny, out=varC)
+        varR /= varC
+        worst = np.maximum(worst, varR.max())
+    return float(worst)
 
 
 def _as_count(x, name, minimum):

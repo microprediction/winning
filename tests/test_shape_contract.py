@@ -374,6 +374,30 @@ def _d_norder(V):
         MU, D, ORDER, V, beta2=1.0)
 
 
+@driver("winning.ratings.nway.update_topk_correlated")
+def _d_ntopk(V):
+    return _mod("winning.ratings.nway.update_topk_correlated")(
+        MU, D, 1, 2, V=V, beta2=1.0)
+
+
+@driver("winning.ratings.nway.update_topset_correlated")
+def _d_ntopset(V):
+    return _mod("winning.ratings.nway.update_topset_correlated")(
+        MU, D, [2, 0], V=V, beta2=1.0)
+
+
+@driver("winning.ratings.nway.update_prefix_correlated")
+def _d_nprefix(V):
+    return _mod("winning.ratings.nway.update_prefix_correlated")(
+        MU, D, [2, 0], V=V, beta2=1.0)
+
+
+@driver("winning.ratings.nway.update_tie_correlated")
+def _d_ntie(V):
+    return _mod("winning.ratings.nway.update_tie_correlated")(
+        MU, D, [2, 0], V=V, beta2=1.0)
+
+
 @driver("winning.ratings.nway.predictive_win_probabilities")
 def _d_npred(V):
     return _mod("winning.ratings.nway.predictive_win_probabilities")(
@@ -778,6 +802,18 @@ SWAPPABLE = {
     "nway.predictive_win_probabilities":
         lambda a, b: importlib.import_module(
             "winning.ratings.nway").predictive_win_probabilities(_M, a, V=b),
+    "nway.update_topk_correlated":
+        lambda a, b: importlib.import_module(
+            "winning.ratings.nway").update_topk_correlated(_M, a, 1, 2, V=b),
+    "nway.update_topset_correlated":
+        lambda a, b: importlib.import_module(
+            "winning.ratings.nway").update_topset_correlated(_M, a, [2, 0], V=b),
+    "nway.update_prefix_correlated":
+        lambda a, b: importlib.import_module(
+            "winning.ratings.nway").update_prefix_correlated(_M, a, [2, 0], V=b),
+    "nway.update_tie_correlated":
+        lambda a, b: importlib.import_module(
+            "winning.ratings.nway").update_tie_correlated(_M, a, [2, 0], V=b),
     "market.update_race":
         lambda a, b: importlib.import_module(
             "winning.ratings.market").update_race(_M, a, winner=1, V=b),

@@ -10,12 +10,18 @@ name: CodeQL
 # repository: research/restriction/data/ holds a copied browser
 # experiment (jQuery 2.1.4, md5.js and friends), and attic/ is frozen.
 
+# No push trigger: every change reaches main through a pull request, which
+# is analysed, and the weekly run keeps main's own alerts current. The push
+# run was four more jobs on every merge in a shared runner queue.
 on:
-  push:
-    branches: [main]
   pull_request:
   schedule:
     - cron: "17 5 * * 2"   # Tuesdays 05:17 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions: {}
 

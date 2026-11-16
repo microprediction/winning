@@ -3123,16 +3123,30 @@ pub fn kink_lattice(lo: f64, hi: f64, points: usize, m: &[f64], sd: &[f64],
     let mut ws = Vec::new();
     for j in 0..pieces {
         let cnt = ((l as f64 * eff[j] / total).round_ties_even() as usize).max(4);
-        let (t, w) = gauss_legendre(cnt);
-        let mid = 0.5 * (cuts[j + 1] + cuts[j]);
-        let half = 0.5 * (cuts[j + 1] - cuts[j]);
-        for (tt, ww) in t.iter().zip(w.iter()) {
-            xs.push(mid + half * tt);
-            ws.push(half * ww);
+        // a piece above KINK_MAX_ORDER is split into k equal panels of
+        // ceil(cnt / k) nodes: one rule is O(m^2) to build, and a large
+        // `points` gave one piece thousands of nodes (#835). At or below
+        // the cap nothing changes. As python's kink_lattice.
+        let panels = cnt.div_ceil(KINK_MAX_ORDER);
+        let (t, w) = gauss_legendre(cnt.div_ceil(panels));
+        let (lo_j, hi_j) = (cuts[j], cuts[j + 1]);
+        for s in 0..panels {
+            let pl = if s == 0 { lo_j } else { lo_j + (hi_j - lo_j) * s as f64 / panels as f64 };
+            let ph = if s == panels - 1 { hi_j } else { lo_j + (hi_j - lo_j) * (s + 1) as f64 / panels as f64 };
+            let mid = 0.5 * (ph + pl);
+            let half = 0.5 * (ph - pl);
+            for (tt, ww) in t.iter().zip(w.iter()) {
+                xs.push(mid + half * tt);
+                ws.push(half * ww);
+            }
         }
     }
     (xs, ws)
 }
+
+/// python's races.KINK_MAX_ORDER: the largest single Gauss rule a
+/// kink-split piece uses (#835).
+pub const KINK_MAX_ORDER: usize = 512;
 
 /// forward_kernel_base on the kink-split lattice: OPT-IN, for a base
 /// whose density has a kink at each of `kinks` (laplace, exponential

@@ -162,13 +162,16 @@ elif mode == "alt":
                   f"TV {0.5*np.abs(g-ref).sum():.2e}  "
                   f"tail {tail_band_err(g, ref):.3f}", flush=True)
 
-        # frequency at wall-clock matched to the race, and at 10x
+        # frequency at wall-clock matched to the race, and at 10x. Its draws
+        # come from their own stream: how many it takes depends on machine
+        # speed, and sharing rng made the next problem drawn depend on it.
+        sim = np.random.default_rng([5, n])
         for mult, tag in ((1.0, "freq(=t)"), (10.0, "freq(10t)")):
             t0 = time.time()
             draws = 0
             counts = np.zeros(n)
             while time.time() - t0 < mult * t_race:
-                zz = rng.standard_normal((n, 4096))
+                zz = sim.standard_normal((n, 4096))
                 counts += np.bincount(
                     np.argmin(mu[:, None] + L @ zz, axis=0), minlength=n)
                 draws += 4096
@@ -247,6 +250,7 @@ elif mode == "genz200":
         json.dump(case, f); path = f.name
     rcode = f'''
 suppressMessages(library(mvtnorm)); suppressMessages(library(jsonlite))
+set.seed(20260827)
 cs <- fromJSON("{path}"); mu <- cs$mu; S <- as.matrix(cs$Sig); i <- cs$i + 1
 n <- length(mu); o <- setdiff(seq_len(n), i)
 m <- mu[o] - mu[i]
@@ -262,6 +266,36 @@ cat(sprintf("genz: %.6e (err est %.1e) in %.2f s\\n", pr,
     os.unlink(path)
     print(f"lattice all-{n}: {t_lat*1e3:.1f} ms; favourite p = {p_lat[i]:.6e}")
     print(out.stdout.strip() or out.stderr.strip()[-200:])
+    if out.returncode != 0 or "genz:" not in out.stdout:
+        sys.exit("genz200: the R call failed (needs R with mvtnorm and jsonlite)")
+elif mode == "classic":
+    # Rust against pure-Python classic (integer-lattice) calibration: the
+    # Scale paragraph's speed ratio. Same answer both ways (printed), median
+    # of five calls each.
+    import winning
+    from winning.classic.lattice_calibration import state_price_implied_ability
+    from winning.classic.lattice import skew_normal_density
+    density = skew_normal_density(L=500, unit=0.01, a=0.0)
+    winning.use_rust(True)
+    if not winning.rust_active():
+        sys.exit("classic: fastrace is not installed, so there is nothing to compare")
+    for n in (10, 50, 200):
+        prices = list(np.random.default_rng(3).dirichlet(np.full(n, 2.0)))
+        res = {}
+        for rust in (True, False):
+            winning.use_rust(rust)
+            ts = []
+            for _ in range(5):
+                t0 = time.perf_counter()
+                a = state_price_implied_ability(prices, density)
+                ts.append(time.perf_counter() - t0)
+            res[rust] = (float(np.median(ts)), np.asarray(a))
+        winning.use_rust(True)
+        print(f"n={n:4d}  rust {1e3*res[True][0]:8.2f} ms  "
+              f"python {1e3*res[False][0]:8.1f} ms  "
+              f"ratio {res[False][0]/res[True][0]:6.0f}  "
+              f"max|diff| {np.abs(res[True][1]-res[False][1]).max():.1e}",
+              flush=True)
 elif mode == "tenmillion":
     # Gap 1: the ten-million-contestant block race, seeded. Needs ~5 GB
     # and a quiet machine; the paper's Scale paragraph cites this run.

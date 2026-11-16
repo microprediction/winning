@@ -365,6 +365,18 @@ def test_relative_floor_preserves_near_singular_contrasts():
     assert global_norm < 0.05   # the old diagnostic would not have
 
 
+def test_contrast_residual_includes_high_variance_pair_across_blocks():
+    from winning.factor.core import _worst_contrast_ratio
+
+    C = np.diag([1.0, 4.0, 1.0, 4.0])
+    R = np.zeros_like(C)
+    C[1, 3] = C[3, 1] = 4.0 - 2**-20
+    R[1, 3] = R[3, 1] = 2**-20
+    # The 1–3 contrast has target variance 2**-19 and residual -2**-19.
+    # It spans two row blocks, and every other pair has zero residual.
+    assert _worst_contrast_ratio(C, R, 2) == 1.0
+
+
 def test_in_grammar_small_n_spread_variances_fits_exactly():
     """The default alternation start can stall on an exactly in-grammar
     matrix at small n with variances spread across decades (projected

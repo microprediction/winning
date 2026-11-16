@@ -19,9 +19,14 @@ if using_pandas:
         duplicated label to every row carrying it and raised on the length
         mismatch, so a legal non-unique index failed where a reset one
         passed (#908). A row whose group label is missing is left NaN, as
-        groupby drops it."""
-        for _, pos in df.groupby(by, sort=False).indices.items():
-            yield pos, df.iloc[pos]
+        groupby drops it. An unused level of a categorical group column has
+        no rows: pandas still lists it with an empty position array, and the
+        calibration kernels refused the empty group, so a frame filtered
+        down from a larger one crashed (#933). Only groups with rows are
+        calibrated."""
+        for _, pos in df.groupby(by, sort=False, observed=True).indices.items():
+            if len(pos):
+                yield pos, df.iloc[pos]
 
 
     def add_ability_implied_state_price_to_dataframe(df, ability_col, by: str, density, new_col: str, unit: float):

@@ -164,6 +164,7 @@
 .ghk_race <- function(mu, C, budget = 4096L, want_slopes = FALSE) {
   C <- as.matrix(C)
   n <- nrow(C)
+  .refuse_matrix(mu, "mu")                                       # (#903)
   mu <- as.numeric(mu)
   # canonical order: by ability, ties by covariance row sum
   ord <- order(mu, rowSums(C))

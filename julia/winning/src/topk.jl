@@ -455,6 +455,7 @@ end
 """P(runner i among the k smallest), min-wins; slot identity enforced."""
 function top_k_probabilities(mu, k; V = nothing, D = nothing,
                              base = "normal", points = 513, qa = nothing)
+    _refuse_matrix(mu, "mu")                                # (#903)
     mu = Float64.(collect(mu))
     n = length(mu)
     k = Int(k)
@@ -511,6 +512,7 @@ returned 0.0 at 513 points and 2.4e-15 at 2049 for a true 7.73e-24
 (#365, as python/R/browser)."""
 function bottom_k_probabilities(mu, k; V = nothing, D = nothing,
                                 base = "normal", points = 513, qa = nothing)
+    _refuse_matrix(mu, "mu")                                # (#903)
     mu = Float64.(collect(mu))
     n = length(mu)
     k = Int(k)
@@ -534,6 +536,7 @@ end
 exact Gauss-Hermite node mixture."""
 function top_k_jacobians(mu, k; D = nothing, base = "normal",
                          points = 513, V = nothing, qa = nothing)
+    _refuse_matrix(mu, "mu")                                # (#903)
     mu = Float64.(collect(mu))
     n = length(mu)
     k = Int(k)
@@ -599,6 +602,7 @@ the adjacent top-k verbs priced it (#202). Column 1 is correlated top-1
 membership and cumulative row sums are correlated top-k."""
 function rank_probabilities(mu; D = nothing, base = "normal", points = 513,
                             V = nothing, qa = nothing)
+    _refuse_matrix(mu, "mu")                                # (#903)
     mu = Float64.(collect(mu))
     n = length(mu)
     mu = _translated_home(mu, _as_idio(D, n))     # (#477)
@@ -699,6 +703,7 @@ function abilities_from_topk(q, k; V = nothing, D = nothing,
                              base = "normal", points = 513, qa = nothing,
                              n_iter = 80, tol = 1e-8,
                              target_floor = nothing, return_info = false)
+    _refuse_matrix(q, "q")                                  # (#903)
     n = length(q)
     k = Int(k)
     1 <= k <= n - 1 || error("k must be in [1, n-1]; got k=$k, n=$n")
@@ -725,22 +730,48 @@ function abilities_from_topk(q, k; V = nothing, D = nothing,
     # 30, #408), and the sweeps adapt it to the contraction they observe
     top2 = (k == 1 && n > 2) ? sum(sort(target)[(end - 1):end]) : 1.0
     alpha = (n == 2 || (k == 1 && top2 > 0.8)) ? 0.7 : 1.0
-    function fwd(m)
-        local qraw, sl
-        if fac === nothing
-            ws = _topk_with_slopes(m, sd, k, fn, points)
-            qraw, sl = ws.q, ws.slopes
-        else
-            qraw = zeros(n)
-            sl = zeros(n)
-            for j in 1:size(fac.nodes, 1)
-                ws = _topk_with_slopes(m .+ fac.Vm * fac.nodes[j, :],
-                                       sd, k, fn, points)
-                qraw .+= fac.w[j] .* ws.q
-                sl .+= fac.w[j] .* ws.slopes
-            end
+    function eval_at(m, pts)
+        fac === nothing && (ws = _topk_with_slopes(m, sd, k, fn, pts);
+                            return ws.q, ws.slopes)
+        qraw = zeros(n)
+        sl = zeros(n)
+        for j in 1:size(fac.nodes, 1)
+            ws = _topk_with_slopes(m .+ fac.Vm * fac.nodes[j, :],
+                                   sd, k, fn, pts)
+            qraw .+= fac.w[j] .* ws.q
+            sl .+= fac.w[j] .* ws.slopes
         end
-        qhat = _checked_topk(qraw, k, "top-k inversion")
+        return qraw, sl
+    end
+    function fwd(m)
+        # python's and the browser's bounded refinement: a lattice that
+        # fails the mass check is doubled (2p - 1) up to four times the
+        # request, and the residual and slopes come from the lattice that
+        # passed. On one fixed lattice the inverse refused, at its warm
+        # start, a target its own forward produced at the same points (#943).
+        qraw, sl = eval_at(m, points)
+        qhat = nothing
+        err = nothing
+        try
+            qhat = _checked_topk(qraw, k, "top-k inversion")
+        catch e
+            err = e
+        end
+        if err !== nothing
+            cap = 4 * (points - 1) + 1
+            pts = points
+            while err !== nothing && pts < cap
+                pts = min(2 * pts - 1, cap)
+                qraw, sl = eval_at(m, pts)
+                try
+                    qhat = _checked_topk(qraw, k, "top-k inversion")
+                    err = nothing
+                catch e
+                    err = e
+                end
+            end
+            err === nothing || throw(err)
+        end
         resid = (log.(max.(qhat, TINY)) .- log.(max.(1 .- qhat, TINY))) .- logit_t
         dlogit = min.(sl ./ max.(qhat .* (1 .- qhat), TINY), -1e-6 / scale)
         return resid, dlogit
@@ -832,6 +863,9 @@ function loc_scale_from_topk_pair(q1, k1, q2, k2; D0 = nothing,
                                   n_iter = 60, tol = 1e-8, ridge = 0.0,
                                   mu0 = nothing, V = nothing,
                                   return_info = false)
+    _refuse_matrix(q1, "q1")                                # (#903)
+    _refuse_matrix(q2, "q2")                                # (#903)
+    _refuse_matrix(mu0, "mu0")                              # (#903)
     # the cold start (no D0, no mu0) can stall far from an exact board;
     # only then, one retry from a scale-informed D0 (#781), as python
     once(d, m) = _loc_scale_once(q1, k1, q2, k2, d, base, points, n_iter,
@@ -973,6 +1007,8 @@ _I(n) = [i == j ? 1.0 : 0.0 for i in 1:n, j in 1:n]
 
 """Win plus EXACTLY-second marginals: P(2nd) + P(win) = P(top-2)."""
 function loc_scale_from_win_and_second(p_win, p_second; kwargs...)
+    _refuse_matrix(p_win, "p_win")                          # (#903)
+    _refuse_matrix(p_second, "p_second")                    # (#903)
     n = length(p_win)
     length(p_second) == n || error("p_win and p_second must have equal length")
     (any(p_win .<= 0) || any(p_second .<= 0)) &&
@@ -1028,6 +1064,8 @@ function abilities_from_rank_marginal(p, r; mu0 = nothing, D = nothing,
                                       base = "normal", points = 513,
                                       n_iter = 60, tol = 1e-8,
                                       return_info = false)
+    _refuse_matrix(p, "p")                                  # (#903)
+    _refuse_matrix(mu0, "mu0")                              # (#903)
     once(m) = _rank_marginal_once(p, r, m, D, base, points, n_iter, tol)
     out = _retry_on_failure(once(mu0), once,
                             f -> _rank_marginal_starts(mu0, f.mu, f.resid, D),

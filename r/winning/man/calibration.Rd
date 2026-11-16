@@ -36,8 +36,8 @@ lower is better}
 \item{implied_offsets_guess}{starting offsets, one per price (default zeros)}
 \item{n_iter}{iteration budget (default 100); the iteration stops early
 once the exact reprice of the current field is within \code{tol} of every
-target, or when two successive steps miss by the best miss again (to
-a relative 1e-6), and returns the best iterate it assessed}
+target or a step leaves the centred offsets unchanged; it returns
+the best iterate it assessed}
 \item{tol}{stopping tolerance on the maximum price error (default 1e-9),
 finite and positive}
 }

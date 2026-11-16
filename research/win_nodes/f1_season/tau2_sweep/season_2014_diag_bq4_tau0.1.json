@@ -1,0 +1,29 @@
+{
+ "year": 2014,
+ "params": {
+  "init_var": 1.0,
+  "drift": 0.05,
+  "rho": 0.5,
+  "beta2_q": 4.0,
+  "beta2_r": 1.0,
+  "lengths_scale_q": 2.0,
+  "nodes_log2": 8,
+  "tau2": 0.1
+ },
+ "results": [
+  {
+   "variant": "race+quali+market",
+   "n_races": 19,
+   "mean_log_score_winner": -1.3159112689755594,
+   "total_evidence": -1062.4487032479615,
+   "belief": "diag",
+   "races_with_market": 15,
+   "market_log_score": -1.2569582060390438,
+   "model_log_score_on_those": -1.2629864837208713,
+   "mean_log_score_pole": -1.6897226623337092,
+   "split_qr": 0.0,
+   "uniform": -2.995732273553991,
+   "seconds": 4519.087142944336
+  }
+ ]
+}

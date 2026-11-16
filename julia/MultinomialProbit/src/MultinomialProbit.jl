@@ -429,6 +429,11 @@ finite entries are refused here; the sign contract belongs to each
 engine (the likelihood needs D > 0, GHK admits a zero)."""
 function _check_D(D, J::Integer)
     D === nothing && return ones(J)
+    # a matrix with J cells was read column-major as a different vector of
+    # variances, moving a share by 9 points (#903); python refuses it
+    (D isa AbstractArray && ndims(D) != 1) && throw(ArgumentError(
+        "D must be a vector, not a " * join(string.(size(D)), " x ") *
+        " array: linear indexing would read it column-major as a different vector"))
     Dv = D isa Number ? fill(Float64(D), J) : Float64.(vec(collect(D)))
     length(Dv) == J || throw(DimensionMismatch(
         "D must have one idiosyncratic variance per alternative: got " *

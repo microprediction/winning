@@ -296,6 +296,20 @@ def _winner_batch(Ms, base="normal"):
     return np.log(p), grad
 
 
+def _lattice_terms(Ms, order, base):
+    # Each contest has its own arbitrary ability origin. Remove it before
+    # sizing the shared grid, so offsets between contests cost no resolution.
+    Ms = Ms - Ms[:, :1]
+    if len(order) >= 2:
+        lp, grad = _order_pass_batch(Ms, np.ones(Ms.shape[1]), order,
+                                     L=_LATTICE_L, base=base)
+    else:
+        lp, grad = _winner_batch(Ms, base=base)
+    # Pull the score back through the subtraction of the first mean.
+    grad[:, 0] = -grad[:, 1:].sum(axis=1)
+    return lp, grad
+
+
 def _loglik_terms(theta, st, base="normal"):
     """Per-event log-likelihood (n_events,) and d loglik / d mu per row
     (n_rows,), for the stacked design at coefficients theta."""
@@ -318,11 +332,7 @@ def _loglik_terms(theta, st, base="normal"):
         order = np.arange(n_ord)
         for c0 in range(0, len(idx), chunk):
             sl = slice(c0, c0 + chunk)
-            if n_ord >= 2:
-                lpv, gr = _order_pass_batch(Ms[sl], np.ones(K), order, L=_LATTICE_L,
-                                            base=base)
-            else:
-                lpv, gr = _winner_batch(Ms[sl], base=base)
+            lpv, gr = _lattice_terms(Ms[sl], order, base)
             # A probability is at most one, and the lattice sum need not
             # be: for a kinked base (laplace) the rectangle rule over the
             # winner's density is second order across its kink, so a
@@ -371,16 +381,14 @@ def _hessian_blocks(theta, st, base="normal"):
         chunk = max(1, _WORK_BUDGET // (2 * K * _LATTICE_L))
         for c0 in range(0, E, chunk):
             sl = slice(c0, c0 + chunk)
-            Mc = Ms[sl]
+            # Perturb at the local origin as well: a small finite difference
+            # can round away at the absolute means.
+            Mc = Ms[sl] - Ms[sl, :1]
             Ec = Mc.shape[0]
             for j in range(K):
                 ej = np.zeros(K); ej[j] = hstep
                 both = np.vstack([Mc + ej, Mc - ej])
-                if n_ord >= 2:
-                    _, g = _order_pass_batch(both, np.ones(K), order, L=_LATTICE_L,
-                                             base=base)
-                else:
-                    _, g = _winner_batch(both, base=base)
+                _, g = _lattice_terms(both, order, base)
                 H[sl, :, j] = (g[:Ec] - g[Ec:]) / (2.0 * hstep)
         H = 0.5 * (H + np.transpose(H, (0, 2, 1)))
         for e_local, e in enumerate(idx):
@@ -704,12 +712,16 @@ def sweep_offset_ridge(train_events, val_events, n_entities, n_cov,
         losses.append(-float(np.mean(factor_loglik(B, val_events, base))))
         fits.append(B)
     best = int(np.argmin(losses))
+    axis = list(dict.fromkeys(grid))
     _, report = select({g: L for g, L in zip(grid, losses)},
-                       "offset_ridge", order=list(dict.fromkeys(grid)))
+                       "offset_ridge", order=axis)
+    # the flags are read on the unique axis select judged: with a repeated
+    # endpoint, (1, 3, 3), argmin is index 1, not the last index, and the
+    # public flags said interior while report.at_edge said edge (#883)
     return {"offset_grid": grid, "val_loss": np.asarray(losses),
             "offset_ridge": grid[best], "B": fits[best],
-            "at_scalar_limit": best == len(grid) - 1,
-            "at_edge": best in (0, len(grid) - 1),
+            "at_scalar_limit": grid[best] == axis[-1],
+            "at_edge": grid[best] in (axis[0], axis[-1]),
             "inert": report.inert, "report": report}
 
 

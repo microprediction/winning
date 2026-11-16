@@ -1,6 +1,6 @@
 // The general race: min-wins, normal/gumbel bases, winner-bulk lattice,
 // adaptive factor quadrature. Port of winning/factor/races.py.
-import { TINY, ndtr, logndtr, npdf, hermiteNodes, mean, checkOpts, OPT_HINTS, asLoadings, asIdio, gaugeCenter, firstPrimes, asFactorLaw, asAbilities, asFiniteVector, asIterations, asTolerance, asCount, aitkenTrial, applyFloor, canonicalBasis, asPoints, kinkLattice, baseSpan, baseKinks } from "./core.mjs";
+import { TINY, ndtr, logndtr, npdf, hermiteNodes, mean, checkOpts, OPT_HINTS, asLoadings, asIdio, gaugeCenter, firstPrimes, asFactorLaw, asAbilities, asFiniteVector, asIterations, asTolerance, asCount, aitkenTrial, AITKEN_AGREE, applyFloor, canonicalBasis, asPoints, kinkLattice, baseSpan, baseKinks } from "./core.mjs";
 
 const EULER = 0.5772156649015329;
 
@@ -854,8 +854,8 @@ function pairMixtureGap(target, proj, w, d0, d1, g0, h) {
     if (!Number.isFinite(f)) return null;
     if (f > 0) hi = g; else lo = g;
     let gn = ratio > 0 ? g - f * sd / ratio : NaN;
-    // quadratic convergence: from 1e-8 the step lands at rounding
-    if (Math.abs(f) < 1e-8 && lo < gn && gn < hi) return gn;
+    // Evaluate the next proposal in the loop even when f is tiny: a
+    // near-zero plateau derivative can make it worse, not quadratic (#954).
     // while one side is open a Newton step is capped at h too: on a
     // mixture plateau the ratio is ~1e-66 and the uncapped step
     // (-6.7e64) set a bracket end bisection never came back from (#830)
@@ -1240,6 +1240,8 @@ function solveRace(target, floored, { V, D, F, W, base, points, nIter, tol,
     } else if (prev && penalty < 1) {
       penalty = Math.min(1, penalty / 0.75);
     }
+    // the last sweep's own contraction, for the Aitken gate below (#956)
+    const prevMax = prev ? prev.rmax : Infinity;
     prev = { mu, resid, dlogp, rmax, rrms };
     alpha = alphaBase * penalty;
     // residual-proportional step cap in the field's scale
@@ -1261,7 +1263,8 @@ function solveRace(target, floored, { V, D, F, W, base, points, nIter, tol,
         if (rho < 0) {
           const lam = 1 - (1 - rho) / alpha;
           alphaBase = Math.min(Math.max(2 / (2 - lam), 0.1), 1);
-        } else if (cosn > 0.999 && ratio > 0.5 && ratio < 0.999 && rmax > 1e3 * tol) {
+        } else if (cosn > 0.999 && ratio > 0.5 && ratio < 0.999 && rmax > 1e3 * tol &&
+                   Math.abs(rmax / prevMax - ratio) <= AITKEN_AGREE) {
           // collinear steps decaying geometrically: sum the tail (Aitken),
           // as a repriced, capped trial
           const trial = aitkenTrial(mu, step, ratio, scale, sweepForward,

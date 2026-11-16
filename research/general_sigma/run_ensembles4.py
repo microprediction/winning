@@ -93,11 +93,9 @@ for method, gen in CORR_GENERATORS.items():
         if method.value == "kernel":
             continue
         CASES.append((tag, gen, kw, 5))
-for kind in ("rbf", "matern32"):
-    for ls in (0.08, 0.2, 0.4):
-        for m in (5, 12):
-            CASES.append((f"kernel-{kind}-ls{ls}-m{m}",
-                          kernel_case(kind, ls), {}, m))
+# The kernel stratification (fix 8) is run by run_kernel4.py, which owns the
+# paper's kernel table. The kernel cases once listed here were called with an
+# integer rng and raised on every seed, so they never contributed a row.
 
 import csv
 outf = open("results_ensembles4.csv", "w", buffering=1)

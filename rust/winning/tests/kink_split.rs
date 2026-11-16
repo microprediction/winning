@@ -56,3 +56,21 @@ fn kink_lattice_keeps_its_node_bound() {
     assert!((w.iter().sum::<f64>() - 40.0).abs() < 1e-12);
     assert!(x.windows(2).all(|p| p[0] < p[1]));
 }
+
+#[test]
+fn a_large_piece_is_split_into_panels() {
+    // #835: a piece above KINK_MAX_ORDER becomes equal panels; the budget,
+    // the integral and the ordering are kept, and construction stays fast
+    let m = vec![-0.4, 0.1, 0.5];
+    let sd = vec![1.0, 0.7, 1.3];
+    for &pts in &[513usize, 4097, 32769] {
+        let t0 = std::time::Instant::now();
+        let (x, w) = kink_lattice(-12.0, 12.0, pts, &m, &sd, &[0.0]);
+        assert!(t0.elapsed().as_secs_f64() < 2.0, "{pts}: {:?}", t0.elapsed());
+        assert!((w.iter().sum::<f64>() - 24.0).abs() < 1e-11);
+        let cubic: f64 = x.iter().zip(&w).map(|(xi, wi)| wi * xi.powi(3)).sum();
+        assert!(cubic.abs() < 1e-7, "{pts}: {cubic}");
+        assert!(x.windows(2).all(|p| p[0] < p[1]));
+        assert!(x.len() <= pts + 8 * 512);
+    }
+}

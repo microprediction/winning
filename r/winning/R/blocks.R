@@ -12,6 +12,7 @@
 # (zero mass at 1e15) and their Jacobians came back zero (#477). Ordinary
 # inputs are returned unchanged; D is validated downstream, as before.
 .home <- function(mu, D) {
+  .refuse_matrix(mu, "mu")                                       # (#903)
   mu <- as.numeric(mu)
   Dn <- suppressWarnings(as.numeric(D))
   if (!length(mu) || !length(Dn)) return(mu)
@@ -669,6 +670,7 @@ nested_race_jacobian <- function(mu, cluster, loading, D, coupling = NULL,
 abilities_from_block_race <- function(p, cluster, loading, D,
                                       points = 257, qa = 9,
                                       tol = 1e-10, max_iter = 25) {
+  .refuse_matrix(p, "p")                                         # (#903)
   p_t <- .rescaled_target(as.numeric(p))       # scale-safe (#463)
   n <- length(p_t)
   floor_ <- max(1e-14, min(p_t[p_t > 0]) * 1e-3)

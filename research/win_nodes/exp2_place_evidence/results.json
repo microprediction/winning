@@ -1,0 +1,53 @@
+{
+ "n": 8,
+ "rank": 1,
+ "beta2": 1.0,
+ "seeds": 1600,
+ "k": 3,
+ "rmse_contrast": {
+  "prior": 0.8958664073393766,
+  "member of top 3": 0.8665932477016992,
+  "order among 3 named": 0.8536389208533484,
+  "top-3 set": 0.77487310400034,
+  "winner": 0.8295139085064194,
+  "top 3 in order, rest behind": 0.7589054075536329,
+  "full order": 0.7022714898670296
+ },
+ "mean_posterior_var": {
+  "prior": 1.0,
+  "member of top 3": 0.9473805847423301,
+  "order among 3 named": 0.921005368867566,
+  "top-3 set": 0.7753273236025916,
+  "winner": 0.8724373969842619,
+  "top 3 in order, rest behind": 0.7487202326646556,
+  "full order": 0.6562800201353434
+ },
+ "mean_log_score_next_winner": {
+  "prior": -2.0662565488267415,
+  "member of top 3": -2.02962152818628,
+  "order among 3 named": -2.0145022398620482,
+  "top-3 set": -1.9182451312738527,
+  "winner": -1.967076868814936,
+  "top 3 in order, rest behind": -1.8912084567514234,
+  "full order": -1.8409241981712712
+ },
+ "se_rmse_contrast": {
+  "prior": 0.006240084581854535,
+  "member of top 3": 0.006147279211693228,
+  "order among 3 named": 0.006025143460285832,
+  "top-3 set": 0.005435427212451368,
+  "winner": 0.005774815866497694,
+  "top 3 in order, rest behind": 0.005286126623596799,
+  "full order": 0.0048091600784447896
+ },
+ "paired_rmse_diff_vs_prior_se": {
+  "member of top 3": 0.0019166768051221163,
+  "order among 3 named": 0.0023041252699395032,
+  "top-3 set": 0.0038998613531784016,
+  "winner": 0.0029281912315723274,
+  "top 3 in order, rest behind": 0.004183144983902839,
+  "full order": 0.0049435114534934375
+ },
+ "raw_log": "races.jsonl",
+ "seconds": 2090.8408868312836
+}

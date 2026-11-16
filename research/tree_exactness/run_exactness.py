@@ -70,9 +70,15 @@ for nc, depth, label in [(4, 1, "depth-1 (blocks)"), (4, 2, "depth-2"),
     p = tree_race_probabilities(mu, cluster, loading, D, parent, strength,
                                 points=1001, qa=15)
     pm, sd = mc_tree(mu, cluster, loading, D, parent, strength, M)
-    z = (p - pm) / np.maximum(sd, 1e-12)
+    # z only where the MC can resolve the entry, chosen independently of the
+    # MC outcome: expected hits M p >= 10 under the lattice answer, with the
+    # score-test sd sqrt(p(1-p)/M). Entries below go to the minimax-tilting
+    # referee (botev_tree.R) instead.
+    ok = M * p >= 10
+    z = (p[ok] - pm[ok]) / np.sqrt(p[ok] * (1 - p[ok]) / M)
     print(f"{label:16s} n={n:3d} nodes={len(parent):3d}  "
           f"max|p-MC| {np.abs(p-pm).max():.2e}  max|z| {np.abs(z).max():5.2f}  "
-          f"rms z {np.sqrt((z*z).mean()):5.2f}", flush=True)
+          f"rms z {np.sqrt((z*z).mean()):5.2f}  below 10 expected hits {int((~ok).sum())} "
+          f"(min p {p.min():.1e})", flush=True)
 print(f"\nMC noise floor per entry ~ {1/np.sqrt(M):.1e}-scale; "
       "|z| ~ 1 means exact to quadrature accuracy, |z| >> 1 means bias")

@@ -59,8 +59,9 @@ console.log(JSON.stringify(out));
 @pytest.mark.skipif(NODE is None, reason="node is not installed")
 def test_browser_endpoint_neighbours_unchanged_773():
     # values pinned from origin/main 7af3ed1c: just inside the endpoint was
-    # already exact, just past it still hangs and clusters, and a W >= L
-    # field is untouched
+    # already exact and a W >= L field is untouched. Just past it hung and
+    # clustered to 0.634; an integer shift of -1 fits it, so it is now the
+    # exact price (#1006)
     got = _node(f"""
 import {{ abilityImpliedStatePrices as f, skewNormalDensity }} from {CLASSIC};
 const d = {json.dumps(L3)};
@@ -69,7 +70,7 @@ console.log(JSON.stringify([f([0, 1 - 1e-9], d), f([0, 1 + 1e-9], d),
   f([-0.5, 0, 0.3, 2.1, 6], skewNormalDensity(50, 0.1, {{ a: 1 }}), {{ unit: 0.1 }})]));
 """)
     pinned = [[0.7777777775000001, 0.22222222250000007],
-              [0.633744856100823, 0.36625514389917707],
+              [0.7777777779444446, 0.22222222205555558],
               [0.6049811058833535, 0.2601479044907512, 0.1086783458341974,
                0.026192643791697244],
               [0.5672982284762254, 0.27027574567228596, 0.16087563506704702,

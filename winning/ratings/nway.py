@@ -1158,3 +1158,238 @@ def _order_pass_batch(Ms, sd, order, L=None, base="normal", curves=None):
     if redo.any() and base == "normal" and curves is None:
         logP[redo], grad[redo] = _order_pass_log(Ms[redo], sd, order, x)
     return logP, grad
+
+
+# --- observed place: "i finished among the top k", and "the top-k set was S"
+
+def _require_normal_base(base, what):
+    if base != "normal":
+        raise NotImplementedError(
+            f"{what} is implemented for base='normal' only; the non-normal "
+            "predictive curves of update_winner are not yet threaded through "
+            "the top-k count program")
+
+
+def update_topk_correlated(m, v, member, k, V=None, beta2=1.0, Qf=7, eps=1e-3,
+                           base="normal", nodes_log2=10, points=513):
+    """Exact-moment posterior update from the evidence that entrant
+    `member` finished among the top k (max-wins), with optional shared
+    performance factors V as in update_winner_correlated. k = 1 is the
+    observed winner. Conditional on the factors the race is independent
+    and the event's probability is the top-k membership of
+    winning.factor.topk. Its Jacobian row is taken in the min-wins means
+    mu = -m, so the score in m is minus that row divided by the
+    probability; the mixture over factor nodes is _mixture_update's. Returns
+    (m_post, v_post, logZ) with logZ = log P(member in top k)."""
+    from ..factor.topk import top_k_probabilities, top_k_jacobian_row
+    _require_normal_base(base, "update_topk_correlated")
+    m = np.asarray(m, dtype=float)
+    n = len(m)
+    v = as_variance(v, n)
+    member = int(as_order([member], n, name="member")[0])        # #129
+    k = int(k)
+    if not 1 <= k <= n:
+        raise ValueError(f"k must lie in 1..{n}; got {k}")
+    if k == n:
+        return m.copy(), v.copy(), 0.0                 # everyone is in the top n
+    D = v + _beta_per_player(beta2, n)                 # Gaussian predictive per node
+    if V is None:
+        V = np.zeros((n, 1))
+
+    def node(mm):
+        mu = -np.asarray(mm, dtype=float)              # the engine speaks min-wins
+        q = float(np.asarray(top_k_probabilities(mu, k, D=D, points=points))[member])
+        row = np.asarray(top_k_jacobian_row(mu, member, k, D=D, points=points))
+        q = max(q, 1e-300)
+        return np.log(q), -row / q                     # d log q / d mm = -(dq/dmu)/q
+    return _mixture_update(m, v, V, beta2, node, Qf=Qf, eps=eps, base=base,
+                           nodes_log2=nodes_log2)
+
+
+def _topset_logp_grad(mm, D, top, points=2001):
+    """log P(every entrant in `top` beat every entrant outside it) for
+    independent normal performances N(mm_j, D_j), max-wins, and its
+    gradient in mm. With G(x) = prod_{j not in top} Phi_j(x) the law of
+    the best outsider and H(x) = prod_{i in top} S_i(x) the chance every
+    member is above x,
+
+        P = int G'(x) H(x) dx = -int G(x) H'(x) dx,
+
+    and differentiating under either form gives one lattice sum per
+    entrant: dP/dm_i = int G' phi_i/sd_i prod_{i' in top, i' != i} S_i'
+    for a member (>= 0), dP/dm_j = int H' phi_j/sd_j prod_{l out, l != j}
+    Phi_l for an outsider (<= 0). The gradient sums to zero by
+    translation invariance, which the tests check."""
+    from scipy.special import log_ndtr
+    _trapz = getattr(np, "trapezoid", None) or np.trapz
+    mm = np.asarray(mm, dtype=float); D = np.asarray(D, dtype=float)
+    n = len(mm)
+    top = np.asarray(sorted(set(int(i) for i in top)), dtype=int)
+    out = np.asarray([j for j in range(n) if j not in set(top.tolist())], dtype=int)
+    sd = np.sqrt(D)
+    lo = float(np.min(mm - 9 * sd)); hi = float(np.max(mm + 9 * sd))
+    x = np.linspace(lo, hi, int(points)); dx = x[1] - x[0]
+    z = (x[:, None] - mm[None, :]) / sd[None, :]            # (L, n)
+    logPhi = log_ndtr(z); logS = log_ndtr(-z)
+    phi_over_sd = np.exp(-0.5 * z * z) / (np.sqrt(2 * np.pi) * sd[None, :])
+    logG = logPhi[:, out].sum(axis=1)                        # best outsider's cdf
+    logH = logS[:, top].sum(axis=1)                          # all members above x
+    # G'(x) = sum_l phi_l/sd_l prod_{l' != l} Phi_l'  = G * sum_l phi_l/(sd_l Phi_l)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        ratio_out = np.where(logPhi[:, out] > -700, phi_over_sd[:, out] / np.exp(logPhi[:, out]), 0.0)
+        ratio_top = np.where(logS[:, top] > -700, phi_over_sd[:, top] / np.exp(logS[:, top]), 0.0)
+    G = np.exp(logG); H = np.exp(logH)
+    Gp = G * ratio_out.sum(axis=1)
+    Hp = -H * ratio_top.sum(axis=1)
+    P = float(_trapz(Gp * H, dx=dx))
+    grad = np.zeros(n)
+    for a, i in enumerate(top):
+        # d/dm_i of H = H * phi_i/(sd_i S_i)
+        grad[i] = _trapz(Gp * H * ratio_top[:, a], dx=dx)
+    for b, j in enumerate(out):
+        # -d/dm_j of G = G * phi_j/(sd_j Phi_j); P = -int G H'
+        grad[j] = _trapz(Hp * G * ratio_out[:, b], dx=dx)
+    P = max(P, 1e-300)
+    return np.log(P), grad / P
+
+
+def update_topset_correlated(m, v, top, V=None, beta2=1.0, Qf=7, eps=1e-3,
+                             base="normal", nodes_log2=10, points=2001):
+    """Exact-moment posterior update from the evidence that the set `top`
+    of entrants finished ahead of everyone else, in unknown order
+    (max-wins): the qualifiers, the shortlist, the final. |top| = 1 is
+    the observed winner and |top| = n - 1 names the last finisher.
+    Shared performance factors V as in update_winner_correlated. Returns
+    (m_post, v_post, logZ) with logZ = log P(top set = `top`)."""
+    _require_normal_base(base, "update_topset_correlated")
+    m = np.asarray(m, dtype=float)
+    n = len(m)
+    v = as_variance(v, n)
+    top = [int(i) for i in as_order(top, n, name="top")]            # distinct, in range (#129)
+    if not 1 <= len(top) <= n - 1:
+        raise ValueError(f"top must name between 1 and {n - 1} entrants; got {len(top)}")
+    D = v + _beta_per_player(beta2, n)
+    if V is None:
+        V = np.zeros((n, 1))
+
+    def node(mm):
+        return _topset_logp_grad(mm, D, top, points=points)
+    return _mixture_update(m, v, V, beta2, node, Qf=Qf, eps=eps, base=base,
+                           nodes_log2=nodes_log2)
+
+
+def _prefix_logp(mm, D, prefix, points=2001):
+    """log P(prefix[0] first, prefix[1] second, ..., and every entrant not
+    named finishes behind the last named), independent normal
+    performances N(mm_j, D_j), max-wins. Nested integrals on one lattice:
+    the last named finishes at x with every unnamed below it,
+    A_k(x) = f_k(x) prod_{l unnamed} Phi_l(x); each earlier named must
+    finish above the next, A_j(x) = f_j(x) int_{-inf}^x A_{j+1}; and
+    P = int A_1. k cumulative sums, O(kL)."""
+    from scipy.special import log_ndtr
+    _trapz = getattr(np, "trapezoid", None) or np.trapz
+    mm = np.asarray(mm, dtype=float); D = np.asarray(D, dtype=float)
+    n = len(mm); sd = np.sqrt(D)
+    prefix = [int(i) for i in prefix]
+    rest = [j for j in range(n) if j not in set(prefix)]
+    lo = float(np.min(mm - 9 * sd)); hi = float(np.max(mm + 9 * sd))
+    x = np.linspace(lo, hi, int(points)); dx = x[1] - x[0]
+    z = (x[:, None] - mm[None, :]) / sd[None, :]
+    logf = -0.5 * z * z - 0.5 * np.log(2 * np.pi) - np.log(sd[None, :])
+    logPhi = log_ndtr(z)
+    below_rest = logPhi[:, rest].sum(axis=1) if rest else np.zeros(len(x))
+    A = np.exp(logf[:, prefix[-1]] + below_rest)
+    for i in reversed(prefix[:-1]):
+        C = np.concatenate([[0.0], np.cumsum(0.5 * (A[1:] + A[:-1])) * dx])   # int_{-inf}^x A
+        A = np.exp(logf[:, i]) * C
+    return float(np.log(max(_trapz(A, dx=dx), 1e-300)))
+
+
+def update_prefix_correlated(m, v, prefix, V=None, beta2=1.0, Qf=7, eps=1e-3,
+                             base="normal", nodes_log2=10, points=2001, h=1e-5):
+    """Exact-moment posterior update from an ordered top-k result with
+    the rest unplaced (max-wins): prefix lists the first k finishers in
+    order, and every entrant not named finished behind them. k = 1 is
+    the observed winner, k = n the full order. Shared factors V as in
+    update_winner_correlated. The conditional score is a central
+    difference of the lattice log-probability at relative step h, exact
+    for the fixed lattice to about h^2. Returns (m_post, v_post, logZ)."""
+    _require_normal_base(base, "update_prefix_correlated")
+    m = np.asarray(m, dtype=float)
+    n = len(m)
+    v = as_variance(v, n)
+    prefix = [int(i) for i in as_order(prefix, n, name="prefix")]        # distinct, in range (#129)
+    D = v + _beta_per_player(beta2, n)
+    if V is None:
+        V = np.zeros((n, 1))
+    step = float(h) * np.sqrt(D)
+
+    def node(mm):
+        lp = _prefix_logp(mm, D, prefix, points=points)
+        g = np.empty(n)
+        for j in range(n):
+            e = np.zeros(n); e[j] = step[j]
+            g[j] = (_prefix_logp(mm + e, D, prefix, points=points)
+                    - _prefix_logp(mm - e, D, prefix, points=points)) / (2 * step[j])
+        return lp, g
+    return _mixture_update(m, v, V, beta2, node, Qf=Qf, eps=eps, base=base,
+                           nodes_log2=nodes_log2)
+
+
+# --- a dead heat for first
+
+def _tie_logdens_grad(mm, D, tied, points=2001):
+    """log of the density that the entrants in `tied` finish level in
+    first place with everyone else behind, independent normal
+    performances N(mm_j, D_j), max-wins: int prod_{i tied} f_i(x)
+    prod_{j out} Phi_j(x) dx, and its gradient. For one tied entrant this
+    is the win probability; for two it is the tie density of the win
+    Jacobian's off-diagonal. The gradient sums to zero (translation)."""
+    from scipy.special import log_ndtr
+    _trapz = getattr(np, "trapezoid", None) or np.trapz
+    mm = np.asarray(mm, dtype=float); D = np.asarray(D, dtype=float)
+    n = len(mm); sd = np.sqrt(D)
+    tied = [int(i) for i in tied]
+    out = [j for j in range(n) if j not in set(tied)]
+    lo = float(np.min(mm - 9 * sd)); hi = float(np.max(mm + 9 * sd))
+    x = np.linspace(lo, hi, int(points)); dx = x[1] - x[0]
+    z = (x[:, None] - mm[None, :]) / sd[None, :]
+    logf = -0.5 * z * z - 0.5 * np.log(2 * np.pi) - np.log(sd[None, :])
+    logPhi = log_ndtr(z)
+    logh = logf[:, tied].sum(axis=1) + (logPhi[:, out].sum(axis=1) if out else 0.0)
+    h = np.exp(logh)
+    P = float(_trapz(h, dx=dx))
+    grad = np.zeros(n)
+    for i in tied:
+        grad[i] = _trapz(h * z[:, i] / sd[i], dx=dx)             # d log f_i / d m_i = z_i / sd_i
+    with np.errstate(divide="ignore", invalid="ignore"):
+        for j in out:
+            ratio = np.where(logPhi[:, j] > -700,
+                             np.exp(-0.5 * z[:, j] ** 2 - 0.5 * np.log(2 * np.pi) - logPhi[:, j]) / sd[j], 0.0)
+            grad[j] = -_trapz(h * ratio, dx=dx)                   # d log Phi_j / d m_j = -phi_j/(sd_j Phi_j)
+    P = max(P, 1e-300)
+    return np.log(P), grad / P
+
+
+def update_tie_correlated(m, v, tied, V=None, beta2=1.0, Qf=7, eps=1e-3,
+                          base="normal", nodes_log2=10, points=2001):
+    """Exact-moment posterior update from a dead heat: the entrants in
+    `tied` finished level in first place and everyone else behind them
+    (max-wins). The event has probability zero under a continuous
+    model, so its likelihood is a density, Bayes' rule applies to it as
+    to any density, and the evidence returned is a log density, not a
+    log probability. One tied entrant is the observed winner. Shared
+    factors V as in update_winner_correlated."""
+    _require_normal_base(base, "update_tie_correlated")
+    m = np.asarray(m, dtype=float)
+    n = len(m)
+    v = as_variance(v, n)
+    tied = [int(i) for i in as_order(tied, n, name="tied")]           # distinct, in range (#129)
+    D = v + _beta_per_player(beta2, n)
+    if V is None:
+        V = np.zeros((n, 1))
+
+    def node(mm):
+        return _tie_logdens_grad(mm, D, tied, points=points)
+    return _mixture_update(m, v, V, beta2, node, Qf=Qf, eps=eps, base=base,
+                           nodes_log2=nodes_log2)

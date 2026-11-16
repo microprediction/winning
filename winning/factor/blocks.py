@@ -625,7 +625,13 @@ def abilities_from_block_race(p, cluster, loading, D, points=257, qa=9,
     max(1e-14, min-positive/1000) and the returned abilities for those
     entries are upper bounds on quality (lower bounds on mu)."""
     from ..shapes import rescaled_target
-    p_t = rescaled_target(np.asarray(p, float))  # scale-safe (#463)
+    p_in = np.asarray(p, float)
+    # a zero share is a sub-resolution bound (above); a negative or NaN one
+    # is not a probability: -0.2 was floored and inverted to a race with
+    # residual 1.8e-15, and NaN failed inside a reduction
+    if p_in.ndim != 1 or not np.all(np.isfinite(p_in)) or np.any(p_in < 0) or not np.any(p_in > 0):
+        raise ValueError("target probabilities must be finite and nonnegative, with some positive")
+    p_t = rescaled_target(p_in)  # scale-safe (#463)
     n = len(p_t)
     floor = max(1e-14, p_t[p_t > 0].min() * 1e-3)
     p_t = np.maximum(p_t, floor); p_t = p_t / p_t.sum()

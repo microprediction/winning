@@ -120,3 +120,31 @@ test_that("race_jacobian without window/delta is unchanged (#821)", {
                    race_jacobian(mu, D = D, points = 101, window = NULL,
                                  delta = NULL))
 })
+
+test_that("a floor above 1/n from a saturated start reaches the binding point (#840)", {
+  # the browser crossed to the opposite deterministic winner and python
+  # returned the violating start; the R projection reaches the boundary,
+  # and this pins it
+  x_star <- 0.9061938024368232                  # -qnorm(0.9) / sqrt(2)
+  for (a in c(8 / sqrt(2), 4.9)) {
+    r <- polish_race(mu0 = c(a, -a), D = c(1, 1), A = matrix(c(-1, 0), 1), b = -0.9)
+    expect_true(r$info$feasible)
+    expect_equal(r$p, c(0.9, 0.1), tolerance = 1e-8)
+    expect_equal(r$mu, c(-x_star, x_star), tolerance = 1e-7)
+    expect_equal(r$info$mu_distance, sqrt(2) * (a + x_star), tolerance = 1e-6)
+  }
+})
+
+test_that("the race Jacobian scales as 1/c at any unit (#870)", {
+  ex <- 1 / (4 * sqrt(pi))
+  for (s in c(1, 1e-18, 1e-20, 1e-100, 1e100)) {
+    J <- race_jacobian(c(0, 0, 0), D = rep(s * s, 3), points = 501)
+    expect_equal(s * J[1, 2], ex, tolerance = 1e-12)
+  }
+  V <- matrix(c(0.3, -0.2, 0.5)); mu <- c(0.1, -0.3, 0.2); D <- c(1, 1.5, 0.7)
+  J1 <- race_jacobian(mu, V = V, D = D, points = 501)
+  for (cc in c(1e-19, 1e40)) {
+    Jc <- race_jacobian(mu * cc, V = V * cc, D = D * cc^2, points = 501)
+    expect_lt(max(abs(J1 - cc * Jc)) / max(abs(J1)), 1e-12)
+  }
+})

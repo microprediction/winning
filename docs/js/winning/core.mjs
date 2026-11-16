@@ -428,8 +428,8 @@ export function asWeights(W, nNodes, where = "W") {
 
 /* A quadrature rule with its null nodes removed -- python's
    shapes.as_factor_law. Nodes of weight zero, and the lightest nodes
-   whose COMBINED relative mass is at most 1e-15, change no share at
-   double precision, but every lattice sizes its window from all the
+   whose COMBINED relative mass is at most 1e-15, have tiny absolute
+   mass, but every lattice sizes its window from all the
    nodes it is handed: a zero (or 1e-300) atom at f = 1000 widened the
    window until the real density spikes fell between lattice points
    (0.69 against 0.54 on one share), and padded block nodes threw
@@ -440,9 +440,15 @@ export function asFactorLaw(F, W, rank, whereF = "F", whereW = "W") {
   const order = Wn.map((_, q) => q).sort((a, b) => Wn[a] - Wn[b] || a - b);
   const drop = new Array(Wn.length).fill(false);
   let cum = 0;
-  for (const q of order) {
+  for (let i = 0; i < order.length; i++) {
+    const q = order[i];
     cum += Wn[q];
-    if (cum > 1e-15) break;
+    if (cum > 1e-15) {
+      // Keep the entire equal-weight group if it straddles the cutoff.
+      for (let j = i - 1; j >= 0 && Wn[order[j]] === Wn[q]; j--)
+        drop[order[j]] = false;
+      break;
+    }
     drop[q] = true;
   }
   if (!drop.some(Boolean)) return { F: Fv, W: Wn };
@@ -765,6 +771,16 @@ export function firstPrimes(d) {
    ratio 0.998 jumped 539x to abilities in [-894, 249] and ended at
    residual 715 after 120 sweeps. `fwdKeys` names the residual and
    slope fields of the forward's result. */
+/* Aitken sums a geometric tail, which exists only while the residual
+   shrinks by the same factor as the step. When the plain sweeps converge
+   FASTER than the step ratio says -- the superlinear finish after a
+   plateau -- the extrapolation overshoots: on #956's exact target trials
+   fired at residual/step ratios 0.60/0.86 and 0.63/0.88, each raised the
+   residual 2-9x, and the inverse ended 13.6 off where the plain sweeps
+   converge in 60. The dense near-unidentified fields of #178, which need
+   the trial, agree to within 0.11. Python's races.AITKEN_AGREE. */
+export const AITKEN_AGREE = 0.15;
+
 export function aitkenTrial(mu, step, ratio, scale, forward, residMax,
                             fwdKeys = ["resid", "dres"]) {
   let jump = step.map(v => v / (1 - ratio));
@@ -818,6 +834,8 @@ export function legendre(m) {
    location, so a uniform rectangle sum of a slope or Jacobian is only
    first order there; on these pieces it is spectral (#267). Used for the
    inverses' derivatives only: the forward maps keep the uniform lattice. */
+export const KINK_MAX_ORDER = 512;        // python's races.KINK_MAX_ORDER (#835)
+
 export function kinkLattice(x, M, sd, kinks) {
   const a = x[0], b = x[x.length - 1], L = x.length;
   let K = [];
@@ -847,10 +865,20 @@ export function kinkLattice(x, M, sd, kinks) {
   }
   const xs = [], ws = [];
   for (let j = 0; j < P; j++) {
-    const m = Math.max(4, Math.round(L * eff[j] / tot));
+    const mAll = Math.max(4, Math.round(L * eff[j] / tot));
+    // a piece above KINK_MAX_ORDER is split into k equal panels of
+    // ceil(m / k) nodes: one Gauss rule is O(m^2) to build, and a
+    // 32,769-point Laplace inverse blocked for seconds on it (#835). At or
+    // below the cap nothing changes. As python's kink_lattice.
+    const k = Math.ceil(mAll / KINK_MAX_ORDER), m = Math.ceil(mAll / k);
     const { t, w } = legendre(m);
-    const mid = 0.5 * (cuts[j + 1] + cuts[j]), half = 0.5 * (cuts[j + 1] - cuts[j]);
-    for (let r = 0; r < m; r++) { xs.push(mid + half * t[r]); ws.push(half * w[r]); }
+    const lo = cuts[j], hi = cuts[j + 1];
+    for (let s = 0; s < k; s++) {
+      const pl = s === 0 ? lo : lo + (hi - lo) * s / k;
+      const ph = s === k - 1 ? hi : lo + (hi - lo) * (s + 1) / k;
+      const mid = 0.5 * (ph + pl), half = 0.5 * (ph - pl);
+      for (let r = 0; r < m; r++) { xs.push(mid + half * t[r]); ws.push(half * w[r]); }
+    }
   }
   return { xs, ws };
 }
@@ -940,6 +968,8 @@ export function jacobiSweeps(mu, forward, scale, alpha, nIter, tol) {
     } else if (prev && penalty < 1) {
       penalty = Math.min(1, penalty / 0.75);
     }
+    // the last sweep's own contraction, for the Aitken gate below (#956)
+    const prevMax = prev ? prev.residMax : Infinity;
     prev = { mu, resid, dres, residMax, residRms };
     const a = alphaBase * penalty;
     let step = resid.map((v, i) => {
@@ -959,7 +989,8 @@ export function jacobiSweeps(mu, forward, scale, alpha, nIter, tol) {
         if (rho < 0) {
           const lam = 1 - (1 - rho) / a;
           alphaBase = Math.min(Math.max(2 / (2 - lam), 0.1), 1);
-        } else if (cosn > 0.999 && ratio > 0.5 && ratio < 0.999 && residMax > 1e3 * tol) {
+        } else if (cosn > 0.999 && ratio > 0.5 && ratio < 0.999 && residMax > 1e3 * tol &&
+                   Math.abs(residMax / prevMax - ratio) <= AITKEN_AGREE) {
           const trial = aitkenTrial(mu, step, ratio, scale, forward, residMax);
           if (trial) {  // sum the geometric tail
             mu = trial.mu;

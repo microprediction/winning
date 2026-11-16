@@ -1,0 +1,10 @@
+regime                                      own-slope                BLP          BLP a=0.5         BLP a=0.25
+unit scale, mild heterogeneity       17 it, res 3e-09   500 it, res 2e+01   500 it, res 2e+01   500 it, res 1e+01
+wide performance sd (x3)             18 it, res 4e-09    86 it, res 9e-09    69 it, res 8e-09   145 it, res 9e-09
+heterogeneous sd (D in 0.1..4)       28 it, res 2e-13   500 it, res 5e+01   500 it, res 6e+01   500 it, res 5e+01
+
+# rerun 2026-11-11 at paper-r12 (iterations now count updates applied)
+regime                                      own-slope                BLP          BLP a=0.5         BLP a=0.25
+unit scale, mild heterogeneity       16 it, res 3e-09   500 it, res 2e+01   500 it, res 1e+01   500 it, res 9e+00
+wide performance sd (x3)             17 it, res 4e-09    85 it, res 9e-09    68 it, res 8e-09   144 it, res 9e-09
+heterogeneous sd (D in 0.1..4)       27 it, res 2e-13   500 it, res 5e+01   500 it, res 6e+01   500 it, res 3e+01

@@ -48,6 +48,10 @@
 # the split lattice there (.kink_lattice, #267); the forward is unchanged
 attr(.base_laplace, "kinks") <- 0
 
+# python's races.KINK_MAX_ORDER: the largest single Gauss rule a kink-split
+# piece uses (#835)
+KINK_MAX_ORDER <- 512L
+
 # Gauss-Legendre nodes and weights on [-1, 1] (Golub-Welsch), cached
 .LEGENDRE <- new.env(parent = emptyenv())
 .legendre <- function(m) {
@@ -93,9 +97,18 @@ attr(.base_laplace, "kinks") <- 0
   cnt <- pmax(4L, as.integer(round(L * eff / sum(eff))))
   xs <- numeric(0); ws <- numeric(0)
   for (j in seq_len(P)) {
-    gl <- .legendre(cnt[j])
-    mid <- 0.5 * (hi[j] + lo[j]); half <- 0.5 * (hi[j] - lo[j])
-    xs <- c(xs, mid + half * gl$t); ws <- c(ws, half * gl$w)
+    # a piece above KINK_MAX_ORDER is split into k equal panels of
+    # ceiling(m / k) nodes: the dense eigen rule is O(m^3), and a large
+    # points= gave one piece thousands of nodes (#835). At or below the cap
+    # nothing changes. As python's kink_lattice and the browser.
+    k <- ceiling(cnt[j] / KINK_MAX_ORDER); m <- ceiling(cnt[j] / k)
+    gl <- .legendre(m)
+    for (s in seq_len(k)) {
+      pl <- if (s == 1) lo[j] else lo[j] + (hi[j] - lo[j]) * (s - 1) / k
+      ph <- if (s == k) hi[j] else lo[j] + (hi[j] - lo[j]) * s / k
+      mid <- 0.5 * (ph + pl); half <- 0.5 * (ph - pl)
+      xs <- c(xs, mid + half * gl$t); ws <- c(ws, half * gl$w)
+    }
   }
   list(x = xs, w = ws)
 }
@@ -254,6 +267,7 @@ attr(.base_laplace, "log_sf") <- function(z) {
 }
 
 .race_setup <- function(mu, V, D, F, W, base) {
+  .refuse_matrix(mu, "mu")                                       # (#903)
   mu <- as.numeric(mu)
   n <- length(mu)
   # One idiosyncratic variance per contestant, or a scalar broadcast on
@@ -581,6 +595,8 @@ attr(.base_laplace, "log_sf") <- function(z) {
     } else if (!is.null(prev) && penalty < 1) {
       penalty <- min(1, penalty / 0.75)
     }
+    # the last sweep's own contraction, for the Aitken gate below (#956)
+    prev_max <- if (is.null(prev)) Inf else prev$rmax
     prev <- list(mu = mu, resid = resid, dlogp = dlogp, rmax = rmax, rrms = rrms)
     alpha <- alpha_base * penalty
     # residual-proportional step cap in the field's scale: a near-certain
@@ -602,7 +618,8 @@ attr(.base_laplace, "log_sf") <- function(z) {
           lam <- 1 - (1 - rho) / alpha
           alpha_base <- min(max(2 / (2 - lam), 0.1), 1)
         } else if (cosn > 0.999 && ratio > 0.5 && ratio < 0.999 &&
-                   rmax > 1e3 * tol) {
+                   rmax > 1e3 * tol &&
+                   abs(rmax / prev_max - ratio) <= AITKEN_AGREE) {
           # collinear steps decaying geometrically: sum the tail (Aitken),
           # as a capped, repriced trial (#583, matching python)
           trial <- .aitken_trial(mu, step, ratio, scale, forward, rmax)
@@ -646,6 +663,13 @@ attr(.base_laplace, "log_sf") <- function(z) {
 # norm at twice the field scale (never below the ordinary step) and
 # repriced; NULL -- take the ordinary step -- when the forward errors, is
 # non-finite, or its max residual grows tenfold.
+# Aitken sums a geometric tail, which exists only while the residual
+# shrinks by the same factor as the step; when the plain sweeps converge
+# faster than the step ratio says (the superlinear finish after a plateau)
+# the extrapolation overshoots, and #956's exact target ended 13.6 off.
+# python's races.AITKEN_AGREE.
+AITKEN_AGREE <- 0.15
+
 .aitken_trial <- function(mu, step, ratio, scale, forward, rmax) {
   jump <- step / (1 - ratio)
   big <- max(abs(jump))
@@ -898,6 +922,7 @@ abilities_from_race <- function(p, V = NULL, D = NULL, F = NULL, W = NULL,
     }
     V <- fit$V; D <- fit$D; F <- fit$F; W <- fit$W
   }
+  .refuse_matrix(p, "p")                                         # (#903)
   target <- as.numeric(p)
   # finite BEFORE the sign test: NaN slips past `<= 0` (#110). And
   # before the structure= dispatch, so every grammar shares one target
