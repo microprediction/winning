@@ -13,6 +13,21 @@
   to 3.0e-4 nats, at 2-4x the cost of those observations. Length-1
   orders, s*sqrt(k) <= 2, the Sobol branch and rank 0 are bitwise
   unchanged (#1017).
+- `top_k_jacobians(V=...)` (python, browser `topKJacobians`, R, Julia)
+  differentiates the automatic rank-one factor rule's weights. Those
+  weights move with the sharpness sqrt(2) max_i |V_i| / sigma_i on
+  15/8 < sharp <= 10 (#850 interpolation and pair, #783 blend), so
+  `Jsigma` was missing a term there and disagreed with finite differences
+  of the forward (sharpness 8.9: -0.0024 against +0.187). It now matches
+  them to about 1e-9 in the column of the runner that sets the sharpness
+  (the first such runner at a tie). Forward prices, `Jmu`, inverses,
+  calls with an explicit `qa`, and `Jsigma` outside those intervals are
+  bitwise unchanged; inside them the Jacobian costs up to about two-thirds
+  more.
+  The browser rank-one blend also drops a component whose weight is
+  exactly zero, as python does: at sharpness exactly 10 its 72
+  zero-weight Gauss-Hermite nodes widened the race window, and a 1e-8
+  rescale of the loadings moved a race share by 2.9 points (#783).
 
 - `tree_race_probabilities` and `tree_race_jacobian` (python and R) now
   centre a single leaf cluster's loading, as the block path and the
@@ -34,6 +49,16 @@
   law, which moves asymmetric rules by up to 0.92 of a share. Callers who
   reflected their nodes to compensate must remove that reflection.
   Automatic node rules are unchanged (#909).
+- `polish_race` (python, browser `polishRace`, R) on a kinked base
+  (laplace, `exponential_power_base` with beta < 2, a callable declaring
+  `kinks`) runs its forward, Jacobian and inversion of `p0` on the
+  kink-split lattice. On the uniform lattice the Jacobian was first-order
+  wrong, and SLSQP hit its iteration limit with `converged=False` on 4 of 6
+  capped laplace fields. The returned `p` is now
+  `race_probabilities(mu, ..., kink_split=True)`; `kink_split=False`
+  (browser `kinkSplit: false`) keeps the old lattice. Smooth bases and
+  the default `race_probabilities` / `race_jacobian` are bitwise
+  unchanged (#1011).
 - `dividends_from_prices` (python `winning.classic`, `StatePricer`, R)
   maps a zero price -- a scratched runner -- to dividend `inf`, which
   `prices_from_dividends` maps back to 0; it returned NaN/`NA`, which the

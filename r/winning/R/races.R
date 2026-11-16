@@ -219,13 +219,21 @@ attr(.base_laplace, "log_sf") <- function(z) {
 # band meets the unchanged rule outside it continuously at both ends.
 .R1_BLEND_LO <- 9.0
 .R1_BLEND_HI <- 10.0
+# The C1 smoothstep S(t) = t^2 (3 - 2t) and its slope 6 t (1 - t).
+.smoothstep <- function(t) c(t * t * (3 - 2 * t), 6 * t * (1 - t))
+
+# dW: dW/dsharp node for node -- the weights move with the sharpness and so
+# with the sd that sets it (#783).
 .rank1_blend_rule <- function(sharp) {
   t <- (sharp - .R1_BLEND_LO) / (.R1_BLEND_HI - .R1_BLEND_LO)
-  w <- t * t * (3 - 2 * t)
+  ss <- .smoothstep(t)
+  w <- ss[1]
+  dw <- ss[2] / (.R1_BLEND_HI - .R1_BLEND_LO)
   g <- hermite_nodes(1, order = as.integer(8 * .R1_BLEND_LO))
   Q <- as.integer(8 * .R1_BLEND_HI) + 1L
   list(F = rbind(g$F, matrix(qnorm((seq_len(Q) - 0.5) / Q), ncol = 1)),
-       W = c((1 - w) * g$W, rep(w / Q, Q)))
+       W = c((1 - w) * g$W, rep(w / Q, Q)),
+       dW = c(-dw * g$W, rep(dw / Q, Q)))
 }
 
 # Below the band the rank-one rule was Gauss-Hermite of order
@@ -241,29 +249,64 @@ attr(.base_laplace, "log_sf") <- function(z) {
 .R1_PAIR_PER_SHARP <- 5.0
 .R1_PAIR_CAP <- 34
 .rank1_hermite_rule <- function(sharp) {
-  S <- function(t) t * t * (3 - 2 * t)
+  # each part: order q, coefficient cw, d cw / d sharp dc (#783); the
+  # pair order y is clamped to [24, 34], and held there its slope is zero
   x <- 8 * sharp
   lo <- .R1_PAIR_FROM
   if (x <= lo) {
-    m <- floor(x); w <- S(x - m)
-    q <- c(m, m + 1); cw <- c(1 - w, w)
+    m <- floor(x); ss <- .smoothstep(x - m); w <- ss[1]; dw <- 8 * ss[2]
+    q <- c(m, m + 1); cw <- c(1 - w, w); dc <- c(-dw, dw)
   } else if (x <= lo + 1) {
-    w <- S(x - lo)
-    q <- c(lo - 1, lo); cw <- c(0.5 * w, 1 - 0.5 * w)
+    ss <- .smoothstep(x - lo); w <- ss[1]; dw <- 8 * ss[2]
+    q <- c(lo - 1, lo); cw <- c(0.5 * w, 1 - 0.5 * w); dc <- c(0.5 * dw, -0.5 * dw)
   } else {
-    y <- min(max(.R1_PAIR_PER_SHARP * sharp, lo), .R1_PAIR_CAP)
-    m <- floor(y); w <- S(y - m)
+    y_raw <- .R1_PAIR_PER_SHARP * sharp
+    y <- min(max(y_raw, lo), .R1_PAIR_CAP)
+    dy <- if (lo < y_raw && y_raw < .R1_PAIR_CAP) .R1_PAIR_PER_SHARP else 0
+    m <- floor(y); ss <- .smoothstep(y - m); w <- ss[1]; dw <- dy * ss[2]
     q <- c(m - 1, m, m + 1); cw <- c(0.5 * (1 - w), 0.5, 0.5 * w)
+    dc <- c(-0.5 * dw, 0, 0.5 * dw)
     top <- 8 * .R1_BLEND_LO
     if (x > top - 1) {
-      v <- S(x - (top - 1))
-      q <- c(q, top); cw <- c(cw * (1 - v), v)
+      sv <- .smoothstep(x - (top - 1)); v <- sv[1]; dv <- 8 * sv[2]
+      q <- c(q, top); dc <- c(dc * (1 - v) - cw * dv, dv); cw <- c(cw * (1 - v), v)
     }
   }
+  # a part of zero coefficient has zero slope too (S is flat at both ends)
   keep <- cw > 0
   g <- lapply(q[keep], function(o) hermite_nodes(1, order = as.integer(o)))
   list(F = do.call(rbind, lapply(g, function(h) h$F)),
-       W = unlist(Map(function(h, c) c * h$W, g, cw[keep])))
+       W = unlist(Map(function(h, c) c * h$W, g, cw[keep])),
+       dW = unlist(Map(function(h, c) c * h$W, g, dc[keep])))
+}
+
+# How the AUTOMATIC rank-one rule moves with the sds (#783), as python's
+# races._rank1_rule_sigma_slope. V gauge-centred and D validated, as
+# .race_setup sees them. The nodes are fixed, but inside the smooth
+# intervals of the two rules above the weights W(sharp) move with
+# sharp = sqrt(2) max_i |V_i| / sigma_i, so with the sd of the runner j
+# attaining the max: dsharp/dsigma_j = -sharp / sigma_j, zero for the rest.
+# Returns list(j, dsharp, F, dW) over the nodes whose weight moves, or NULL
+# where the rule is piecewise constant in sharp. A tie for the max is a
+# kink: the term goes to the FIRST runner attaining it (its one-sided
+# derivative as its sd falls; each other tied runner's column is its
+# one-sided derivative as its sd rises).
+.rank1_rule_sigma_slope <- function(V, D) {
+  if (ncol(V) != 1L) return(NULL)
+  ratio <- sqrt(rowSums(V^2)) / sqrt(pmax(D, 1e-300))
+  sharp <- sqrt(2) * max(ratio)
+  if (sharp > .R1_BLEND_LO && sharp <= .R1_BLEND_HI) {
+    hw <- .rank1_blend_rule(sharp)
+  } else if (ceiling(8 * sharp) > 80 || !(8 * sharp > 15)) {
+    return(NULL)
+  } else {
+    hw <- .rank1_hermite_rule(sharp)
+  }
+  keep <- hw$dW != 0
+  if (!any(keep)) return(NULL)
+  j <- which.max(ratio)
+  list(j = j, dsharp = -sharp / sqrt(D[j]),
+       F = hw$F[keep, , drop = FALSE], dW = hw$dW[keep])
 }
 
 .race_setup <- function(mu, V, D, F, W, base) {
@@ -893,6 +936,50 @@ race_probabilities <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
     slope <- slope + st$W[q] * as.vector((-b$fp / sd^2 * rest) %*% kl$w)
   }
   slope / sum(p)
+}
+
+# The race AND its Jacobian on the kink-split lattice, one pass: python's
+# race_probabilities(..., kink_split = TRUE) and
+# race_jacobian(..., kink_split = TRUE). Raw masses a, A = da/dmu with
+# the own coordinate integrated, dT = column sums of A; p = a / T and
+# J = (A - p dT') / T. For polish_race on a kinked base only (#1011): the
+# uniform lattice's window slides across every runner's kink, so its
+# derivative carries an O(dx) artifact no fixed-grid Jacobian matches; on
+# this lattice the pair is smooth and consistent.
+.split_race_jacobian <- function(mu, V, D, F, W, base, points) {
+  st <- .race_setup(mu, V, D, F, W, base)
+  n <- length(st$mu)
+  sd <- sqrt(st$D)
+  Q <- nrow(st$F)
+  M_all <- matrix(st$mu, Q, n, byrow = TRUE) + st$F %*% t(st$V)
+  x <- suppressWarnings(.race_lattice(st, M_all, sd, points))$x
+  kinks <- .kinks_of(st$fn)
+  a <- numeric(n); dT <- numeric(n)
+  A <- matrix(0, n, n)
+  clip <- function(v) exp(pmin(pmax(v, -745), 40))
+  for (q in seq_len(Q)) {
+    kl <- .kink_lattice(x, M_all[q, ], sd, kinks)
+    T <- length(kl$x)
+    w <- kl$w
+    z <- (matrix(kl$x, n, T, byrow = TRUE) - M_all[q, ]) / sd
+    b <- st$fn(z)
+    logS <- log(pmax(b$S, 1e-300))
+    logf <- log(pmax(b$f / sd, 1e-300))
+    Lm <- matrix(colSums(logS), n, T, byrow = TRUE)
+    g <- clip(logf + Lm - logS)
+    haz <- clip(logf - logS)
+    own <- -(b$fp / sd^2) * clip(Lm - logS)
+    G <- matrix(colSums(g), n, T, byrow = TRUE)
+    gw <- sweep(g, 2, w, "*")
+    a <- a + st$W[q] * rowSums(gw)
+    Aq <- gw %*% t(haz)
+    diag(Aq) <- diag(Aq) + as.vector(own %*% w) - rowSums(gw * haz)
+    A <- A + st$W[q] * Aq
+    dT <- dT + st$W[q] * as.vector(((G - g) * haz + own) %*% w)
+  }
+  tot <- sum(a)
+  p <- a / tot
+  list(p = p, J = (A - outer(p, dT)) / tot)
 }
 
 #' Invert the general race: mean-zero mu reproducing probabilities p

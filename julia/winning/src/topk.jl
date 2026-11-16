@@ -533,7 +533,14 @@ function bottom_k_probabilities(mu, k; V = nothing, D = nothing,
 end
 
 """Both top-k Jacobians (dq/dmu, dq/dsigma); factor rank <= 2 via the
-exact Gauss-Hermite node mixture."""
+node mixture J = sum_q w_q J_ind(mu + V f_q, sigma), exact given the
+nodes. The automatic rule (qa = nothing) is not fixed in sigma: at rank
+one its weights move with the sharpness sqrt(2) max_i |V_i| / sigma_i on
+15/8 < sharp <= 10 (#850, #783), so Jsigma also carries
+(dsharp/dsigma_j) sum_q (dw_q/dsharp) q_ind(mu + V f_q, sigma) in the
+column of the runner j attaining the max (dsharp/dsigma_j =
+-sharp/sigma_j; the first such runner at a tie). Jmu, and every Jsigma
+column outside those intervals, is the node mixture alone."""
 function top_k_jacobians(mu, k; D = nothing, base = "normal",
                          points = 513, V = nothing, qa = nothing)
     _refuse_matrix(mu, "mu")                                # (#903)
@@ -551,6 +558,26 @@ function top_k_jacobians(mu, k; D = nothing, base = "normal",
                                    D = D, base = base, points = points)
             Jm .+= fac.w[q] .* node.Jmu
             Js .+= fac.w[q] .* node.Jsigma
+        end
+        # The automatic rule's weights move with the sharpness, and so
+        # with the sd that sets it (#783): column j also carries
+        # (dsharp/dsigma_j) sum_q (dW_q/dsharp) q_ind(mu + V f_q), the
+        # conditional memberships taken as the forward's raw mixture takes
+        # them. Nothing to add where the rule is piecewise constant, or for
+        # an explicit qa (a fixed rule). As python's _add_rule_sigma_slope.
+        if qa === nothing
+            Dv = _as_idio(D === nothing ? ones(n) : D, n)
+            sl = _rank1_rule_sigma_slope(fac.Vm, Dv)
+            if sl !== nothing
+                sd = sqrt.(Dv)
+                fn = _base_fn(base)
+                dq = zeros(n)
+                for q in 1:size(sl.F, 1)
+                    dq .+= sl.dW[q] .* _topk_with_slopes(
+                        mu .+ fac.Vm * sl.F[q, :], sd, k, fn, points).q
+                end
+                Js[:, sl.j] .+= sl.dsharp .* dq
+            end
         end
         return (Jmu = Jm, Jsigma = Js)
     end
