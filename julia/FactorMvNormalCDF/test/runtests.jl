@@ -534,5 +534,7 @@ end
     C = [0.63 0.29 0.11 0.52; 0.29 0.86 0.95 0.16;
          0.11 0.95 2.15 1.28; 0.52 0.16 1.28 2.45]
     fd = factorize_covariance(C)
-    @test fd === nothing || minimum(fd[2] ./ [C[i, i] for i in 1:4]) > 1e-12
+    # tolerance above the floor: main's round trip D .* d[pos] ./ C[i,i]
+    # can land a floored entry an ulp above 1e-12
+    @test fd === nothing || minimum(fd[2] ./ [C[i, i] for i in 1:4]) > 1e-11
 end
