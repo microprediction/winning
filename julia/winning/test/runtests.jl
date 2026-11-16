@@ -162,6 +162,12 @@ end
     @test top_k_probabilities(mu4, 2; V = transpose(V4)) ==
           top_k_probabilities(mu4, 2; V = V4)
     @test_throws ArgumentError top_k_probabilities(mu, 1; V = [0.5], qa = 15)
+    # a 3-D array is refused, not flattened; non-finite loadings are refused
+    @test_throws ArgumentError top_k_probabilities(
+        mu4, 2; V = reshape([-1.0, 0.3, 0.2, 0.5], 2, 1, 2))
+    for bad in (Inf, -Inf, NaN)
+        @test_throws ArgumentError top_k_probabilities(mu, 1; V = bad)
+    end
 end
 
 @testset "zero-rank loadings reach top-k" begin

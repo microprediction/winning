@@ -418,6 +418,11 @@ end
 function _as_loadings(V, n)
     # Scalars are common loadings. For a matrix, rows take precedence
     # when both orientations fit (rank == n).
+    # Higher-dimensional arrays are refused, not flattened, and loadings
+    # must be finite before any centering (as in Python's shapes).
+    (V isa AbstractArray && ndims(V) > 2) && throw(ArgumentError(
+        "V must be a scalar, vector or matrix; got " * string(ndims(V)) *
+        " dimensions"))
     Vm = V isa AbstractMatrix ? Float64.(Matrix(V)) :
          V isa Number ? fill(Float64(V), n, 1) :
          reshape(Float64.(collect(V)), :, 1)
@@ -427,6 +432,7 @@ function _as_loadings(V, n)
     size(Vm, 1) == n || throw(ArgumentError(
         "V must have one row per contestant; got " *
         string(size(Vm, 1)) * " for " * string(n)))
+    all(isfinite, Vm) || throw(ArgumentError("V has a non-finite entry"))
     return Vm
 end
 
