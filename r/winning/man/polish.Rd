@@ -7,7 +7,7 @@
 polish_race(p0 = NULL, mu0 = NULL, V = NULL, D = NULL, F = NULL,
   W = NULL, base = "normal", points = 257, name_caps = NULL,
   groups = NULL, A = NULL, b = NULL, tol = 1e-09, max_iter = 60,
-  structure = NULL)
+  structure = NULL, kink_split = NULL)
 
 race_jacobian(mu, V = NULL, D = NULL, F = NULL, W = NULL,
   base = "normal", points = 501, structure = NULL, qa = 9, qf = 15,
@@ -32,6 +32,10 @@ lattice \code{race_probabilities(..., window = , delta = )} integrates on,
 the unset one at the forward's default ("bulk", 1e-12). Both NULL (the
 default) keeps the span lattice race_jacobian has always used.}
 \item{structure}{covariance grammar (Tree not yet supported here)}
+\item{kink_split}{NULL (default) chooses by the base: for a base that
+declares kinks (laplace) \code{polish_race} runs its forward, Jacobian and
+inverse on the kink-split lattice, whose map is smooth (#1011). FALSE keeps
+the uniform lattice; a smooth base is unchanged either way.}
 \item{n}{number of contestants}
 }
 \value{

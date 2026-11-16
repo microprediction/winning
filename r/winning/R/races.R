@@ -895,6 +895,50 @@ race_probabilities <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
   slope / sum(p)
 }
 
+# The race AND its Jacobian on the kink-split lattice, one pass: python's
+# race_probabilities(..., kink_split = TRUE) and
+# race_jacobian(..., kink_split = TRUE). Raw masses a, A = da/dmu with
+# the own coordinate integrated, dT = column sums of A; p = a / T and
+# J = (A - p dT') / T. For polish_race on a kinked base only (#1011): the
+# uniform lattice's window slides across every runner's kink, so its
+# derivative carries an O(dx) artifact no fixed-grid Jacobian matches; on
+# this lattice the pair is smooth and consistent.
+.split_race_jacobian <- function(mu, V, D, F, W, base, points) {
+  st <- .race_setup(mu, V, D, F, W, base)
+  n <- length(st$mu)
+  sd <- sqrt(st$D)
+  Q <- nrow(st$F)
+  M_all <- matrix(st$mu, Q, n, byrow = TRUE) + st$F %*% t(st$V)
+  x <- suppressWarnings(.race_lattice(st, M_all, sd, points))$x
+  kinks <- .kinks_of(st$fn)
+  a <- numeric(n); dT <- numeric(n)
+  A <- matrix(0, n, n)
+  clip <- function(v) exp(pmin(pmax(v, -745), 40))
+  for (q in seq_len(Q)) {
+    kl <- .kink_lattice(x, M_all[q, ], sd, kinks)
+    T <- length(kl$x)
+    w <- kl$w
+    z <- (matrix(kl$x, n, T, byrow = TRUE) - M_all[q, ]) / sd
+    b <- st$fn(z)
+    logS <- log(pmax(b$S, 1e-300))
+    logf <- log(pmax(b$f / sd, 1e-300))
+    Lm <- matrix(colSums(logS), n, T, byrow = TRUE)
+    g <- clip(logf + Lm - logS)
+    haz <- clip(logf - logS)
+    own <- -(b$fp / sd^2) * clip(Lm - logS)
+    G <- matrix(colSums(g), n, T, byrow = TRUE)
+    gw <- sweep(g, 2, w, "*")
+    a <- a + st$W[q] * rowSums(gw)
+    Aq <- gw %*% t(haz)
+    diag(Aq) <- diag(Aq) + as.vector(own %*% w) - rowSums(gw * haz)
+    A <- A + st$W[q] * Aq
+    dT <- dT + st$W[q] * as.vector(((G - g) * haz + own) %*% w)
+  }
+  tot <- sum(a)
+  p <- a / tot
+  list(p = p, J = (A - outer(p, dT)) / tot)
+}
+
 #' Invert the general race: mean-zero mu reproducing probabilities p
 #'
 #' @param p positive target probabilities (normalized internally)

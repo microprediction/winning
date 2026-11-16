@@ -413,7 +413,11 @@ PORT_ONLY = {
     "js": {"fitGrammar", "haltonNormalNodes", "asFactorNodes",
            # boundary helpers and the demo's Monte Carlo factor (#334, #357,
            # #394): plumbing with race-like names, no python verb
-           "asAbilities", "validateCovariance", "raceFactor"},
+           "asAbilities", "validateCovariance", "raceFactor",
+           # polishRace's kink-split pair (#1011): python's
+           # race_probabilities / race_jacobian(..., kink_split=True) in
+           # one pass, exported across modules for the polish only
+           "splitRaceJacobian"},
 }
 
 

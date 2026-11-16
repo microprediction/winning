@@ -192,14 +192,35 @@ concentration_matrix <- function(n, name_caps = NULL, groups = NULL) {
 #'   Lagrangian fallback, active-set Newton), as python passes maxiter to
 #'   each SLSQP attempt; 0 performs no optimisation. \code{info$nit} is
 #'   the total of outer iterations, \code{info$phase_iterations} the split
+#' @param kink_split NULL (default) chooses by the base: TRUE for a base
+#'   that declares kinks (laplace), whose forward, Jacobian and inverse then
+#'   all run on the kink-split lattice (#1011), FALSE otherwise. FALSE
+#'   keeps the uniform lattice; a smooth base is unchanged either way.
 #' @return list(p, mu, info)
 #' @export
 polish_race <- function(p0 = NULL, mu0 = NULL, V = NULL, D = NULL,
                         F = NULL, W = NULL, base = "normal", points = 257,
                         name_caps = NULL, groups = NULL, A = NULL, b = NULL,
-                        tol = 1e-9, max_iter = 60, structure = NULL) {
+                        tol = 1e-9, max_iter = 60, structure = NULL,
+                        kink_split = NULL) {
   .refuse_matrix(p0, "p0")                                        # (#903)
   .refuse_matrix(mu0, "mu0")                                      # (#903)
+  # A kinked base (laplace, a callable declaring kinks) polishes on the
+  # kink-split lattice: forward, Jacobian and the inversion of p0 on one
+  # smooth map. On the uniform lattice the window slides with mu across
+  # every runner's kink, so the map's derivative carries an O(dx) artifact
+  # no fixed-grid Jacobian matches (python's polish_race, #1011).
+  # kink_split: NULL chooses by the base, FALSE keeps the uniform lattice;
+  # a smooth base is unchanged either way.
+  if (!is.null(kink_split) && !(is.logical(kink_split) &&
+                                length(kink_split) == 1L && !is.na(kink_split)))
+    stop("kink_split must be NULL, TRUE or FALSE", call. = FALSE)
+  if (!is.null(structure) && isTRUE(kink_split))
+    stop("kink_split applies to the factor lattice (V=/D=), not to structure=",
+         call. = FALSE)
+  fn_b <- if (is.function(base)) base else .BASES[[base]]
+  split <- is.null(structure) && is.function(fn_b) &&
+    !isFALSE(kink_split) && !is.null(.kinks_of(fn_b))
   if (!is.null(structure)) {
     forward <- function(m) race_probabilities(m, structure = structure,
                                               points = points)
@@ -224,6 +245,62 @@ polish_race <- function(p0 = NULL, mu0 = NULL, V = NULL, D = NULL,
     }
     invert <- function(p) abilities_from_race(p, structure = structure,
                                               points = points)
+  } else if (split) {
+    pair_at <- NULL; pair_val <- NULL
+    pair <- function(m) {
+      if (!is.null(pair_at) && length(pair_at) == length(m) &&
+          all(pair_at == m)) return(pair_val)
+      # unit scale by an exact power of two far from it (#870)
+      sd_max <- if (is.numeric(D) && length(D)) sqrt(max(D)) else 1
+      cc <- if (sd_max > 0 && is.finite(sd_max) &&
+                (sd_max < 2^-30 || sd_max > 2^30)) 2^round(log2(sd_max)) else 1
+      Vs <- if (is.null(V)) NULL else V / cc
+      # NULL keeps the unit default; cc twice, as cc^2 overflows at 2^512
+      Ds <- if (is.null(D)) NULL else D / cc / cc
+      r <- .split_race_jacobian(m / cc, Vs, Ds, F, W, base, points)
+      r$J <- r$J / cc
+      pair_at <<- m; pair_val <<- r
+      r
+    }
+    forward <- function(m) pair(m)$p
+    jac <- function(m) pair(m)$J
+    invert <- function(p) {
+      # abilities_from_race inverts the uniform map (its slopes already
+      # split, #267): a ~1e-4 start that Newton on the split pair
+      # finishes. J has the gauge 1 as null vector on both sides, so
+      # J + 11'/n is regular.
+      m <- abilities_from_race(p, V = V, D = D, F = F, W = W, base = base,
+                               points = points)
+      t <- .rescaled_target(p)          # a sum past double.xmax zeroed t
+      res <- function(mm) max(abs(log(pmax(forward(mm), 1e-300)) - log(t)))
+      r <- res(m)
+      for (it in seq_len(30)) {
+        if (r < 1e-8) break
+        pj <- pair(m)
+        # the gauge term on J's own scale: J is O(1 / sd), and at D ~ 1e80
+        # J + 1/n rounded to a constant matrix (exactly singular). The
+        # step is the same for any positive gauge weight; a power of two,
+        # 1 on ordinary races.
+        sj <- max(abs(pj$J))
+        g <- if (sj > 0 && is.finite(sj) && (sj < 2^-30 || sj > 2^30))
+          2^round(log2(sj)) else 1
+        d <- solve(pj$J + g / length(m), t - pj$p)
+        moved <- FALSE
+        step <- 1
+        for (h in seq_len(12)) {
+          mn <- m + step * d
+          mn <- mn - mean(mn)
+          rn <- res(mn)
+          if (rn < r) { m <- mn; r <- rn; moved <- TRUE; break }
+          step <- step / 2
+        }
+        if (!moved) break
+      }
+      if (r >= 1e-8)
+        warning(sprintf("polish_race: the split-lattice inverse did not converge on p0: max |log residual| %.2e", r),
+                call. = FALSE)
+      m
+    }
   } else {
     forward <- function(m) race_probabilities(m, V = V, D = D, F = F, W = W,
                                               base = base, points = points)
