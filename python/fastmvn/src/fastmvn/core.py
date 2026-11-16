@@ -132,7 +132,10 @@ def factorize_covariance(sigma, max_rank=6, tol=1e-11, n_iter=300):
     sigma is exactly V V' + diag(D) with no factors, and a rank-one
     search fits it by putting a variance into an artificial LOADING
     (9487 on diag([1, 1, 1, 1, 1e8])), which turns an independent
-    product into a near-step factor integrand (#132).
+    product into a near-step factor integrand (#132). A fit whose
+    residual variance sits at the 1e-12 floor (a Heywood solution) is
+    not accepted as exact either: it makes the same near-step integrand
+    out of a well-conditioned sigma (#1015).
     """
     # the controls are checked before anything else (#658). tol is in
     # correlation units, where no off-diagonal exceeds 1: tol = inf, or
@@ -192,7 +195,17 @@ def factorize_covariance(sigma, max_rank=6, tol=1e-11, n_iter=300):
         lam, U = np.linalg.eigh(R - np.diag(D))
         idx = np.argsort(lam)[::-1][:r]
         V = U[:, idx] * np.sqrt(np.maximum(lam[idx], 0.0))
-        if np.abs(V @ V.T + np.diag(D) - R).max() < tol:
+        # A residual pinned at the floor is a Heywood solution: the
+        # iteration wanted a negative variance and the clip held it at
+        # 1e-12. The fit can still reconstruct R, but that coordinate is
+        # then a deterministic function of the factors, its conditional
+        # cell a step of width 1e-6, and the factor quadrature prices it
+        # wrong by up to 1e-3 on well-conditioned matrices (#1015). Such
+        # a solution is a degenerate member of a non-unique family, not
+        # the structure of sigma: refuse it, try the next rank, and fall
+        # back to the dense path if no rank gives an interior fit.
+        if D.min() > 1e-12 and \
+                np.abs(V @ V.T + np.diag(D) - R).max() < tol:
             return _back(V, D)
     return None
 

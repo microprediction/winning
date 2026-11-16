@@ -256,7 +256,12 @@ function factorize_covariance(sigma::AbstractMatrix; max_rank = 6,
         E = eigen(Symmetric(R .- dg(D)))
         idx = sortperm(E.values, rev = true)[1:r]
         V = E.vectors[:, idx] .* sqrt.(max.(E.values[idx], 0.0))'
-        if maximum(abs.(V * V' .+ dg(D) .- R)) < tol
+        # a residual pinned at the 1e-12 floor is a Heywood solution:
+        # that coordinate becomes a deterministic function of the
+        # factors, a step integrand the factor quadrature misprices by up
+        # to 1e-3 on well-conditioned matrices (#1015). Refuse it and try
+        # the next rank; with no interior fit the caller falls back.
+        if minimum(D) > 1e-12 && maximum(abs.(V * V' .+ dg(D) .- R)) < tol
             Vf = zeros(n, r)
             Vf[pos, :] = V .* sd
             Df = zeros(n)
