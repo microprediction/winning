@@ -292,3 +292,62 @@ def test_missing_time_on_resumed_state_means_now_and_split_equals_single():
     assert lz == pytest.approx(lz1 + lz2)
     # equal timestamps remain valid
     rate_history([races[0], races[0]], ids=["a", "b"], **kw)
+
+
+# --- #654 (residual): AbilityTracker's per-entity clocks never run backwards
+
+def _tracker_at_10():
+    from winning.ratings.tracker import AbilityTracker, AbilityState
+    trk = AbilityTracker(drift=0.5, drift_exp=1.0, beta2=1.0)
+    trk.state = {"a": AbilityState(1.0, 1.0, 10.0),
+                 "b": AbilityState(0.0, 1.0, 10.0)}
+    return trk
+
+
+def test_tracker_stale_observation_is_refused_not_rewound():
+    import copy
+    direct = _tracker_at_10()
+    p_direct = direct.predict(["a", "b"], 11.0)
+    trk = _tracker_at_10()
+    before = copy.deepcopy(trk.state)
+    # a one-runner winner is a tautology; it rewound a's clock to 5 and
+    # moved the t = 11 prediction from 0.6726 to 0.6425
+    with pytest.raises(ValueError, match="older"):
+        trk.observe(["a"], 5.0, winner=0)
+    with pytest.raises(ValueError, match="older"):
+        trk.observe(["c", "a", "b"], 9.0, scores=[0.0, 1.0, 2.0])
+    assert trk.state == before and trk.evidence == 0.0
+    np.testing.assert_array_equal(trk.predict(["a", "b"], 11.0), p_direct)
+    for bad in (float("nan"), float("inf"), float("-inf")):
+        with pytest.raises(ValueError, match="finite"):
+            trk.observe(["a", "b"], bad, winner=0)
+    assert trk.state == before and trk.evidence == 0.0
+
+
+def test_tracker_stale_prediction_is_refused():
+    trk = _tracker_at_10()
+    with pytest.raises(ValueError, match="older"):
+        trk.predict(["a", "b"], 5.0)
+    with pytest.raises(ValueError, match="older"):
+        trk.predict(["new", "b"], 9.999)
+    with pytest.raises(ValueError, match="finite"):
+        trk.predict(["a", "b"], float("nan"))
+    # an unseen entity has no clock; mixed with a stale one it still raises
+    # above, alone it prices at the prior
+    assert np.allclose(trk.predict(["x", "y"], 0.0), [0.5, 0.5])
+
+
+def test_tracker_equal_times_and_per_entity_clocks_remain_valid():
+    from winning.ratings.tracker import AbilityTracker
+    trk = _tracker_at_10()
+    p = trk.predict(["a", "b"], 10.0)
+    assert np.allclose(p, _tracker_at_10().predict(["a", "b"], 10.0))
+    trk.observe(["a", "b"], 10.0, winner=0)        # t == last_time is fine
+    trk.observe(["a", "b"], 10.0, winner=1)
+    assert trk.state["a"].last_time == 10.0
+    # clocks are per entity: c, d last seen at 3 may still race at 5
+    t2 = AbilityTracker()
+    t2.observe(["c", "d"], 3.0, winner=0)
+    t2.observe(["a", "b"], 10.0, winner=0)
+    t2.observe(["c", "d"], 5.0, winner=1)
+    assert t2.state["c"].last_time == 5.0 and t2.state["a"].last_time == 10.0
