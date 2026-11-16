@@ -49,8 +49,7 @@ dividends_from_prices <- function(prices, multiplicity = 1.0) {
   # does. NA_real_ was read there as a MISSING quote and priced at
   # nan_value, reviving the scratch; an all-zero book was all NA (#1009).
   # NA and a negative price stay NA; positive prices are unchanged.
-  s <- sum(prices)
-  p <- if (isTRUE(s == 0)) prices else normalize(prices)
+  p <- if (isTRUE(all(prices == 0))) prices else normalize(prices)
   ifelse(!is.na(p) & p > 0, 1 / (multiplicity * p),
          ifelse(!is.na(p) & p == 0, Inf, NA_real_))
 }

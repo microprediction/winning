@@ -240,7 +240,7 @@ def dividends_from_prices(prices, multiplicity=1.0):
     all-zero book raised ZeroDivisionError (#1009). Positive prices are
     unchanged.
     """
-    p = list(prices) if sum(prices) == 0 else normalize(prices)
+    p = list(prices) if all(x == 0 for x in prices) else normalize(prices)
     return [np.nan if np.isnan(d) else
             (1.0 / (multiplicity * d) if d > 0 else (math.inf if d == 0 else np.nan))
             for d in p]
