@@ -1465,8 +1465,9 @@ def _fit_cov(cov, structure, V, D, stacklevel=2, will_route=False):
     # otherwise the fit is priced on 2^_COV_POLISHED_NODES factor nodes.
     # Measured on two 360-covariance sweeps (221 polished fits) against
     # alternatives from more factor nodes for every fit to GHK at 2^16:
-    # this prices no more slowly than before, and 4 of the 221 came out
-    # worse than the stalled fit, by at most 1.5e-5. Every other fit is
+    # 4 of the 221 came out worse than the stalled fit, by at most 1.5e-5,
+    # at about 1.1x main's cov= time in total (worst call 0.36 s -> 1.5 s
+    # at n = 10; GHK at 2^16 for every fit cost up to 11x). Every other fit is
     # priced exactly as before. The returned route is the GHK budget,
     # so the inverse inverts the same map (#164).
     if report.get("polished", False) and not degraded:
