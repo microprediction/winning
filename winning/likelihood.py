@@ -340,12 +340,17 @@ def _tilt_mode(c0, t, sk):
     return m, h, dm_c, dh_c, dm_t, dh_t
 
 
-def _choice_terms(mu, V, choice, s, F, W, tilt=True, score=True):
+def _choice_terms(mu, V, choice, s, F, W, tilt=True, score=True,
+                  split=None):
     """Per-observation log P(choice), d/dmu and d/dV on one node set.
     V is gauge-centred; F holds (factor^r, own-noise) node columns for
     the N(0, I) measure. With tilt, the own-noise column is moved per
     observation (see _tilt_mode). score=False returns (lp, None, None)
-    and skips the score's node arrays; lp is the same to the bit."""
+    and skips the score's node arrays; lp is the same to the bit.
+    With split (and score), a fourth return (T, 2) holds each
+    observation's posterior mass on the nodes before index split and on
+    those from it on, each summed directly (one is not 1 minus the
+    other, which cancels where the other is near 1)."""
     T, J = mu.shape
     r = V.shape[1]
     Fq, xq = F[:, :r], F[:, r]
@@ -354,6 +359,7 @@ def _choice_terms(mu, V, choice, s, F, W, tilt=True, score=True):
     lp = np.zeros(T)
     dmu = np.zeros((T, J))
     dV = np.zeros((T, J, r))
+    mass = np.zeros((T, 2)) if split is not None else None
     half_log2pi = 0.5 * np.log(2 * np.pi)
     for k in range(J):
         idx = np.where(choice == k)[0]
@@ -393,6 +399,9 @@ def _choice_terms(mu, V, choice, s, F, W, tilt=True, score=True):
             continue
         lam = np.exp(-0.5 * A * A - half_log2pi - logPhi)
         omega = pw / rs[:, None]
+        if mass is not None:
+            mass[idx, 0] = omega[:, :split].sum(axis=1)
+            mass[idx, 1] = omega[:, split:].sum(axis=1)
         wl = omega[None, :, :] * lam / sj[:, :, None]          # (R, Ti, Q)
         dc = wl.sum(axis=2)                                    # (R, Ti)
         H = wl @ Fq                                            # (R, Ti, r)
@@ -412,6 +421,8 @@ def _choice_terms(mu, V, choice, s, F, W, tilt=True, score=True):
         dV[idx[None, :], rv[:, None]] -= H
     if not score:
         return lp, None, None
+    if mass is not None:
+        return lp, dmu, dV, mass
     return lp, dmu, dV
 
 
@@ -491,6 +502,29 @@ def _choice_pair(mu, V, choice, D):
 QZ_SMALL, QZ_LARGE, QZ_LARGE_FROM_J = 7, 11, 6
 
 
+# The factor tensor's order rises with the loading sharpness (#1060).
+# Seven nodes per factor resolve the conditional choice probability only
+# while it is smooth on the prior scale; its transitions in f narrow like
+# 1/sharpness. Against scipy's MVN on random J = 3-8 fields the fixed 7^r
+# tensor was off by up to 2.6e-3 nats at smooth sharpness 1-1.5 and 0.16
+# at 2.5-2.9 (rank 1; 0.061 at rank 2), and the exchangeable three-way
+# race priced 0.3296 against 1/3. More own-noise nodes did nothing.
+# Past _FACTOR_LADDER_BAND the tensor has _FACTOR_QF_HIGH[r] nodes per
+# factor: 31 at rank 1 (max error 6e-4 up to the Sobol window, for about
+# 1.8-2x the time) and 11 at rank 2 (1.1e-2 at 2.5-2.9, median 4.9e-4
+# from 3.9e-3, for 2x; 15 nodes would halve that error at 3x). Across
+# the band the probability is the C1 blend of the two tensors and the
+# score carries the weight's derivative, as at the Sobol switch (#420,
+# #1063). Below the band the 7^r tensor was already within the own-noise
+# error and is kept to the bit, as is everything past the Sobol switch.
+# Rank 3+ keeps 7^3: an 11^3 tensor is 7000 nodes. Neither a lower Sobol
+# switch (untilted, 2.7e-2 off on rare choices even at sharpness 0.5)
+# nor a Laplace-recentred factor grid (up to 1 nat off on rare choices
+# with the independent-rival surrogate) was better.
+_FACTOR_LADDER_BAND = (0.8, 1.0)
+_FACTOR_QF_HIGH = {1: 31, 2: 11}
+
+
 def default_qz(J):
     """The own-noise order used when Qz is None: 7 below J = 6, 11 from
     J = 6 (#173)."""
@@ -557,12 +591,41 @@ def _choice_logprob_terms(mu, V, D=None, choice=None, Qf=7, Qz=None,
     if ratio > 1.0:
         Qz = int(min(4 * Qz, np.ceil(Qz * ratio)))
     w, dw = _blend_weight(sharp)
+    # The Hermite tensor's order: the caller's Qf, or past the ladder band
+    # the higher one (#1060). A caller already at or above that order
+    # keeps their tensor throughout, and rank 0 and 3+ have no ladder.
+    qh = _FACTOR_QF_HIGH.get(r)
+    if w < 1.0 and qh is not None and Qf < qh:
+        wh, dwh = _band_weight(sharp, _FACTOR_LADDER_BAND)
+    else:
+        wh, dwh = 0.0, 0.0
+    if 0.0 < wh < 1.0:
+        # Inside the ladder band. Both tensors carry the same own-noise
+        # tilt, so the blend (1 - u) P_lo + u P_hi is ONE rule on the
+        # union of their nodes with weights (1 - u) W_lo and u W_hi: a
+        # single pass. Its score with the weights held is the blend's mu
+        # and loading score; the weight's own derivative adds
+        # (P_hi - P_lo) / P * du/dsharp * dsharp/dV, where P_hi / P is
+        # the posterior mass on the high nodes over u and P_lo / P the
+        # mass on the low nodes over 1 - u.
+        Fl, Wl = nodes_for_likelihood(r, Qf, Qz, 0.0)
+        Fh, Wh = nodes_for_likelihood(r, qh, Qz, 0.0)
+        F = np.vstack([Fl, Fh])
+        Wt = np.concatenate([(1.0 - wh) * Wl, wh * Wh])
+        if not score:
+            return _choice_terms(mu, Vc, choice, s, F, Wt, score=False)
+        lp, dmu, dV, ab = _choice_terms(mu, Vc, choice, s, F, Wt,
+                                        split=len(Fl))
+        gw = (ab[:, 1] / wh - ab[:, 0] / (1.0 - wh)) * dwh      # (T,)
+        dV = dV + gw[:, None, None] * sharp_grad[None, :, :]
+        return lp, dmu, dV
+    Qg = qh if wh == 1.0 else Qf
     if w == 0.0 or w == 1.0:
-        F, Wt = nodes_for_likelihood(r, Qf, Qz, sharp)
+        F, Wt = nodes_for_likelihood(r, Qg, Qz, sharp)
         return _choice_terms(mu, Vc, choice, s, F, Wt, tilt=(w == 0.0),
                              score=score)
-    # inside the blend window: both rules, mixed in probability
-    Fg, Wg = nodes_for_likelihood(r, Qf, Qz, 0.0)
+    # inside the Sobol blend window: both rules, mixed in probability
+    Fg, Wg = nodes_for_likelihood(r, Qg, Qz, 0.0)
     Fs, Ws = nodes_for_likelihood(r, Qf, Qz, np.inf)
     lg, dmg, dVg = _choice_terms(mu, Vc, choice, s, Fg, Wg, score=score)
     ls, dms, dVs = _choice_terms(mu, Vc, choice, s, Fs, Ws, tilt=False,
@@ -646,7 +709,10 @@ def choice_loglik_and_score(mu, V, choice, D=None, Qf=7, Qz=None):
     V : (J, r) factor loadings.
     choice : (T,) chosen alternative indices in 0..J-1.
     D : (J,) idiosyncratic variances, default all ones.
-    Qf : Gauss-Hermite order per factor dimension.
+    Qf : Gauss-Hermite order per factor dimension at low sharpness. At
+        rank 1 and 2 a Qf below 31 (rank 1) or 11 (rank 2) is raised to
+        that order past smooth sharpness 1, blended in over 0.8-1.0
+        (#1060); a Qf at or above that order is used throughout.
     Qz : own-noise Gauss-Hermite order; None (default) takes 7 below
         J = 6 and 11 from J = 6 (#173).
 
@@ -657,8 +723,9 @@ def choice_loglik_and_score(mu, V, choice, D=None, Qf=7, Qz=None):
     dV : (J, r) gradient in the loadings.
 
     J = 2 is the Gaussian contrast in closed form. For J >= 3 the own
-    noise and the factors are integrated on the Hermite tensor or, past
-    sharpness 3, scrambled Sobol, blended continuously across the switch.
+    noise and the factors are integrated on the Hermite tensor (its
+    factor order rising with the sharpness, #1060) or, past sharpness 3,
+    scrambled Sobol, blended continuously across each change of rule.
     Known limits at J >= 3: a large observed utility gap puts the mass
     outside the fixed own-noise nodes (#128, #270), and a near-
     deterministic rival makes the integrand a step (#352). The Hermite
