@@ -9,10 +9,13 @@
   6e-5 at n = 5, k = 4. The tolerance now carries the power-of-four scale
   `fit_covariance` already uses, so the fit of 4^j C is exactly the fit
   of C scaled (R fits at that unit scale and scales back, which also
-  covers its absolute NNLS thresholds). Covariances with mean variance in
-  about [0.7, 1.4), including every correlation matrix and every python
-  `fit_covariance` fit, are bitwise unchanged. R's `fit_covariance` away
-  from unit scale now fits as python does at every scale: on
+  covers its absolute NNLS thresholds). R's `fit_covariance` now does the
+  same, as python's has since #101: its clustering clip and multistart
+  floor were absolute too, and at 4^-25 every one of 60 random rank-3
+  fields came back at a different rank, with D off by up to 54%.
+  Covariances with mean variance in about [0.7, 1.4), including every
+  correlation matrix and every python `fit_covariance` fit, are bitwise
+  unchanged. Away from unit scale R now fits as python does: on
   diag(1e-6, 1e-6, 1, 100, 100) its contrast residual is python's 2.1e-5,
   where the old absolute stop happened to give 9e-8 at that scale and
   the same 2.1e-5 at unit scale (#1052).

@@ -480,3 +480,22 @@ test_that("the alternation's stop scales with the covariance (#1052)", {
     expect_equal(f$V %*% t(f$V), s * (f0$V %*% t(f0$V)), tolerance = 1e-12)
   }
 })
+
+test_that("fit_covariance fits a scaled covariance as the scaled fit (#1052)", {
+  # its own clustering clip and multistart floor were absolute too: at
+  # 4^-25 every one of 60 random rank-3 fields came back at a different
+  # rank (3 -> 6 here) with D off by up to 54% of its unit-scale value
+  set.seed(1)
+  A <- matrix(rnorm(18), 6, 3)
+  C <- A %*% t(A) + diag(runif(6, 0.2, 1))
+  C <- C / mean(diag(C))
+  f0 <- suppressWarnings(fit_covariance(C))
+  for (j in c(-25, -8, 8)) {
+    s <- 4^j
+    f <- suppressWarnings(fit_covariance(s * C))
+    expect_identical(f$D, s * f0$D)
+    expect_identical(f$V, 2^j * f0$V)
+    expect_identical(f$rank, f0$rank)
+    expect_identical(f$residual, s * f0$residual)
+  }
+})

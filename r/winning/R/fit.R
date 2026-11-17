@@ -327,6 +327,24 @@ fit_covariance <- function(C, k = 3L, m = 5L, blocks = NULL,
                 residual = 0, contrast_residual = 0, degraded = FALSE,
                 polished = FALSE))
   }
+  # Fit at UNIT scale and scale back, as python does (#101, #1052): the
+  # clustering clip sqrt(pmax(diag, 1e-12)), the 1e-3 multistart floor
+  # and the alternation's thresholds are absolute, so 1e-14 * C was not
+  # fitted as C scaled. The working scale is a power of four, so the
+  # rescaling is exact and every C with mean variance in about
+  # [0.7, 1.4) is fitted bitwise as before. V, D, the floor clamp and
+  # the absolute residual carry the scale; the rest is scale-free.
+  md <- mean(diag(C))
+  k2 <- if (md > 0) round(log2(md) / 2) else 0
+  if (k2 != 0) {
+    out <- fit_covariance(C / 4^k2, k = k, m = m, blocks = blocks,
+                          nodes = nodes)
+    out$V <- out$V * 2^k2
+    out$D <- out$D * 4^k2
+    out$clamp <- out$clamp * 4^k2
+    out$residual <- out$residual * 4^k2
+    return(out)
+  }
   # a common shift cancels from every contrast: fit the representative
   # without it, so C and C + a 11' are fitted identically (#465, python
   # core._without_common_shift)
