@@ -30,9 +30,10 @@ itself is unchanged, so the routing stays necessary.
 staging but the stage-one alternation stalling at its sweep cap with a
 residual the promoted eigendirections then chased to full rank. With
 capped fits finished by Gauss-Newton the fit recovers the true rank and
-D exactly, is not degraded, and is priced on the factor lattice (to its
-2^11-node quadrature, within the first test's 2e-3). r = 5 exceeds the
-default k = 3 and still degenerates; it stays pinned and routed.
+D exactly and is not degraded. As a polished fit of at most 15 runners
+its forward normal race is routed to GHK at 2^14 nodes, within the first
+test's 2e-3 of the exact V/D lattice. r = 5 exceeds the default k = 3
+and still degenerates; it stays pinned and routed (GHK at 4096 nodes).
 """
 import warnings
 
@@ -61,9 +62,9 @@ def exact_correlation(r, seed):
 def test_cov_reproduces_an_exactly_structured_correlation(r):
     """r = 5: the fit still degenerates (pinned below); cov= routes the
     forward normal race to scrambled-Sobol GHK instead of using it, so
-    the answer is within GHK's 1024-node accuracy (~5e-4) of the exact
-    V/D lattice rather than 5-8e-3 off it. r = 1, 3: the fit is exact
-    since #1051 and priced on the factor lattice."""
+    the answer is within GHK's 4096-node accuracy of the exact V/D
+    lattice rather than 5-8e-3 off it. r = 1, 3: the fit is exact since
+    #1051 and, being polished, is routed to GHK at 2^14 nodes."""
     V, D, C = exact_correlation(r, seed=5 + r)
     with warnings.catch_warnings():
         warnings.simplefilter("error")                 # routed: no warning
@@ -92,3 +93,15 @@ def test_the_defect_is_the_fit_not_the_race(r):
     assert Df.min() < 1e-5, "D no longer on the floor: the xfail above may lift"
     assert rep["projected_residual_max"] < 1e-4, \
         "the residual report would now catch this; recheck the warnings"
+
+
+@pytest.mark.parametrize("r", [1, 5])
+def test_routed_cov_refuses_masked_and_complex_abilities(r):
+    """The GHK route (polished r = 1, degraded r = 5) returns before the
+    factor path's ability checks; it must refuse what they refuse (#914)."""
+    _, _, C = exact_correlation(r, seed=5 + r)
+    masked = np.ma.masked_array(MU, mask=[False] * (N - 1) + [True])
+    with pytest.raises(ValueError, match="masked"):
+        wf.race_probabilities(masked, cov=C)
+    with pytest.raises(ValueError, match="complex"):
+        wf.race_probabilities(MU + 0j, cov=C)

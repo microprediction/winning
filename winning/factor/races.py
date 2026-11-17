@@ -1769,7 +1769,11 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
         V, D, F, W, degraded = _fit_cov(cov, structure, V, D, stacklevel=3,
                                         will_route=routable)
         if degraded and routable:
-            return _race_dense(mu, cov, budget=int(degraded))
+            # _race_dense floats mu as given: check it first, as the
+            # factor path does, so a masked or complex ability is refused
+            # on this route too (#914)
+            return _race_dense(_as_abilities(mu), cov,
+                               budget=int(degraded))
     if structure is not None:
         # structure= DESCRIBES the covariance; V/D/F/W describe it too,
         # and passing both asked two questions and answered one of them
