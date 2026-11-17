@@ -693,7 +693,9 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
     (stage skipped: a count below 2, or n < 3), and "block_labels" the
     0-based membership the fit used; "arm" is "pipeline", or "eigen" when
     a pure eigen fit at the same rank left the smaller residual and
-    replaced the staged fit, blocks included.
+    replaced the staged fit, blocks included; "polished" is True when
+    the stage-one start ran out of sweeps and its Gauss-Newton finish
+    replaced the fit (#1051).
     """
     from scipy.cluster.hierarchy import fcluster, linkage
     from scipy.spatial.distance import squareform
@@ -732,7 +734,8 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
                                 "blocks": "none" if labels is None
                                 else "given",
                                 "block_labels": np.zeros(1, dtype=int),
-                                "arm": "pipeline"}
+                                "arm": "pipeline",
+                                "polished": False}
         return V, D, F, W
     # Fit at UNIT scale and scale back. Several stages carry absolute
     # constants (start values, convergence tests, dead-column and
@@ -896,6 +899,7 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
         return Vall, D, res_pipe, "pipeline"
 
     Vall, D, res_pipe, arm = _stages(V, D0)
+    used_polish = False
     if polished is not None:
         # The polished start lowers the stage-one objective, but blocks,
         # promotion and the closing solve are greedy and can, rarely, end
@@ -914,6 +918,7 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
                 _fro(out1[0], out1[1]) <= _fro(Vall, D):
             Vall, D, res_pipe, arm = out1
             V, D0 = polished
+            used_polish = True
     _warn_if_rank_splits_a_tie(C, D0, kk)
     # the nodes are not rotation or sign invariant, so the basis they
     # meet must be a function of V V' alone, not of LAPACK's choices (#745)
@@ -957,7 +962,8 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
                   "contrast_residual_max": worst,
                   "blocks": block_source,
                   "block_labels": np.asarray(cluster, dtype=int).copy(),
-                  "arm": arm}
+                  "arm": arm,
+                  "polished": used_polish}
         return Vall, D, F, W, report
     return Vall, D, F, W
 

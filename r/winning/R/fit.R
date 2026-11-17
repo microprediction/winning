@@ -289,7 +289,8 @@ fit_covariance <- function(C, k = 3L, m = 5L, blocks = NULL,
     return(list(V = matrix(0, 1L, 1L), D = pmax(C[1L, 1L], 1e-12),
                 F = matrix(0, 1L, 1L), W = 1,
                 rank = 0L, n = 1L, bound = 0, clamp = 0,
-                residual = 0, contrast_residual = 0, degraded = FALSE))
+                residual = 0, contrast_residual = 0, degraded = FALSE,
+                polished = FALSE))
   }
   # a common shift cancels from every contrast: fit the representative
   # without it, so C and C + a 11' are fitted identically (#465, python
@@ -433,9 +434,13 @@ fit_covariance <- function(C, k = 3L, m = 5L, blocks = NULL,
   fro <- function(st) sqrt(sum((P %*% (C - st$V %*% t(st$V) -
                                          diag(st$D, n)) %*% P)^2))
   st <- stages(fit$V, fit$D)
+  used_polish <- FALSE
   if (!is.null(polished)) {
     st1 <- stages(polished$V, polished$D)
-    if (st1$res < st$res && fro(st1) <= fro(st)) st <- st1
+    if (st1$res < st$res && fro(st1) <= fro(st)) {
+      st <- st1
+      used_polish <- TRUE
+    }
   }
   Vall <- st$V
   D <- st$D
@@ -466,7 +471,8 @@ fit_covariance <- function(C, k = 3L, m = 5L, blocks = NULL,
        contrast_residual = contrast_res,
        degraded = (bound > 0 || ncol(Vall) >= n ||
                    contrast_res > 0.05 ||
-                   residual > 0.05 * mean(diag(C))))
+                   residual > 0.05 * mean(diag(C))),
+       polished = used_polish)
 }
 
 

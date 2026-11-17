@@ -30,13 +30,20 @@
   every start that stopped on its own, the fit is bitwise unchanged. An
   exact rank-1-plus-diagonal C at n = 5 was left at projected residuals
   up to 1.5e-3 and now fits to rounding, with python and R agreeing to
-  1e-14. Some small exact fields that used to stall into a degraded
-  full-rank fit (the #118 n = 8 rank-3 correlation among them) are now
-  fitted exactly at their true rank. They are no longer routed to GHK
-  and are priced on the factor lattice at the default 2^11 nodes: on a
-  360-covariance sweep the 42 such fields moved from a median 1e-5 (max
-  4.5e-5) off a 2^21-node GHK reference to a median 8e-5 (max 5.7e-4),
-  the lattice's quadrature error on the true V and D (#1051).
+  1e-14. The report gains `polished`. A polished fit replaces a stalled
+  one that had often degenerated and been routed to GHK, and priced on
+  the 2^11 factor nodes it could be less accurate than the stall had
+  been (up to 5.7e-4 off a 2^21-node GHK reference against 4.5e-5). So
+  `race_probabilities(cov=)` and `abilities_from_race(cov=)` route a
+  polished fit of up to 20 runners to GHK at 2^16 nodes, and price a
+  larger one (or a call that needs the factor form) on 2^13 factor
+  nodes (8192 Halton nodes in R). Every other fit is priced bitwise as
+  before. On two 360-covariance sweeps every changed price was at least
+  as accurate as before (python 95 and 100 changed, R 103 and 102). The
+  cost falls on polished fields: on the sweep, cov= pricing takes 1.6x
+  as long overall in python (worst call 0.016 s -> 0.19 s) and 1.9x in
+  R, and the inverse 2.2x in python with single calls up to 11x (17 s
+  at n = 20; R up to 78 s) (#1051).
 
 ## 1.7.0 (2026-10-31)
 

@@ -440,3 +440,22 @@ test_that("the polish matches python and leaves converged fits alone (#1051)", {
   # a fit that stops on its own never reaches the polish
   expect_false(.factor_model_projected(diag(c(1, 2, 3, 4, 5, 6)), 3L)$hit_cap)
 })
+
+test_that("a polished cov= fit is priced at least as well as the stall (#1051)", {
+  # the polished fit replaces a stalled one that had often degenerated
+  # and been routed to GHK; up to 20 runners its race now goes to GHK at
+  # 2^16 nodes, and the inverse inverts that same map
+  set.seed(3)
+  n <- 8
+  V <- matrix(rnorm(n * 3), n, 3)
+  C <- V %*% t(V) + diag(0.2 + runif(n))
+  f <- fit_covariance(C)
+  expect_true(f$polished)
+  expect_false(f$degraded)
+  mu <- seq(-0.5, 0.5, length.out = n)
+  p <- race_probabilities(mu, cov = C)
+  expect_identical(p, .ghk_race(mu, C, budget = 65536L)$p)
+  mu_back <- abilities_from_race(p, cov = C)
+  expect_lt(max(abs(mu_back - (mu - mean(mu)))), 1e-6)
+  expect_false(fit_covariance(diag(c(1, 2, 3, 4, 5, 6)))$polished)
+})

@@ -532,3 +532,31 @@ def test_polish_never_worsens_the_final_fit_1051(monkeypatch):
         assert a[-1]["projected_residual_max"] < b[-1]["projected_residual_max"]
         assert a[-1]["projected_residual_rel"] <= b[-1]["projected_residual_rel"]
     assert changed > 0
+
+
+def test_polished_fit_is_priced_at_least_as_well_as_the_stall_1051():
+    # A polished fit replaces a stalled one that had often degenerated
+    # and been routed to GHK; on the 2^11 factor nodes the exact fit
+    # then priced worse than the stalled one had (5.7e-4 off a 2^21-node
+    # GHK reference against 4.5e-5). Up to 20 runners its race is routed
+    # to GHK at 2^16 nodes, and the inverse inverts that same map.
+    from winning.factor import races
+    rng = np.random.default_rng(6)
+    n = 8
+    V = rng.standard_normal((n, 3))
+    C = V @ V.T + np.diag(rng.uniform(0.2, 2.0, n))
+    rep = fit_covariance(C, return_report=True)[-1]
+    assert rep["polished"]
+    mu = np.linspace(-0.5, 0.5, n)
+    p = np.asarray(race_probabilities(mu, cov=C))
+    assert np.array_equal(p, races._race_dense(mu, C, budget=2 ** 16))
+    ref = races._race_dense(mu, C, budget=2 ** 20)
+    assert np.abs(p - ref).max() < 2e-5
+    from winning.factor import abilities_from_race
+    m = abilities_from_race(p, cov=C)
+    assert np.abs(m - (mu - mu.mean())).max() < 1e-7
+    # an unpolished fit is untouched: the report says so and the route
+    # (or the lattice) is what it was
+    rep0 = fit_covariance(np.diag([1.0, 2, 3, 4, 5, 6]),
+                          return_report=True)[-1]
+    assert not rep0["polished"]

@@ -329,15 +329,13 @@ def test_ordered_k1_with_cov_routes_like_the_win_race():
                                     points=257)
     assert np.abs(p - q).max() == 0.0
     # #1051: this exact rank-3 field used to stall in the fit (full rank,
-    # D on its floor), which routed both doors to GHK, 1.5e-5 from the
-    # truth. The fit now recovers the true D, is not degraded, and both
-    # doors price it on the factor lattice at fit_covariance's 2^11
-    # nodes: 3.1e-4 here, where the TRUE V/D at those nodes is 4.2e-4
-    # off a 2^21-node GHK reference. The tolerance is that quadrature's.
+    # D on its floor) and so was routed to GHK. The fit now recovers the
+    # true D, and a polished fit this small is routed to GHK at 2^16
+    # nodes, so both doors still agree with the exact V/D lattice.
     from winning.factor.core import fit_covariance
     _, Df, _, _ = fit_covariance(C)
     assert np.abs(Df - d0 / s**2).max() < 1e-8
-    assert np.abs(q - oracle).max() < 6e-4
+    assert np.abs(q - oracle).max() < 1e-4
 
 
 # #684: a scalar block loading means the same loading for every runner.

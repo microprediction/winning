@@ -759,10 +759,11 @@ race_probabilities <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
     # without the fit at all; everything else needs the factor form and
     # keeps the fit with its warning (matching python)
     routable <- identical(base, "normal") && !return_slopes
-    if (isTRUE(fit$degraded) && routable)
-      return(.ghk_race(mu, cov)$p)
+    if ((b <- .cov_route_budget(fit)) > 0L && routable)
+      return(.ghk_race(mu, cov, budget = b)$p)
     .warn_degraded_cov(fit, "race_probabilities")
-    V <- fit$V; D <- fit$D; F <- fit$F; W <- fit$W
+    nd <- .cov_fit_nodes(fit)
+    V <- fit$V; D <- fit$D; F <- nd$F; W <- nd$W
   }
   if (!is.null(structure)) {
     if (is.null(cov)) .refuse_second_covariance(V, D, F, W)
@@ -895,6 +896,31 @@ race_probabilities <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
   slope / sum(p)
 }
 
+
+# The GHK budget a cov= fit is routed with, 0 for none (python
+# races._fit_cov). A degraded fit goes at 4096 nodes. A polished fit of
+# up to 20 runners (#1051) goes at 2^16: its stage-one start ran out of
+# sweeps and was finished, and the stalled fit it replaces had often
+# degenerated and been routed; priced on the factor nodes instead, some
+# such fields lost an order of magnitude of accuracy, and at 2^16 every
+# polished field of python's two 360-covariance sweeps was priced at
+# least as accurately as before.
+.cov_route_budget <- function(fit) {
+  if (isTRUE(fit$degraded)) return(4096L)
+  if (isTRUE(fit$polished) && fit$n <= 20L) return(65536L)
+  0L
+}
+
+# A polished fit that is not routed keeps the factor form on 4x the
+# nodes: on the n = 30 polished fields of the sweep the 2048 Halton
+# nodes priced up to 3.4x further off than the stalled fit had, 8192
+# priced every one closer (#1051; python uses 2^13 Sobol nodes).
+.cov_fit_nodes <- function(fit) {
+  if (isTRUE(fit$polished) && !isTRUE(fit$degraded))
+    return(.halton_normal_nodes(ncol(fit$V), 8192L))
+  list(F = fit$F, W = fit$W)
+}
+
 #' Invert the general race: mean-zero mu reproducing probabilities p
 #'
 #' @param p positive target probabilities (normalized internally)
@@ -915,12 +941,14 @@ abilities_from_race <- function(p, V = NULL, D = NULL, F = NULL, W = NULL,
     if (!is.null(structure) || !is.null(V) || !is.null(D))
       stop("cov= replaces structure=/V=/D=; pass one only")
     fit <- fit_covariance(cov)
-    if (isTRUE(fit$degraded) && identical(base, "normal")) {
+    dense_budget <- .cov_route_budget(fit)
+    if (dense_budget > 0L && identical(base, "normal")) {
       dense <- as.matrix(cov)
     } else {
       .warn_degraded_cov(fit, "abilities_from_race")
     }
-    V <- fit$V; D <- fit$D; F <- fit$F; W <- fit$W
+    nd <- .cov_fit_nodes(fit)
+    V <- fit$V; D <- fit$D; F <- nd$F; W <- nd$W
   }
   .refuse_matrix(p, "p")                                         # (#903)
   target <- as.numeric(p)
@@ -1012,11 +1040,17 @@ abilities_from_race <- function(p, V = NULL, D = NULL, F = NULL, W = NULL,
     # different races, which is python's #164.
     scale <- sqrt(mean(diag(dense)))
     mu <- -(logt - mean(logt)) / 2 * scale
-    fwd <- function(m) {
-      g <- .ghk_race(m, dense, want_slopes = TRUE)
+    fwd_at <- function(budget) function(m) {
+      g <- .ghk_race(m, dense, budget = budget, want_slopes = TRUE)
       list(resid = g$logp - logt, dres = pmin(g$dlogp, -1e-6 / scale))
     }
-    out <- .jacobi_sweeps(mu, fwd, scale, alpha, max(n_iter, 120), tol)
+    # a polished fit routed at a larger budget (#1051): converge on the
+    # cheap 4096-node map first, then on the map the forward prices with
+    if (dense_budget > 4096L)
+      mu <- .jacobi_sweeps(mu, fwd_at(4096L), scale, alpha,
+                           max(n_iter, 120), tol)$mu
+    out <- .jacobi_sweeps(mu, fwd_at(dense_budget), scale, alpha,
+                          max(n_iter, 120), tol)
     if (!out$converged)
       warning(sprintf("abilities_from_race did not converge: max |log residual| %.2e (tol %.0e)", out$resid, tol), call. = FALSE)
     return(out$mu)
