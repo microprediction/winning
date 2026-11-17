@@ -344,6 +344,40 @@ def _polish_projected(C, k, D, max_eval=60):
     return V, D, f
 
 
+# A kept eigenvalue below this fraction of the largest is a direction the
+# polished fit does not need (#1066); see _polish_numerical_rank.
+_POLISH_RANK_REL = 1e-6
+
+
+def _polish_numerical_rank(C, k, D):
+    """_polish_projected at k, then again at the polished fit's numerical
+    rank when that is lower; returns (V, D) with D before the floor.
+
+    When k exceeds the rank an exact fit needs (the default k = 3 on an
+    exact rank-1 field), the extra kept eigenvalues are zero at the
+    solution and the Gauss-Newton system is singular there: the polish
+    slows to a crawl and stops on its relative-gain rule wherever
+    rounding leaves it, with D off by anything from 1e-15 to 5e-9 and a
+    spurious column whose squared norm tracks that error -- straddling
+    fit_covariance's 1e-10 column cut, so the reported rank (and the
+    node dimension cov= prices on) varied between machines (#1066). At
+    the numerical rank the system is regular and the polish converges
+    quadratically. The lower-rank polish is kept only if it gives up at
+    most a relative 1e-24 of the squared projected objective (eigenvalues
+    1e-12 of the scale), so a genuine small factor is never dropped
+    here."""
+    V, D1, f = _polish_projected(C, k, D)
+    lam = (V ** 2).sum(axis=0)          # the columns are B U sqrt(lam)
+    top = float(lam.max()) if lam.size else 0.0
+    kn = int((lam > _POLISH_RANK_REL * top).sum())
+    if 0 < kn < k:
+        V2, D2, f2 = _polish_projected(C, kn, D1)
+        scale = float(np.linalg.norm(_center2(C))) ** 2
+        if f2 <= f + 1e-24 * scale:
+            return V2, D2
+    return V, D1
+
+
 def _projected_sq(C, V, D):
     """||P (C - V V' - diag D) P||_F^2, the identified objective."""
     return float(np.sum(_center2(C - V @ V.T - np.diag(D)) ** 2))
@@ -786,7 +820,7 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
     V = np.asarray(V, dtype=float)
     polished = None
     if hit_cap and 3 <= n <= 800:
-        V1, D1, _ = _polish_projected(C, kk, D0)
+        V1, D1 = _polish_numerical_rank(C, kk, D0)
         D1 = _projected_floor(C, D1)
         if _projected_sq(C, V1, D1) < _projected_sq(C, V, D0) * (1.0 - 1e-10):
             polished = (np.asarray(V1, dtype=float), D1)

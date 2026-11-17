@@ -177,6 +177,28 @@
   list(V = cur$V, D = D, f = cur$f)
 }
 
+# python's core._polish_numerical_rank (#1066): polish at k, then again at
+# the polished fit's numerical rank when that is lower. With k above the
+# rank an exact fit needs, the Gauss-Newton system is singular at the
+# solution and the polish stops wherever rounding leaves it, so the
+# reported rank varied between machines; at the numerical rank it
+# converges quadratically. The lower-rank result is kept only if it gives
+# up at most a relative 1e-24 of the squared projected objective.
+.polish_numerical_rank <- function(C, k, D) {
+  pz <- .polish_projected(C, k, D)
+  lam <- colSums(pz$V^2)
+  top <- if (length(lam)) max(lam) else 0
+  kn <- sum(lam > 1e-6 * top)
+  if (kn > 0L && kn < k) {
+    p2 <- .polish_projected(C, kn, pz$D)
+    n <- nrow(C)
+    P <- diag(n) - 1 / n
+    scale <- sum((P %*% C %*% P)^2)
+    if (p2$f <= pz$f + 1e-24 * scale) return(list(V = p2$V, D = p2$D))
+  }
+  list(V = pz$V, D = pz$D)
+}
+
 # Warn when the rank cuts through a degenerate eigenvalue of the
 # centred covariance (port of python's _warn_if_rank_splits_a_tie). Any
 # k directions from a tied group fit equally well and imply DIFFERENT
@@ -329,7 +351,7 @@ fit_covariance <- function(C, k = 3L, m = 5L, blocks = NULL,
   # untouched.
   polished <- NULL
   if (isTRUE(fit$hit_cap) && n >= 3L && n <= 800L) {
-    pz <- .polish_projected(C, kk, fit$D)
+    pz <- .polish_numerical_rank(C, kk, fit$D)
     D1 <- .projected_floor(C, pz$D)
     if (.projected_sq(C, pz$V, D1) <
         .projected_sq(C, fit$V, fit$D) * (1 - 1e-10))
