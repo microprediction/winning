@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- `fit_covariance` (python and R): a polished fit's rank no longer
+  depends on rounding. When the default k = 3 exceeds the rank an exact
+  fit needs, the #1051 polish is singular at the solution and stopped
+  wherever rounding left it, with a spurious column straddling the 1e-10
+  column cut. A 1e-15 perturbation of an exact rank-1 field gave rank 2
+  or 3 in 11 of 40 refits, which changes the node dimension `cov=`
+  prices on. The polish now finishes at the fit's numerical rank, where
+  it converges quadratically: 200 of 200 perturbed refits give the true
+  rank with D exact to 2e-14. Only polished fits whose kept eigenvalues
+  fall below a relative 1e-6 change; all other fits are bitwise
+  unchanged (#1066).
 - `ranking_loglik_and_score`: rankings of length k >= 2 at rank 1 or 2
   with loading sharpness s <= 2 and s*sqrt(k) > 2 now use adaptive
   Gauss-Hermite, the same Qf tensor moved to each ranking's factor
