@@ -725,6 +725,55 @@ _FACTOR_SOBOL_SHARP = 2.0
 _RANKING_ADAPTIVE_GATE = 2.0
 
 
+# Both gates above were hard switches between rules that do not agree
+# exactly, so the log-likelihood jumped as a loading or the temperature
+# crossed one -- up to 6e-4 nats per observation at the adaptive gate and
+# 4e-4 at the Sobol one -- and the score could not see it (#1063). Across
+# a band beside each gate the probability is the blend of the two rules'
+# probabilities with the C1 smoothstep weight of the gate's own statistic
+# (sharpness * sqrt(k) for the adaptive rule, sharpness for Sobol), and
+# the score carries the blend's derivative, as the MNP choice likelihood
+# does at its own switch (#420). Each band sits on the side of its gate
+# where the rule it blends in is the more accurate one: below the
+# adaptive gate (median error against a 40-node adaptive reference
+# 2.5e-5 -> 6.9e-6 over 400 observations in the band) and ABOVE the Sobol
+# one, where the Gauss-Hermite side is blended into the 2^10 cloud; a
+# band below it would have moved the median error from 1.8e-5 to 2.2e-4.
+# Every observation outside both bands is priced exactly as before. For
+# k >= 2 the adaptive statistic is past its gate wherever the Sobol band
+# lies, so no observation is in both.
+_RANKING_SOBOL_BAND = (_FACTOR_SOBOL_SHARP, _FACTOR_SOBOL_SHARP + 0.2)
+_RANKING_ADAPTIVE_BAND = (_RANKING_ADAPTIVE_GATE - 0.2,
+                          _RANKING_ADAPTIVE_GATE)
+
+
+def _band_weight(x, band):
+    """(w, dw/dx): C1 smoothstep from 0 at band[0] to 1 at band[1];
+    0 at and below the band, 1 from its top. Only the gate point itself
+    changes rule: the hard gate (`x > gate`) priced it on the old one."""
+    lo, hi = band
+    if not x > lo:
+        return 0.0, 0.0
+    if x >= hi:
+        return 1.0, 0.0
+    t = (x - lo) / (hi - lo)
+    return t * t * (3.0 - 2.0 * t), 6.0 * t * (1.0 - t) / (hi - lo)
+
+
+def _sharpness_grad(V):
+    """d sharpness_bound(V) / dV (D = 1): sqrt(2) times the unit centred
+    row of largest norm, through the centring. Exact off row-norm ties,
+    where the statistic has a cusp; there the first tied row's one-sided
+    derivative."""
+    C = V - V.mean(axis=0)
+    nrm = np.sqrt((C ** 2).sum(axis=1))
+    i = int(np.argmax(nrm))
+    G = np.zeros_like(V)
+    if nrm[i] > 0.0:
+        G[i] = np.sqrt(2.0) * C[i] / nrm[i]
+    return G - G.mean(axis=0)
+
+
 def _ranking_mode(mu_t, V, order, tau, iters=30, tol=1e-10):
     """Mode and Hessian of the log factor posterior of ONE ranking,
     -|f|^2/2 + log PL(order | f), by backtracking Newton from f = 0.
@@ -850,7 +899,11 @@ def ranking_loglik_and_score(mu, V, orders, temperature=1.0, Qf=7,
     Factor rule: at rank one or two with loading sharpness at most 2 a
     Qf-node Gauss-Hermite tensor; past that, Sobol. A ranking of length
     k >= 2 with sharpness * sqrt(k) above 2 moves that tensor to its own
-    factor posterior (adaptive Gauss-Hermite, #1017). The score is the
+    factor posterior (adaptive Gauss-Hermite, #1017). Neither switch is a
+    jump: the fixed and adaptive rules are blended over sharpness *
+    sqrt(k) in (1.8, 2], and the Gauss-Hermite and Sobol rules over
+    sharpness in (2, 2.2), in probability with a C1 weight whose
+    derivative the score carries (#1063). The score is the
     exact derivative of the rule with its nodes held where they were
     placed; finite differences of the value also move the nodes, and
     that term is of the size of the quadrature error (measured 5e-4
@@ -894,7 +947,6 @@ def ranking_loglik_and_score(mu, V, orders, temperature=1.0, Qf=7,
     # the sharpness is measured on.
     sharp = sharpness_bound(V / tau, n=J)
     F, W = _factor_nodes(r, Qf=Qf, nodes_log2=nodes_log2, sharp=sharp)
-    Q = len(F)
     shift = (F @ V.T)                       # (Q, J)
     # Order lengths whose ranking posterior is too narrow for the fixed
     # tensor (#1017): decided once per length, so observations outside
@@ -902,9 +954,35 @@ def ranking_loglik_and_score(mu, V, orders, temperature=1.0, Qf=7,
     # or 2, sharpness <= 2) is ever adapted; Sobol and rank 0 are not.
     gh_branch = 0 < r <= 2 and not sharp > _FACTOR_SOBOL_SHARP
     adaptive = set()
+    lengths = {len(o) for o in orders}
     if gh_branch:
-        adaptive = {k for k in {len(o) for o in orders}
+        adaptive = {k for k in lengths
                     if k >= 2 and sharp * np.sqrt(k) > _RANKING_ADAPTIVE_GATE}
+    # The blend bands beside the two gates (#1063): per order length, the
+    # rule blended in, its weight and the weight's derivative in
+    # sharpness. Lengths in neither band take one dict lookup.
+    blend = {}
+    if gh_branch:
+        for k in lengths - adaptive:
+            if k >= 2:
+                wa, dwa = _band_weight(sharp * np.sqrt(k),
+                                       _RANKING_ADAPTIVE_BAND)
+                if wa > 0.0:
+                    blend[k] = ("adaptive", wa, dwa * np.sqrt(k))
+    elif 0 < r <= 2 and sharp < _RANKING_SOBOL_BAND[1]:
+        # just past the Sobol gate: F is the cloud, and the Gauss-Hermite
+        # side blended in is the rule the length had at the gate --
+        # adaptive for k >= 2 (sharp * sqrt(k) > 2.8 there), fixed for k = 1
+        ws, dws = _band_weight(sharp, _RANKING_SOBOL_BAND)
+        Fg, Wg = _factor_nodes(r, Qf=Qf, nodes_log2=nodes_log2, sharp=0.0)
+        shift_g = Fg @ V.T
+        for k in lengths:
+            blend[k] = ("adaptive" if k >= 2 else "fixed", 1.0 - ws, -dws)
+    if blend:
+        # sharp is measured on V / tau, so d sharp / dV carries 1 / tau
+        sharp_grad = _sharpness_grad(V / tau) / tau
+        if gh_branch:
+            Fg, Wg = F, W
     loglik = 0.0
     dmu = np.zeros((T, J))
     dV = np.zeros((J, r))
@@ -912,33 +990,65 @@ def ranking_loglik_and_score(mu, V, orders, temperature=1.0, Qf=7,
         order = orders[t]
         if len(order) in adaptive:
             Ft, logw = _ranking_adaptive_nodes(mu[t], V, order, tau, F)
-            z = (mu[t][None, :] + Ft @ V.T) / tau
+            ll, g_mu, g_V = _ranking_obs_terms(
+                mu[t], (Ft @ V.T), order, tau, Ft, W, logw)
         else:
-            Ft, logw = F, None
-            z = (mu[t][None, :] + shift) / tau  # (Q, J)
-        logp_q = np.zeros(Q)
-        grad_q = np.zeros((Q, J))
-        alive = np.ones(J, dtype=bool)
-        for w in order:
-            zz = np.where(alive[None, :], z, -np.inf)
-            m = zz.max(axis=1, keepdims=True)
-            lse = m[:, 0] + np.log(np.exp(zz - m).sum(axis=1))
-            logp_q += z[:, w] - lse
-            sm = np.exp(zz - lse[:, None])
-            sm[:, ~alive] = 0.0
-            grad_q[:, w] += 1.0
-            grad_q -= sm
-            alive[w] = False
-        if logw is not None:
-            logp_q = logp_q + logw           # importance-corrected log weights
-        mstar = logp_q.max()
-        pw = W * np.exp(logp_q - mstar)
-        tot = pw.sum()
-        omega = pw / tot                     # posterior node weights
-        loglik += mstar + np.log(tot)
-        g_mu = (omega[:, None] * grad_q).sum(axis=0) / tau
+            ll, g_mu, g_V = _ranking_obs_terms(
+                mu[t], shift, order, tau, F, W, None)
+        b = blend.get(len(order))
+        if b is not None:
+            kind, w, dw = b
+            if kind == "fixed":
+                l2, m2, v2 = _ranking_obs_terms(
+                    mu[t], shift_g, order, tau, Fg, Wg, None)
+            else:
+                Ft, logw = _ranking_adaptive_nodes(mu[t], V, order, tau, Fg)
+                l2, m2, v2 = _ranking_obs_terms(
+                    mu[t], (Ft @ V.T), order, tau, Ft, Wg, logw)
+            if w == 1.0:                # the adaptive gate point itself
+                ll, g_mu, g_V = l2, m2, v2
+            else:
+                lb = np.logaddexp(np.log1p(-w) + ll, np.log(w) + l2)
+                a = np.exp(np.log1p(-w) + ll - lb)   # posterior rule weights
+                c = np.exp(np.log(w) + l2 - lb)
+                # d lb / dV through w: (P_new - P_old) / P * dw * dsharp/dV
+                gw = (np.exp(l2 - lb) - np.exp(ll - lb)) * dw
+                ll, g_mu = lb, a * g_mu + c * m2
+                g_V = a * g_V + c * v2 + gw * sharp_grad
+        loglik += ll
         dmu[t] += g_mu
-        # the nodes this observation was integrated on: the score is
-        # exact for them held fixed (see the docstring)
-        dV += ((omega[:, None] * grad_q).T @ Ft) / tau
+        dV += g_V
     return float(loglik), dmu, dV
+
+
+def _ranking_obs_terms(mu_t, shift, order, tau, Ft, W, logw):
+    """One ranking on one node rule: (log P, d/dmu_t, d/dV with the nodes
+    held fixed). shift = Ft @ V.T; logw the adaptive rule's log importance
+    correction, or None."""
+    J = len(mu_t)
+    Q = len(Ft)
+    z = (mu_t[None, :] + shift) / tau      # (Q, J)
+    logp_q = np.zeros(Q)
+    grad_q = np.zeros((Q, J))
+    alive = np.ones(J, dtype=bool)
+    for w in order:
+        zz = np.where(alive[None, :], z, -np.inf)
+        m = zz.max(axis=1, keepdims=True)
+        lse = m[:, 0] + np.log(np.exp(zz - m).sum(axis=1))
+        logp_q += z[:, w] - lse
+        sm = np.exp(zz - lse[:, None])
+        sm[:, ~alive] = 0.0
+        grad_q[:, w] += 1.0
+        grad_q -= sm
+        alive[w] = False
+    if logw is not None:
+        logp_q = logp_q + logw               # importance-corrected log weights
+    mstar = logp_q.max()
+    pw = W * np.exp(logp_q - mstar)
+    tot = pw.sum()
+    omega = pw / tot                         # posterior node weights
+    g_mu = (omega[:, None] * grad_q).sum(axis=0) / tau
+    # the nodes this observation was integrated on: the score is exact
+    # for them held fixed (see ranking_loglik_and_score)
+    g_V = ((omega[:, None] * grad_q).T @ Ft) / tau
+    return mstar + np.log(tot), g_mu, g_V

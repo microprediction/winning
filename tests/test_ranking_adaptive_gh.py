@@ -139,8 +139,8 @@ def _forbid_adaptive(*args, **kwargs):
 @pytest.mark.parametrize("r, sharp, k", [
     (1, 1.95, 1),        # a length-1 order is the choice likelihood
     (2, 1.95, 1),
-    (1, 1.4, 2),         # sharp*sqrt(k) = 1.98 <= 2
-    (2, 0.6, 10),        # 1.90
+    (1, 1.25, 2),        # sharp*sqrt(k) = 1.77, below the blend band
+    (2, 0.55, 10),       # 1.74; (1.8, 2] blends the two rules (#1063)
     (1, 3.0, 6),         # Sobol branch
     (3, 1.5, 6),         # rank 3: Sobol
     (0, 0.0, 6),         # rank 0: the empty product

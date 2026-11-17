@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- `ranking_loglik_and_score` no longer jumps at its two node-rule
+  switches. A loading moved by 1e-9 across the fixed-to-adaptive gate
+  (sharpness * sqrt(k) = 2) or the Gauss-Hermite-to-Sobol gate
+  (sharpness = 2) moved the log-likelihood by up to 6e-4 and 4e-4 nats
+  per observation, which the score could not see. The rules are now
+  blended in probability with a C1 weight, over sharpness * sqrt(k) in
+  (1.8, 2] and sharpness in (2, 2.2), and the score carries the weight's
+  derivative (it matches finite differences to 2e-9 where the nodes do
+  not move). Each band sits where the rule it blends in is the more
+  accurate: median error against a high-order reference falls from
+  2.5e-5 to 6.9e-6 in the first band and from 6.1e-4 to 3.0e-4 in the
+  second. Observations outside both bands are bitwise unchanged. Inside
+  them an observation costs what it costs just past the gate, plus the
+  cheaper rule (#1063).
 - `fit_covariance` (python and R): a polished fit's rank no longer
   depends on rounding. When the default k = 3 exceeds the rank an exact
   fit needs, the #1051 polish is singular at the solution and stopped
