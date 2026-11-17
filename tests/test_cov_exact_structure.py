@@ -105,3 +105,23 @@ def test_routed_cov_refuses_masked_and_complex_abilities(r):
         wf.race_probabilities(masked, cov=C)
     with pytest.raises(ValueError, match="complex"):
         wf.race_probabilities(MU + 0j, cov=C)
+
+
+@pytest.mark.parametrize("r", [1, 3])
+def test_polished_rank_does_not_depend_on_rounding_1066(r):
+    """At k = 3 above the true rank the polish's Gauss-Newton system is
+    singular at the solution, so it stopped wherever rounding left it and
+    a spurious column straddled the 1e-10 cut: a 1e-15 perturbation of C
+    gave rank 2 or 3 instead of 1 in 11 of 40 refits, and CI on Linux
+    failed the rank pin above while macOS passed it. The polish now
+    finishes at the fit's numerical rank."""
+    V, D, C = exact_correlation(r, seed=5 + r)
+    rng = np.random.default_rng(0)
+    for _ in range(30):
+        E = rng.normal(size=C.shape) * 1e-15
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            _, Df, _, _, rep = fit_covariance(C + (E + E.T) / 2,
+                                              return_report=True)
+        assert rep["rank"] == r
+        assert np.abs(Df - D).max() < 1e-12
