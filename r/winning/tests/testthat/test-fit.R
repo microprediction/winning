@@ -32,7 +32,10 @@ test_that("a degraded cov= fit is announced where it cannot be routed", {
   # one failure mode that looks like an answer.
   set.seed(3)
   n <- 8
-  V <- matrix(rnorm(n * 3), n, 3)
+  # exactly 5-factor (#1051): the original 3-factor field degenerated only
+  # because the stage-one alternation stalled at its sweep cap; it is now
+  # fitted exactly at rank 3 and is no longer degraded
+  V <- matrix(rnorm(n * 5), n, 5)
   d <- 0.05 + runif(n)
   S <- V %*% t(V) + diag(d)
   s <- sqrt(diag(S))
@@ -69,7 +72,10 @@ test_that("a degraded cov= fit is routed to GHK, forward and inverse", {
   # different races, which is python's #164.
   set.seed(3)
   n <- 8
-  V <- matrix(rnorm(n * 3), n, 3)
+  # exactly 5-factor (#1051): the original 3-factor field degenerated only
+  # because the stage-one alternation stalled at its sweep cap; it is now
+  # fitted exactly at rank 3 and is no longer degraded
+  V <- matrix(rnorm(n * 5), n, 5)
   d <- 0.05 + runif(n)
   S <- V %*% t(V) + diag(d)
   s <- sqrt(diag(S))
@@ -122,7 +128,10 @@ test_that("degradation is judged against the clamp close_fit actually uses", {
   # unchanged.
   set.seed(3)
   n <- 8
-  V <- matrix(rnorm(n * 3), n, 3)
+  # exactly 5-factor (#1051): the original 3-factor field degenerated only
+  # because the stage-one alternation stalled at its sweep cap; it is now
+  # fitted exactly at rank 3 and is no longer degraded
+  V <- matrix(rnorm(n * 5), n, 5)
   S <- V %*% t(V) + diag(0.05 + runif(n))
   s <- sqrt(diag(S))
   C <- S / outer(s, s)
@@ -396,4 +405,57 @@ test_that("fit_covariance is invariant to a common shift", {
   f1 <- suppressWarnings(fit_covariance(C0 + 1))
   f2 <- suppressWarnings(fit_covariance(C0 + 1e6))
   expect_equal(f2$D, f1$D, tolerance = 1e-8)
+})
+
+test_that("an exact rank-1-plus-diagonal matrix is fitted exactly (#1051)", {
+  # the alternation converges linearly and at n = 5 ran out of sweeps,
+  # leaving projected residuals up to 0.014 over these 40 draws; a start
+  # that hits the sweep cap is now finished by Gauss-Newton on the same
+  # objective, as in python
+  set.seed(1)
+  n <- 5
+  P <- diag(n) - 1 / n
+  worst <- 0
+  for (s in 1:40) {
+    V <- matrix(rnorm(n), n)
+    D <- runif(n, 0.2, 2)
+    C <- V %*% t(V) + diag(D)
+    f <- fit_covariance(C, k = 1L, m = 0L, blocks = 1L, nodes = 32L)
+    worst <- max(worst, max(abs(P %*% (C - tcrossprod(f$V) - diag(f$D)) %*% P)))
+    expect_false(f$degraded)
+  }
+  expect_lt(worst, 1e-12)
+})
+
+test_that("the polish matches python and leaves converged fits alone (#1051)", {
+  # python's seed-6 field (numpy default_rng(6)): fit_covariance there
+  # recovers D to 1e-10; the port must too
+  V <- c(1.0531157544867582, 1.776491303816993, -2.5532918384570134,
+         -0.13796506137840808, 1.0137194090532766)
+  D <- c(0.793934219693825, 1.42385179009524, 0.4213502747969421,
+         0.2931126175707954, 1.7303444242558168)
+  C <- tcrossprod(V) + diag(D)
+  f <- fit_covariance(C, k = 1L, m = 0L, blocks = 1L, nodes = 32L)
+  expect_lt(max(abs(f$D - D)), 1e-10)
+  # a fit that stops on its own never reaches the polish
+  expect_false(.factor_model_projected(diag(c(1, 2, 3, 4, 5, 6)), 3L)$hit_cap)
+})
+
+test_that("a polished cov= fit is priced at least as well as the stall (#1051)", {
+  # the polished fit replaces a stalled one that had often degenerated
+  # and been routed to GHK; up to 15 runners its race now goes to GHK at
+  # 2^14 nodes, and the inverse inverts that same map
+  set.seed(3)
+  n <- 8
+  V <- matrix(rnorm(n * 3), n, 3)
+  C <- V %*% t(V) + diag(0.2 + runif(n))
+  f <- fit_covariance(C)
+  expect_true(f$polished)
+  expect_false(f$degraded)
+  mu <- seq(-0.5, 0.5, length.out = n)
+  p <- race_probabilities(mu, cov = C)
+  expect_identical(p, .ghk_race(mu, C, budget = 16384L)$p)
+  mu_back <- abilities_from_race(p, cov = C)
+  expect_lt(max(abs(mu_back - (mu - mean(mu)))), 1e-6)
+  expect_false(fit_covariance(diag(c(1, 2, 3, 4, 5, 6)))$polished)
 })

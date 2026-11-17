@@ -381,7 +381,8 @@ def test_a_declared_option_gap_is_a_loud_gap():
     assert "warning(" in r_races
     for fn in ("race_probabilities <- function", "abilities_from_race <- function"):
         i = r_races.index(fn)
-        assert ".warn_degraded_cov(fit," in r_races[i:i + 1400], fn
+        # (window widened for #1051's routing budget line)
+        assert ".warn_degraded_cov(fit," in r_races[i:i + 1600], fn
 
 
 def test_python_and_r_reject_unknown_keywords_by_language():

@@ -1415,6 +1415,12 @@ def _refine_grid(x, sd, V, points, stacklevel=2, fn=None):
     return x, points
 
 
+_GHK_BUDGET = 4096         # _race_dense's default budget
+_COV_DENSE_N = 15          # #1051: see _fit_cov
+_COV_DENSE_LOG2 = 14       # #1051: GHK budget (log2) for a polished fit
+_COV_POLISHED_NODES = 12   # #1051: log2 factor nodes, other polished fits
+
+
 def _fit_cov(cov, structure, V, D, stacklevel=2, will_route=False):
     """Fit a dense cov= to the factor grammar, with the accuracy warnings.
 
@@ -1425,11 +1431,14 @@ def _fit_cov(cov, structure, V, D, stacklevel=2, will_route=False):
     reproduces cov badly (residual warnings), or it reproduces cov by
     degenerating to full rank with D on its floor (quadrature cannot
     resolve it). A caller that can route around a degraded fit passes
-    will_route=True and gets no warnings, because it will not use the fit.
+    will_route=True and gets no warnings, because it will not use the fit;
+    with will_route=True a truthy `degraded` is the GHK node budget to
+    route with (4096, or 2^14 for a polished fit of up to 15 runners,
+    #1051).
     """
     if structure is not None or V is not None or D is not None:
         raise ValueError("cov= replaces structure=/V=/D=; pass one only")
-    from .core import fit_covariance
+    from .core import fit_covariance, qmc_nodes
     import warnings
     with warnings.catch_warnings():
         # this function words the contrast warning itself, and says
@@ -1446,8 +1455,27 @@ def _fit_cov(cov, structure, V, D, stacklevel=2, will_route=False):
     misfit = (report.get("contrast_residual_max", 0.0) > 0.05
               or report["projected_residual_max"] > 0.05)
     degraded = degenerate or misfit
+    # #1051: a fit whose stage-one start ran out of sweeps and was
+    # finished by Gauss-Newton ("polished") replaces one that had
+    # stalled, and the stalled fit had often degenerated and been routed
+    # to GHK. Priced on the 2^11 factor nodes, the finished fits moved
+    # up to 5.7e-4 off a 2^21-node GHK reference where the stalled ones
+    # had been within 4.5e-5. So a polished fit's routable race goes to
+    # GHK at 2^_COV_DENSE_LOG2 nodes up to _COV_DENSE_N runners, and
+    # otherwise the fit is priced on 2^_COV_POLISHED_NODES factor nodes.
+    # Measured on two 360-covariance sweeps (221 polished fits) against
+    # alternatives from more factor nodes for every fit to GHK at 2^16:
+    # 4 of the 221 came out worse than the stalled fit, by at most 1.5e-5,
+    # at about 1.1x main's cov= time in total (worst call 0.36 s -> 1.5 s
+    # at n = 10; GHK at 2^16 for every fit cost up to 11x). Every other fit is
+    # priced exactly as before. The returned route is the GHK budget,
+    # so the inverse inverts the same map (#164).
+    if report.get("polished", False) and not degraded:
+        if will_route and n <= _COV_DENSE_N:
+            return V, D, F, W, 2 ** _COV_DENSE_LOG2
+        F, W = qmc_nodes(V.shape[1], m=_COV_POLISHED_NODES, seed=0)
     if will_route and degraded:
-        return V, D, F, W, True
+        return V, D, F, W, _GHK_BUDGET
     if degenerate:
         # The residual checks below judge how well V V' + D reproduces
         # cov, and they do fire on a dense cov the grammar fits badly. The
@@ -1505,7 +1533,7 @@ def _fit_cov(cov, structure, V, D, stacklevel=2, will_route=False):
     return V, D, F, W, degraded
 
 
-def _race_dense(mu, cov, budget=4096, seed=0, return_slopes=False,
+def _race_dense(mu, cov, budget=_GHK_BUDGET, seed=0, return_slopes=False,
                 log=False):
     """The dense-covariance race by scrambled-Sobol GHK: exact structure not
     required, deterministic at a fixed seed, smooth in its inputs.
@@ -1741,7 +1769,11 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
         V, D, F, W, degraded = _fit_cov(cov, structure, V, D, stacklevel=3,
                                         will_route=routable)
         if degraded and routable:
-            return _race_dense(mu, cov)
+            # _race_dense floats mu as given: check it first, as the
+            # factor path does, so a masked or complex ability is refused
+            # on this route too (#914)
+            return _race_dense(_as_abilities(mu), cov,
+                               budget=int(degraded))
     if structure is not None:
         # structure= DESCRIBES the covariance; V/D/F/W describe it too,
         # and passing both asked two questions and answered one of them
@@ -2039,6 +2071,7 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
                                         will_route=routable)
         if degraded and routable:
             dense = np.asarray(cov, dtype=float)
+            dense_budget = int(degraded)
     if structure is not None:
         from .structures import Factor, Independent
         if isinstance(structure, Independent):
@@ -2240,12 +2273,28 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
         scale = float(np.sqrt(np.mean(np.diag(dense))))
         mu = -(logt - logt.mean()) / 2.0 * scale
 
-        def _dense_fwd(m):
-            lp, dl = _race_dense(m, dense, return_slopes=True, log=True)
-            return lp - logt, np.minimum(dl, -1e-6 / scale)
+        def _dense_fwd_at(budget):
+            def _dense_fwd(m):
+                lp, dl = _race_dense(m, dense, budget=budget,
+                                     return_slopes=True, log=True)
+                return lp - logt, np.minimum(dl, -1e-6 / scale)
+            return _dense_fwd
 
+        iters0 = 0
+        if dense_budget > _GHK_BUDGET:
+            # a polished fit routed at a larger budget (#1051): the
+            # sweeps first converge on the cheap 4096-node map, whose
+            # root is within its quadrature error of the target map's,
+            # and only then on the map the forward prices with -- the
+            # answer is that map's root either way, at a few of its
+            # sweeps rather than all of them
+            mu, _, _, iters0 = _jacobi_sweeps(
+                mu, _dense_fwd_at(_GHK_BUDGET), scale, alpha,
+                max(n_iter, 120), tol)
         mu, converged, resid_max, iters = _jacobi_sweeps(
-            mu, _dense_fwd, scale, alpha, max(n_iter, 120), tol)
+            mu, _dense_fwd_at(dense_budget), scale, alpha, max(n_iter, 120),
+            tol)
+        iters += iters0
         return _inverse_return(mu, converged, resid_max, iters, floored,
                                tol, return_info)
 

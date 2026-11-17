@@ -73,8 +73,30 @@
   the same projected objective. An exact rank-1-plus-diagonal Sigma at
   n = 5 was left at projected residuals up to 2e-3 and now fits to
   rounding. Fits that converged on their own are bitwise unchanged
-  (#1018). `fit_covariance` (behind `cov=`) still runs the capped
-  alternation alone and can stall the same way; tracked in #1051.
+  (#1018).
+- `fit_covariance` (python and R; behind `race_probabilities(cov=)`,
+  the posterior refit and `top_k` intake) applies the same polish to a
+  stage-one start that ran out of sweeps. The polished start replaces
+  the fit only if the final projected residual is strictly lower in its
+  largest entry and no higher in Frobenius norm; otherwise, and for
+  every start that stopped on its own, the fit is bitwise unchanged. An
+  exact rank-1-plus-diagonal C at n = 5 was left at projected residuals
+  up to 1.5e-3 and now fits to rounding, with python and R agreeing to
+  1e-14. The report gains `polished`. A polished fit replaces a stalled
+  one that had often degenerated and been routed to GHK, and priced on
+  the 2^11 factor nodes it could be less accurate than the stall had
+  been (up to 5.7e-4 off a 2^21-node GHK reference against 4.5e-5). So
+  `race_probabilities(cov=)` and `abilities_from_race(cov=)` route a
+  polished fit of up to 15 runners to GHK at 2^14 nodes, and price a
+  larger one (or a call that needs the factor form) on 2^12 factor
+  nodes (4096 Halton nodes in R). Every other fit is priced bitwise as
+  before. On two 360-covariance sweeps the changed prices (python 95
+  and 100, R 103 and 102) cut the median error by 3x or more in every
+  family; 4 python and 1 R price came out worse than before, by at most
+  1.5e-5. cov= pricing over the sweep takes 1.1x as long in python
+  (worst call 0.015 s -> 0.05 s) and 1.2x in R; the inverse 1.1x in
+  python (worst call 0.36 s -> 1.5 s) and up to 2.6x per call in R
+  (#1051).
 
 ## 1.7.0 (2026-10-31)
 

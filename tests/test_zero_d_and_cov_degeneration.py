@@ -79,10 +79,13 @@ def _exact_factor_corr(n, r, seed):
 
 
 def test_cov_warns_when_the_fit_degenerates():
-    """Exactly 3-factor at n=8 (#118): the fit goes to full rank with D on
-    the floor, reproduces cov to ~1e-6, and prices 6.6e-3 off the exact
-    V/D answer -- the case the residual checks cannot see."""
-    C = _exact_factor_corr(8, 3, seed=8)
+    """Exactly 5-factor at n=8 (#118): the rank-3 fit goes to full rank
+    with D on the floor and reproduces cov to ~1e-6 -- the case the
+    residual checks cannot see. (The original fixture was exactly
+    3-factor; that degeneration was the stage-one alternation stalling at
+    its sweep cap, and since #1051 the fit recovers it exactly at rank 3,
+    so it no longer exercises this warning.)"""
+    C = _exact_factor_corr(8, 5, seed=8)
     mu = np.linspace(-0.5, 0.5, 8)
     # the forward normal race now ROUTES around a degraded fit and says
     # nothing; a call that needs the factor form (slopes) keeps the fit
