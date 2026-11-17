@@ -206,6 +206,17 @@ def _factor_model_projected_run(C, k, n_outer=60, D0=None):
     V = np.zeros((n, k))
     Q = None
     best = (V, D, _projected_sq(C, V, D))
+    # The stopping tolerance is on D, a variance, so it carries the scale
+    # of C: an absolute 1e-12 stopped a Sigma scaled by 1e-12 after one
+    # sweep (relative residual 0.12 against 6e-5 at n = 5, k = 4, #1052).
+    # The scale is fit_covariance's power of four, so every C with mean
+    # variance in about [0.7, 1.4) -- correlation matrices, and every
+    # fit_covariance call, which works at that scale -- keeps 1e-12
+    # exactly, and the fit of 4^j C stops on the same sweep as the fit
+    # of C.
+    md = float(np.mean(np.diag(C)))
+    tol = np.ldexp(1e-12, 2 * int(np.round(np.log2(md) / 2.0))) \
+        if md > 0 else 1e-12
     for it in range(n_outer):
         # V-step: top-k eigenpairs of P (C - diag D) P. Conjugation by P
         # is double centering (O(n^2)), and the eigenpairs come from
@@ -231,7 +242,7 @@ def _factor_model_projected_run(C, k, n_outer=60, D0=None):
             hit_cap = False
             break
         best = (V, D_new, obj)
-        if np.abs(D_new - D).max() < 1e-12:
+        if np.abs(D_new - D).max() < tol:
             D = D_new
             hit_cap = False
             break

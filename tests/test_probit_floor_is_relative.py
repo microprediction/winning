@@ -81,3 +81,23 @@ def test_unit_scale_is_untouched():
     # parameters than equations, so exact solutions form a family and
     # D.sum() moves by 2.5e-6 within it; the floor is not involved.
     assert float(D.sum()) == pytest.approx(4.8501846385, abs=1e-8)
+
+
+@pytest.mark.parametrize("n, k, seed", [(5, 4, 0), (6, 2, 1), (8, 2, 2)])
+def test_alternation_stop_scales_with_the_covariance_1052(n, k, seed):
+    """The alternation stopped when D moved by an ABSOLUTE 1e-12, so a
+    Sigma scaled by 1e-12 stopped after one sweep (relative projected
+    residual 0.12 against 6e-5 at n = 5, k = 4). The tolerance now
+    carries fit_covariance's power-of-four scale, so the fit of 4^j C is
+    the fit of C scaled, bit for bit, and unit-scale fits are as before."""
+    from winning.factor.core import factor_model_projected
+    rng = np.random.default_rng(seed)
+    A = rng.normal(size=(n, n))
+    C = A @ A.T / n
+    C = C / np.mean(np.diag(C))
+    V0, D0 = factor_model_projected(C, k)
+    for j in (-20, -6, 6):
+        s = 4.0 ** j
+        V, D = factor_model_projected(s * C, k)
+        assert np.array_equal(D, s * D0)
+        assert np.array_equal(V @ V.T, s * (V0 @ V0.T))

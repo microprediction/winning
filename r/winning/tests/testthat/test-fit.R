@@ -331,7 +331,12 @@ test_that("near-singular contrasts survive the closing floor (#407)", {
   # at n = 3, only the choice-relevant contrasts are)
   C2 <- diag(c(1e-6, 1e-6, 1, 100, 100))
   f2 <- fit_covariance(C2)
-  expect_lt(f2$contrast_residual, 1e-5)
+  # 2.1e-5, python's value on the same field: at k = 3 the diagonal has
+  # many exact fits and the alternation lands on one with large loadings,
+  # whose cancellation costs the tiny contrast its last digits. The 9e-8
+  # this once showed came from the alternation's absolute stop at mean
+  # variance 40, a scale artefact (#1052); the #407 failure was 0.48.
+  expect_lt(f2$contrast_residual, 5e-5)
   expect_true(all(f2$clamp == 1e-3 * pmax(diag(C2), 1e-6 * mean(diag(C2)))))
 })
 
@@ -458,4 +463,20 @@ test_that("a polished cov= fit is priced at least as well as the stall (#1051)",
   mu_back <- abilities_from_race(p, cov = C)
   expect_lt(max(abs(mu_back - (mu - mean(mu)))), 1e-6)
   expect_false(fit_covariance(diag(c(1, 2, 3, 4, 5, 6)))$polished)
+})
+
+test_that("the alternation's stop scales with the covariance (#1052)", {
+  # an absolute 1e-12 on D stopped a Sigma scaled by 1e-12 after one sweep;
+  # with the power-of-four scale the fit of 4^j C is the fit of C, scaled
+  set.seed(1)
+  A <- matrix(rnorm(25), 5, 5)
+  C <- A %*% t(A) / 5
+  C <- C / mean(diag(C))
+  f0 <- winning:::.factor_model_projected(C, 4L)
+  for (j in c(-20, -6, 6)) {
+    s <- 4^j
+    f <- winning:::.factor_model_projected(s * C, 4L)
+    expect_identical(f$D, s * f0$D)
+    expect_equal(f$V %*% t(f$V), s * (f0$V %*% t(f0$V)), tolerance = 1e-12)
+  }
 })

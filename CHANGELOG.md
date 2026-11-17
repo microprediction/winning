@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- `factor_model_projected` and `probit.fit_factor_model` (python and R)
+  fit a scaled covariance as well as an unscaled one. The alternation
+  stopped when D moved by an absolute 1e-12, so a Sigma scaled by 1e-12
+  stopped after one sweep, with relative projected residual 0.12 against
+  6e-5 at n = 5, k = 4. The tolerance now carries the power-of-four scale
+  `fit_covariance` already uses, so the fit of 4^j C is exactly the fit
+  of C scaled (R fits at that unit scale and scales back, which also
+  covers its absolute NNLS thresholds). Covariances with mean variance in
+  about [0.7, 1.4), including every correlation matrix and every python
+  `fit_covariance` fit, are bitwise unchanged. R's `fit_covariance` away
+  from unit scale now fits as python does at every scale: on
+  diag(1e-6, 1e-6, 1, 100, 100) its contrast residual is python's 2.1e-5,
+  where the old absolute stop happened to give 9e-8 at that scale and
+  the same 2.1e-5 at unit scale (#1052).
 - `ranking_loglik_and_score` no longer jumps at its two node-rule
   switches. A loading moved by 1e-9 across the fixed-to-adaptive gate
   (sharpness * sqrt(k) = 2) or the Gauss-Hermite-to-Sobol gate

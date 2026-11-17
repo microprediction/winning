@@ -57,6 +57,19 @@
 }
 
 .factor_model_projected <- function(C, k, n_outer = 60L, D0 = NULL) {
+  # Fit at unit scale and scale back (#1052, python's fit_covariance rule,
+  # #101): the stop on D and the NNLS thresholds are absolute, so a Sigma
+  # scaled by 1e-12 stopped after one sweep. The working scale is a power
+  # of four, so the rescaling is exact, the fit of 4^j C is the fit of C
+  # scaled, and every C with mean variance in about [0.7, 1.4) is fitted
+  # bitwise as before.
+  md <- mean(diag(C))
+  k2 <- if (md > 0) round(log2(md) / 2) else 0
+  if (k2 != 0) {
+    out <- .factor_model_projected(C / 4^k2, k, n_outer,
+                                   if (is.null(D0)) NULL else D0 / 4^k2)
+    return(list(V = out$V * 2^k2, D = out$D * 4^k2, hit_cap = out$hit_cap))
+  }
   n <- nrow(C)
   P <- diag(n) - 1 / n
   B <- qr.Q(qr(P))[, seq_len(n - 1), drop = FALSE]
