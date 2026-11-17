@@ -238,16 +238,34 @@ function midpointRule(Q) {
    each order is the one its side uses at the band's edge, so the band
    meets the unchanged rule outside it continuously at both ends. */
 const R1_BLEND_LO = 9.0, R1_BLEND_HI = 10.0;
-function rank1BlendRule(sharp) {
+/* The C1 smoothstep S(t) = t^2 (3 - 2t) and its slope 6 t (1 - t). */
+function smoothstep(t) {
+  return [t * t * (3.0 - 2.0 * t), 6.0 * t * (1.0 - t)];
+}
+/* slope: also dW/dsharp, node for node -- the weights move with the
+   sharpness and so with the sd that sets it (#783). A component of
+   mixture coefficient exactly zero is left out, as python's
+   as_factor_law drops it: its no-op nodes widened the race window and
+   at sharpness exactly 10 moved a share by 2.9 points (#783). */
+function rank1BlendRule(sharp, slope = false) {
   const t = (sharp - R1_BLEND_LO) / (R1_BLEND_HI - R1_BLEND_LO);
-  const w = t * t * (3.0 - 2.0 * t);
+  const [w, dS] = smoothstep(t);
   const g = hermiteNodes(1, 8 * R1_BLEND_LO);
   const m = midpointRule(8 * R1_BLEND_HI + 1);
-  return {
+  const dw = dS / (R1_BLEND_HI - R1_BLEND_LO);
+  const Q = m.W.length;
+  // kept in V's own axes, as python builds it
+  if (w === 1)
+    return { F: m.F, W: m.W, hermite: true, ...(slope && { dW: m.W.map(() => dw / Q) }) };
+  if (w === 0)
+    return { F: g.F, W: g.W, hermite: true, ...(slope && { dW: g.W.map(x => -dw * x) }) };
+  const rule = {
     F: g.F.concat(m.F),
-    W: g.W.map(x => (1.0 - w) * x).concat(m.W.map(() => w / m.W.length)),
-    hermite: true,   // kept in V's own axes, as python builds it
+    W: g.W.map(x => (1.0 - w) * x).concat(m.W.map(() => w / Q)),
+    hermite: true,
   };
+  if (slope) rule.dW = g.W.map(x => -dw * x).concat(m.W.map(() => dw / Q));
+  return rule;
 }
 
 /* Below the band the rank-one rule was Gauss-Hermite of order ceil(8 sharp),
@@ -258,35 +276,77 @@ function rank1BlendRule(sharp) {
    on (24, 25] GH(24) takes on GH(23) up to half weight; past 25 the
    parity-balanced pair GH(m-1)/2 + GH(m)/2 at order y = 5 sharp in
    [24, 34], sliding its lower half to GH(m+1) as y crosses (m, m+1); on
-   (71, 72] handed back to GH(72), the band's lower edge. */
+   (71, 72] handed back to GH(72), the band's lower edge. Each part is
+   (order, coefficient, d coefficient / d sharp); slope also returns
+   dW/dsharp (#783), zero where y is held at a clamp. */
 const R1_PAIR_FROM = 24, R1_PAIR_PER_SHARP = 5.0, R1_PAIR_CAP = 34;
-function rank1HermiteRule(sharp) {
-  const S = t => t * t * (3.0 - 2.0 * t);
+function rank1HermiteRule(sharp, slope = false) {
   const x = 8 * sharp, lo = R1_PAIR_FROM;
   let parts;
   if (x <= lo) {
-    const m = Math.floor(x), w = S(x - m);
-    parts = [[m, 1.0 - w], [m + 1, w]];
+    const m = Math.floor(x), [w, dS] = smoothstep(x - m), dw = 8 * dS;
+    parts = [[m, 1.0 - w, -dw], [m + 1, w, dw]];
   } else if (x <= lo + 1) {
-    const w = S(x - lo);
-    parts = [[lo - 1, 0.5 * w], [lo, 1.0 - 0.5 * w]];
+    const [w, dS] = smoothstep(x - lo), dw = 8 * dS;
+    parts = [[lo - 1, 0.5 * w, 0.5 * dw], [lo, 1.0 - 0.5 * w, -0.5 * dw]];
   } else {
-    const y = Math.min(Math.max(R1_PAIR_PER_SHARP * sharp, lo), R1_PAIR_CAP);
-    const m = Math.floor(y), w = S(y - m);
-    parts = [[m - 1, 0.5 * (1.0 - w)], [m, 0.5], [m + 1, 0.5 * w]];
+    const yRaw = R1_PAIR_PER_SHARP * sharp;
+    const y = Math.min(Math.max(yRaw, lo), R1_PAIR_CAP);
+    const dy = lo < yRaw && yRaw < R1_PAIR_CAP ? R1_PAIR_PER_SHARP : 0.0;
+    const m = Math.floor(y), [w, dS] = smoothstep(y - m), dw = dy * dS;
+    parts = [[m - 1, 0.5 * (1.0 - w), -0.5 * dw], [m, 0.5, 0.0],
+             [m + 1, 0.5 * w, 0.5 * dw]];
     const top = 8 * R1_BLEND_LO;
     if (x > top - 1) {
-      const v = S(x - (top - 1));
-      parts = parts.map(([q, c]) => [q, c * (1.0 - v)]).concat([[top, v]]);
+      const [v, dS2] = smoothstep(x - (top - 1)), dv = 8 * dS2;
+      parts = parts.map(([q, c, dc]) => [q, c * (1.0 - v), dc * (1.0 - v) - c * dv])
+        .concat([[top, v, dv]]);
     }
   }
-  const F = [], W = [];
-  for (const [q, c] of parts) {
+  // a part of zero coefficient has zero slope too (S is flat at both ends)
+  const F = [], W = [], dW = [];
+  for (const [q, c, dc] of parts) {
     if (!(c > 0.0)) continue;
     const g = hermiteNodes(1, q);
-    for (let i = 0; i < g.W.length; i++) { F.push(g.F[i]); W.push(c * g.W[i]); }
+    for (let i = 0; i < g.W.length; i++) {
+      F.push(g.F[i]); W.push(c * g.W[i]); dW.push(dc * g.W[i]);
+    }
   }
-  return { F, W, hermite: true };   // kept in V's own axes, as python builds it
+  // kept in V's own axes, as python builds it
+  return slope ? { F, W, hermite: true, dW } : { F, W, hermite: true };
+}
+
+/* How the AUTOMATIC rank-one rule moves with the sds (#783), python's
+   races._rank1_rule_sigma_slope. V gauge-centred and D validated, as
+   canonicalRule sees them. The nodes are fixed, but inside the smooth
+   intervals of the two rules above the weights W(sharp) move with
+   sharp = sqrt(2) max_i |V_i| / sigma_i, so with the sd of the runner j
+   attaining the max: dsharp/dsigma_j = -sharp/sigma_j, zero for the
+   rest. Returns { j, dsharp, F, dW } over the nodes whose weight moves,
+   or null where the rule is piecewise constant in sharp. A tie for the
+   max is a kink: the term goes to the FIRST runner attaining it (its
+   one-sided derivative as its sd falls; each other tied runner's column
+   is its one-sided derivative as its sd rises). */
+export function _autoRuleSigmaSlope(V, D) {
+  const n = V.length;
+  if (V[0].length !== 1) return null;
+  let sharp = 0, j = 0;
+  for (let i = 0; i < n; i++) {
+    const nv = Math.sqrt(V[i].reduce((a, b) => a + b * b, 0));
+    const ri = nv / Math.sqrt(Math.max(D[i], 1e-300));
+    if (ri > sharp) j = i;
+    sharp = Math.max(sharp, ri);
+  }
+  sharp *= Math.SQRT2;
+  let rule;
+  if (sharp > R1_BLEND_LO && sharp <= R1_BLEND_HI) rule = rank1BlendRule(sharp, true);
+  else if (Math.ceil(8 * sharp) > 80 || !(8 * sharp > 15)) return null;
+  else rule = rank1HermiteRule(sharp, true);
+  const F = [], dW = [];
+  for (let q = 0; q < rule.dW.length; q++)
+    if (rule.dW[q] !== 0) { F.push(rule.F[q]); dW.push(rule.dW[q]); }
+  if (!F.length) return null;
+  return { j, dsharp: -sharp / Math.sqrt(D[j]), F, dW };
 }
 
 function ruleFamily(V, D) {
@@ -1033,6 +1093,92 @@ function splitRaceSlopes(mu, { V, D, F, W, base, points }) {
   }
   const total = p.reduce((a, b) => a + b, 0);
   return slope.map(v => v / total);
+}
+
+/* The race AND its Jacobian on the kink-split lattice, one pass: python's
+   race_probabilities(..., kink_split=True) and
+   race_jacobian(..., kink_split=True) (polish._raw_and_derivative's
+   split branch). Raw masses a, A = da/dmu with the own coordinate
+   integrated, dT = column sums of A; p = a / T and J = (A - p dT') / T.
+   For polishRace on a kinked base only (#1011): the uniform lattice's
+   window slides across every runner's kink, so its derivative carries an
+   O(dx) artifact no fixed-grid Jacobian matches and the solver stalled;
+   on this lattice the pair is smooth and consistent. Not a public door:
+   the forward maps keep the uniform lattice by default. wantJ: false
+   returns p alone, O(n T) rather than O(n^2 T), bitwise the same p. */
+export function splitRaceJacobian(mu, { V, D, F, W, base, points }, wantJ = true) {
+  const st = setup(mu, V, D, F, W, base);
+  const n = st.mu.length;
+  const sd = st.D.map(Math.sqrt);
+  const Mall = condMeans(st.mu, st.V, st.F);
+  const { x } = forwardGrid(Mall, sd, st, points, "bulk", 1e-12);
+  const kinks = baseKinks(st.fn);
+  const a = new Array(n).fill(0), dT = new Array(n).fill(0);
+  const A = Array.from({ length: n }, () => new Array(n).fill(0));
+  const clip = v => Math.exp(Math.min(Math.max(v, -745), 40));
+  for (let q = 0; q < st.F.length; q++) {
+    const Mq = Mall[q], wq = st.W[q];
+    const { xs, ws } = kinkLattice(x, Mq, sd, kinks);
+    const T = xs.length;
+    const L = new Array(T).fill(0);
+    const logS = new Array(n), logf = new Array(n), fpA = new Array(n);
+    for (let i = 0; i < n; i++) {
+      const li = new Array(T), fi = new Array(T), fpi = new Array(T);
+      for (let t = 0; t < T; t++) {
+        const [S, f, fp] = st.fn((xs[t] - Mq[i]) / sd[i]);
+        li[t] = Math.log(Math.max(S, 1e-300));
+        fi[t] = Math.log(Math.max(f / sd[i], 1e-300));
+        fpi[t] = fp;
+        L[t] += li[t];
+      }
+      logS[i] = li; logf[i] = fi; fpA[i] = fpi;
+    }
+    if (!wantJ) {
+      // the same a[i] sum as below, without the hazards and A
+      for (let i = 0; i < n; i++) {
+        let ai = 0;
+        for (let t = 0; t < T; t++) ai += clip(logf[i][t] + L[t] - logS[i][t]) * ws[t];
+        a[i] += wq * ai;
+      }
+      continue;
+    }
+    const g = new Array(n), haz = new Array(n), own = new Array(n);
+    const G = new Array(T).fill(0);
+    for (let i = 0; i < n; i++) {
+      const gi = new Array(T), hi = new Array(T), oi = new Array(T);
+      const sd2 = sd[i] * sd[i];
+      for (let t = 0; t < T; t++) {
+        gi[t] = clip(logf[i][t] + L[t] - logS[i][t]);
+        hi[t] = clip(logf[i][t] - logS[i][t]);
+        oi[t] = -fpA[i][t] / sd2 * clip(L[t] - logS[i][t]);
+        G[t] += gi[t];
+      }
+      g[i] = gi; haz[i] = hi; own[i] = oi;
+    }
+    for (let i = 0; i < n; i++) {
+      let ai = 0, oi = 0, gh = 0, d = 0;
+      for (let t = 0; t < T; t++) {
+        ai += g[i][t] * ws[t];
+        oi += own[i][t] * ws[t];
+        gh += g[i][t] * haz[i][t] * ws[t];
+        d += ((G[t] - g[i][t]) * haz[i][t] + own[i][t]) * ws[t];
+      }
+      a[i] += wq * ai;
+      dT[i] += wq * d;
+      for (let j = 0; j < n; j++) {
+        let s = 0;
+        for (let t = 0; t < T; t++) s += g[i][t] * ws[t] * haz[j][t];
+        A[i][j] += wq * s;
+      }
+      // own coordinate, differentiated rather than imposed
+      A[i][i] += wq * (oi - gh);
+    }
+  }
+  const total = a.reduce((u, v) => u + v, 0);
+  const p = a.map(v => v / total);
+  if (!wantJ) return { p };
+  const J = A.map((row, i) => row.map((v, j) => (v - p[i] * dT[j]) / total));
+  return { p, J };
 }
 
 /* One exit for every inversion path, as python's _inverse_return: warn

@@ -868,6 +868,10 @@ def tree_race_probabilities(mu, cluster, loading, D, parent, strength,
     v = _scalar_loading(loading, "tree races", len(mu))
     cluster = np.asarray(cluster)
     _check_cluster(cluster, len(mu))                 # (#792)
+    # one leaf cluster: its common loading cancels, as in the block path;
+    # a +40 on every loading raised a mass defect (#1056)
+    v = np.asarray(_one_cluster_gauge(cluster, v, len(mu)),
+                   float).reshape(-1)
     parent = _as_parent(parent); lam = np.asarray(strength, float)
     n = len(m); nT = len(parent)
     _, inv = np.unique(cluster, return_inverse=True)
@@ -978,6 +982,10 @@ def tree_race_jacobian(mu, cluster, loading, D, parent, strength,
     v = _scalar_loading(loading, "tree races", len(mu))
     cluster = np.asarray(cluster)
     _check_cluster(cluster, len(mu))                 # (#792)
+    # one leaf cluster: its common loading cancels, as in the block path;
+    # a +40 on every loading raised a mass defect (#1056)
+    v = np.asarray(_one_cluster_gauge(cluster, v, len(mu)),
+                   float).reshape(-1)
     parent = _as_parent(parent); lam = np.asarray(strength, float)
     n = len(m); nT = len(parent)
     _, inv = np.unique(cluster, return_inverse=True)

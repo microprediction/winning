@@ -41,6 +41,10 @@ one. \code{top_k_jacobians}: list(Jmu, Jsigma) of n x n matrices
 dq/dmu (minus a graph Laplacian on the rank-k boundary: symmetric
 nonnegative off-diagonals, zero row sums) and dq/dsigma (satisfying
 the scale-gauge Euler identity mu . row_mu + sigma . row_sigma = 0).
+With \code{V} and \code{qa = NULL} the rank-one rule's weights move with
+the sharpness sqrt(2) max_i |V_i| / sigma_i on 15/8 < sharp <= 10, and
+\code{Jsigma} includes that term, in the column of the runner attaining
+the max (the first such runner at a tie).
 }
 \description{
 Exact membership probabilities at any depth by one shared

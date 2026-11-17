@@ -2,6 +2,39 @@
 
 ## Unreleased
 
+- `ranking_loglik_and_score`: rankings of length k >= 2 at rank 1 or 2
+  with loading sharpness s <= 2 and s*sqrt(k) > 2 now use adaptive
+  Gauss-Hermite, the same Qf tensor moved to each ranking's factor
+  posterior mode and scaled by its curvature. The fixed tensor's
+  threshold had been measured on a single choice; a k-stage ranking's
+  posterior is about sqrt(k) times narrower, so full rankings were
+  up to 0.09 nats off at J = 5 and 0.32 at J = 10, with loading scores
+  about half their true value. Worst error over 210 gated fields: 0.077
+  to 3.0e-4 nats, at 2-4x the cost of those observations. Length-1
+  orders, s*sqrt(k) <= 2, the Sobol branch and rank 0 are bitwise
+  unchanged (#1017).
+- `top_k_jacobians(V=...)` (python, browser `topKJacobians`, R, Julia)
+  differentiates the automatic rank-one factor rule's weights. Those
+  weights move with the sharpness sqrt(2) max_i |V_i| / sigma_i on
+  15/8 < sharp <= 10 (#850 interpolation and pair, #783 blend), so
+  `Jsigma` was missing a term there and disagreed with finite differences
+  of the forward (sharpness 8.9: -0.0024 against +0.187). It now matches
+  them to about 1e-9 in the column of the runner that sets the sharpness
+  (the first such runner at a tie). Forward prices, `Jmu`, inverses,
+  calls with an explicit `qa`, and `Jsigma` outside those intervals are
+  bitwise unchanged; inside them the Jacobian costs up to about two-thirds
+  more.
+  The browser rank-one blend also drops a component whose weight is
+  exactly zero, as python does: at sharpness exactly 10 its 72
+  zero-weight Gauss-Hermite nodes widened the race window, and a 1e-8
+  rescale of the loadings moved a race share by 2.9 points (#783).
+
+- `tree_race_probabilities` and `tree_race_jacobian` (python and R) now
+  centre a single leaf cluster's loading, as the block path and the
+  browser tree already did. With one cluster its shock reaches every
+  runner and cancels, but uncentred it widened the lattice: +40 on every
+  loading raised a mass defect, and the Jacobian moved by 0.019. Trees
+  with more than one cluster are bitwise unchanged (#1056).
 - `mvn_cdf_fast(sigma=)` (python, vendored `fastmvn`, R `mvtnormfast`,
   Julia `FactorMvNormalCDF`): `factorize_covariance` no longer accepts a
   Heywood fit, one whose residual variance sits at the 1e-12 floor. It
@@ -16,6 +49,25 @@
   law, which moves asymmetric rules by up to 0.92 of a share. Callers who
   reflected their nodes to compensate must remove that reflection.
   Automatic node rules are unchanged (#909).
+- `polish_race` (python, browser `polishRace`, R) on a kinked base
+  (laplace, `exponential_power_base` with beta < 2, a callable declaring
+  `kinks`) runs its forward, Jacobian and inversion of `p0` on the
+  kink-split lattice. On the uniform lattice the Jacobian was first-order
+  wrong, and SLSQP hit its iteration limit with `converged=False` on 4 of 6
+  capped laplace fields. The returned `p` is now
+  `race_probabilities(mu, ..., kink_split=True)`; `kink_split=False`
+  (browser `kinkSplit: false`) keeps the old lattice. Smooth bases and
+  the default `race_probabilities` / `race_jacobian` are bitwise
+  unchanged (#1011).
+- `dividends_from_prices` (python `winning.classic`, `StatePricer`, R)
+  maps a zero price -- a scratched runner -- to dividend `inf`, which
+  `prices_from_dividends` maps back to 0; it returned NaN/`NA`, which the
+  round trip read as a missing quote and revived at `nan_value`, so
+  `normalize_dividends` was not idempotent. An all-zero book is all
+  `inf` (python raised `ZeroDivisionError`). Simulated place prices from
+  `skew_normal_place_pricing` are `inf`, not NaN, for runners with zero
+  counts. NaN and negative prices, and all positive prices, are
+  unchanged (#1009).
 - `winning.probit.fit_factor_model` (and so `shares(..., Sigma=, k=)`)
   finishes fits whose alternation ran out of sweeps with Gauss-Newton on
   the same projected objective. An exact rank-1-plus-diagonal Sigma at

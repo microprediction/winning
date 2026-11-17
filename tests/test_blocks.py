@@ -493,6 +493,60 @@ def test_single_cluster_common_loading_is_a_gauge_471(c):
     assert np.abs(abilities_from_block_race(p0, cl, L + c, D)[0] - a0).max() < 1e-8
 
 
+# --- #1056: a one-leaf tree centres its loading, as the block path does ---
+
+_ONE_LEAF_TREES = [([-1], [0.0], None),          # the bare one-block race
+                   ([1, -1], [0.0, 0.8], None),  # a common root above it
+                   ([-1], [0.0], [7])]           # a named leaf label
+
+
+@pytest.mark.parametrize("c", [40.0, 50.0, 1e6])
+@pytest.mark.parametrize("parent,strength,leaves", _ONE_LEAF_TREES)
+def test_one_leaf_tree_common_loading_is_a_gauge_1056(c, parent, strength,
+                                                      leaves):
+    """With one leaf cluster its loading shock reaches every runner and
+    cancels. The block path and the browser's tree centred it (#471);
+    the python tree did not, so +40 on every loading raised a mass
+    defect (1.0094 at 40, 1071 at 1e6) and the Jacobian moved by 0.019."""
+    from winning.factor.blocks import tree_race_probabilities as F
+    from winning.factor.blocks import tree_race_jacobian as J
+    mu = np.array([-0.8, -0.3, 0.0, 0.2, 0.9])
+    cl, D = [7] * 5 if leaves else [0] * 5, [1.0] * 5
+    L = np.array([0.4, 0.2, 0.3, 0.5, 0.1])
+    kw = dict(leaves=leaves)
+    p0 = F(mu, cl, L, D, parent, strength, **kw)
+    J0 = J(mu, cl, L, D, parent, strength, **kw)
+    tol = 1e-12 if c < 100 else 1e-9   # L + 1e6 itself rounds L by 1e-10
+    p = F(mu, cl, L + c, D, parent, strength, **kw)
+    Jc = J(mu, cl, L + c, D, parent, strength, **kw)
+    assert np.abs(p - p0).max() < tol
+    assert np.abs(Jc - J0).max() < tol
+    # the one-block race it is, priced by the (already gauged) block path
+    assert np.abs(p - block_race_probabilities(mu, cl, L + c, D)).max() < 1e-14
+    assert np.abs(Jc - block_race_jacobian(mu, cl, L + c, D)).max() < 1e-14
+
+
+def test_one_leaf_tree_matches_dense_factor_reference_1056():
+    """Independent check: the centred one-leaf tree is the rank-one factor
+    race with the same covariance."""
+    from winning.factor.blocks import tree_race_probabilities
+    from winning.factor.races import race_probabilities
+    mu = np.array([-0.8, -0.3, 0.0, 0.2, 0.9])
+    L = np.array([0.4, 0.2, 0.3, 0.5, 0.1])
+    p = tree_race_probabilities(mu, [0] * 5, L + 40.0, [1.0] * 5, [-1], [0.0])
+    ref = race_probabilities(mu, V=(L - L.mean())[:, None], D=np.ones(5),
+                             points=4001)
+    assert np.abs(p - ref).max() < 1e-12
+
+
+def test_tree_gauge_leaves_several_clusters_alone_1056():
+    """With several leaf clusters a common loading part is a real
+    between-cluster effect: the gauge must not touch it."""
+    from winning.factor.blocks import _one_cluster_gauge
+    v = np.array([40.4, 40.2, 40.3, 40.5])
+    assert _one_cluster_gauge(np.array([0, 0, 1, 1]), v, 4) is v
+
+
 # --- #780: a scalar tree leaf loading is one loading for every runner ---
 
 def _tree_780():

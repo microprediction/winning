@@ -8,7 +8,7 @@ import { TINY, hermite1, solve, checkOpts, OPT_HINTS, asLoadings, asIdio,
          asAbilities, asFiniteVector, asIterations, asTolerance,
          jacobiSweeps, rescaledTarget, applyFloor, gaugeCenter, asPoints,
          kinkLattice, baseKinks } from "./core.mjs";
-import { BASES, _factorNodeRule, baseResolution, checkTails,
+import { BASES, _factorNodeRule, _autoRuleSigmaSlope, baseResolution, checkTails,
          lowerCdf, translatedHome, invNormalRational } from "./races.mjs";
 
 /* Each exported call declares its own option keys; see checkOpts in
@@ -639,7 +639,8 @@ export function topKJacobians(mu, k, opts = {}) {
   const n = mu.length;
   k = asDepth(k, n);
   if (V != null) {
-    // exact node mixture: the factor shift commutes with d/dmu, d/dsigma
+    // node mixture: given the nodes the factor shift commutes with
+    // d/dmu, d/dsigma (the moving rule weights are added below, #783)
     const { Vm, nodes, w } = factorNodes(V, n, qa, D);
     const Jmu = [], Jsigma = [];
     for (let i = 0; i < n; i++) {
@@ -658,6 +659,26 @@ export function topKJacobians(mu, k, opts = {}) {
           Jmu[i][j] += w[q] * node.Jmu[i][j];
           Jsigma[i][j] += w[q] * node.Jsigma[i][j];
         }
+    }
+    // The automatic rule's weights move with the sharpness, and so with
+    // the sd that sets it (#783): column j also carries
+    // (dsharp/dsigma_j) sum_q (dW_q/dsharp) q_ind(mu + V f_q), with the
+    // conditional memberships taken as the forward's raw mixture takes
+    // them. Nothing to add where the rule is piecewise constant, or for
+    // an explicit qa (a fixed rule). As python's _add_rule_sigma_slope.
+    if (qa === undefined) {
+      const Dv = asIdio(D, n);
+      const slope = _autoRuleSigmaSlope(Vm, Dv);
+      if (slope) {
+        const sd = Dv.map(Math.sqrt), fn = baseFn(base);
+        const dq = new Array(n).fill(0);
+        for (let q = 0; q < slope.F.length; q++) {
+          const shifted = mu.map((m, i) => m + Vm[i][0] * slope.F[q][0]);
+          const node = topkWithSlopes(shifted, sd, k, fn, points).q;
+          for (let i = 0; i < n; i++) dq[i] += slope.dW[q] * node[i];
+        }
+        for (let i = 0; i < n; i++) Jsigma[i][slope.j] += slope.dsharp * dq[i];
+      }
     }
     return { Jmu, Jsigma };
   }

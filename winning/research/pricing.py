@@ -129,4 +129,8 @@ class StatePricer:
         out = np.full_like(p, np.nan, dtype=float)
         mask = p > 0
         out[mask] = 1.0 / (multiplicity * p[mask])
+        # a zero price (a scratch) is worth nothing: +inf, which
+        # prices_from_dividends maps back to 0. NaN read it as a missing
+        # quote and revived the scratch at nan_value (#1009)
+        out[p == 0] = np.inf
         return out

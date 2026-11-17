@@ -179,3 +179,35 @@ def test_fastrace_classic_density_needs_positive_mass():
     with pytest.raises(ValueError, match="positive mass"):
         fastrace.classic_exact_calibrate([0.0] * 7, [0.5, 0.5],
                                          [1.0, 0.0, -1.0], [0.0, 0.0], 3)
+
+
+_JS_TREE_1056 = r"""
+import { treeRaceProbabilities, treeRaceJacobian } from %s;
+console.warn = () => {};
+const mu = [-0.8, -0.3, 0.0, 0.2, 0.9], L = [0.4, 0.2, 0.3, 0.5, 0.1];
+const cl = [0, 0, 0, 0, 0], D = [1, 1, 1, 1, 1];
+const out = [40, 1e6].map(c => {
+  const a = [mu, cl, L.map(v => v + c), D, [-1], [0]];
+  return [treeRaceProbabilities(...a), treeRaceJacobian(...a)];
+});
+console.log(JSON.stringify(out));
+"""
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_one_leaf_tree_gauge_matches_browser_1056():
+    """The browser's tree centres a single cluster's loading (blockArgs);
+    python's raised a mass defect on the same field (#1056)."""
+    from winning.factor.blocks import tree_race_probabilities as F
+    from winning.factor.blocks import tree_race_jacobian as J
+    mod = Path(ROOT, "docs", "js", "winning", "blocks.mjs").as_uri()
+    run = subprocess.run([NODE, "--input-type=module", "-e",
+                          _JS_TREE_1056 % json.dumps(mod)],
+                         capture_output=True, text=True, check=True,
+                         timeout=300)
+    mu = np.array([-0.8, -0.3, 0.0, 0.2, 0.9])
+    L = np.array([0.4, 0.2, 0.3, 0.5, 0.1])
+    for c, (pj, Jj) in zip((40.0, 1e6), json.loads(run.stdout)):
+        a = (mu, [0] * 5, L + c, np.ones(5), [-1], [0.0])
+        np.testing.assert_allclose(F(*a), pj, atol=1e-14)
+        np.testing.assert_allclose(J(*a), Jj, atol=1e-13)
