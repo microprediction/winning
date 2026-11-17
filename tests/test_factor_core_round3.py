@@ -330,7 +330,7 @@ def test_ordered_k1_with_cov_routes_like_the_win_race():
     assert np.abs(p - q).max() == 0.0
     # #1051: this exact rank-3 field used to stall in the fit (full rank,
     # D on its floor) and so was routed to GHK. The fit now recovers the
-    # true D, and a polished fit this small is routed to GHK at 2^16
+    # true D, and a polished fit this small is routed to GHK at 2^14
     # nodes, so both doors still agree with the exact V/D lattice.
     from winning.factor.core import fit_covariance
     _, Df, _, _ = fit_covariance(C)

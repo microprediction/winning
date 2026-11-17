@@ -35,15 +35,16 @@
   the 2^11 factor nodes it could be less accurate than the stall had
   been (up to 5.7e-4 off a 2^21-node GHK reference against 4.5e-5). So
   `race_probabilities(cov=)` and `abilities_from_race(cov=)` route a
-  polished fit of up to 20 runners to GHK at 2^16 nodes, and price a
-  larger one (or a call that needs the factor form) on 2^13 factor
-  nodes (8192 Halton nodes in R). Every other fit is priced bitwise as
-  before. On two 360-covariance sweeps every changed price was at least
-  as accurate as before (python 95 and 100 changed, R 103 and 102). The
-  cost falls on polished fields: on the sweep, cov= pricing takes 1.6x
-  as long overall in python (worst call 0.016 s -> 0.19 s) and 1.9x in
-  R, and the inverse 2.2x in python with single calls up to 11x (17 s
-  at n = 20; R up to 78 s) (#1051).
+  polished fit of up to 15 runners to GHK at 2^14 nodes, and price a
+  larger one (or a call that needs the factor form) on 2^12 factor
+  nodes (4096 Halton nodes in R). Every other fit is priced bitwise as
+  before. On two 360-covariance sweeps the changed prices (python 95
+  and 100, R 103 and 102) cut the median error by 3x or more in every
+  family; 4 python and 1 R price came out worse than before, by at most
+  1.5e-5. cov= pricing over the sweep takes 1.1x as long in python
+  (worst call 0.015 s -> 0.05 s) and 1.2x in R; the inverse 1.1x in
+  python (worst call 0.36 s -> 1.5 s) and up to 2.6x per call in R
+  (#1051).
 
 ## 1.7.0 (2026-10-31)
 

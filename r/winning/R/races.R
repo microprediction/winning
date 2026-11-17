@@ -899,25 +899,21 @@ race_probabilities <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
 
 # The GHK budget a cov= fit is routed with, 0 for none (python
 # races._fit_cov). A degraded fit goes at 4096 nodes. A polished fit of
-# up to 20 runners (#1051) goes at 2^16: its stage-one start ran out of
+# up to 15 runners (#1051) goes at 2^14: its stage-one start ran out of
 # sweeps and was finished, and the stalled fit it replaces had often
-# degenerated and been routed; priced on the factor nodes instead, some
-# such fields lost an order of magnitude of accuracy, and at 2^16 every
-# polished field of python's two 360-covariance sweeps was priced at
-# least as accurately as before.
+# degenerated and been routed; on the 2048 factor nodes some such fields
+# priced an order of magnitude worse than the stall had.
 .cov_route_budget <- function(fit) {
   if (isTRUE(fit$degraded)) return(4096L)
-  if (isTRUE(fit$polished) && fit$n <= 20L) return(65536L)
+  if (isTRUE(fit$polished) && fit$n <= 15L) return(16384L)
   0L
 }
 
-# A polished fit that is not routed keeps the factor form on 4x the
-# nodes: on the n = 30 polished fields of the sweep the 2048 Halton
-# nodes priced up to 3.4x further off than the stalled fit had, 8192
-# priced every one closer (#1051; python uses 2^13 Sobol nodes).
+# A polished fit that is not routed keeps the factor form on twice the
+# nodes (#1051; python uses 2^12 Sobol nodes).
 .cov_fit_nodes <- function(fit) {
   if (isTRUE(fit$polished) && !isTRUE(fit$degraded))
-    return(.halton_normal_nodes(ncol(fit$V), 8192L))
+    return(.halton_normal_nodes(ncol(fit$V), 4096L))
   list(F = fit$F, W = fit$W)
 }
 

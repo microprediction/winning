@@ -1346,9 +1346,9 @@ def _refine_grid(x, sd, V, points, stacklevel=2, fn=None):
 
 
 _GHK_BUDGET = 4096         # _race_dense's default budget
-_COV_DENSE_N = 20          # #1051: see _fit_cov
-_COV_DENSE_LOG2 = 16       # #1051: GHK budget (log2) for a polished fit
-_COV_POLISHED_NODES = 13   # #1051: log2 factor nodes, other polished fits
+_COV_DENSE_N = 15          # #1051: see _fit_cov
+_COV_DENSE_LOG2 = 14       # #1051: GHK budget (log2) for a polished fit
+_COV_POLISHED_NODES = 12   # #1051: log2 factor nodes, other polished fits
 
 
 def _fit_cov(cov, structure, V, D, stacklevel=2, will_route=False):
@@ -1363,7 +1363,7 @@ def _fit_cov(cov, structure, V, D, stacklevel=2, will_route=False):
     resolve it). A caller that can route around a degraded fit passes
     will_route=True and gets no warnings, because it will not use the fit;
     with will_route=True a truthy `degraded` is the GHK node budget to
-    route with (4096, or 2^16 for a polished fit of up to 20 runners,
+    route with (4096, or 2^14 for a polished fit of up to 15 runners,
     #1051).
     """
     if structure is not None or V is not None or D is not None:
@@ -1390,21 +1390,18 @@ def _fit_cov(cov, structure, V, D, stacklevel=2, will_route=False):
     # stalled, and the stalled fit had often degenerated and been routed
     # to GHK. Priced on the 2^11 factor nodes, the finished fits moved
     # up to 5.7e-4 off a 2^21-node GHK reference where the stalled ones
-    # had been within 4.5e-5, and polished fits that were never routed
-    # traded node noise for node noise. On two 360-covariance sweeps
-    # (221 polished fits) routing the polished fit's race to GHK at
-    # 2^_COV_DENSE_LOG2 nodes up to _COV_DENSE_N runners priced every
-    # one at least as accurately as before; 2^14 or 2^15 nodes, n <= 15,
-    # or more factor nodes alone each left some worse. Every other fit
-    # is priced exactly as before. The returned route is the GHK budget,
+    # had been within 4.5e-5. So a polished fit's routable race goes to
+    # GHK at 2^_COV_DENSE_LOG2 nodes up to _COV_DENSE_N runners, and
+    # otherwise the fit is priced on 2^_COV_POLISHED_NODES factor nodes.
+    # Measured on two 360-covariance sweeps (221 polished fits) against
+    # alternatives from more factor nodes for every fit to GHK at 2^16:
+    # this prices no more slowly than before, and 4 of the 221 came out
+    # worse than the stalled fit, by at most 1.5e-5. Every other fit is
+    # priced exactly as before. The returned route is the GHK budget,
     # so the inverse inverts the same map (#164).
     if report.get("polished", False) and not degraded:
         if will_route and n <= _COV_DENSE_N:
             return V, D, F, W, 2 ** _COV_DENSE_LOG2
-        # larger polished fields, and calls that need the factor form,
-        # keep the fit on 4x the factor nodes (the V=/D= path's own
-        # Sobol budget): on the sweeps' n = 30 polished fields 2^11 nodes
-        # lost to the stalled fit in the R port, 2^13 did not
         F, W = qmc_nodes(V.shape[1], m=_COV_POLISHED_NODES, seed=0)
     if will_route and degraded:
         return V, D, F, W, _GHK_BUDGET
