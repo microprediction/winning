@@ -6,7 +6,7 @@ amssymb, amsthm, booktabs, graphicx, tikz, microtype, natbib, hyperref) are all 
 Live. Rebuild the zip with `python3 arxiv/make_zip.py` after editing paper.tex or the
 figure.
 
-Title: Win Nodes for Factor-Structured Gaussian Bayes Nets
+Title: Sampling-Free Inference with Win Nodes in Bayes Nets and Correlated Bandits
 Authors: Peter Cotton
 Primary category: stat.ML
 Cross-list: stat.CO, cs.LG, cs.AI

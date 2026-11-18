@@ -1,4 +1,4 @@
-# Win Nodes for Factor-Structured Gaussian Bayes Nets
+# Sampling-Free Inference with Win Nodes in Bayes Nets and Correlated Bandits
 
 The n-ary win node W = argmax_i X_i on Gaussian Bayes nets whose
 variables share a few factors: the forward query, its Jacobian, the
