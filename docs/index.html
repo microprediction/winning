@@ -70,26 +70,15 @@
     <h1>winning</h1>
     <p class="subtitle">A generalization of factor multinomial probit models that scales to millions of variables</p>
 
-    <p class="lead">This package prices the winner of many: N competitors whose
-      performances can be correlated through common factors, and for the
-      independent and factor grammars can follow any smooth noise
-      distribution (the block, nested and tree kernels are Gaussian, and
-      say so rather than silently ignoring a base). One pass over a
-      shared survival field gives all N win probabilities, and the same
-      field answers removal and photo-finish queries; complete all-pairs
-      tables of those have quadratic output size and are priced per
-      query. Calibration runs in the other direction, from
-      observed shares back to abilities. Factor probit, Luce's softmax and the
-      finite-temperature softmin are special cases of one parameterized
-      race.</p>
-
-    <div class="tag-row">
-      <span class="tag">one race, five grammars</span>
-      <span class="tag">O(QNL) shared field</span>
-      <span class="tag">photo-finish densities</span>
-      <span class="tag">Python &middot; R &middot; Rust</span>
-      <span class="tag">parity-locked ports</span>
-    </div>
+    <p class="lead">This package provides a novel fast algorithm for computing
+      probabilities of contests where performances are correlated and
+      margins (performance distributions) take almost any form. Moreover
+      the inverse operation of
+      calibrating location parameters is also handled, not to mention
+      other computations useful for econometrics at scale (probit with
+      millions of variables), rating systems,
+      <a href="https://allocation.microprediction.org/papers/thurstone-portfolios/paper.pdf">portfolio allocation</a>
+      and so forth.</p>
 
     <div class="fitter">
       <h2 style="margin-top:0">The model, live</h2>
@@ -219,21 +208,22 @@ remotes::install_github("microprediction/winning", subdir = "r/winning")</code><
         Supersedes the earlier
         <a href="./assets/pdf/factor_probit_share_calibration.pdf">share-calibration
         draft</a>.</li>
-      <li><a href="./assets/pdf/exact_pom_factor_gaussian.pdf">Deterministic
-        probabilities for Thompson sampling and entropy search</a> (2026, draft). The probability that an alternative
-        is truly best, declared intractable in reinforcement learning
-        and approximated there from marginal means and variances alone,
-        is a shared integral that quadrature evaluates in time linear in
-        the number of alternatives, at fixed factor rank and resolution,
-        whenever the posterior covariance is factor-plus-diagonal. Two
-        standard observation processes, common random numbers and
-        per-arm Gaussian observations, keep the posterior in that form
-        at every update. At a common nominal threshold, stopping on
-        this vector uses between a third and two-thirds of the
-        replicates of the marginal-only rules, and sampling from it
-        matches Thompson sampling's regret, as the occupancy identity
-        requires. Experiments under
-        <code>research/rs_crn/</code>.</li>
+      <li><a href="./assets/pdf/win_nodes.pdf">Sampling-free
+        inference with win nodes in Bayes nets and correlated
+        bandits</a> (2026, draft). When
+        the dependence among Gaussian variables runs through a few
+        shared factors, the probability that each variable is the
+        largest is computed deterministically, at a cost linear in the
+        number of variables at fixed factor rank and quadrature
+        resolution. The same computation gives the derivatives of these
+        probabilities and the likelihoods of an observed winner, a
+        quoted price and a published place. Under a posterior, the
+        probabilities are the action probabilities of Thompson
+        sampling. Experiments under <code>research/win_nodes/</code>
+        and <code>research/rs_crn/</code>. Supersedes the draft
+        <a href="./assets/pdf/exact_pom_factor_gaussian.pdf">Deterministic
+        probabilities for Thompson sampling and entropy search</a>
+        (first version September 1, 2026).</li>
       <li><a href="./assets/pdf/passk_posterior.pdf">A posterior predictive
         for pass@k</a> (2026, note). An independent evaluation of the
         published empirical-Bayes pass@k estimator on released rollout

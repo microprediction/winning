@@ -80,7 +80,7 @@ rprobit_fast <- function(df, covariates, r = NULL, Qf = 7L, Qz = NULL,
   nb <- ncol(X)
   nw <- sum(vapply(seq_len(r), function(cl) J - cl, 0L))
   if (is.null(Qz)) Qz <- .default_qz(J)
-  nodes <- .nodes3(Qf, Qz, r)
+  nodes <- .fit_nodes(Qf, Qz, r)
   # built only if the sharpness rule ever selects it (#388)
   nodes_sharp <- .lazy_sharp_nodes(r, 10L)
   memo <- new.env()

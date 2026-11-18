@@ -901,7 +901,7 @@ def _recentre_nodes(F, logW, logp):
 
 
 def _mixture_update(m, v, V, beta2, node_logp_grad, Qf=7, eps=1e-3,
-                    base="normal", nodes_log2=10):
+                    base="normal", nodes_log2=10, convex_event=True):
     """Shared engine of the correlated updates. For Gaussian priors,
     E[s_j | event] = m_j + v_j d log P / d m_j and
     Var[s_j | event] = v_j + v_j^2 d^2 log P / d m_j^2 hold for any
@@ -909,7 +909,14 @@ def _mixture_update(m, v, V, beta2, node_logp_grad, Qf=7, eps=1e-3,
     event probabilities over factor nodes, its gradient the posterior-
     node-weighted average of conditional gradients, and the diagonal
     curvature comes from central differences of that mixture gradient
-    (matching update_winner / update_ranking_exact's treatment)."""
+    (matching update_winner / update_ranking_exact's treatment).
+
+    convex_event says whether the event is a convex set of performances
+    (a winner, a top set, an ordered prefix: intersections of half-spaces).
+    Only then is P log-concave in m for a log-concave base, and only
+    then is positive curvature clipped as differencing noise. Top-k
+    membership for 1 < k < n is a union of such sets, and conditioning
+    on it can raise a rival's variance, so its curvature is kept."""
     m = np.asarray(m, dtype=float)
     v = np.asarray(v, dtype=float)
     V = _canonical_loadings(as_loadings(V, len(m)))   # #130
@@ -951,7 +958,8 @@ def _mixture_update(m, v, V, beta2, node_logp_grad, Qf=7, eps=1e-3,
         gp, _ = mixture(m + ej)
         gm, _ = mixture(m - ej)
         d2[j] = (gp[j] - gm[j]) / (2 * step[j])
-    d2 = _clamp_d2(d2, base)
+    if convex_event:
+        d2 = _clamp_d2(d2, base)
     v_new = _floor_v(v, v + v ** 2 * d2, frac=1e-4)          # #660
     return m_new, v_new, float(logZ)
 
@@ -1203,7 +1211,7 @@ def update_topk_correlated(m, v, member, k, V=None, beta2=1.0, Qf=7, eps=1e-3,
         q = max(q, 1e-300)
         return np.log(q), -row / q                     # d log q / d mm = -(dq/dmu)/q
     return _mixture_update(m, v, V, beta2, node, Qf=Qf, eps=eps, base=base,
-                           nodes_log2=nodes_log2)
+                           nodes_log2=nodes_log2, convex_event=(k == 1))
 
 
 def _topset_logp_grad(mm, D, top, points=2001):

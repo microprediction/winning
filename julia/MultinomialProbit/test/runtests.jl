@@ -634,7 +634,9 @@ end
     V4 = [-0.0107529507 1.80970562; -0.6565907660 0.00168241106;
           0.3133862710 0.0763054062; 0.3539574460 -1.88769344]
     ll = choice_loglik_and_score(mu4, V4, [4]; D = ones(4))[1]
-    @test abs(exp(ll) - 0.65440808) < 1e-6        # python reference, tilted rule
+    # python reference, tilted rule; 0.65440808 on the 7x7 factor tensor
+    # before #1060 (exact MVN 0.63607220)
+    @test abs(exp(ll) - 0.63991517) < 1e-6
     @test_throws DimensionMismatch choice_loglik_and_score(
         mu4, vcat(V4, [1.0 1.0]), [4]; D = ones(4))
     @test_throws DimensionMismatch choice_loglik_and_score(
@@ -996,4 +998,42 @@ end
     @test_throws ArgumentError choice_loglik_and_score(reshape(mu, 1, 4), V, [1]; D = Dmat)
     # the vector reading still runs
     @test isfinite(ghk_choice_logprob(mu, V, 1; D = [1.0, 9.0, 4.0, 16.0]))
+end
+
+@testset "factor tensor order rises with sharpness (#1060)" begin
+    # the exchangeable three-way race: 0.3296 / 0.3353 / 0.3353 on the
+    # fixed 7x7 tensor; exact 1/3
+    s3 = sqrt(3.0)
+    Vx = [2.0 0.0; -1.0 s3; -1.0 -s3]
+    for k in 1:3
+        ll = choice_loglik_and_score(zeros(1, 3), Vx, [k])[1]
+        @test abs(exp(ll) - 1 / 3) < 1.5e-3
+    end
+    # continuity across the ladder band's edges and inside it, and the
+    # score is the derivative of the returned value there
+    rng = Xoshiro(1060)
+    for r in (1, 2)
+        mu = randn(rng, 8, 5)
+        ch = rand(rng, 1:5, 8)
+        V0 = randn(rng, 5, r)
+        V0 ./= MP._smooth_sharpness(V0, ones(5))[1]
+        for edge in (0.8, 0.9, 1.0), eps in (1e-6, 1e-9)
+            lo = choice_loglik_and_score(mu, V0 .* (edge - eps), ch)
+            hi = choice_loglik_and_score(mu, V0 .* (edge + eps), ch)
+            @test abs(hi[1] - lo[1]) < 2e4 * eps
+            @test maximum(abs.(hi[3] .- lo[3])) < 2e4 * eps
+        end
+        for target in (0.85, 0.95, 1.5)
+            V = V0 .* target
+            g = choice_loglik_and_score(mu, V, ch)[3]
+            h = 1e-6
+            for i in 1:5, c in 1:r
+                Vp = copy(V); Vp[i, c] += h
+                Vm = copy(V); Vm[i, c] -= h
+                num = (choice_loglik_and_score(mu, Vp, ch)[1] -
+                       choice_loglik_and_score(mu, Vm, ch)[1]) / (2h)
+                @test abs(num - g[i, c]) < 1e-6
+            end
+        end
+    end
 end

@@ -199,6 +199,42 @@
   c(w = t * t * (3 - 2 * t), dw = 6 * t * (1 - t) / (hi - lo))
 }
 
+# The factor tensor's order rises with the loading sharpness (#1060,
+# python: winning.likelihood._FACTOR_LADDER_BAND). The fixed 7^r tensor
+# under-resolves the conditional choice probability, whose transitions
+# in f narrow like 1/sharpness: up to 0.16 nats off at smooth sharpness
+# 2.5-2.9 at rank 1 (0.061 at rank 2), and the exchangeable three-way
+# race priced 0.3296 against 1/3. Past smooth sharpness 1 the tensor has
+# 31 nodes per factor at rank 1 and 11 at rank 2, blended in with a C1
+# weight over 0.8-1.0 whose derivative the score carries. Below the band,
+# past the Sobol switch, at rank 0 and 3+, and for a Qf at or above the
+# high order, nothing changes.
+.factor_qf_high <- function(r) if (r == 1L) 31L else if (r == 2L) 11L else 0L
+
+.ladder_weight <- function(sharp) {
+  lo <- 0.8; hi <- 1.0
+  if (!(sharp > lo)) return(c(w = 0, dw = 0))
+  if (sharp >= hi) return(c(w = 1, dw = 0))
+  t <- (sharp - lo) / (hi - lo)
+  c(w = t * t * (3 - 2 * t), dw = 6 * t * (1 - t) / (hi - lo))
+}
+
+# The tensor a fit integrates on below the Sobol switch: .nodes3(Qf, Qz,
+# r), carrying in $high the ladder's higher-order tensor (built on first
+# use) when the rank has a ladder and Qf is below its order.
+.fit_nodes <- function(Qf, Qz, r) {
+  nodes <- .nodes3(Qf, Qz, r)
+  qh <- .factor_qf_high(r)
+  if (qh > 0L && Qf < qh) {
+    cache <- NULL
+    nodes$high <- function() {
+      if (is.null(cache)) cache <<- .nodes3(qh, Qz, r)
+      cache
+    }
+  }
+  nodes
+}
+
 # Lazily built sharp-regime rule: constructed on first use only.
 .lazy_sharp_nodes <- function(r, m = 10L) {
   cache <- NULL
@@ -328,7 +364,8 @@
 # set: logp (Tn), dmu (Tn x J), GV (Tn x J x r). `tilt` moves the
 # own-noise nodes (the Gauss-Hermite branch only: on a paired Sobol cloud
 # the change-of-measure weight is unbounded and QMC error grew tenfold).
-.mnp_terms <- function(mu, V, choice, nd, tilt = TRUE, want_grad = TRUE) {
+.mnp_terms <- function(mu, V, choice, nd, tilt = TRUE, want_grad = TRUE,
+                       split = 0L) {
   Tn <- nrow(mu); J <- ncol(mu); r <- ncol(V)
   Fq <- nd$F[, seq_len(r), drop = FALSE]
   xq <- nd$F[, r + 1L]
@@ -338,6 +375,9 @@
   logp <- numeric(Tn)
   dmu <- matrix(0, Tn, J)
   GV <- array(0, c(Tn, J, r))
+  # with split > 0, each observation's posterior mass on nodes 1..split
+  # and on the rest, each summed directly (#1060)
+  mass <- matrix(0, Tn, 2L)
   for (k_alt in seq_len(J)) {
     idx <- which(choice == k_alt)
     if (!length(idx)) next
@@ -374,6 +414,10 @@
     logp[idx] <- log(sig) + mx + log(pmax(rs, 1e-300))
     if (!want_grad) next
     omega <- pw / rs
+    if (split > 0L) {
+      mass[idx, 1L] <- rowSums(omega[, seq_len(split), drop = FALSE])
+      mass[idx, 2L] <- rowSums(omega[, -seq_len(split), drop = FALSE])
+    }
     if (tilt) {
       gp <- -z
       for (i in seq_len(R)) gp <- gp + lam[[i]]
@@ -398,7 +442,7 @@
       }
     }
   }
-  list(logp = logp, dmu = dmu, GV = GV)
+  list(logp = logp, dmu = dmu, GV = GV, mass = mass)
 }
 
 # J = 2 in closed form: P(k) = Phi(c / s), c = mu_k - mu_j,
@@ -513,13 +557,35 @@
     bw <- .blend_weight(sm$value)
     sharp_nd <- function()
       if (is.function(nodes_sharp)) nodes_sharp() else nodes_sharp
-    if (bw[["w"]] == 0) {
-      tr <- .mnp_terms(mu, V, choice, nodes, TRUE, want_grad)
+    # the factor ladder (#1060): nodes$high, when the fitter attached it,
+    # is the higher-order tensor used past smooth sharpness 1
+    lw <- c(w = 0, dw = 0)
+    if (bw[["w"]] < 1 && !is.null(nodes$high))
+      lw <- .ladder_weight(sm$value)
+    high_nd <- function()
+      if (is.function(nodes$high)) nodes$high() else nodes$high
+    gh <- if (lw[["w"]] == 1) high_nd() else nodes
+    if (lw[["w"]] > 0 && lw[["w"]] < 1) {
+      # inside the ladder band: one rule on the union of both tensors'
+      # nodes, weights (1 - u) W_lo and u W_hi; the weight's derivative
+      # comes from the posterior masses on the two node sets
+      u <- lw[["w"]]
+      nh <- high_nd()
+      nd <- list(F = rbind(nodes$F, nh$F),
+                 W = c((1 - u) * nodes$W, u * nh$W))
+      tr <- .mnp_terms(mu, V, choice, nd, TRUE, want_grad,
+                       split = length(nodes$W))
+      if (want_grad) {
+        gw <- (tr$mass[, 2L] / u - tr$mass[, 1L] / (1 - u)) * lw[["dw"]]
+        sgrad <- list(gw = gw, G = sm$grad)
+      }
+    } else if (bw[["w"]] == 0) {
+      tr <- .mnp_terms(mu, V, choice, gh, TRUE, want_grad)
     } else if (bw[["w"]] == 1) {
       tr <- .mnp_terms(mu, V, choice, sharp_nd(), FALSE, want_grad)
     } else {
       w <- bw[["w"]]
-      tg <- .mnp_terms(mu, V, choice, nodes, TRUE, want_grad)
+      tg <- .mnp_terms(mu, V, choice, gh, TRUE, want_grad)
       ts <- .mnp_terms(mu, V, choice, sharp_nd(), FALSE, want_grad)
       x1 <- log1p(-w) + tg$logp
       x2 <- log(w) + ts$logp

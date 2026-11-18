@@ -24,6 +24,24 @@
   diag(1e-6, 1e-6, 1, 100, 100) its contrast residual is python's 2.1e-5,
   where the old absolute stop happened to give 9e-8 at that scale and
   the same 2.1e-5 at unit scale (#1052).
+- `choice_loglik_and_score` (python, julia `MultinomialProbit`, R
+  `mlogitfast` and `rprobitfast`): the factor Gauss-Hermite tensor's
+  order now rises with the loading sharpness. The fixed 7^r tensor
+  under-resolved the conditional choice probability below the
+  sharpness-3 Sobol switch: against scipy's exact MVN on random J = 3-8
+  fields its worst error was 2.6e-3 nats at smooth sharpness 1-1.5 and
+  0.16 at 2.5-2.9 (rank 1; 0.061 at rank 2), and the exchangeable
+  three-way race priced 0.3296 / 0.3353 / 0.3353 against 1/3. Past
+  smooth sharpness 1 the tensor has 31 nodes per factor at rank 1 and 11
+  at rank 2, blended in with a C1 weight over (0.8, 1.0) whose derivative
+  the score carries. Worst error by band falls to 1.0e-4, 6.5e-5, 3.6e-4
+  and 6.0e-4 at rank 1 (sharpness 1-1.5, 1.5-2, 2-2.5, 2.5-2.9) and to
+  6.6e-5, 1.1e-3, 6.2e-3 and 1.1e-2 at rank 2; the exchangeable race
+  prices 0.3326 / 0.3338 / 0.3338, and its 15-degree rotation moves the
+  probabilities by 3.5e-3 instead of 1.4e-2. Calls at smooth sharpness
+  at most 0.8 or past 3.1, at rank 3 and above, or with Qf at or above
+  the new order are bitwise unchanged. Cost past the band is 1.7-2.0x at
+  rank 1 and 1.9-2.2x at rank 2, at most 2.8x inside it (#1060).
 - `ranking_loglik_and_score` no longer jumps at its two node-rule
   switches. A loading moved by 1e-9 across the fixed-to-adaptive gate
   (sharpness * sqrt(k) = 2) or the Gauss-Hermite-to-Sobol gate

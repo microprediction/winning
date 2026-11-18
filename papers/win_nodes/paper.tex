@@ -16,10 +16,10 @@
 
 \newtheorem{proposition}{Proposition}
 
-\title{\textbf{Win Nodes for Factor-Structured Gaussian Bayes Nets}}
+\title{\textbf{Sampling-Free Inference with Win Nodes\\ in Bayes Nets and Correlated Bandits}}
 \author{Peter Cotton}
 \date{\normalsize First version: September 1, 2026.\\ This version:
-November 9, 2026.}
+November 17, 2026.}
 
 \begin{document}
 \maketitle
@@ -425,10 +425,12 @@ prior variances differ, the average changes, and the reason is the
 prior, not the price.
 
 For example, let entrant 1 have a mean known
-exactly and entrant 2 a mean with a wide prior. A price that makes the
-two equally likely to win implies that entrant 2's mean equals entrant
-1's. The update moves entrant 2's mean to entrant 1's and leaves
-entrant 1's where it was, so the average moves.
+exactly and entrant 2 a mean with prior $N(\mu,v)$. A price that makes
+the two equally likely to win says that the market's noisy views of
+the two means are equal. The update moves entrant 2's mean toward
+entrant 1's, to $(2\tau^2\mu+vc)/(v+2\tau^2)$ when entrant 1's mean is
+$c$, and leaves entrant 1's where it was, so the average moves. Entrant
+2's variance falls to $2\tau^2v/(v+2\tau^2)$ and not to zero.
 
 The price model adds one parameter, the market noise $\tau^2$. To
 estimate it, take a history of races with prices, compute the
@@ -444,9 +446,8 @@ one; the inversion is agnostic about where the prices came from.
 
 A win node can now take two kinds of evidence about the same race, a
 price before it and the outcome after it. Two questions follow. How
-much is each worth on its own? And does using both improve on either,
-as it should if the two are conditionally independent given the
-means? A simulation measures the posterior after each kind of
+much is each worth on its own? And does using both improve on either?
+A simulation measures the posterior after each kind of
 evidence, and after both, against the truth, as follows.
 
 Prices are set before the race and the outcome is observed after it,
@@ -468,14 +469,22 @@ probability the posterior assigns to the winner of a second,
 independent running of the same race. Table~\ref{tab:price} reports
 the averages over the 400 races.
 
-Table~\ref{tab:price} answers both questions. The price is worth far
-more than one observed winner, which is a single draw from the
-outcome, and the posterior after both is tighter and scores better
-than after either alone. Between messages the belief is kept in the
-diagonal Gaussian family: the price posterior is exact and its
-diagonal is carried forward, and the winner message is projected to a
-diagonal Gaussian as in Section~\ref{sec:observed}, so the composed
-row is a moment-matched posterior, not the exact one.
+The price is worth far more than one observed winner, which is a
+single draw from the outcome. Adding the winner to the price improves
+both measures slightly. Contrast RMSE falls by $0.003$ with a paired
+standard error of $0.002$, and the log score rises by $0.015$ with a
+paired standard error of $0.009$. Neither difference is resolved at
+400 races.
+
+Between messages the belief is kept in the diagonal Gaussian family.
+The price posterior's means and marginal variances are exact. Its
+covariance is $0.2\,I+0.1\,\mathbf{1}\mathbf{1}^\top$, and only the
+diagonal, $0.3$, is carried forward. The variance of a contrast
+$m_i-m_j$ is then taken as $0.6$ where the exact value is $0.4$. This
+affects the log scores of both price rows and the winner update in
+the last row. The winner message is projected to a diagonal Gaussian
+as in Section~\ref{sec:observed}, so the composed row is a
+moment-matched posterior, not the exact one.
 
 \begin{table}[t]
 \centering
@@ -743,10 +752,19 @@ studied in \citet{cotton2026}. On ten posteriors from the experiments
 of Section~\ref{sec:applications}, raising the lattice from $257$ to
 $2{,}049$ points changes no entry by more than $4 \times 10^{-16}$,
 and replacing the default factor rule by $2^{15}$ scrambled-Sobol
-nodes changes no entry by more than $1.2 \times 10^{-6}$. Four
-million Monte Carlo draws differ from the computed probabilities by
-at most $0.6$ to $4 \times 10^{-4}$ per posterior, within about two of
-their own standard errors. No error bound is proved. The script is
+nodes changes no entry by more than $1.2 \times 10^{-6}$. Both are
+comparisons between numerical rules. Four million Monte Carlo draws
+differ from the computed probabilities by at most $0.6$ to
+$4 \times 10^{-4}$ per posterior, within about two of their own
+standard errors, which is too coarse to confirm agreement at
+$10^{-6}$.
+
+A three-alternative case has a closed form: means zero, one factor
+with loadings $(0,1,3)$ and residual variances $0.1$. There the
+default factor rule is in error by $2.3 \times 10^{-4}$, while refining
+the lattice changes the answer by less than $10^{-16}$. The factor
+rule, and not the lattice, limits the accuracy in that case. No error
+bound is proved. The script is
 \texttt{research/rs\_crn/exp3\_quadrature}.
 
 \section{Applications}
@@ -890,9 +908,10 @@ the prior. It is not a frequentist guarantee for a fixed $\theta$.
 For computed probabilities with $\|\hat p - p\|_\infty \le \eta$ at
 stopping, the error is at most $\delta + \eta$, and a threshold of
 $1 - \delta + \eta$ restores $\delta$. At the ten posteriors measured
-in Section~\ref{sec:checks}, $\|\hat p - p\|_\infty$ was about
-$10^{-6}$. That is a measurement at those posteriors and not a bound
-at every stopping time.
+in Section~\ref{sec:checks}, the default evaluator agreed with a
+$2^{15}$-node factor rule to about $10^{-6}$ per entry. That is
+agreement between two rules at those posteriors and not a bound on
+$\|\hat p - p\|_\infty$ at every stopping time.
 
 The threshold is nominal, and its true confidence level differs by
 rule. With two independent arms of equal posterior standard
@@ -1016,8 +1035,8 @@ independent funds). The
 comparison with counted posterior draws depends on rank. On the
 posteriors of the two experiments, where the centered loadings have
 rank at most two, one evaluation for a hundred alternatives takes
-about ten milliseconds and was measured accurate to $10^{-6}$ per entry
-at ten posteriors from the experiments.
+about ten milliseconds and agreed with a $2^{15}$-node factor rule to
+about $10^{-6}$ per entry at ten posteriors from the experiments.
 
 Counting draws for ten milliseconds gives about twenty thousand
 draws, which estimate an entry near $0.01$ to seven percent of
