@@ -210,13 +210,12 @@ def _factor_model_projected_run(C, k, n_outer=60, D0=None):
     # of C: an absolute 1e-12 stopped a Sigma scaled by 1e-12 after one
     # sweep (relative residual 0.12 against 6e-5 at n = 5, k = 4, #1052).
     # The scale is fit_covariance's power of four, so every C with mean
-    # variance in about [0.7, 1.4) -- correlation matrices, and every
+    # variance in [0.5, 2) -- correlation matrices, and every
     # fit_covariance call, which works at that scale -- keeps 1e-12
     # exactly, and the fit of 4^j C stops on the same sweep as the fit
     # of C.
-    md = float(np.mean(np.diag(C)))
-    tol = np.ldexp(1e-12, 2 * int(np.round(np.log2(md) / 2.0))) \
-        if md > 0 else 1e-12
+    tol = np.ldexp(1e-12,
+                   2 * _unit_scale_exponent(float(np.mean(np.diag(C)))))
     for it in range(n_outer):
         # V-step: top-k eigenpairs of P (C - diag D) P. Conjugation by P
         # is double centering (O(n^2)), and the eigenpairs come from
@@ -259,6 +258,17 @@ def _factor_model_projected_run(C, k, n_outer=60, D0=None):
     # new. The inner term keeps the floor positive for a runner whose
     # own variance is zero.
     return V, _projected_floor(C, D), hit_cap
+
+
+def _unit_scale_exponent(md):
+    """j with md / 4^j in [0.5, 2): the power of four the fitters work at
+    (#101, #1052). Rounded half UP, not numpy's half-to-even, so that it
+    moves by exactly one when md is multiplied by four, ties included: at
+    a mean variance of exactly 2 * 4^j half-to-even picked the wrong
+    power for every other j. 0 for a zero or non-finite md."""
+    if not (md > 0 and np.isfinite(md)):
+        return 0
+    return int(np.floor(np.log2(md) / 2.0 + 0.5))
 
 
 def _projected_floor(C, D):
@@ -742,9 +752,6 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
     the stage-one start ran out of sweeps and its Gauss-Newton finish
     replaced the fit (#1051).
     """
-    from scipy.cluster.hierarchy import fcluster, linkage
-    from scipy.spatial.distance import squareform
-
     k = _as_fit_rank(k, "k")
     m = _as_fit_rank(m, "m")
     C = _validate_covariance(C)
@@ -790,15 +797,25 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
     # variation (#101). The working scale is a power of FOUR, so C / s
     # and sqrt(s) are exact in binary and the fit of s * C is the fit of
     # C, bit for bit, scaled.
-    md = float(np.mean(np.diag(C)))
-    k2 = int(np.round(np.log2(md) / 2.0)) if md > 0 else 0
-    if k2 != 0:
-        out = fit_covariance(np.ldexp(C, -2 * k2), k=k, m=m,
-                             blocks=blocks if labels is None else labels,
-                             nodes_log2=nodes_log2, seed=seed,
-                             return_report=return_report)
-        Vu, Du = out[0], out[1]
-        return (np.ldexp(Vu, k2), np.ldexp(Du, 2 * k2)) + tuple(out[2:])
+    k2 = _unit_scale_exponent(float(np.mean(np.diag(C))))
+    # the scaled matrix goes straight to the fitter: it is already
+    # validated and shift-free, and a second shift removal is not a no-op
+    # when the first restored an over-removed part (#1052)
+    out = _fit_covariance_unit(np.ldexp(C, -2 * k2), n, k, m, blocks,
+                               labels, nodes_log2, seed, return_report)
+    if k2 == 0:
+        return out
+    Vu, Du = out[0], out[1]
+    return (np.ldexp(Vu, k2), np.ldexp(Du, 2 * k2)) + tuple(out[2:])
+
+
+def _fit_covariance_unit(C, n, k, m, blocks, labels, nodes_log2, seed,
+                         return_report):
+    """fit_covariance's stages on a validated, shift-free C at unit
+    scale (mean variance in [0.5, 2))."""
+    from scipy.cluster.hierarchy import fcluster, linkage
+    from scipy.spatial.distance import squareform
+
     s = np.sqrt(np.clip(np.diag(C), 1e-12, None))
     corr = C / np.outer(s, s)
     kk = min(k, n - 1)

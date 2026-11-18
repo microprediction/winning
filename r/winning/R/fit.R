@@ -56,6 +56,14 @@
   pmax((c0 - b * s) / a, 0)
 }
 
+# j with md / 4^j in [0.5, 2), the power of four the fitters work at
+# (python core._unit_scale_exponent, #1052). Half UP, not R's half-to-even
+# round(), so it moves by exactly one when md is multiplied by four.
+.unit_scale_exponent <- function(md) {
+  if (!(is.finite(md) && md > 0)) return(0)
+  floor(log2(md) / 2 + 0.5)
+}
+
 .factor_model_projected <- function(C, k, n_outer = 60L, D0 = NULL) {
   # Fit at unit scale and scale back (#1052, python's fit_covariance rule,
   # #101): the stop on D and the NNLS thresholds are absolute, so a Sigma
@@ -63,8 +71,7 @@
   # of four, so the rescaling is exact, the fit of 4^j C is the fit of C
   # scaled, and every C with mean variance in about [0.7, 1.4) is fitted
   # bitwise as before.
-  md <- mean(diag(C))
-  k2 <- if (md > 0) round(log2(md) / 2) else 0
+  k2 <- .unit_scale_exponent(mean(diag(C)))
   if (k2 != 0) {
     out <- .factor_model_projected(C / 4^k2, k, n_outer,
                                    if (is.null(D0)) NULL else D0 / 4^k2)
@@ -327,28 +334,34 @@ fit_covariance <- function(C, k = 3L, m = 5L, blocks = NULL,
                 residual = 0, contrast_residual = 0, degraded = FALSE,
                 polished = FALSE))
   }
+  # a common shift cancels from every contrast: fit the representative
+  # without it, so C and C + a 11' are fitted identically (#465, python
+  # core._without_common_shift). Before the scale is chosen, and once:
+  # a second removal is not a no-op when the first restored an
+  # over-removed part (#1052).
+  C <- .without_common_shift(C)
   # Fit at UNIT scale and scale back, as python does (#101, #1052): the
   # clustering clip sqrt(pmax(diag, 1e-12)), the 1e-3 multistart floor
   # and the alternation's thresholds are absolute, so 1e-14 * C was not
   # fitted as C scaled. The working scale is a power of four, so the
-  # rescaling is exact and every C with mean variance in about
-  # [0.7, 1.4) is fitted bitwise as before. V, D, the floor clamp and
-  # the absolute residual carry the scale; the rest is scale-free.
-  md <- mean(diag(C))
-  k2 <- if (md > 0) round(log2(md) / 2) else 0
-  if (k2 != 0) {
-    out <- fit_covariance(C / 4^k2, k = k, m = m, blocks = blocks,
-                          nodes = nodes)
-    out$V <- out$V * 2^k2
-    out$D <- out$D * 4^k2
-    out$clamp <- out$clamp * 4^k2
-    out$residual <- out$residual * 4^k2
-    return(out)
-  }
-  # a common shift cancels from every contrast: fit the representative
-  # without it, so C and C + a 11' are fitted identically (#465, python
-  # core._without_common_shift)
-  C <- .without_common_shift(C)
+  # rescaling is exact; rounding is half UP so that it shifts by exactly
+  # one when C is multiplied by four, ties included, and every C with
+  # mean variance in [0.5, 2) is fitted bitwise as before. V, D, the
+  # floor clamp and the absolute residual carry the scale.
+  k2 <- .unit_scale_exponent(mean(diag(C)))
+  if (k2 == 0) return(.fit_covariance_unit(C, k, m, blocks, nodes))
+  out <- .fit_covariance_unit(C / 4^k2, k, m, blocks, nodes)
+  out$V <- out$V * 2^k2
+  out$D <- out$D * 4^k2
+  out$clamp <- out$clamp * 4^k2
+  out$residual <- out$residual * 4^k2
+  out
+}
+
+# fit_covariance's stages on a validated, shift-free C at unit scale
+# (mean variance in [0.5, 2))
+.fit_covariance_unit <- function(C, k, m, blocks, nodes) {
+  n <- nrow(C)
   s <- sqrt(pmax(diag(C), 1e-12))
   corr <- C / outer(s, s)
   kk <- min(k, n - 1L)

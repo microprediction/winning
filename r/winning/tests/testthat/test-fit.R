@@ -499,3 +499,17 @@ test_that("fit_covariance fits a scaled covariance as the scaled fit (#1052)", {
     expect_identical(f$residual, s * f0$residual)
   }
 })
+
+test_that("scale ties round one way (#1052)", {
+  # R's round() is half-to-even, so mean variance exactly 2 and 8 chose
+  # working scales that were not one power of four apart
+  e <- winning:::.unit_scale_exponent
+  for (md in c(2, 0.5, 1, 1.3, 3.7, 1e-9, 7e12))
+    for (j in -12:12) expect_identical(e(md * 4^j), e(md) + j)
+  expect_identical(c(e(2), e(0.5), e(1)), c(1, 0, 0))
+})
+
+test_that("the common shift is removed before the scale is chosen (#1052)", {
+  # scaling by 4^26 first left 2^-52 * I for the shift solve, which failed
+  expect_identical(fit_covariance(diag(5) + 2^52)$D, fit_covariance(diag(5))$D)
+})

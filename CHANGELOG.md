@@ -13,9 +13,11 @@
   same, as python's has since #101: its clustering clip and multistart
   floor were absolute too, and at 4^-25 every one of 60 random rank-3
   fields came back at a different rank, with D off by up to 54%.
-  Covariances with mean variance in about [0.7, 1.4), including every
-  correlation matrix and every python `fit_covariance` fit, are bitwise
-  unchanged. Away from unit scale R now fits as python does: on
+  The working power of four now rounds half up in both ports (numpy's and
+  R's half-to-even put a mean variance of exactly 2 * 4^j on the wrong
+  side for every other j), and R removes the common shift once, before
+  choosing it. Covariances with mean variance in [0.5, 2), including
+  every correlation matrix, are bitwise unchanged. Away from unit scale R now fits as python does: on
   diag(1e-6, 1e-6, 1, 100, 100) its contrast residual is python's 2.1e-5,
   where the old absolute stop happened to give 9e-8 at that scale and
   the same 2.1e-5 at unit scale (#1052).

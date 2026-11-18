@@ -101,3 +101,16 @@ def test_alternation_stop_scales_with_the_covariance_1052(n, k, seed):
         V, D = factor_model_projected(s * C, k)
         assert np.array_equal(D, s * D0)
         assert np.array_equal(V @ V.T, s * (V0 @ V0.T))
+
+
+
+def test_scale_ties_round_one_way_1052():
+    """A mean variance of exactly 2 * 4^j is a tie between two working
+    scales. numpy rounds ties to even, so md = 2 and md = 8 (4x it) chose
+    working scales that were NOT one power of four apart, and the fit of
+    4C was not guaranteed to be the fit of C scaled. Ties round half up."""
+    from winning.factor.core import _unit_scale_exponent as e
+    for md in (2.0, 0.5, 1.0, 1.3, 3.7, 1e-9, 7e12):
+        for j in range(-12, 13):
+            assert e(md * 4.0 ** j) == e(md) + j
+    assert e(2.0) == 1 and e(0.5) == 0 and e(1.0) == 0
