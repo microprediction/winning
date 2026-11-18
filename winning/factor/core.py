@@ -196,6 +196,21 @@ def _factor_model_projected_run(C, k, n_outer=60, D0=None):
     a caller finish those fits without touching the ones that stopped
     on their own."""
     C = np.asarray(C, dtype=float)
+    # Fit at unit scale and scale back (#1052). The stop on D and the
+    # NNLS water-filling stop are absolute, so a Sigma scaled by 1e-12
+    # stopped after one sweep (relative residual 0.12 against 6e-5 at
+    # n = 5, k = 4). The working scale is fit_covariance's power of four,
+    # applied with ldexp, so it is exact and cannot overflow: the fit of
+    # 4^j C is the fit of C scaled, and every C with mean variance in
+    # [0.5, 2) -- correlation matrices, and every fit_covariance call,
+    # which works at that scale -- is fitted bitwise as before.
+    k2 = _unit_scale_exponent(np.diag(C))
+    if k2 != 0:
+        V, D, cap = _factor_model_projected_run(
+            np.ldexp(C, -2 * k2), k, n_outer=n_outer,
+            D0=None if D0 is None else np.ldexp(np.asarray(D0, dtype=float),
+                                                -2 * k2))
+        return np.ldexp(V, k2), np.ldexp(D, 2 * k2), cap
     n = len(C)
     hit_cap = True
     # D0 exists for multistart. The objective is nonconvex in (V, D), so
@@ -248,6 +263,27 @@ def _factor_model_projected_run(C, k, n_outer=60, D0=None):
     # new. The inner term keeps the floor positive for a runner whose
     # own variance is zero.
     return V, _projected_floor(C, D), hit_cap
+
+
+def _unit_scale_exponent(d):
+    """j with mean(d) / 4^j in [0.5, 2): the power of four the fitters
+    work at (#101, #1052). From binary exponents, not log2: a rounded
+    log2 put means just below 2 * 4^j on the next power, and half-to-even
+    rounding put exact ties at 2 * 4^j on alternate sides, so 4C did not
+    always land where C did. The entries are first shifted by the largest
+    one's binary exponent, which is exact and keeps the sum finite where
+    the raw sum overflowed, and which moves by exactly 2j when d is
+    multiplied by 4^j. 0 for a zero or non-finite mean."""
+    d = np.asarray(d, dtype=float)
+    top = float(np.max(d)) if d.size else 0.0
+    if not (top > 0 and np.isfinite(top)):
+        return 0
+    _, et = np.frexp(top)
+    ms = float(np.mean(np.ldexp(d, -int(et))))    # in (0, 1]
+    if not ms > 0:
+        return 0
+    _, e = np.frexp(ms)          # mean(d) = m 2^(e + et), m in [0.5, 1)
+    return (int(e) + int(et)) // 2
 
 
 def _projected_floor(C, D):
@@ -383,7 +419,7 @@ def _projected_sq(C, V, D):
     return float(np.sum(_center2(C - V @ V.T - np.diag(D)) ** 2))
 
 
-def _warn_if_rank_splits_a_tie(C, D, k, tol=1e-6):
+def _warn_if_rank_splits_a_tie(C, D, k, tol=1e-6, stacklevel=3):
     """Warn when the rank cuts through a degenerate eigenvalue.
 
     A rank-k fit is normally a well-defined approximation: the top-k
@@ -452,7 +488,7 @@ def _warn_if_rank_splits_a_tie(C, D, k, tol=1e-6):
         f"fixes it; pass k={resolved} or more to take the whole tied "
         "group, or check it by pricing the race from several starts "
         "(factor_model_projected accepts D0=).",
-        RuntimeWarning, stacklevel=3)
+        RuntimeWarning, stacklevel=stacklevel)
 
 
 def _top_eigen(M, k, Q=None, sweeps=30, pad=3):
@@ -731,9 +767,6 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
     the stage-one start ran out of sweeps and its Gauss-Newton finish
     replaced the fit (#1051).
     """
-    from scipy.cluster.hierarchy import fcluster, linkage
-    from scipy.spatial.distance import squareform
-
     k = _as_fit_rank(k, "k")
     m = _as_fit_rank(m, "m")
     C = _validate_covariance(C)
@@ -779,15 +812,25 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
     # variation (#101). The working scale is a power of FOUR, so C / s
     # and sqrt(s) are exact in binary and the fit of s * C is the fit of
     # C, bit for bit, scaled.
-    md = float(np.mean(np.diag(C)))
-    k2 = int(np.round(np.log2(md) / 2.0)) if md > 0 else 0
-    if k2 != 0:
-        out = fit_covariance(np.ldexp(C, -2 * k2), k=k, m=m,
-                             blocks=blocks if labels is None else labels,
-                             nodes_log2=nodes_log2, seed=seed,
-                             return_report=return_report)
-        Vu, Du = out[0], out[1]
-        return (np.ldexp(Vu, k2), np.ldexp(Du, 2 * k2)) + tuple(out[2:])
+    k2 = _unit_scale_exponent(np.diag(C))
+    # the scaled matrix goes straight to the fitter: it is already
+    # validated and shift-free, and a second shift removal is not a no-op
+    # when the first restored an over-removed part (#1052)
+    out = _fit_covariance_unit(np.ldexp(C, -2 * k2), n, k, m, blocks,
+                               labels, nodes_log2, seed, return_report)
+    if k2 == 0:
+        return out
+    Vu, Du = out[0], out[1]
+    return (np.ldexp(Vu, k2), np.ldexp(Du, 2 * k2)) + tuple(out[2:])
+
+
+def _fit_covariance_unit(C, n, k, m, blocks, labels, nodes_log2, seed,
+                         return_report):
+    """fit_covariance's stages on a validated, shift-free C at unit
+    scale (mean variance in [0.5, 2))."""
+    from scipy.cluster.hierarchy import fcluster, linkage
+    from scipy.spatial.distance import squareform
+
     s = np.sqrt(np.clip(np.diag(C), 1e-12, None))
     corr = C / np.outer(s, s)
     kk = min(k, n - 1)
@@ -953,7 +996,8 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
             Vall, D, res_pipe, arm = out1
             V, D0 = polished
             used_polish = True
-    _warn_if_rank_splits_a_tie(C, D0, kk)
+    # one frame below fit_covariance, so the warning names its caller
+    _warn_if_rank_splits_a_tie(C, D0, kk, stacklevel=4)
     # the nodes are not rotation or sign invariant, so the basis they
     # meet must be a function of V V' alone, not of LAPACK's choices (#745)
     Vall = _canonical_factor_basis(Vall)
@@ -977,7 +1021,7 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
             "its own size (contrast_residual_max). Global residual norms "
             "cannot see this, so head-to-head probabilities between the "
             "affected pair may be badly wrong even though the covariance "
-            "residual looks small.", RuntimeWarning, stacklevel=2)
+            "residual looks small.", RuntimeWarning, stacklevel=3)
     if return_report:
         denom = float(np.linalg.norm(_center2(C)))
         rel = float(np.linalg.norm(Rfin)) / denom if denom > 0 else 0.0

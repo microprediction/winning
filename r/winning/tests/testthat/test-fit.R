@@ -331,7 +331,12 @@ test_that("near-singular contrasts survive the closing floor (#407)", {
   # at n = 3, only the choice-relevant contrasts are)
   C2 <- diag(c(1e-6, 1e-6, 1, 100, 100))
   f2 <- fit_covariance(C2)
-  expect_lt(f2$contrast_residual, 1e-5)
+  # 2.1e-5, python's value on the same field: at k = 3 the diagonal has
+  # many exact fits and the alternation lands on one with large loadings,
+  # whose cancellation costs the tiny contrast its last digits. The 9e-8
+  # this once showed came from the alternation's absolute stop at mean
+  # variance 40, a scale artefact (#1052); the #407 failure was 0.48.
+  expect_lt(f2$contrast_residual, 5e-5)
   expect_true(all(f2$clamp == 1e-3 * pmax(diag(C2), 1e-6 * mean(diag(C2)))))
 })
 
@@ -458,4 +463,70 @@ test_that("a polished cov= fit is priced at least as well as the stall (#1051)",
   mu_back <- abilities_from_race(p, cov = C)
   expect_lt(max(abs(mu_back - (mu - mean(mu)))), 1e-6)
   expect_false(fit_covariance(diag(c(1, 2, 3, 4, 5, 6)))$polished)
+})
+
+test_that("the alternation's stop scales with the covariance (#1052)", {
+  # an absolute 1e-12 on D stopped a Sigma scaled by 1e-12 after one sweep;
+  # with the power-of-four scale the fit of 4^j C is the fit of C, scaled
+  set.seed(1)
+  A <- matrix(rnorm(25), 5, 5)
+  C <- A %*% t(A) / 5
+  C <- C / mean(diag(C))
+  f0 <- winning:::.factor_model_projected(C, 4L)
+  for (j in c(-20, -6, 6)) {
+    s <- 4^j
+    f <- winning:::.factor_model_projected(s * C, 4L)
+    expect_identical(f$D, s * f0$D)
+    expect_equal(f$V %*% t(f$V), s * (f0$V %*% t(f0$V)), tolerance = 1e-12)
+  }
+})
+
+test_that("fit_covariance fits a scaled covariance as the scaled fit (#1052)", {
+  # its own clustering clip and multistart floor were absolute too: at
+  # 4^-25 every one of 60 random rank-3 fields came back at a different
+  # rank (3 -> 6 here) with D off by up to 54% of its unit-scale value
+  set.seed(1)
+  A <- matrix(rnorm(18), 6, 3)
+  C <- A %*% t(A) + diag(runif(6, 0.2, 1))
+  C <- C / mean(diag(C))
+  f0 <- suppressWarnings(fit_covariance(C))
+  for (j in c(-25, -8, 8)) {
+    s <- 4^j
+    f <- suppressWarnings(fit_covariance(s * C))
+    expect_identical(f$D, s * f0$D)
+    expect_identical(f$V, 2^j * f0$V)
+    expect_identical(f$rank, f0$rank)
+    expect_identical(f$residual, s * f0$residual)
+  }
+})
+
+test_that("scale ties round one way (#1052)", {
+  # R's round() is half-to-even, so mean variance exactly 2 and 8 chose
+  # working scales that were not one power of four apart
+  e <- winning:::.unit_scale_exponent
+  for (md in c(2, 0.5, 1, 1.3, 3.7, 1e-9, 7e12, 2 - 2^-52, 8 - 2^-50))
+    for (j in seq(-200, 200, by = 7))
+      expect_identical(e(md * 2^j * 2^j), e(md) + j)
+  expect_identical(c(e(2), e(0.5), e(1)), c(1, 0, 0))
+  # a rounded log2 put these on the next power of four
+  expect_identical(c(e(2 - 2^-52), e(8 - 2^-50)), c(0, 1))
+})
+
+test_that("the scale is representable at the top of the double range (#1052)", {
+  # 4^512 is Inf: dividing by it fitted a zero matrix
+  f <- suppressWarnings(fit_covariance(diag(c(.Machine$double.xmax, 1))))
+  expect_true(all(is.finite(f$D)) && all(is.finite(f$V)))
+  p <- winning:::.factor_model_projected(diag(2) * 2^1023, 1L)
+  expect_true(all(is.finite(p$D)))
+  # three variances at the ceiling overflowed the mean itself
+  e <- winning:::.unit_scale_exponent
+  top <- .Machine$double.xmax
+  expect_identical(e(rep(top, 3)), e(rep(top * 2^-1000, 3)) + 500)
+  f3 <- suppressWarnings(fit_covariance(diag(rep(top, 3))))
+  expect_true(all(is.finite(f3$D)))
+})
+
+test_that("the common shift is removed before the scale is chosen (#1052)", {
+  # scaling by 4^26 first left 2^-52 * I for the shift solve, which failed
+  expect_identical(fit_covariance(diag(5) + 2^52)$D, fit_covariance(diag(5))$D)
 })

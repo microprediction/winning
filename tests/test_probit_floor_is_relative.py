@@ -81,3 +81,91 @@ def test_unit_scale_is_untouched():
     # parameters than equations, so exact solutions form a family and
     # D.sum() moves by 2.5e-6 within it; the floor is not involved.
     assert float(D.sum()) == pytest.approx(4.8501846385, abs=1e-8)
+
+
+@pytest.mark.parametrize("n, k, seed", [(5, 4, 0), (6, 2, 1), (8, 2, 2)])
+def test_alternation_stop_scales_with_the_covariance_1052(n, k, seed):
+    """The alternation stopped when D moved by an ABSOLUTE 1e-12, so a
+    Sigma scaled by 1e-12 stopped after one sweep (relative projected
+    residual 0.12 against 6e-5 at n = 5, k = 4). The tolerance now
+    carries fit_covariance's power-of-four scale, so the fit of 4^j C is
+    the fit of C scaled, bit for bit, and unit-scale fits are as before."""
+    from winning.factor.core import factor_model_projected
+    rng = np.random.default_rng(seed)
+    A = rng.normal(size=(n, n))
+    C = A @ A.T / n
+    C = C / np.mean(np.diag(C))
+    V0, D0 = factor_model_projected(C, k)
+    for j in (-20, -6, 6):
+        s = 4.0 ** j
+        V, D = factor_model_projected(s * C, k)
+        assert np.array_equal(D, s * D0)
+        assert np.array_equal(V @ V.T, s * (V0 @ V0.T))
+
+
+
+def test_scale_ties_round_one_way_1052():
+    """A mean variance of exactly 2 * 4^j is a tie between two working
+    scales. numpy rounds ties to even, so md = 2 and md = 8 (4x it) chose
+    working scales that were NOT one power of four apart, and the fit of
+    4C was not guaranteed to be the fit of C scaled. Ties round half up."""
+    from winning.factor.core import _unit_scale_exponent as e
+    for md in (2.0, 0.5, 1.0, 1.3, 3.7, 1e-9, 7e12, 2 - 2 ** -52,
+               8 - 2 ** -50):
+        for j in range(-200, 201, 7):
+            assert e([np.ldexp(md, 2 * j)]) == e([md]) + j
+    assert [e([2.0]), e([0.5]), e([1.0])] == [1, 0, 0]
+    # a rounded log2 put these on the next power of four
+    assert [e([2 - 2 ** -52]), e([8 - 2 ** -50])] == [0, 1]
+
+
+def test_scale_at_the_top_of_the_double_range_1052():
+    """The sum of the diagonal overflowed before the scale was chosen,
+    so the fit ran unscaled and overflowed in turn."""
+    from winning.factor.core import fit_covariance
+    rng = np.random.default_rng(5)
+    A = rng.normal(size=(5, 5))
+    C = A @ A.T
+    C = C / np.max(np.diag(C))
+    big = np.ldexp(C, 1022)
+    V, D, _, _ = fit_covariance(big)
+    V0, D0, _, _ = fit_covariance(C)
+    assert np.all(np.isfinite(D)) and np.all(np.isfinite(V))
+    from winning.factor.core import _unit_scale_exponent as e
+    j = e(np.diag(big)) - e(np.diag(C))
+    assert j == 511
+    assert np.array_equal(D, np.ldexp(D0, 2 * j))
+
+
+def test_exponent_is_range_safe_and_probit_polishes_at_any_scale_1052():
+    """Three variances at the double ceiling overflowed the mean, so the
+    scale was never chosen; and fit_factor_model polished at the original
+    scale, where squared residuals of a 1e-200 Sigma underflow to zero."""
+    from winning.factor.core import _unit_scale_exponent as e
+    top = np.finfo(float).max
+    assert e([top] * 3) == e([np.ldexp(top, -1000)] * 3) + 500
+    V, D = fit_factor_model(np.diag([top] * 3), 1)
+    assert np.all(np.isfinite(D))
+    rng = np.random.default_rng(6)
+    v = rng.normal(size=(5, 1)) * 0.5
+    C = v @ v.T + np.diag(rng.uniform(0.5, 1.0, 5))
+    C = C / np.mean(np.diag(C))
+    V0, D0 = fit_factor_model(C, 1)
+    s = np.ldexp(1.0, -664)                    # 4^-332, about 1e-200
+    V1, D1 = fit_factor_model(s * C, 1)
+    assert np.array_equal(D1, s * D0)
+    assert np.array_equal(V1, np.ldexp(V0, -332))
+
+
+def test_fit_covariance_warnings_name_the_caller_1052():
+    """_fit_covariance_unit adds a frame below fit_covariance; the
+    tied-eigenvalue warning pointed into core.py instead of here."""
+    import warnings
+    from winning.factor.core import fit_covariance
+    B = np.kron(np.eye(6), np.full((3, 3), 0.5)) + 0.5 * np.eye(18)
+    for scale in (1.0, 64.0):
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            fit_covariance(scale * B, k=3)
+        tie = [x for x in w if "splits a tied eigenvalue" in str(x.message)]
+        assert tie and all(x.filename == __file__ for x in tie)
