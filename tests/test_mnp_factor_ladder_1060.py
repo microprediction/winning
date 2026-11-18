@@ -49,9 +49,11 @@ def _exact_logp(mu, V, k):
     rv = [j for j in range(J) if j != k]
     d = V[k] - V[rv]
     cov = d @ d.T + 1.0 + np.eye(J - 1)
-    return np.log(multivariate_normal(
-        mean=mu[rv] - mu[k], cov=cov, abseps=1e-12,
-        releps=1e-10).cdf(np.zeros(J - 1)))
+    # tolerances on .cdf, not the frozen constructor: older scipy (the
+    # python 3.10 CI runner) refuses them there
+    return np.log(multivariate_normal.cdf(
+        np.zeros(J - 1), mean=mu[rv] - mu[k], cov=cov, abseps=1e-12,
+        releps=1e-10))
 
 
 # worst |log p - exact| over 6 fields x every choice; the fixed tensor
