@@ -1,0 +1,261 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1.1in]{geometry}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsthm}
+\usepackage{booktabs}
+\usepackage{microtype}
+\usepackage[round,authoryear]{natbib}
+\usepackage[colorlinks=true,allcolors=blue]{hyperref}
+
+\newtheorem{proposition}{Proposition}
+
+\title{A Scalable Aggregating Algorithm for Races}
+\author{Peter Cotton\thanks{\texttt{peter.cotton@microprediction.com}.
+The seeded scripts behind every number are in
+\texttt{papers/aggregating/} in
+\texttt{github.com/microprediction/winning}.}}
+\date{November 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent Vovk's Aggregating Algorithm predicts with a substitution of
+its weighted mixture of experts. For the log-loss of a contest winner
+under a Thurstone race model, the mixture of races over Gaussian
+uncertainty in the abilities is again a race, with that uncertainty
+added to the performance covariance. The algorithm's prediction under a
+Gaussian posterior is therefore one forward pass, linear in the field
+size when the covariance has factor structure, where the softmax
+analogue needs Monte Carlo. We state the fact and check it
+numerically. Online, the mixed prediction was no more accurate than
+the plug-in race at the posterior mean, even with the exact posterior;
+what it supplies is the algorithm's worst-case guarantee at the cost
+of one race.
+\end{abstract}
+
+\section{Setting}
+
+A contest has $n$ entrants with abilities $x\in\mathbb R^n$. Entrant
+$i$ performs $Y_i=x_i+\varepsilon_i$ with $\varepsilon\sim
+N(0,\Sigma)$, and the lowest performance wins. Write $p_\Sigma(x)$ for
+the vector of win probabilities and
+\[
+  \ell(x,y)=-\ln p_{\Sigma,y}(x)
+\]
+for the log-loss of an observed winner $y$. When $\Sigma=V V^\top+
+\operatorname{diag}(D)$ with $V$ of low rank, $p_\Sigma(x)$ costs time
+linear in $n$, and so does its inverse $p_\Sigma^{-1}$, which returns
+the abilities (up to translation) that give a target vector of win
+probabilities \citep{cotton2026}. The race map is onto the open
+simplex, so the inverse is defined everywhere.
+
+An online learner sees contests $t=1,\dots,T$, each a field
+$F_t\subseteq\{1,\dots,N\}$ from a population of $N$ entrants, and
+predicts a distribution over the winner before $y_t$ is revealed.
+
+\section{The Aggregating Algorithm and its substitution}
+
+The Aggregating Algorithm \citep{vovk1990,vovk2001} keeps weights $P_t$
+over experts, here ability vectors $x$, updated as
+$P_{t+1}(x)\propto P_t(x)\,e^{-\eta\,\ell(x_{F_t},y_t)}$, and predicts
+with a substitution $s(P_t)$. The loss is $\eta$-mixable if some $s$
+satisfies
+\begin{equation}\label{eq:mix}
+  \ell(s(P),y)\le-\tfrac1\eta\ln\mathbb E_{x\sim P}\,
+  e^{-\eta\,\ell(x,y)}\qquad\text{for all }P,\,y,
+\end{equation}
+and then the cumulative loss is at most
+$-\tfrac1\eta\ln\mathbb E_{x\sim P_1}e^{-\eta L_T(x)}$, where $L_T(x)$ is
+expert $x$'s cumulative loss. Against any comparator distribution $Q$
+this is at most $\mathbb E_Q L_T+\tfrac1\eta\operatorname{KL}(Q\|P_1)$.
+
+At $\eta=1$ the right side of \eqref{eq:mix} is $-\ln\mathbb E_P\,
+p_{\Sigma,y}(x)$, so
+\begin{equation}\label{eq:sub}
+  s(P)=p_\Sigma^{-1}\!\big(\mathbb E_{x\sim P}\,p_\Sigma(x)\big)
+\end{equation}
+meets \eqref{eq:mix} with equality for every $y$. This is not new.
+Log-loss is 1-mixable whatever the parameterisation of the forecast,
+provided the parameterisation reaches every interior forecast
+\citep[Section~6]{vanerven2012}, and \citet{foster2018} give the
+softmax case, $s(\pi)=\sigma^{-1}(\mathbb E_\pi\sigma(x))$, as the
+route to logarithmic regret for multiclass logistic regression. The
+Thurstone case needs only that $p_\Sigma$ is invertible, and
+\eqref{eq:sub} is computable with the inverse above.
+
+\section{Gaussian closure}
+
+The step that is specific to races is the expectation in
+\eqref{eq:sub}.
+
+\begin{proposition}\label{prop:closure}
+If $x\sim N(m,S)$ then $\mathbb E\,p_\Sigma(x)=p_{\Sigma+S}(m)$.
+\end{proposition}
+
+\begin{proof}
+$Y=x+\varepsilon$ with independent $x\sim N(m,S)$ and
+$\varepsilon\sim N(0,\Sigma)$ is $N(m,\Sigma+S)$, and averaging the
+event $\{Y_y<Y_j\ \forall j\ne y\}$ over $x$ gives its probability
+under that law.
+\end{proof}
+
+This is the multinomial-probit version of the familiar
+$\mathbb E\,\Phi(w^\top z)=\Phi(m^\top z/\sqrt{1+z^\top Sz})$
+\citep[Section~3.9]{rasmussen2006} and of random-coefficient probit
+\citep{hausman1978,train2009}. Its consequence for aggregation is that
+under a Gaussian posterior the algorithm's prediction is a single race,
+with performance covariance $\Sigma+S$. If $S$ is itself low rank plus
+diagonal, as a factor posterior is, $\Sigma+S$ keeps that form and the
+prediction costs one forward pass, linear in $n$. Passing it through
+$p_\Sigma^{-1}$ expresses it, if wanted, as abilities in the original
+model.
+
+The softmax has no such closure. The fast mixable method of
+\citet{jezequel2021} runs the Aggregating Algorithm on quadratic
+surrogates, so its posterior is exactly Gaussian, and then estimates
+$\mathbb E\,\sigma(x)$ by sampling; they used 100 draws. For races the
+same step is exact.
+
+The closure also covers whole orderings. A Gaussian mixture of
+Thurstone ranking laws with covariance $\Sigma$ is the Thurstone
+ranking law with covariance $\Sigma+S$, so the ranking log-loss is
+1-mixable with a substitution inside the general-covariance Thurstone
+family. Plackett--Luce is not closed in this way: mixtures of
+Plackett--Luce laws violate independence of irrelevant alternatives
+\citep{train2009} and form a strictly larger class \citep{zhao2016}.
+Since a substitution meeting \eqref{eq:mix} at $\eta=1$ for every
+ordering must equal the mixture, the ranking log-loss with a
+Plackett--Luce substitution is not 1-mixable. The closure needs the
+general covariance: a Case~V model (independent, equal-variance noise)
+is not closed, because $S$ adds correlation.
+
+\section{What the guarantee covers}
+
+The exact aggregating posterior under probit likelihoods is not
+Gaussian; it is unified skew-normal \citep{durante2019}. The
+one-pass prediction therefore applies exactly to a Gaussian posterior:
+the surrogate posterior of \citet{jezequel2021}, or a Laplace or
+expectation-propagation approximation, which carries no regret
+guarantee of its own. For the exact Bayesian mixture with a Gaussian
+prior, regret bounds that need only bounded curvature of the
+log-likelihood \citep{kakade2005,kakade2005gp} apply to probit. Whether
+improperness is needed at all for probit is less clear than for the
+logistic, whose proper lower bound comes from its exponential tail.
+We claim the computation, not a new rate, and the checks below find
+no accuracy gain from it in ordinary rating streams.
+
+\section{Checks}
+
+All numbers come from \texttt{checks.py} and \texttt{exact\_bayes.py} with fixed seeds.
+
+\emph{Substitution.} For random mixtures $P$ of 2 to 50 ability
+vectors in fields of 3 to 25, deliberately non-Gaussian,
+\eqref{eq:sub} computed with the race inverse meets \eqref{eq:mix} with
+equality to within $8.5\times10^{-9}$ in every coordinate, the inverse's own
+tolerance.
+
+\emph{Closure.} For posteriors $N(m,LL^\top+\operatorname{diag}d)$ in
+fields of 4 to 12 with $L$ of rank 1 or 2, the single race at
+covariance $I+LL^\top+\operatorname{diag}d$ agrees with
+$4\times10^6$ simulated contests to within $1.7$ standard errors in
+every entry, at 1 to 20 ms per call.
+
+\emph{Scale.} For factor posteriors over $1{,}000$ entrants (rank 2)
+the mixed race takes $0.70$ s. Averaging 100 plug-in races over
+posterior draws, the Monte Carlo step of \citet{jezequel2021}, takes
+$0.74$ s and misses the ten favourites' probabilities by up to $25\%$
+(median over five repetitions); reaching $1\%$ would need some $6\times
+10^4$ draws. At $5{,}000$ entrants and rank 3 the mixed race takes
+$53$ s, against $3.6$ s for 100 draws that miss by up to $53\%$.
+
+\emph{Online.} Entrants with standard normal abilities race in fields
+of 5 drawn from a population of $N$, for $T=1000$ contests, five
+seeds. A Gaussian posterior is updated by one Laplace step per contest
+on the field's block, and predicts either by the mixed race
+$p_{I+S_{FF}}(m_F)$ or by the plug-in race $p_I(m_F)$. Summed over
+the 1000 contests, the mixed race lost more than the plug-in by
+$1.0\pm0.6$ nats at $N=20$ and $3.9\pm2.0$ nats at $N=400$, where each
+entrant has about a dozen contests. A diagonal posterior did no
+better. To separate the substitution from the Laplace approximation,
+a small case ($N=6$, fields of 3, 40 contests, 30 seeds) was run with
+the exact posterior on $6\times10^4$ prior particles. Exact Bayes, the
+Aggregating Algorithm itself, and the plug-in race at the exact
+posterior mean differed by $0.007\pm0.118$ nats, which is nothing; the Laplace
+mixed race lost $0.23\pm0.09$ nats to it, the Laplace plug-in
+$0.02\pm0.03$. In these tests the mixture's smoothing is second order,
+and a crude Gaussian posterior overstates the variance it smooths
+with.
+
+\section{Remarks}
+
+Glicko's expected score shrinks the rating difference by
+$g(\sqrt{RD_i^2+RD_j^2})$ \citep{glickman1999}, and TrueSkill adds the
+players' variances to the performance variance \citep{herbrich2006}.
+Both are approximate Gaussian aggregating predictions for two players.
+Proposition~\ref{prop:closure} gives the exact version for any number
+of entrants with correlated performances and correlated uncertainty,
+at the cost of one race.
+
+\begin{thebibliography}{99}
+
+\bibitem[Cotton(2026)]{cotton2026} P.~Cotton. Scalable inversion of
+contests with correlated performances, including softmax and
+multinomial probit. arXiv:2609.01133, 2026.
+
+\bibitem[Durante(2019)]{durante2019} D.~Durante. Conjugate Bayes for
+probit regression via unified skew-normal distributions.
+\emph{Biometrika}, 106(4):765--779, 2019.
+
+\bibitem[Foster et~al.(2018)]{foster2018} D.~J.~Foster, S.~Kale,
+H.~Luo, M.~Mohri, and K.~Sridharan. Logistic regression: the
+importance of being improper. In \emph{Proc.\ COLT}, PMLR 75, 2018.
+
+\bibitem[Glickman(1999)]{glickman1999} M.~E.~Glickman. Parameter
+estimation in large dynamic paired comparison experiments.
+\emph{JRSS C}, 48(3):377--394, 1999.
+
+\bibitem[Hausman and Wise(1978)]{hausman1978} J.~A.~Hausman and
+D.~A.~Wise. A conditional probit model for qualitative choice.
+\emph{Econometrica}, 46(2):403--426, 1978.
+
+\bibitem[Herbrich et~al.(2006)]{herbrich2006} R.~Herbrich, T.~Minka,
+and T.~Graepel. TrueSkill: a Bayesian skill rating system. In
+\emph{NIPS 19}, 2006.
+
+\bibitem[J\'ez\'equel et~al.(2021)]{jezequel2021} R.~J\'ez\'equel,
+P.~Gaillard, and A.~Rudi. Mixability made efficient: fast online
+multiclass logistic regression. In \emph{NeurIPS 34}, 2021.
+
+\bibitem[Kakade and Ng(2005)]{kakade2005} S.~M.~Kakade and A.~Y.~Ng.
+Online bounds for Bayesian algorithms. In \emph{NIPS 17}, 2005.
+
+\bibitem[Kakade et~al.(2005)]{kakade2005gp} S.~M.~Kakade, M.~W.~Seeger,
+and D.~P.~Foster. Worst-case bounds for Gaussian process models. In
+\emph{NIPS 18}, 2005.
+
+\bibitem[Rasmussen and Williams(2006)]{rasmussen2006} C.~E.~Rasmussen
+and C.~K.~I.~Williams. \emph{Gaussian Processes for Machine Learning}.
+MIT Press, 2006.
+
+\bibitem[Train(2009)]{train2009} K.~E.~Train. \emph{Discrete Choice
+Methods with Simulation}. Cambridge University Press, 2nd edition, 2009.
+
+\bibitem[van Erven et~al.(2012)]{vanerven2012} T.~van Erven,
+M.~D.~Reid, and R.~C.~Williamson. Mixability is Bayes risk curvature
+relative to log loss. \emph{JMLR}, 13:1639--1663, 2012.
+
+\bibitem[Vovk(1990)]{vovk1990} V.~Vovk. Aggregating strategies. In
+\emph{Proc.\ COLT}, 371--386, 1990.
+
+\bibitem[Vovk(2001)]{vovk2001} V.~Vovk. Competitive on-line statistics.
+\emph{International Statistical Review}, 69(2):213--248, 2001.
+
+\bibitem[Zhao et~al.(2016)]{zhao2016} Z.~Zhao, P.~Piech, and L.~Xia.
+Learning mixtures of Plackett--Luce models. In \emph{Proc.\ ICML}, PMLR
+48, 2016.
+
+\end{thebibliography}
+\end{document}
