@@ -155,3 +155,17 @@ def test_exponent_is_range_safe_and_probit_polishes_at_any_scale_1052():
     V1, D1 = fit_factor_model(s * C, 1)
     assert np.array_equal(D1, s * D0)
     assert np.array_equal(V1, np.ldexp(V0, -332))
+
+
+def test_fit_covariance_warnings_name_the_caller_1052():
+    """_fit_covariance_unit adds a frame below fit_covariance; the
+    tied-eigenvalue warning pointed into core.py instead of here."""
+    import warnings
+    from winning.factor.core import fit_covariance
+    B = np.kron(np.eye(6), np.full((3, 3), 0.5)) + 0.5 * np.eye(18)
+    for scale in (1.0, 64.0):
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            fit_covariance(scale * B, k=3)
+        tie = [x for x in w if "splits a tied eigenvalue" in str(x.message)]
+        assert tie and all(x.filename == __file__ for x in tie)

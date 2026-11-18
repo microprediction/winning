@@ -419,7 +419,7 @@ def _projected_sq(C, V, D):
     return float(np.sum(_center2(C - V @ V.T - np.diag(D)) ** 2))
 
 
-def _warn_if_rank_splits_a_tie(C, D, k, tol=1e-6):
+def _warn_if_rank_splits_a_tie(C, D, k, tol=1e-6, stacklevel=3):
     """Warn when the rank cuts through a degenerate eigenvalue.
 
     A rank-k fit is normally a well-defined approximation: the top-k
@@ -488,7 +488,7 @@ def _warn_if_rank_splits_a_tie(C, D, k, tol=1e-6):
         f"fixes it; pass k={resolved} or more to take the whole tied "
         "group, or check it by pricing the race from several starts "
         "(factor_model_projected accepts D0=).",
-        RuntimeWarning, stacklevel=3)
+        RuntimeWarning, stacklevel=stacklevel)
 
 
 def _top_eigen(M, k, Q=None, sweeps=30, pad=3):
@@ -996,7 +996,8 @@ def _fit_covariance_unit(C, n, k, m, blocks, labels, nodes_log2, seed,
             Vall, D, res_pipe, arm = out1
             V, D0 = polished
             used_polish = True
-    _warn_if_rank_splits_a_tie(C, D0, kk)
+    # one frame below fit_covariance, so the warning names its caller
+    _warn_if_rank_splits_a_tie(C, D0, kk, stacklevel=4)
     # the nodes are not rotation or sign invariant, so the basis they
     # meet must be a function of V V' alone, not of LAPACK's choices (#745)
     Vall = _canonical_factor_basis(Vall)
@@ -1020,7 +1021,7 @@ def _fit_covariance_unit(C, n, k, m, blocks, labels, nodes_log2, seed,
             "its own size (contrast_residual_max). Global residual norms "
             "cannot see this, so head-to-head probabilities between the "
             "affected pair may be badly wrong even though the covariance "
-            "residual looks small.", RuntimeWarning, stacklevel=2)
+            "residual looks small.", RuntimeWarning, stacklevel=3)
     if return_report:
         denom = float(np.linalg.norm(_center2(C)))
         rel = float(np.linalg.norm(Rfin)) / denom if denom > 0 else 0.0
