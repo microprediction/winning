@@ -57,17 +57,24 @@
 }
 
 # j with mean(d) / 4^j in [0.5, 2), the power of four the fitters work at
-# (python core._unit_scale_exponent, #1052), from the binary exponent: a
+# (python core._unit_scale_exponent, #1052), from binary exponents: a
 # rounded log2 put means just below 2 * 4^j on the next power, and R's
-# half-to-even round() put exact ties on alternate sides. The mean is of
-# d / 2, exact and free of overflow.
+# half-to-even round() put exact ties on alternate sides. The entries are
+# first shifted by the largest one's binary exponent, exact and free of
+# the overflow the raw sum hit near the double ceiling.
+.binary_exponent <- function(x) {     # e with x / 2^e in [0.5, 1), x > 0
+  e <- floor(log2(x)) + 1
+  if (x / 2^(e - 1) < 1) e <- e - 1   # log2 rounded up
+  if (x / 2^(e - 1) >= 2) e <- e + 1  # log2 rounded down
+  e
+}
 .unit_scale_exponent <- function(d) {
-  mh <- mean(d / 2)
-  if (!(is.finite(mh) && mh > 0)) return(0)
-  e <- floor(log2(mh))                  # then made exact: mh / 2^e in [1, 2)
-  if (mh / 2^e >= 2) e <- e + 1
-  if (mh / 2^e < 1) e <- e - 1
-  (e + 2) %/% 2
+  top <- if (length(d)) max(d) else 0
+  if (!(is.finite(top) && top > 0)) return(0)
+  et <- .binary_exponent(top)
+  ms <- mean(d / 2^(et - 1) / 2)      # two steps: 2^et overflows at 1024
+  if (!(ms > 0)) return(0)
+  (.binary_exponent(ms) + et) %/% 2
 }
 
 # C / 4^j and x * 4^j as two exact halvings of the exponent, so neither

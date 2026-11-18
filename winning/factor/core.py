@@ -267,17 +267,23 @@ def _factor_model_projected_run(C, k, n_outer=60, D0=None):
 
 def _unit_scale_exponent(d):
     """j with mean(d) / 4^j in [0.5, 2): the power of four the fitters
-    work at (#101, #1052). From the binary exponent, not log2: a rounded
+    work at (#101, #1052). From binary exponents, not log2: a rounded
     log2 put means just below 2 * 4^j on the next power, and half-to-even
     rounding put exact ties at 2 * 4^j on alternate sides, so 4C did not
-    always land where C did. The mean is taken of d / 2, which is exact
-    and cannot overflow where the sum of d would. 0 for a zero or
-    non-finite mean."""
-    mh = float(np.mean(np.ldexp(np.asarray(d, dtype=float), -1)))
-    if not (mh > 0 and np.isfinite(mh)):
+    always land where C did. The entries are first shifted by the largest
+    one's binary exponent, which is exact and keeps the sum finite where
+    the raw sum overflowed, and which moves by exactly 2j when d is
+    multiplied by 4^j. 0 for a zero or non-finite mean."""
+    d = np.asarray(d, dtype=float)
+    top = float(np.max(d)) if d.size else 0.0
+    if not (top > 0 and np.isfinite(top)):
         return 0
-    _, e = np.frexp(mh)                 # mean(d) = m 2^(e+1), m in [0.5, 1)
-    return (int(e) + 1) // 2
+    _, et = np.frexp(top)
+    ms = float(np.mean(np.ldexp(d, -int(et))))    # in (0, 1]
+    if not ms > 0:
+        return 0
+    _, e = np.frexp(ms)          # mean(d) = m 2^(e + et), m in [0.5, 1)
+    return (int(e) + int(et)) // 2
 
 
 def _projected_floor(C, D):

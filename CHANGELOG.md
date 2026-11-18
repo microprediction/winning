@@ -18,7 +18,9 @@
   rounded log2 put means just below 2 * 4^j on the next power, and
   half-to-even rounding put exact ties on alternate sides. The diagonal's
   sum could overflow near the top of the double range, and R's 4^512 was
-  Inf. R also now removes the common shift once, before choosing the
+  Inf. `probit.fit_factor_model` also fits at unit scale, so its polish
+  works at any scale: at 1e-200 its squared residuals underflowed to
+  zero. R also now removes the common shift once, before choosing the
   scale. Covariances with mean variance in [0.5, 2), including
   every correlation matrix, are bitwise unchanged. Away from unit scale R now fits as python does: on
   diag(1e-6, 1e-6, 1, 100, 100) its contrast residual is python's 2.1e-5,

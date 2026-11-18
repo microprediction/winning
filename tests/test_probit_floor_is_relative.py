@@ -135,3 +135,23 @@ def test_scale_at_the_top_of_the_double_range_1052():
     j = e(np.diag(big)) - e(np.diag(C))
     assert j == 511
     assert np.array_equal(D, np.ldexp(D0, 2 * j))
+
+
+def test_exponent_is_range_safe_and_probit_polishes_at_any_scale_1052():
+    """Three variances at the double ceiling overflowed the mean, so the
+    scale was never chosen; and fit_factor_model polished at the original
+    scale, where squared residuals of a 1e-200 Sigma underflow to zero."""
+    from winning.factor.core import _unit_scale_exponent as e
+    top = np.finfo(float).max
+    assert e([top] * 3) == e([np.ldexp(top, -1000)] * 3) + 500
+    V, D = fit_factor_model(np.diag([top] * 3), 1)
+    assert np.all(np.isfinite(D))
+    rng = np.random.default_rng(6)
+    v = rng.normal(size=(5, 1)) * 0.5
+    C = v @ v.T + np.diag(rng.uniform(0.5, 1.0, 5))
+    C = C / np.mean(np.diag(C))
+    V0, D0 = fit_factor_model(C, 1)
+    s = np.ldexp(1.0, -664)                    # 4^-332, about 1e-200
+    V1, D1 = fit_factor_model(s * C, 1)
+    assert np.array_equal(D1, s * D0)
+    assert np.array_equal(V1, np.ldexp(V0, -332))

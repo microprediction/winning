@@ -518,6 +518,12 @@ test_that("the scale is representable at the top of the double range (#1052)", {
   expect_true(all(is.finite(f$D)) && all(is.finite(f$V)))
   p <- winning:::.factor_model_projected(diag(2) * 2^1023, 1L)
   expect_true(all(is.finite(p$D)))
+  # three variances at the ceiling overflowed the mean itself
+  e <- winning:::.unit_scale_exponent
+  top <- .Machine$double.xmax
+  expect_identical(e(rep(top, 3)), e(rep(top * 2^-1000, 3)) + 500)
+  f3 <- suppressWarnings(fit_covariance(diag(rep(top, 3))))
+  expect_true(all(is.finite(f3$D)))
 })
 
 test_that("the common shift is removed before the scale is chosen (#1052)", {

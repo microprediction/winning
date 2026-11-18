@@ -45,6 +45,15 @@ def fit_factor_model(Sigma, k):
     The projected fit returns V = 0, D = diag(Sigma) there, exactly.
     """
     Sigma = np.asarray(Sigma, dtype=float)
+    # Fit at unit scale and scale back, as fit_covariance does (#101,
+    # #1052): the polish below compares squared residuals, which underflow
+    # to zero at a Sigma of 1e-200, so it did nothing there. Exact (ldexp);
+    # mean variance in [0.5, 2) is fitted bitwise as before.
+    from ..factor.core import _unit_scale_exponent
+    k2 = _unit_scale_exponent(np.diag(Sigma)) if Sigma.ndim == 2 else 0
+    if k2 != 0:
+        V, D = fit_factor_model(np.ldexp(Sigma, -2 * k2), k)
+        return np.ldexp(V, k2), np.ldexp(D, 2 * k2)
     n = len(Sigma)
     # the alternation is nonconvex and its default start (a constant
     # idiosyncratic variance) can stall short of the exact solution on
