@@ -501,6 +501,26 @@ function _blend_weight(sharp::Real)
     return t * t * (3 - 2t), 6t * (1 - t) / (_BLEND_HI - _BLEND_LO)
 end
 
+# The factor tensor's order rises with the loading sharpness (#1060,
+# python: winning.likelihood._FACTOR_LADDER_BAND). The fixed 7^r tensor
+# under-resolves the conditional choice probability, whose transitions in
+# f narrow like 1/sharpness: up to 0.16 nats off at smooth sharpness
+# 2.5-2.9 at rank 1 (0.061 at rank 2), and the exchangeable three-way
+# race priced 0.3296 against 1/3. Past the band the tensor has 31 nodes
+# per factor at rank 1 and 11 at rank 2; across it the probability is
+# the C1 blend of the two tensors and the score carries the weight's
+# derivative. Below the band, past the Sobol switch, at rank 0 and 3+,
+# and for a caller's Qf at or above the high order, nothing changes.
+const _LADDER_LO, _LADDER_HI = 0.8, 1.0
+_factor_qf_high(r::Integer) = r == 1 ? 31 : r == 2 ? 11 : 0
+
+function _ladder_weight(sharp::Real)
+    sharp > _LADDER_LO || return 0.0, 0.0
+    sharp >= _LADDER_HI && return 1.0, 0.0
+    t = (sharp - _LADDER_LO) / (_LADDER_HI - _LADDER_LO)
+    return t * t * (3 - 2t), 6t * (1 - t) / (_LADDER_HI - _LADDER_LO)
+end
+
 # The blend's statistic must be differentiable and symmetric in the
 # alternatives: a max over row norms has a cusp at ties. A p-norm of the
 # centred row norms is smooth, permutation symmetric, at least the max
@@ -601,7 +621,8 @@ set; V gauge-centred; `tilt` moves each observation's own-noise nodes
 (Gauss-Hermite branch only). Port of winning/likelihood.py::_choice_terms."""
 function _choice_terms(mu::AbstractMatrix, V::AbstractMatrix,
                        choice::AbstractVector{Int}, s::AbstractVector,
-                       F::AbstractMatrix, W::AbstractVector; tilt = true)
+                       F::AbstractMatrix, W::AbstractVector; tilt = true,
+                       split::Int = 0)
     T, J = size(mu)
     r = size(V, 2)
     ET = promote_type(eltype(mu), eltype(V), Float64)
@@ -623,6 +644,9 @@ function _choice_terms(mu::AbstractMatrix, V::AbstractMatrix,
     rv = zeros(Int, R)
     dcs = zeros(ET, R)
     Hj = zeros(ET, R, r)
+    # with split > 0, each observation's posterior mass on nodes 1:split
+    # and on split+1:Q, each summed directly (#1060)
+    mass = zeros(ET, T, 2)
     for t in 1:T
         k = choice[t]
         i = 0
@@ -670,6 +694,7 @@ function _choice_terms(mu::AbstractMatrix, V::AbstractMatrix,
         # on every node cost more than the likelihood itself
         @inbounds for q in 1:Q
             om = acc[q] / rs
+            split > 0 && (mass[t, q <= split ? 1 : 2] += om)
             gp = -z[q]
             for (i, j) in enumerate(rv)
                 wl = om * lam[i, q] / s[j]
@@ -704,6 +729,7 @@ function _choice_terms(mu::AbstractMatrix, V::AbstractMatrix,
             dmu[t, j] -= dci
         end
     end
+    split > 0 && return lp, dmu, GV, mass
     return lp, dmu, GV
 end
 
@@ -810,11 +836,35 @@ function _choice_logprob_terms(mu::AbstractMatrix, V::AbstractMatrix,
     Qz = ratio > 1 ? Int(min(4 * Qz, ceil(Qz * ratio))) : Qz
     sharp, sgrad = _smooth_sharpness(V, Dv)
     w, dw = _blend_weight(sharp)
+    # the Hermite tensor's order: the caller's Qf, or past the ladder band
+    # the higher one (#1060)
+    qh = _factor_qf_high(r)
+    wh, dwh = (w < 1.0 && qh > 0 && Qf < qh) ? _ladder_weight(sharp) :
+              (0.0, 0.0)
+    if 0.0 < wh < 1.0
+        # inside the ladder band: both tensors carry the same own-noise
+        # tilt, so the blend is ONE rule on the union of their nodes with
+        # weights (1 - u) W_lo and u W_hi; the weight's own derivative
+        # adds (P_hi / P - P_lo / P) du/dsharp dsharp/dV, from the
+        # posterior masses on the two node sets
+        Fl, Wl = nodes_for_likelihood(r; Qf = Qf, Qz = Qz, sharp = 0.0)
+        Fh, Wh = nodes_for_likelihood(r; Qf = qh, Qz = Qz, sharp = 0.0)
+        F = vcat(Fl, Fh)
+        W = vcat((1 - wh) .* Wl, wh .* Wh)
+        lp, dmu, GV, ab = _choice_terms(mu, Vc, choice, s, F, W;
+                                        tilt = true, split = length(Wl))
+        for t in eachindex(lp)
+            gw = (ab[t, 2] / wh - ab[t, 1] / (1 - wh)) * dwh
+            GV[t, :, :] .+= gw .* sgrad
+        end
+        return lp, dmu, GV
+    end
+    Qg = wh == 1.0 ? qh : Qf
     if w == 0.0 || w == 1.0
-        F, W = nodes_for_likelihood(r; Qf = Qf, Qz = Qz, sharp = sharp)
+        F, W = nodes_for_likelihood(r; Qf = Qg, Qz = Qz, sharp = sharp)
         return _choice_terms(mu, Vc, choice, s, F, W; tilt = (w == 0.0))
     end
-    Fg, Wg = nodes_for_likelihood(r; Qf = Qf, Qz = Qz, sharp = 0.0)
+    Fg, Wg = nodes_for_likelihood(r; Qf = Qg, Qz = Qz, sharp = 0.0)
     Fs, Ws = nodes_for_likelihood(r; Qf = Qf, Qz = Qz, sharp = Inf)
     lg, dmg, GVg = _choice_terms(mu, Vc, choice, s, Fg, Wg; tilt = true)
     ls, dms, GVs = _choice_terms(mu, Vc, choice, s, Fs, Ws; tilt = false)
@@ -883,7 +933,9 @@ Returns (loglik, dmu, dV), plus the per-observation loading scores
 in closed form; J >= 3 integrates the factors and the chosen
 alternative's own noise on a Gauss-Hermite tensor with tilted own-noise
 nodes, or past sharpness 3 a symmetrised Halton cloud, blended
-continuously across the switch. `Qz = nothing` takes 7 own-noise nodes
+continuously across the switch. At rank 1 and 2 a `Qf` below 31 (rank
+1) or 11 (rank 2) is raised to that order past smooth sharpness 1,
+blended in over 0.8-1.0 (#1060). `Qz = nothing` takes 7 own-noise nodes
 below J = 6 and 11 from J = 6 (#173). `nodes = (F, W)` integrates the
 caller's rule as given."""
 function choice_loglik_and_score(mu::AbstractMatrix, V::AbstractMatrix,
