@@ -56,13 +56,23 @@
   pmax((c0 - b * s) / a, 0)
 }
 
-# j with md / 4^j in [0.5, 2), the power of four the fitters work at
-# (python core._unit_scale_exponent, #1052). Half UP, not R's half-to-even
-# round(), so it moves by exactly one when md is multiplied by four.
-.unit_scale_exponent <- function(md) {
-  if (!(is.finite(md) && md > 0)) return(0)
-  floor(log2(md) / 2 + 0.5)
+# j with mean(d) / 4^j in [0.5, 2), the power of four the fitters work at
+# (python core._unit_scale_exponent, #1052), from the binary exponent: a
+# rounded log2 put means just below 2 * 4^j on the next power, and R's
+# half-to-even round() put exact ties on alternate sides. The mean is of
+# d / 2, exact and free of overflow.
+.unit_scale_exponent <- function(d) {
+  mh <- mean(d / 2)
+  if (!(is.finite(mh) && mh > 0)) return(0)
+  e <- floor(log2(mh))                  # then made exact: mh / 2^e in [1, 2)
+  if (mh / 2^e >= 2) e <- e + 1
+  if (mh / 2^e < 1) e <- e - 1
+  (e + 2) %/% 2
 }
+
+# C / 4^j and x * 4^j as two exact halvings of the exponent, so neither
+# overflows to Inf at j = 512 (#1052)
+.scale4 <- function(x, j) x * 2^j * 2^j
 
 .factor_model_projected <- function(C, k, n_outer = 60L, D0 = NULL) {
   # Fit at unit scale and scale back (#1052, python's fit_covariance rule,
@@ -71,11 +81,12 @@
   # of four, so the rescaling is exact, the fit of 4^j C is the fit of C
   # scaled, and every C with mean variance in about [0.7, 1.4) is fitted
   # bitwise as before.
-  k2 <- .unit_scale_exponent(mean(diag(C)))
+  k2 <- .unit_scale_exponent(diag(C))
   if (k2 != 0) {
-    out <- .factor_model_projected(C / 4^k2, k, n_outer,
-                                   if (is.null(D0)) NULL else D0 / 4^k2)
-    return(list(V = out$V * 2^k2, D = out$D * 4^k2, hit_cap = out$hit_cap))
+    out <- .factor_model_projected(.scale4(C, -k2), k, n_outer,
+                                   if (is.null(D0)) NULL else .scale4(D0, -k2))
+    return(list(V = out$V * 2^k2, D = .scale4(out$D, k2),
+                hit_cap = out$hit_cap))
   }
   n <- nrow(C)
   P <- diag(n) - 1 / n
@@ -348,13 +359,13 @@ fit_covariance <- function(C, k = 3L, m = 5L, blocks = NULL,
   # one when C is multiplied by four, ties included, and every C with
   # mean variance in [0.5, 2) is fitted bitwise as before. V, D, the
   # floor clamp and the absolute residual carry the scale.
-  k2 <- .unit_scale_exponent(mean(diag(C)))
+  k2 <- .unit_scale_exponent(diag(C))
   if (k2 == 0) return(.fit_covariance_unit(C, k, m, blocks, nodes))
-  out <- .fit_covariance_unit(C / 4^k2, k, m, blocks, nodes)
+  out <- .fit_covariance_unit(.scale4(C, -k2), k, m, blocks, nodes)
   out$V <- out$V * 2^k2
-  out$D <- out$D * 4^k2
-  out$clamp <- out$clamp * 4^k2
-  out$residual <- out$residual * 4^k2
+  out$D <- .scale4(out$D, k2)
+  out$clamp <- .scale4(out$clamp, k2)
+  out$residual <- .scale4(out$residual, k2)
   out
 }
 

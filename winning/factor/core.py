@@ -196,6 +196,21 @@ def _factor_model_projected_run(C, k, n_outer=60, D0=None):
     a caller finish those fits without touching the ones that stopped
     on their own."""
     C = np.asarray(C, dtype=float)
+    # Fit at unit scale and scale back (#1052). The stop on D and the
+    # NNLS water-filling stop are absolute, so a Sigma scaled by 1e-12
+    # stopped after one sweep (relative residual 0.12 against 6e-5 at
+    # n = 5, k = 4). The working scale is fit_covariance's power of four,
+    # applied with ldexp, so it is exact and cannot overflow: the fit of
+    # 4^j C is the fit of C scaled, and every C with mean variance in
+    # [0.5, 2) -- correlation matrices, and every fit_covariance call,
+    # which works at that scale -- is fitted bitwise as before.
+    k2 = _unit_scale_exponent(np.diag(C))
+    if k2 != 0:
+        V, D, cap = _factor_model_projected_run(
+            np.ldexp(C, -2 * k2), k, n_outer=n_outer,
+            D0=None if D0 is None else np.ldexp(np.asarray(D0, dtype=float),
+                                                -2 * k2))
+        return np.ldexp(V, k2), np.ldexp(D, 2 * k2), cap
     n = len(C)
     hit_cap = True
     # D0 exists for multistart. The objective is nonconvex in (V, D), so
@@ -206,16 +221,6 @@ def _factor_model_projected_run(C, k, n_outer=60, D0=None):
     V = np.zeros((n, k))
     Q = None
     best = (V, D, _projected_sq(C, V, D))
-    # The stopping tolerance is on D, a variance, so it carries the scale
-    # of C: an absolute 1e-12 stopped a Sigma scaled by 1e-12 after one
-    # sweep (relative residual 0.12 against 6e-5 at n = 5, k = 4, #1052).
-    # The scale is fit_covariance's power of four, so every C with mean
-    # variance in [0.5, 2) -- correlation matrices, and every
-    # fit_covariance call, which works at that scale -- keeps 1e-12
-    # exactly, and the fit of 4^j C stops on the same sweep as the fit
-    # of C.
-    tol = np.ldexp(1e-12,
-                   2 * _unit_scale_exponent(float(np.mean(np.diag(C)))))
     for it in range(n_outer):
         # V-step: top-k eigenpairs of P (C - diag D) P. Conjugation by P
         # is double centering (O(n^2)), and the eigenpairs come from
@@ -241,7 +246,7 @@ def _factor_model_projected_run(C, k, n_outer=60, D0=None):
             hit_cap = False
             break
         best = (V, D_new, obj)
-        if np.abs(D_new - D).max() < tol:
+        if np.abs(D_new - D).max() < 1e-12:
             D = D_new
             hit_cap = False
             break
@@ -260,15 +265,19 @@ def _factor_model_projected_run(C, k, n_outer=60, D0=None):
     return V, _projected_floor(C, D), hit_cap
 
 
-def _unit_scale_exponent(md):
-    """j with md / 4^j in [0.5, 2): the power of four the fitters work at
-    (#101, #1052). Rounded half UP, not numpy's half-to-even, so that it
-    moves by exactly one when md is multiplied by four, ties included: at
-    a mean variance of exactly 2 * 4^j half-to-even picked the wrong
-    power for every other j. 0 for a zero or non-finite md."""
-    if not (md > 0 and np.isfinite(md)):
+def _unit_scale_exponent(d):
+    """j with mean(d) / 4^j in [0.5, 2): the power of four the fitters
+    work at (#101, #1052). From the binary exponent, not log2: a rounded
+    log2 put means just below 2 * 4^j on the next power, and half-to-even
+    rounding put exact ties at 2 * 4^j on alternate sides, so 4C did not
+    always land where C did. The mean is taken of d / 2, which is exact
+    and cannot overflow where the sum of d would. 0 for a zero or
+    non-finite mean."""
+    mh = float(np.mean(np.ldexp(np.asarray(d, dtype=float), -1)))
+    if not (mh > 0 and np.isfinite(mh)):
         return 0
-    return int(np.floor(np.log2(md) / 2.0 + 0.5))
+    _, e = np.frexp(mh)                 # mean(d) = m 2^(e+1), m in [0.5, 1)
+    return (int(e) + 1) // 2
 
 
 def _projected_floor(C, D):
@@ -797,7 +806,7 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
     # variation (#101). The working scale is a power of FOUR, so C / s
     # and sqrt(s) are exact in binary and the fit of s * C is the fit of
     # C, bit for bit, scaled.
-    k2 = _unit_scale_exponent(float(np.mean(np.diag(C))))
+    k2 = _unit_scale_exponent(np.diag(C))
     # the scaled matrix goes straight to the fitter: it is already
     # validated and shift-free, and a second shift removal is not a no-op
     # when the first restored an over-removed part (#1052)

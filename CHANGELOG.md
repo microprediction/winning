@@ -6,17 +6,20 @@
   fit a scaled covariance as well as an unscaled one. The alternation
   stopped when D moved by an absolute 1e-12, so a Sigma scaled by 1e-12
   stopped after one sweep, with relative projected residual 0.12 against
-  6e-5 at n = 5, k = 4. The tolerance now carries the power-of-four scale
-  `fit_covariance` already uses, so the fit of 4^j C is exactly the fit
-  of C scaled (R fits at that unit scale and scales back, which also
-  covers its absolute NNLS thresholds). R's `fit_covariance` now does the
+  6e-5 at n = 5, k = 4. Both ports now fit at the power-of-four unit
+  scale `fit_covariance` already uses and scale back, which also covers
+  the absolute NNLS thresholds, so the fit of 4^j C is exactly the fit
+  of C scaled. R's `fit_covariance` now does the
   same, as python's has since #101: its clustering clip and multistart
   floor were absolute too, and at 4^-25 every one of 60 random rank-3
   fields came back at a different rank, with D off by up to 54%.
-  The working power of four now rounds half up in both ports (numpy's and
-  R's half-to-even put a mean variance of exactly 2 * 4^j on the wrong
-  side for every other j), and R removes the common shift once, before
-  choosing it. Covariances with mean variance in [0.5, 2), including
+  The working power of four now comes from the binary exponent of the
+  mean variance in both ports, applied as exact exponent shifts. A
+  rounded log2 put means just below 2 * 4^j on the next power, and
+  half-to-even rounding put exact ties on alternate sides. The diagonal's
+  sum could overflow near the top of the double range, and R's 4^512 was
+  Inf. R also now removes the common shift once, before choosing the
+  scale. Covariances with mean variance in [0.5, 2), including
   every correlation matrix, are bitwise unchanged. Away from unit scale R now fits as python does: on
   diag(1e-6, 1e-6, 1, 100, 100) its contrast residual is python's 2.1e-5,
   where the old absolute stop happened to give 9e-8 at that scale and

@@ -110,7 +110,28 @@ def test_scale_ties_round_one_way_1052():
     working scales that were NOT one power of four apart, and the fit of
     4C was not guaranteed to be the fit of C scaled. Ties round half up."""
     from winning.factor.core import _unit_scale_exponent as e
-    for md in (2.0, 0.5, 1.0, 1.3, 3.7, 1e-9, 7e12):
-        for j in range(-12, 13):
-            assert e(md * 4.0 ** j) == e(md) + j
-    assert e(2.0) == 1 and e(0.5) == 0 and e(1.0) == 0
+    for md in (2.0, 0.5, 1.0, 1.3, 3.7, 1e-9, 7e12, 2 - 2 ** -52,
+               8 - 2 ** -50):
+        for j in range(-200, 201, 7):
+            assert e([np.ldexp(md, 2 * j)]) == e([md]) + j
+    assert [e([2.0]), e([0.5]), e([1.0])] == [1, 0, 0]
+    # a rounded log2 put these on the next power of four
+    assert [e([2 - 2 ** -52]), e([8 - 2 ** -50])] == [0, 1]
+
+
+def test_scale_at_the_top_of_the_double_range_1052():
+    """The sum of the diagonal overflowed before the scale was chosen,
+    so the fit ran unscaled and overflowed in turn."""
+    from winning.factor.core import fit_covariance
+    rng = np.random.default_rng(5)
+    A = rng.normal(size=(5, 5))
+    C = A @ A.T
+    C = C / np.max(np.diag(C))
+    big = np.ldexp(C, 1022)
+    V, D, _, _ = fit_covariance(big)
+    V0, D0, _, _ = fit_covariance(C)
+    assert np.all(np.isfinite(D)) and np.all(np.isfinite(V))
+    from winning.factor.core import _unit_scale_exponent as e
+    j = e(np.diag(big)) - e(np.diag(C))
+    assert j == 511
+    assert np.array_equal(D, np.ldexp(D0, 2 * j))

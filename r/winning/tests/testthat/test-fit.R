@@ -504,9 +504,20 @@ test_that("scale ties round one way (#1052)", {
   # R's round() is half-to-even, so mean variance exactly 2 and 8 chose
   # working scales that were not one power of four apart
   e <- winning:::.unit_scale_exponent
-  for (md in c(2, 0.5, 1, 1.3, 3.7, 1e-9, 7e12))
-    for (j in -12:12) expect_identical(e(md * 4^j), e(md) + j)
+  for (md in c(2, 0.5, 1, 1.3, 3.7, 1e-9, 7e12, 2 - 2^-52, 8 - 2^-50))
+    for (j in seq(-200, 200, by = 7))
+      expect_identical(e(md * 2^j * 2^j), e(md) + j)
   expect_identical(c(e(2), e(0.5), e(1)), c(1, 0, 0))
+  # a rounded log2 put these on the next power of four
+  expect_identical(c(e(2 - 2^-52), e(8 - 2^-50)), c(0, 1))
+})
+
+test_that("the scale is representable at the top of the double range (#1052)", {
+  # 4^512 is Inf: dividing by it fitted a zero matrix
+  f <- suppressWarnings(fit_covariance(diag(c(.Machine$double.xmax, 1))))
+  expect_true(all(is.finite(f$D)) && all(is.finite(f$V)))
+  p <- winning:::.factor_model_projected(diag(2) * 2^1023, 1L)
+  expect_true(all(is.finite(p$D)))
 })
 
 test_that("the common shift is removed before the scale is chosen (#1052)", {
