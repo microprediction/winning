@@ -85,7 +85,7 @@
       <p class="legend">Six runners moved by two common luck factors; whichever draws the
         smallest performance wins. Drag each runner's ability and its two
         factor loadings, pick the noise distribution (and its skew), and the win probabilities update
-        live — computed in your browser by the factor lattice algorithm this
+        live. They are computed in your browser by the factor lattice algorithm this
         package ships, at verified parity with the Python. Runners loading the same factor with the
         same sign are teammates, opposite signs rivals; zero loadings recover the
         independent race, where Gumbel noise reproduces softmax exactly.</p>
@@ -111,7 +111,7 @@
       grammar, and inversion of observed shares back to utilities. A
       million alternatives price in 29 seconds under a rank-one factor;
       inversion at a million takes 80 seconds independent and about
-      twenty minutes rank-one — every number from a committed, seeded
+      twenty minutes rank-one. Every number comes from a committed, seeded
       script.
       <a href="./assets/pdf/scalable_contest_inversion_paper-r11.pdf">The
       paper (PDF, tag paper-r11) →</a>
@@ -134,11 +134,11 @@ q = removal_shares(mu, V=V, D=D)         # P(j wins | i removed), all pairs</cod
       Max-wins semantics for the probit literature live in
       <code>winning.probit</code> (<code>shares</code>,
       <code>calibrate_utilities</code>, supplied-covariance fitting); the
-      retired density-agnostic research engine in <code>winning.research</code>; the
+      density-agnostic research engine in <code>winning.research</code>; the
       paper-faithful kernels in <code>winning.factor</code>.
     </p>
 
-    <h2 id="grammars">One race, five covariance grammars</h2>
+    <h2 id="grammars">Covariance grammars</h2>
     <p>Every grammar describes the same min-race
     $Y = \mu + \text{noise}$; the grammars are declarative descriptions of the
     noise covariance that admit $O(N)$-per-lattice-point evaluation. With the
@@ -160,15 +160,16 @@ polish_race(p0=w, structure=tree, name_caps=0.05)     # nearest race under caps<
     correlation is the <em>floored</em> cophenetic correlation of a
     hierarchical clustering (merge height maps through
     $\rho=\max(1-2h^2,0)$; negative cophenetic correlation has no tree
-    representation) — so a
-    portfolio's HRP weights can be inverted, re-priced and polished along the
-    dendrogram they came from. Analytic fixed-grid Jacobians (rows sum
+    representation). A
+    portfolio's HRP weights can therefore be inverted, re-priced and polished along the
+    dendrogram they came from.</p>
+    <p>Analytic fixed-grid Jacobians (rows sum
     to zero; off-diagonals are photo-finish tie densities) ship for the
     factor, block and nested grammars, with preconditioned Newton
     inversion throughout. An arbitrary dense $\Sigma$ is priced by
     fitting the grammar family (seriated blocks under global factors)
-    and promoting the residual to extra factor dimensions — one seeded,
-    reproducible call that beats million-draw Monte Carlo on wall clock
+    and promoting the residual to extra factor dimensions. That is one seeded,
+    reproducible call; it beats million-draw Monte Carlo on wall clock
     at $n = 2000$ and prices tail probabilities Monte Carlo cannot
     see.</p>
 
@@ -176,12 +177,13 @@ polish_race(p0=w, structure=tree, name_caps=0.05)     # nearest race under caps<
     <p>The numpy implementation is the spec. The compiled kernels
     (<a href="https://pypi.org/project/fastrace/">fastrace</a>, thin
     <a href="https://github.com/PyO3/pyo3">pyo3</a> bindings over the pure-rust
-    <code>winning</code> crate) accelerate every path — 232&times; on the classic
-    calibration, input-bound to ten million runners on the block field — and the
-    base-R package mirrors the complete API with no compiled dependency. All
+    <code>winning</code> crate) accelerate every path: 232&times; on the classic
+    calibration, and input-bound to ten million runners on the block field. The
+    base-R package mirrors the complete API with no compiled dependency.</p>
+    <p>All
     ports are parity-locked: <code>parity/vectors.json</code> embeds inputs and
     outputs from the reference, and every language replays the same
-    twenty-two scenarios — nineteen to within 1e-7 (most to 1e-10), the
+    twenty-two scenarios. Nineteen agree to within 1e-7 (most to 1e-10), and the
     three fit- or optimizer-mediated ones to between 5e-4 and 5e-3.</p>
 <pre><code>pip install winning          # pure python (numpy/scipy)
 pip install winning[fast]    # + compiled kernels (abi3 wheels)
@@ -189,8 +191,8 @@ pip install winning[certified]  # + winning.certified: Arb-ball enclosures (pyth
 remotes::install_github("microprediction/winning", subdir = "r/winning")</code></pre>
     <p>Random test covariances come from
     <a href="https://randomcov.microprediction.org/">randomcov</a>: fifteen
-    named ensembles, because “a random covariance matrix” means nothing until
-    the measure is named.</p>
+    named ensembles. A random covariance matrix is defined only once its
+    distribution is specified.</p>
 
     <h2 id="papers">Papers</h2>
     <ul>
@@ -200,12 +202,12 @@ remotes::install_github("microprediction/winning", subdir = "r/winning")</code><
         <a href="https://papers.ssrn.com/abstract=7307363">SSRN working paper</a>).
         All shares of a correlated race in one O(QNL) pass,
         graph-Laplacian derivatives applied matrix-free, and inversion
-        of observed shares back to utilities &mdash; forward pricing
-        benchmarked to ten million alternatives, inversion to one
+        of observed shares back to utilities. Forward pricing is
+        benchmarked to ten million alternatives, and inversion to one
         million. Softmax is the Gumbel special case of the same lattice.
         Ships as <code>winning.factor</code>; every experiment is a
         committed script under <code>research/experiments/</code>.
-        Supersedes the earlier
+        Predecessor: the
         <a href="./assets/pdf/factor_probit_share_calibration.pdf">share-calibration
         draft</a>.</li>
       <li><a href="./assets/pdf/win_nodes.pdf">Sampling-free
@@ -243,7 +245,7 @@ remotes::install_github("microprediction/winning", subdir = "r/winning")</code><
         collision local time: for Brownian races the photo-finish flux
         at horizon s is the rate at which the leading pair's local time
         accumulates, verified against sixty thousand simulated paths,
-        and computable at scale &mdash; a Russell-3000-sized field prices
+        and computable at scale: a Russell-3000-sized field prices
         its full rank-1/2 collision-rate curve in under two seconds.
         Sketches market-implied index leakage (reconstitution turnover
         as rank-boundary local time) via a top-k flux formula, derived
@@ -254,8 +256,8 @@ remotes::install_github("microprediction/winning", subdir = "r/winning")</code><
         draft). Rescaling a probability vector when an item is withdrawn,
         delisted or masked out of a softmax is one of the great unconscious
         modelling acts; it amounts to assuming a Gumbel race. Gaussian
-        renormalization &mdash; re-running a Thurstone Case V contest among
-        the survivors &mdash; is an equally canonical, tuning-free
+        renormalization (re-running a Thurstone Case V contest among
+        the survivors) is an equally canonical, tuning-free
         alternative. Scored out of sample, it has the lower held-out log
         loss in thirty of thirty-nine comparisons, re-litigating the
         constant-ratio rule against Case V with psychology's restriction
@@ -280,31 +282,31 @@ remotes::install_github("microprediction/winning", subdir = "r/winning")</code><
 
     <h2 id="demos">Demos</h2>
     <ul>
-      <li><a href="./converge.html">Watch it converge</a> — choose a
-        covariance ensemble and a field size; the lattice answers in
-        milliseconds while frequency simulation crawls its
-        inverse-square-root slope, live in the browser.</li>
-      <li><a href="./polish.html">Polish your portfolio</a> — concentration caps
-        without breaking model-consistency: the nearest race satisfying your
-        limits, solved live in the browser with the analytic race Jacobian, showing
+      <li><a href="./converge.html">Watch it converge</a>: choose a
+        covariance ensemble and a field size. The lattice answers in
+        milliseconds while frequency simulation converges at the
+        inverse-square-root rate, live in the browser.</li>
+      <li><a href="./polish.html">Polish your portfolio</a>: concentration caps
+        without breaking model-consistency. The nearest race satisfying your
+        limits is solved live in the browser with the analytic race Jacobian, showing
         the redistribution running along the correlation structure.</li>
     </ul>
     <ul>
-      <li><a href="./fit.html">Fit a correlated race</a> — the inverse problem,
-        live: drag observed shares and a correlation, and the engine calibrates
+      <li><a href="./fit.html">Fit a correlated race</a>: the inverse problem,
+        live. Drag observed shares and a correlation, and the engine calibrates
         standalone abilities in the browser, against the naive independent
         fit.</li>
-      <li><a href="./circuit.html">The photo-finish circuit</a> — interactive:
-        the race as a resistor network, computed live in your browser by the
+      <li><a href="./circuit.html">The photo-finish circuit</a>: the race
+        as a resistor network, computed live in your browser by the
         shipped algorithm. Click a runner to delete it and watch the share flow
         to factor-similar survivors, against the IIA prediction.</li>
-      <li><a href="https://github.com/microprediction/winning/blob/main/research/demos/siam2021/race_field_demo.py">race_field_demo.py</a>
-        — one shared survival field prices every competitor by division; the naive
+      <li><a href="https://github.com/microprediction/winning/blob/main/research/demos/siam2021/race_field_demo.py">race_field_demo.py</a>:
+        one shared survival field prices every competitor by division; the naive
         O(N&sup2;) route against the O(N) field.</li>
-      <li><a href="https://github.com/microprediction/winning/blob/main/research/demos/siam2021/cavity_downdate_demo.py">cavity_downdate_demo.py</a>
-        — the rank-one cavity twin: one inverse contains every leave-one-out inverse.</li>
-      <li><a href="https://github.com/microprediction/winning/tree/main/js/factor">js/factor</a>
-        — the calibration core in the browser: dependency-free JavaScript
+      <li><a href="https://github.com/microprediction/winning/blob/main/research/demos/siam2021/cavity_downdate_demo.py">cavity_downdate_demo.py</a>:
+        the rank-one cavity twin, in which one inverse contains every leave-one-out inverse.</li>
+      <li><a href="https://github.com/microprediction/winning/tree/main/js/factor">js/factor</a>:
+        the calibration core in the browser, as dependency-free JavaScript
         checked against the Python (forward shares to ~1e-15, calibrated
         abilities to 2e-6); it powers the circuit demo
         above.</li>
@@ -321,13 +323,13 @@ remotes::install_github("microprediction/winning", subdir = "r/winning")</code><
       <code>winning</code> began as the reference implementation of the SIAM paper above.
       By Peter Cotton, with sibling packages at
       <a href="https://www.microprediction.org/">microprediction</a>. The same
-      computation &mdash; inferring latent ability from who wins &mdash; has been
+      computation, inferring latent ability from who wins, has been
       rediscovered field by field for a century, from Thurstone's 1927 law of
       comparative judgment to language-model leaderboards:
       <a href="./heritage.html">the heritage, as a timeline &rarr;</a>
     </p>
     <p>Notes: <a href="./notes-backblaze.html">disks do not fail
-      independently</a> &mdash; a common-cause factor in the public
+      independently</a>: a common-cause factor in the public
       Backblaze data, and what it costs erasure-coding durability.</p>
 
     <h2>Get the source</h2>
