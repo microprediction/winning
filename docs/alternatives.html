@@ -48,14 +48,14 @@
   <main class="content">
     <h1>Alternatives</h1>
 
-    <p>For the Gaussian grammars, the probabilities discussed on this
-    page are multivariate-normal rectangle and argmax probabilities,
-    and good software for those predates this project by decades. This
-    page does not survey alternatives for the non-Gaussian independent
-    and factor bases. It lists the implementations people already use,
-    says when each is the right
-    choice, and describes the reference improvements shipped as
-    <code>winning.alternatives</code> &mdash; which are new, and
+    <p>For the Gaussian grammars, the probabilities in question are
+    multivariate-normal rectangle and argmax probabilities, and good
+    software for those predates this project by decades. Alternatives
+    for the non-Gaussian independent and factor bases are not surveyed
+    here.</p>
+    <p>Below are the implementations people already use, when each is
+    the right choice, and the reference improvements shipped as
+    <code>winning.alternatives</code>. Those improvements are new, and
     therefore not as battle-tested as the incumbents they modify.
     Every comparison number below comes from a committed script under
     <code>research/alternatives/</code>.</p>
@@ -73,10 +73,10 @@
     scores for covariance of the form BB&prime; + diagonal, the
     Marsaglia&ndash;Genz&ndash;Bretz construction. For one specified
     winner under factor covariance, <code>lpRR</code> computes
-    essentially the same integral this engine does &mdash; the
+    essentially the same integral this engine does. The
     difference appears when every winner is wanted at once, which is
-    the case this package exists for.
-    <a href="https://cran.r-project.org/package=TruncatedNormal">TruncatedNormal</a>
+    the case this package exists for.</p>
+    <p><a href="https://cran.r-project.org/package=TruncatedNormal">TruncatedNormal</a>
     implements Botev's minimax exponential tilting, the strongest
     single rare-orthant estimator we know.
     <a href="https://cran.r-project.org/package=tlrmvnmvt">tlrmvnmvt</a>
@@ -84,8 +84,8 @@
     covariance algebra for very high-dimensional single rectangles.
     <a href="https://cran.r-project.org/package=mlogit">mlogit</a>
     estimates multinomial probit by GHK behind its familiar
-    interface.
-    <a href="https://cran.r-project.org/package=VeccTMVN">VeccTMVN</a>
+    interface.</p>
+    <p><a href="https://cran.r-project.org/package=VeccTMVN">VeccTMVN</a>
     reaches linear cost for a single region by combining Vecchia
     dependence truncation with minimax tilting, and a 2026
     doubly-blocked Genz implementation reports order-of-magnitude
@@ -100,8 +100,8 @@
     the full multinomial-probit choice vector there is no standard
     Python tool; the scattered research implementations of GHK on
     GitHub are unmaintained. This package fills that slot, and
-    <code>winning.alternatives</code> adds the strongest GHK-family
-    construction we could build for cross-checking it.</p>
+    <code>winning.alternatives</code> adds a GHK-family
+    construction for cross-checking it.</p>
 
     <h3>Stata</h3>
     <p>GHK's native home: Mata ships <code>ghk()</code> and
@@ -111,7 +111,7 @@
     One reading note: the <code>factor(#)</code> option parameterizes
     the covariance as low-rank-plus-diagonal, but the evaluator still
     Cholesky-factorizes each difference covariance and runs dense
-    GHK &mdash; the factor structure changes the model, not the
+    GHK. The factor structure changes the model, not the
     computation.</p>
 
     <h2 id="improvements">Our suggested improvements</h2>
@@ -124,22 +124,23 @@
     <h3>The reduced-rank bridge</h3>
     <p><code>reduced_rank_representation(mu, V, D, i)</code> returns
     the Marsaglia rectangle representation of one winner's
-    probability &mdash; the (k+1)-column loading matrix, residual
-    diagonal, and bounds &mdash; ready for <code>lpRR</code> or any
+    probability (the (k+1)-column loading matrix, residual
+    diagonal, and bounds), ready for <code>lpRR</code> or any
     rectangle solver, and verified against
     <code>pmvnorm</code> in this repository's tests. The complete
     per-winner protocol also ships compiled
     (<code>per_winner_reduced_rank_shares</code>, a Rust kernel with
     a numpy fallback), so the wall-clock comparison below is
-    same-toolchain. Use it when you
+    same-toolchain.</p>
+    <p>Use it when you
     want a second opinion on a single share from machinery
     independent of this package. Pricing the complete vector this way
-    costs one call per winner: measured at n = 1000 (rank 2, common
-    scrambled-Sobol draws, both sides compiled), eighteen times the
+    costs one call per winner. Measured at n = 1000 (rank 2, common
+    scrambled-Sobol draws, both sides compiled), it takes eighteen times the
     engine's exact 0.125 seconds at total-variation 0.036, or 148
-    times at 0.0045, with the
-    per-winner cost growing as the square of the field size and
-    deep-tail winners falling below the estimator's floor at finite
+    times at 0.0045. The
+    per-winner cost grows as the square of the field size, and
+    deep-tail winners fall below the estimator's floor at finite
     sample counts.</p>
 
     <h3>The CDF-gradient evaluator</h3>
@@ -150,16 +151,16 @@
     factors as a Kalman state (no dense Cholesky), and one
     reverse-mode sweep per grid point returns all n components, so
     the whole vector is linear in n. We found no published GHK
-    protocol combining these pieces; as far as we know this is the
-    strongest GHK-family all-share evaluator in existence, and we
-    give it away because the shared field still dominates it:
+    protocol combining these pieces.</p>
+    <p>The shared field still dominates it:
     conditional on the factors, its draws simulate idiosyncratic
     dimensions the field integrates analytically. Measured at n = 200
     against a 131k-node reference: at ranks 4, 8 and 16 the engine's
     quasi&ndash;Monte Carlo factor nodes are five to sixty-five times
     more accurate at equal or less time, and at rank 2 the margin is
-    fifty-fold and up. The evaluator remains useful as an independent
-    cross-check, a GPU starting point, and an honest baseline.
+    fifty-fold and up.</p>
+    <p>The evaluator remains useful as an independent
+    cross-check, a GPU starting point, and a baseline.
     It requires <code>jax</code>, and one warning transfers: its
     output sums to one identically for any estimate of the CDF, so
     total mass is not a diagnostic of correctness.</p>

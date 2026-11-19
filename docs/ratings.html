@@ -51,7 +51,7 @@
   <main>
     <h1>Rating systems</h1>
 
-    <p>This page describes the package's rating line: systems that
+    <p>The package's rating line consists of systems that
       maintain a belief about each contestant in a multi-entrant contest
       (a race, a tournament, a leaderboard) and update it
       from observed finishing orders. The design differs from the
@@ -73,14 +73,14 @@
       finish order, computed by an O(N) forward chain, and a single
       update reproduces exact Bayes to lattice precision. Predictions are
       exact winner-of-many probabilities from the same machinery as the
-      <a href="./index.html">race engine</a>, including tie handling.
-      The construction is described in the
+      <a href="./index.html">race engine</a>, including tie handling.</p>
+    <p>The construction is described in the
       <a href="https://github.com/microprediction/winning#what-is-different-about-thurstonerating">repository
       documentation</a>. The package separately ships
       <code>winning.ratings</code>, a Gaussian moment-update line: beliefs
       there are (&mu;, &sigma;) pairs advanced by exact N-way moment
       updates, the correlated-race generalization of the TrueSkill-style
-      factor. This page describes the density line.</p>
+      factor. The description above is of the density line.</p>
 
     <p>Every ranked update takes <code>order</code>, the entrant indices
       from first to last finisher. A rank array, the position of each
@@ -104,7 +104,7 @@
       entity enters, and the offsets are shrunk toward it, so an entity
       with few contests under some condition falls back on its level
       rather than on zero.</p>
-    <p>Measured on 65,178 Chatbot Arena battles and 59,399 Lichess games.
+    <p>The measurements use 65,178 Chatbot Arena battles and 59,399 Lichess games.
       On chess, with both sides tuned on the same validation split, a
       partially pooled factor rating beats Lichess's deployed
       architecture (Glicko-2 maintained separately per time control) by
@@ -138,7 +138,8 @@
       0.0006, and online it is worth &minus;0.0005 and +0.0015, neither
       significant. Left at its default rating period Glicko-2 appears to gain
       +0.0074 from stratification, which is a property of the default
-      rather than of the category information. Partial pooling beats both: within one estimator, pooling
+      rather than of the category information.</p>
+    <p>Partial pooling beats both: within one estimator, pooling
       the level across conditions and shrinking the offsets beats both
       the scalar and a per-condition rating. On
       Arena the advantage grows with cell sparsity. On chess it is
@@ -164,7 +165,8 @@
       looked worth &minus;0.25 nats against a driver-only baseline until
       the baseline was given a tuned recency half-life, after which it
       was worth +0.04, because an omitted time dimension flatters any
-      richer parameterisation. The covariate must be exogenously varied:
+      richer parameterisation.</p>
+    <p>The covariate must be exogenously varied:
       chess opening family gives a null result because players are their
       openings (per-player tactical share sd 0.415 against a no-choice
       binomial null of 0.058), not because the axis is absent.
@@ -240,7 +242,7 @@ trk.predict(ids, t, groups=teams)</code></pre>
       <a href="https://github.com/microprediction/winning/blob/main/BENCHMARKS.md">BENCHMARKS.md</a>
       and regenerate from committed scripts.</p>
 
-    <h2>Non-Gaussian noise, and a market-efficiency result</h2>
+    <h2>Retirement noise and bookmaker odds in Formula 1</h2>
     <p>Formula 1 retirements make finishing order a mixture: pace when
       the car survives, a lottery when it does not. A noise density with
       a uniform disaster component beats every Gaussian system tested on

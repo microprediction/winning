@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>winning — watch it converge</title>
-  <meta name="description" content="Pick a covariance ensemble and a field size; the lattice race answers in milliseconds while GHK, Mendell-Elston and frequency simulation spend honest wall time. Live, in your browser, on the parity-locked engine." />
+  <meta name="description" content="Pick a covariance ensemble and a field size; the lattice race answers in milliseconds while GHK, Mendell-Elston and frequency simulation spend measured wall time. Live, in your browser, on the parity-locked engine." />
   <link rel="stylesheet" href="./academic.css" />
   <style>
     .panel { border: 1px solid #ddd; border-radius: 8px; padding: 1.2rem 1.4rem; margin: 1.4rem 0; }
@@ -58,26 +58,26 @@
   <main>
     <h1>Watch it converge</h1>
     <p class="lead">Pick a covariance ensemble and a field size, and race the
-    field's standard tools on honest wall time &mdash; each method charged only
+    field's standard tools on wall time, with each method charged only
     for its own compute, on your machine. The
-    <span class="lat">lattice race</span> prices every contestant at once
-    &mdash; milliseconds for the block and tree grammars, a second or two of
+    <span class="lat">lattice race</span> prices every contestant at once:
+    milliseconds for the block and tree grammars, a second or two of
     single-threaded JavaScript for the dense fits, and seconds for a sharp
     rank-2 factor field, which takes the 8,192-node quasi-Monte Carlo rule
-    (computed in a background worker, so the page stays live) (the compiled engines
-    are another two orders of magnitude faster).
-    Generic dense <span class="ghk">GHK</span> factors one
+    (computed in a background worker, so the page stays live). The compiled engines
+    are another two orders of magnitude faster.</p>
+    <p>Generic dense <span class="ghk">GHK</span> factors one
     (n&minus;1)-dimensional difference covariance <em>per contestant</em>
     before its first draw, then simulates its way down. (Reduced-rank
     Genz avoids the dense factorization for factor covariance, but
     still prices the winner events separately rather than reusing
     their common product; that is the version benchmarked in the
-    paper.)
-    <span class="me">Mendell&ndash;Elston</span>, the analytic
+    paper.)</p>
+    <p><span class="me">Mendell&ndash;Elston</span>, the analytic
     sequential-conditioning approximation, finishes fast and then never
-    improves. <span class="mc">Frequency simulation</span> crawls its
-    1/&radic;M slope, and <span class="ind">ignoring the correlation</span>
-    never arrives at all.</p>
+    improves. <span class="mc">Frequency simulation</span> converges at the
+    1/&radic;M rate, and <span class="ind">ignoring the correlation</span>
+    never reaches the correlated answer at all.</p>
 
     <div class="panel">
       <div class="controls">
@@ -100,8 +100,8 @@
       normalized. Mendell&ndash;Elston propagates truncated-normal moments
       analytically; its line is flat because its error is bias, not noise.
       On the dense ensembles all simulation-based arms floor at the small
-      grammar-fit residual instead of zero: that visible gap is the honest
-      boundary of the fitted approximation (largest for the AR(1) chain,
+      grammar-fit residual instead of zero: that visible gap marks the accuracy
+      limit of the fitted approximation (largest for the AR(1) chain,
       whose locality structure is the one family the grammar serves
       worst).</p>
     </div>
@@ -110,10 +110,10 @@
     (for the dense rows) the in-browser eigenfit of the covariance to the
     race grammar. GHK and Mendell&ndash;Elston as run here price one
     contestant at a time through that contestant's own difference
-    distribution &mdash; the per-alternative structure is why their
+    distribution. That per-alternative structure is why their
     clocks start seconds late at large field sizes. A structure-aware
-    variant can do better than this plain protocol; what no
-    per-contestant method reuses is the shared product field.</p>
+    variant can do better than this plain protocol, but no
+    per-contestant method reuses the shared product field.</p>
   </main>
   <footer>
     <a href="https://github.com/microprediction/winning">Source</a> &middot;
