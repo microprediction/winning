@@ -54,22 +54,23 @@
     <h1>The photo-finish circuit</h1>
     <p class="subtitle">The race is a resistor network. Click a runner to delete it.</p>
     <p class="lead">Twelve runners moved by two common factors. Each runner's
-      <strong>colour</strong> is its position in factor space, so similar colours mean
+      <em>colour</em> is its position in factor space, so similar colours mean
       similar factor exposure. Node size is win share. Wire thickness is the
-      photo-finish tie density between two runners — the probability density of the
-      race coming down to exactly that pair, which is also the weight in the
-      calibration Jacobian's graph Laplacian: the race is literally a resistor
-      network. (That the derivative matrix has this tie-density, zero-row-sum
+      photo-finish tie density between two runners: the probability density of the
+      race coming down to exactly that pair. It is also the weight in the
+      calibration Jacobian's graph Laplacian, so the race is literally a resistor
+      network.</p>
+    <p class="lead">That the derivative matrix has this tie-density, zero-row-sum
       structure was derived for general random-utility models by
-      M&uuml;ller, Nesterov and Shikhman in 2019; what this demo runs on is
+      M&uuml;ller, Nesterov and Shikhman in 2019. The demo runs on
       the shared-field identity that applies the dense network in linear
-      work without building its edges.)</p>
-    <p class="lead"><strong>Click a node</strong> to remove that runner. The engine
+      work without building its edges.</p>
+    <p class="lead"><em>Click a node</em> to remove that runner. The engine
       then computes each survivor's new win probability q<sub>j</sub> exactly, and the
       bar for j is the excess over the naive IIA rule that just redistributes the
       deleted share proportionally: q<sub>j</sub> / (p<sub>j</sub>/(1−p<sub>i</sub>)) − 1.
       Bars are ordered by factor similarity to the deleted runner, most similar at the
-      top — runners that resemble the deleted one gain disproportionately, exactly the
+      top. Runners that resemble the deleted one gain disproportionately, exactly the
       red-bus/blue-bus failure of IIA. Everything is computed live in your browser by
       the same algorithm the Python package ships.</p>
     <div class="stage">
@@ -82,6 +83,11 @@
       <a href="https://github.com/microprediction/winning/tree/main/js/factor">the JS module and its parity tests</a> ·
       <a href="./assets/pdf/scalable_contest_inversion.pdf">the paper</a></p>
   </main>
+  <footer>
+    <a href="https://github.com/microprediction/winning">Source</a> &middot;
+    Part of the <a href="https://repos.microprediction.org/">microprediction family</a> &middot;
+    Authored by <a href="https://home.microprediction.org/">Peter Cotton</a>.
+  </footer>
   <script type="module">
     import { winProbabilitiesFactor } from "./assets/js/factor_race.mjs?v=4";
     window.addEventListener("error", (e) => {

@@ -53,17 +53,16 @@
   </header>
   <main>
     <h1>How it works</h1>
-    <p class="lead">The package prices and inverts contests &mdash;
-    races, choices, markets &mdash; at scales where the standard methods
-    give out. Three ideas carry all of it, each with a history credited
-    in its section: the choice event is
-    one-dimensional, so one <strong>shared field</strong> prices every
-    contestant at once; correlation enters by
-    <strong>conditioning</strong>, so it costs a low-dimensional
-    quadrature rather than an \(n\)-dimensional one; and the Jacobian is
-    a <strong>boundary flux</strong>, which makes inversion a convex
-    program on a graph. This page walks through each, with the full
-    derivations and every measured number in
+    <p class="lead">The package prices and inverts contests (races,
+    choices, markets) at scales where the standard methods give out.
+    The choice event is one-dimensional, so one <em>shared field</em>
+    prices every contestant at once. Correlation enters by
+    <em>conditioning</em>, so it costs a low-dimensional quadrature
+    rather than an \(n\)-dimensional one. The Jacobian is a
+    <em>boundary flux</em>, which makes inversion a convex program on a
+    graph.</p>
+    <p>Each of these ideas has a history, credited in its section below.
+    The full derivations and every measured number are in
     <a href="./assets/pdf/scalable_contest_inversion.pdf">the paper</a>.</p>
 
     <h2>1. A race is decided at the winning time</h2>
@@ -73,21 +72,22 @@
     contestant \(i\) wins by finishing at some time \(x\) with everyone
     else still out on the course:</p>
     \[ p_i \;=\; \int f_i(x)\prod_{j\ne i}S_j(x)\,dx . \]
-    <p>That integral is one-dimensional no matter how large \(n\) is
-    &mdash; an observation as old as the subject. Domencich and McFadden
+    <p>That integral is one-dimensional no matter how large \(n\) is,
+    an observation as old as the subject. Domencich and McFadden
     wrote the general random-utility choice probability as a
     one-dimensional integral over the winning utility in 1975, with the
-    honest caveat that its integrand generally conceals a multivariate
-    calculation; under <em>independence</em> the integrand really is a
+    caveat that its integrand generally conceals a multivariate
+    calculation. Under <em>independence</em> the integrand really is a
     density times a product of univariate CDFs, and that one-dimensional
-    quadrature has been standard ever since. The smooth methods of the
-    <em>correlated</em>-probit literature &mdash; GHK, Genz's quadrature,
-    minimax tilting &mdash; treat \(p_i\) as an \((n-1)\)-dimensional
+    quadrature has been standard ever since.</p>
+    <p>The smooth methods of the
+    <em>correlated</em>-probit literature (GHK, Genz's quadrature,
+    minimax tilting) treat \(p_i\) as an \((n-1)\)-dimensional
     orthant integral and pay for that view one alternative at a time
     (frequency simulation does return the whole vector per draw, but is
-    not smooth in the parameters). And even the independent one-dimensional view,
+    not smooth in the parameters). Even the independent one-dimensional view,
     evaluated per alternative, re-forms an \((n-1)\)-fold product
-    \(n\) times &mdash; which is where the representation stops being
+    \(n\) times, which is where the representation stops being
     an algorithm.</p>
     <p>The computational trick is that the product is <em>shared</em>.
     Build the log survival field
@@ -99,9 +99,10 @@
     \(O(nL)\) for \(L\) lattice points. Working in logs is also what
     keeps hopeless contestants finite: in the far tail the product of
     survivals underflows to zero and a division would return \(0/0\),
-    while a difference of logs simply decays to nothing. The lattice
-    itself is placed on the winner's bulk &mdash; the region where the
-    race is actually decided &mdash; rather than across the ability
+    while a difference of logs simply decays to nothing.</p>
+    <p>The lattice
+    itself is placed on the winner's bulk (the region where the
+    race is actually decided) rather than across the ability
     span, which is why 33 well-placed points can beat 500 badly placed
     ones.</p>
 
@@ -115,32 +116,32 @@
     <p>a \(Q\)-node quadrature over the shared luck \(f\), each node one
     run of the shared-field pass: \(O(nLQ)\) in total. The package's
     covariance <a href="/#grammars">grammar</a> is the set of structures
-    for which this works exactly &mdash; a global factor, rank-\(r\)
+    for which this works exactly: a global factor, rank-\(r\)
     effects per cluster (teams, sectors), a global factor over clusters
-    (markets), and trees of uniform shared effects (hierarchies) &mdash;
-    plus a fitted reduction for dense matrices. To be plain about
-    lineage: the one-dimensional representation is 1975, conditioning on
-    a factor is forty years old, the common-survival field itself is
+    (markets), and trees of uniform shared effects (hierarchies). A
+    fitted reduction handles dense matrices.</p>
+    <p>The one-dimensional representation dates from 1975, conditioning
+    on a factor is forty years old, the common-survival field itself is
     classical competing-risks calculus, and the log-domain lattice engine
     that evaluates and inverts it for all \(n\) at once is the 2021
-    paper this package began as. The contribution is the
-    organization &mdash; one field pass prices all \(n\) correlated
+    paper this package began as. The package organizes these
+    pieces so that one field pass prices all \(n\) correlated
     alternatives <em>and applies their dense tie-density Jacobian in
     linear work</em>, removing the one-alternative-per-integral
     repetition that GHK, Genz's quadrature, and minimax tilting all
     pay.</p>
 
     <h2>3. The Jacobian is a boundary flux</h2>
-    <p>Everything downstream &mdash; calibration, counterfactuals,
-    ratings &mdash; needs derivatives: how does every win probability
-    move when one ability moves? The answer has a geometry worth seeing
-    rather than just differentiating.</p>
+    <p>Everything downstream (calibration, counterfactuals,
+    ratings) needs derivatives: how does every win probability
+    move when one ability moves? The answer can be read off the
+    geometry of the winning regions.</p>
     <p>An outcome of the race is a point \(x\in\mathbb{R}^n\), one
     finishing value per contestant. Contestant \(i\) wins on the cone
     \(R_i=\{x: x_i\le x_k\ \text{for all } k\}\), and these cones tile
     the space. Two cones meet where two contestants dead-heat ahead of
-    the field &mdash; the <em>photo-finish face</em> \(F_{ij}\).</p>
-    <p>The tool is the divergence theorem, stated exactly: for a
+    the field: the <em>photo-finish face</em> \(F_{ij}\).</p>
+    <p>The tool is the divergence theorem. For a
     continuously differentiable vector field \(\mathbf{F}\) on a region
     \(\Omega\subset\mathbb{R}^n\) with piecewise-smooth boundary
     \(\partial\Omega\) and outward unit normal \(n\),</p>
@@ -161,7 +162,7 @@
     plus a sphere at infinity whose contribution vanishes (the density
     decays fast enough). On the face \(F_{ik}\) the outward normal is
     \((e_i-e_k)/\sqrt2\), whose \(j\)-th component is zero unless
-    \(k=j\) &mdash; so every face drops out except the one shared with
+    \(k=j\), so every face drops out except the one shared with
     \(j\):</p>
     \[ \frac{\partial p_i}{\partial \mu_j}
        \;=\; \frac{1}{\sqrt 2}\int_{F_{ij}} q_\mu\, dS \;\ge\; 0 ,
@@ -169,36 +170,37 @@
     <p>Slowing \(j\) pushes probability out of \(j\)'s winning region,
     and all of it crosses into the neighbouring cones through the
     surfaces where photo finishes happen. The derivative <em>is</em> the
-    tie density &mdash; an identity M&uuml;ller, Nesterov and Shikhman
-    (2019) derived for general joint laws by differentiating the surplus
-    function, and which the flux picture above reaches independently by
-    geometry. The contribution here is that picture, and, below, the
+    tie density. M&uuml;ller, Nesterov and Shikhman (2019) derived that
+    identity for general joint laws by differentiating the surplus
+    function; the flux picture above reaches it independently by
+    geometry. The package adds that picture and, below, the
     shared-field factorization that applies the resulting dense matrix
     without constructing its \(O(n^2)\) edges.</p>
 
     <figure class="diagram">
       <img src="./assets/images/boundary-flux.png" alt="Boundary flux intuition: the cone boundary decomposes into pairwise tie surfaces, each corresponding to a graph edge, so divergence at a node needs only pair-boundary fluxes." />
-      <figcaption><strong>Why no volume computation is needed.</strong>
+      <figcaption><em>The Jacobian needs no volume computation.</em>
       The boundary of a winning cone decomposes into pairwise
       photo-finish surfaces, one per rival, and each becomes one edge of
       the graph. The divergence theorem says the interior tells you
       nothing the boundary does not, so the Jacobian is assembled from
-      pair fluxes alone &mdash; and applied as an operator, never
+      pair fluxes alone. It is applied as an operator, never
       materialized, at the same \(O(nLQ)\) cost as pricing.</figcaption>
     </figure>
 
-    <p>Three structural facts fall out of the same picture, free of
-    charge. The face \(F_{ij}\) is one surface shared by two cones, so
-    the Jacobian is <strong>symmetric</strong>. What leaves one cone
-    enters its neighbours, so each row sums to zero &mdash; a
-    <strong>conservation law</strong>, which is translation invariance:
-    slowing everyone equally changes nothing. Together those two facts
+    <p>Three structural facts follow from the same picture. The face
+    \(F_{ij}\) is one surface shared by two cones, so
+    the Jacobian is <em>symmetric</em>. What leaves one cone
+    enters its neighbours, so each row sums to zero. That is a
+    <em>conservation law</em>, which is translation invariance:
+    slowing everyone equally changes nothing.</p>
+    <p>Together those two facts
     identify the matrix completely, and this is a two-line argument
     rather than a named theorem. Take the off-diagonal entries as edge
     weights, \(w_{ij} = \partial p_i/\partial\mu_j \ge 0\), symmetric
     because the face is shared. The rows summing to zero then force each
-    diagonal entry to be the negative sum of its row's edge weights
-    &mdash; the diagonal holds no free information. A matrix of exactly
+    diagonal entry to be the negative sum of its row's edge weights,
+    so the diagonal holds no free information. A matrix of exactly
     that form, minus degrees on the diagonal and weights off it, is what
     <em>weighted graph Laplacian</em> means (up to our sign convention),
     so the Jacobian is one:</p>
@@ -206,7 +208,7 @@
        (Jh)_i \;=\; \sum_{j\ne i} w_{ij}\,(h_j-h_i) , \]
     <p>with \(B\) the incidence matrix of the photo-finish graph and
     \(W_e\) the diagonal of tie densities.</p>
-    <p><strong>The identity the scale rests on.</strong> The dense matrix
+    <p>The dense matrix
     above never has to be built, because its weights factor through the
     field. Write \(A_i(x)=f_i(x)/S_i(x)\) for the hazard and
     \(G(x)=\prod_k S_k(x)\) for the field; then
@@ -214,26 +216,27 @@
     \[ (Jh)_i \;=\; \int G(x)\,A_i(x)\Bigl[\textstyle\sum_j A_j(x)h_j
        \;-\; h_i\sum_j A_j(x)\Bigr]\,dx , \]
     <p>where the two inner sums are shared across every contestant. A
-    graph with \(\binom{n}{2}\) potential edges is applied in \(O(nL)\)
-    &mdash; the cost of pricing &mdash; without one edge being formed.
+    graph with \(\binom{n}{2}\) potential edges is applied in \(O(nL)\),
+    the cost of pricing, without one edge being formed.
     That cancellation is the cavity trick of the forward pass applied to
-    derivatives, and it is the step the earlier literature stopped short
-    of. Generic automatic differentiation does not supply it unaided:
+    derivatives.</p>
+    <p>Generic automatic differentiation does not supply it unaided:
     Pearlmutter (1994) prices a Hessian&ndash;vector product at the cost
     of a gradient, but differentiating the per-alternative evaluators the
-    literature had returns the \(O(n^2L)\) it started with &mdash; the
+    literature had returns the \(O(n^2L)\) it started with. The
     missing piece was the cheap object to differentiate, and that object
     is the field.</p>
     <p>The race is a resistor
-    network, and the correspondence is exact, not decorative. Assign
+    network, and the correspondence is exact. Assign
     node \(i\) a potential \(v_i\) (the ability correction the
     inversion is solving for) and give the edge \(ij\) conductance
     \(w_{ij}\) (the tie density). Ohm's law says the current from
     \(i\) to \(j\) is \(w_{ij}(v_i-v_j)\); Kirchhoff's current law
     says the net current out of node \(i\) equals whatever is injected
     there externally. Summing Ohm's law over \(i\)'s neighbours gives
-    net outflow \(\sum_j w_{ij}(v_i-v_j) = (Lv)_i\) &mdash; Kirchhoff's
-    law <em>is</em> the graph Laplacian applied to the potentials. In the
+    net outflow \(\sum_j w_{ij}(v_i-v_j) = (Lv)_i\), so Kirchhoff's
+    law <em>is</em> the graph Laplacian applied to the potentials.</p>
+    <p>In the
     inversion the injected current at node \(i\) is the share residual
     \(r_i = p_i - p_i^\star\), the surplus probability that has to flow
     away from \(i\) through its photo-finish edges, and one Newton step
@@ -244,54 +247,54 @@
 
     <figure class="diagram">
       <img src="./assets/images/flux.png" alt="Cone geometry intuition: a winning cone as a control volume, with the divergence theorem turning a volume derivative into a boundary flux, and the discrete graph analogue with photo-finish ties as edges." />
-      <figcaption><strong>The cone as a control volume.</strong> On the
+      <figcaption><em>The cone as a control volume.</em> On the
       left, the continuous picture: contestant \(i\)'s winning region,
       with probability flowing out through its boundary. On the right,
       the discrete analogue: each contestant is a node, each
       photo-finish tie density \(w_{ij}\) an edge conductance, and the
-      net flux out of a node is exactly a graph-Laplacian action &mdash;
+      net flux out of a node is exactly a graph-Laplacian action. This is
       the Kirchhoff picture of the text above, with the ability
       correction \(v\) as potential and the share residual \(r\) as
       injected current.</figcaption>
     </figure>
 
     <h2>4. Inversion is a convex program</h2>
-    <p>The inverse problem &mdash; given a probability vector, find the
-    abilities &mdash; is where this geometry pays, and none of the
+    <p>The inverse problem (given a probability vector, find the
+    abilities) uses this geometry, and none of the
     convexity is ours. Let
     \(W(\mu)=\mathbb{E}\min_i(\mu_i+\epsilon_i)\), the expected winning
     time. That its gradient is the probability vector is the
     Williams&ndash;Daly&ndash;Zachary theorem of discrete choice; that
     share inversion is therefore an unconstrained convex program was
-    made explicit by Li (2018); and the Hessian is the negative
+    made explicit by Li (2018). The Hessian is the negative
     tie-density Laplacian, whose structure M&uuml;ller, Nesterov and
     Shikhman had by 2019. It is strictly negative definite on the space
-    of contrasts whenever every pairwise tie density is positive &mdash;
-    the photo-finish graph connected &mdash; which the Gaussian factor
+    of contrasts whenever every pairwise tie density is positive (the
+    photo-finish graph connected), which the Gaussian factor
     model guarantees when every contestant keeps idiosyncratic noise.
     So</p>
     \[ \max_\mu \; W(\mu) - \langle p^\star, \mu\rangle \]
     <p>is, for a target \(p^\star\) in the interior of the simplex
     (\(p^\star_i &gt; 0\) for every \(i\), \(\sum_i p^\star_i = 1\)), a strictly
     concave, coercive program whose unique mean-zero maximiser is the
-    inversion: the abilities exist and are unique up to a common shift.
-    The interior condition is necessary. With full-support noise every
+    inversion: the abilities exist and are unique up to a common shift.</p>
+    <p>The interior condition is necessary. With full-support noise every
     contestant wins with positive probability at every finite ability
     vector, so a target with some \(p^\star_i = 0\) has no finite inverse:
     the supremum is approached only as the contrast diverges. Flooring
     such a target gives a finite approximation whose contrast diverges as
     the floor tends to zero.</p>
-    <p>What is ours is the pair of oracles the field supplies, and it is
-    worth being exact about which one does what. The demonstrated
-    million-contestant inversions (about eighty seconds) run a damped
-    coordinate iteration preconditioned by the own-coordinate slopes the
-    field pass returns for free &mdash; a handful of passes, no linear
-    algebra. The same field also exposes the exact matrix-free
+    <p>The pair of oracles the field supplies is ours. The
+    demonstrated million-contestant inversions (about eighty seconds) run
+    a damped coordinate iteration preconditioned by the own-coordinate
+    slopes the field pass returns for free. The iteration takes a handful
+    of passes and no linear algebra.</p>
+    <p>The same field also exposes the exact matrix-free
     Jacobian&ndash;vector product of the previous section, which makes
     Newton&ndash;Krylov methods possible without constructing the dense
-    Jacobian; measured naively (the committed <code>exp23</code>), that
+    Jacobian. Measured naively (the committed <code>exp23</code>), that
     route currently loses to the diagonal iteration by two orders of
-    magnitude, so a competitive Newton&ndash;Krylov solver is solver
+    magnitude. A competitive Newton&ndash;Krylov solver is therefore solver
     engineering still to do, not a capability the oracle lacks.</p>
     <p>The program also has an economic reading, noted in the original
     paper (Cotton 2021). \(W(\mu)\) is the expected winning time, so
@@ -299,50 +302,50 @@
     contestant \(i\) faster improves the expected winning time at a rate
     equal to \(i\)'s win probability: the win probabilities are the
     <em>shadow prices</em> of ability, and inversion is the equilibrium
-    question run backwards &mdash; find the ability vector at which the
+    question run backwards: find the ability vector at which the
     observed shares are exactly those shadow prices.</p>
 
     <figure class="diagram">
       <img src="./assets/images/divergence-diagram.png" alt="The divergence calculation: build the race network from tie densities, form the Laplacian, equate divergence with the share residual, and see why deleting a runner does not redistribute share proportionally." />
-      <figcaption><strong>Share changes behave like current on the
-      network.</strong> Tie densities wire the field; the mismatch
+      <figcaption><em>Share changes behave like current on the
+      network.</em> Tie densities wire the field; the mismatch
       between model shares and target shares is a source term; the
       ability correction is the voltage that reconciles them. The
       right-hand panel is the practical consequence: delete a runner and
       its share does <em>not</em> spread proportionally (the Luce/IIA
-      prediction) &mdash; it flows down the thickest wires, to the
+      prediction). It flows down the thickest wires, to the
       runners most likely to have photo-finished with the deleted one.
       That is the counterfactual a Gaussian race gets right and a logit
       cannot.</figcaption>
     </figure>
 
     <div class="callout">
-      <strong>Summary.</strong> Build the survival
+      Build the survival
       field once, condition correlation away, read derivatives off the
-      photo-finish boundaries, and invert by convexity &mdash; all
+      photo-finish boundaries, and invert by convexity: all
       \(n\) contestants, one pass, \(O(nLQ)\).
     </div>
 
     <h2>Performance examples</h2>
     <ul>
-      <li><strong>Forward pricing.</strong> All-\(n\) probabilities under
+      <li><em>Forward pricing.</em> All-\(n\) probabilities under
       a rank-one factor in <span class="num">0.18</span>,
       <span class="num">2.7</span> and <span class="num">29</span>
       seconds at \(n=10^4, 10^5, 10^6\); a ten-million contestant block
       field in <span class="num">245</span> seconds.</li>
-      <li><strong>Inversion.</strong> \(n=10^6\) in about
+      <li><em>Inversion.</em> \(n=10^6\) in about
       <span class="num">80</span> seconds independent, twenty minutes
       rank-one; round trips accurate to a log-residual below
       <span class="num">1e-8</span>.</li>
-      <li><strong>Against the standard.</strong> The GHK simulator at
+      <li><em>Against the standard.</em> The GHK simulator at
       \(n=200\) and ten thousand draws is roughly
       <span class="num">200&times;</span> slower for the complete
       vector, with superquadratic measured cost growth; the analytic
       derivatives here carry no simulation noise at all.</li>
-      <li><strong>Any smooth base.</strong> Normal, Gumbel (softmax is
+      <li><em>Any smooth base.</em> Normal, Gumbel (softmax is
       the closed-form special case, reproduced to
       <span class="num">1e-15</span>), logistic, Laplace, Student-t,
-      skew-normal, or your own callable &mdash; the machinery never uses
+      skew-normal, or your own callable. The machinery never uses
       Gaussianity except where it says so.</li>
     </ul>
     <p>Every number is generated by a committed, seeded script in
