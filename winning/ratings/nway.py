@@ -754,6 +754,9 @@ def _order_pass(m, sd, order, L=2001, base="normal", curves=None):
     if denom <= _ORDER_TINY * u.max() and log_ok:
         return in_logs()
     if denom <= 0.0:
+        # P depends on the means only through their differences, so the
+        # gradient sums to zero and the last entry is the rest's negation
+        grad[order[-1]] = -float(np.sum(grad))
         return logP, grad
     grad[order[-1]] = float(np.sum(u * (-g[n - 1]))) / denom
     return logP, grad
@@ -1167,9 +1170,13 @@ def _order_pass_batch(Ms, sd, order, L=None, base="normal", curves=None):
         # ratio is invariant to the rescale; nothing further to track
     # last coordinate
     denom = (u * T[n]).sum(axis=1)
+    redo |= denom <= _ORDER_TINY * u.max(axis=1)      # as _order_pass
     ok = alive & (denom > 0)
     num = (u * (-g[n - 1])).sum(axis=1)
-    grad[:, order[-1]] = np.where(ok, num / np.where(ok, denom, 1.0), 0.0)
+    # an underflowed last stage on a live row: the shift invariance
+    # gives the last entry as the negated sum of the rest
+    grad[:, order[-1]] = np.where(ok, num / np.where(ok, denom, 1.0),
+                                  np.where(alive, -grad.sum(axis=1), 0.0))
     if redo.any() and base == "normal" and curves is None:
         logP[redo], grad[redo] = _order_pass_log(Ms[redo], sd, order, x)
     return logP, grad

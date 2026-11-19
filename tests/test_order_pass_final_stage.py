@@ -29,3 +29,15 @@ def test_correlated_order_update_survives_far_nodes():
     V = np.array([[-4.2], [3.1], [2.4], [-2.2]])
     mp, vp, lz = update_order_correlated(m, v, [2, 0, 3, 1], V, 1.0, Qf=31)
     assert np.all(np.isfinite(mp)) and np.all(vp > 0) and np.isfinite(lz)
+
+
+def test_batch_final_stage_matches_scalar():
+    # the batched pass (update_order_full's factor nodes) divided the
+    # last stage unguarded too, and returned zeros for two gradient
+    # entries on this field instead of rerunning it in logs
+    from winning.ratings.nway import _order_pass_batch
+    lp, g = _order_pass_batch(M[None, :], SD, ORDER)
+    lp1, g1 = order_loglik(M, SD, ORDER)
+    assert abs(lp[0] - lp1) < 1e-9 * abs(lp1)
+    np.testing.assert_allclose(g[0], g1, rtol=1e-9, atol=1e-9)
+    assert abs(g[0].sum()) < 1e-6
