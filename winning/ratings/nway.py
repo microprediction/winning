@@ -910,8 +910,72 @@ def _recentre_nodes(F, logW, logp):
     return F2, logW2
 
 
+# The Hermite tensor is recentred past _FACTOR_LADDER_BAND (#1076). At
+# rank <= 2 the correlated updates integrated on the fixed 7^r tensor at
+# any sharpness: conditional on the factors the event probability turns
+# over on a scale of 1/sharpness, and seven prior-placed nodes miss it.
+# Against a 61-81-node reference (rank 1; 31^2 at rank 2), cross-checked
+# with a recentred one, order log Z was off by 0.16 at sharpness 2.5-3
+# and 0.39 at 3-4 (rank 1; 0.07 and 0.31 at rank 2). More prior-placed
+# nodes converge slowly (31 per factor still left 3.5e-3 at 3-4, for
+# 3.4x the time); moving them onto the factor posterior, as the Sobol
+# branch already does, converges fast: 11 recentred nodes at rank 1 left
+# 1.9e-4 at 2.5-3 and 1.2e-3 at 3-4 for 1.6-1.9x, and 9^2 at rank 2
+# left 8e-6 at 2-2.5 and 2.9e-3 at 3-4 for 1.8x. Below the band the 7^r
+# tensor is the better rule (5e-8 against 2e-5 at sharpness under 0.8)
+# and is kept to the bit; across it the event probability is the
+# mixture (1 - u) P_7 + u P_rc, and since u depends on the loadings and
+# variances alone, never on the means, that is ONE fixed rule on the
+# union of the nodes, whose mean gradient and differenced curvature are
+# those of the blended probability. A caller already at or above the
+# recentred order keeps their tensor throughout, as in the choice
+# likelihood's ladder (#1060).
+#
+# Winner events keep a fixed rule. A recentred rule depends on the
+# observed outcome, so the K winner probabilities came from K different
+# quadratures: they summed to one only to 1.8e-4 and the mean updates
+# averaged to zero only to 6e-5 (the verifier's identity.moments, whose
+# Gaussian winner floors are 1e-8; the fixed tensor meets them to 1e-15).
+# Order-type events sit at their lattice floors (1e-4) either way. So a
+# winner takes the prior-placed tensor at _PLAIN_SHARP_QF[r] past the
+# band instead: 15 nodes at rank 1 (winner log Z 1.6e-3 off at 2.5-3,
+# from 1.5e-2, for 2.1x) and 11 at rank 2 (3.1e-3 from 1.4e-2, 2.5x).
+_RECENTRED_QF = {1: 11, 2: 9}
+_PLAIN_SHARP_QF = {1: 15, 2: 11}
+
+
+def _sharp_factor_rule(m, v, V, beta2, node_logp_grad, F, logW,
+                       recentre=True):
+    """The rank <= 2 factor rule for the correlated updates: (F, logW)
+    unchanged below _FACTOR_LADDER_BAND in the smooth sharpness of the
+    canonical loadings against v + beta2, the recentred
+    _RECENTRED_QF[r] tensor past it (recentre=False: the prior-placed
+    _PLAIN_SHARP_QF[r] tensor), and their weight-u union across it."""
+    from ..likelihood import (_FACTOR_LADDER_BAND, _band_weight,
+                              _smooth_sharpness)
+    D = v + _beta_per_player(beta2, len(m))
+    u, _ = _band_weight(_smooth_sharpness(V, D)[0], _FACTOR_LADDER_BAND)
+    if u == 0.0:
+        return F, logW
+    r = V.shape[1]
+    Fh, Wh = _factor_grid(r, Qf=(_RECENTRED_QF if recentre
+                                 else _PLAIN_SHARP_QF)[r])
+    logWh = np.log(Wh)
+    if recentre:
+        sh = Fh @ V.T
+        logp0 = np.array([node_logp_grad(m + sh[q])[0]
+                          for q in range(len(Fh))])
+        if np.isfinite(np.max(logWh + logp0)):
+            Fh, logWh = _recentre_nodes(Fh, logWh, logp0)
+    if u == 1.0:
+        return Fh, logWh
+    return (np.vstack([F, Fh]),
+            np.concatenate([np.log1p(-u) + logW, np.log(u) + logWh]))
+
+
 def _mixture_update(m, v, V, beta2, node_logp_grad, Qf=7, eps=1e-3,
-                    base="normal", nodes_log2=10, convex_event=True):
+                    base="normal", nodes_log2=10, convex_event=True,
+                    recentre_sharp=True):
     """Shared engine of the correlated updates. For Gaussian priors,
     E[s_j | event] = m_j + v_j d log P / d m_j and
     Var[s_j | event] = v_j + v_j^2 d^2 log P / d m_j^2 hold for any
@@ -930,14 +994,19 @@ def _mixture_update(m, v, V, beta2, node_logp_grad, Qf=7, eps=1e-3,
     m = np.asarray(m, dtype=float)
     v = np.asarray(v, dtype=float)
     V = _canonical_loadings(as_loadings(V, len(m)))   # #130
-    F, W = _factor_grid(V.shape[1], Qf=Qf, nodes_log2=nodes_log2)
+    r = V.shape[1]
+    F, W = _factor_grid(r, Qf=Qf, nodes_log2=nodes_log2)
     logW = np.log(W)
     shifts = F @ V.T                                  # (Q, n)
-    if V.shape[1] >= 3:
+    if r >= 3:
         # Sobol branch: recentre the cloud on the factor posterior (see
         # _recentre_nodes; the full-covariance path does the same)
         logp0 = np.array([node_logp_grad(m + shifts[q])[0] for q in range(len(F))])
         F, logW = _recentre_nodes(F, logW, logp0)
+        shifts = F @ V.T
+    elif (_RECENTRED_QF if recentre_sharp else _PLAIN_SHARP_QF).get(r, 0) > Qf:
+        F, logW = _sharp_factor_rule(m, v, V, beta2, node_logp_grad, F,
+                                     logW, recentre=recentre_sharp)
         shifts = F @ V.T
 
     def mixture(mm):
@@ -982,8 +1051,9 @@ def update_winner_correlated(m, v, winner, V, beta2=1.0, Qf=7, eps=1e-3,
     matching this module throughout). Conditional on f the race is the
     independent one update_winner serves; the update mixes those
     conditionals with posterior node weights. Nodes: Qf Gauss-Hermite
-    per factor dimension at rank r <= 2; 2**nodes_log2 scrambled Sobol
-    at r >= 3 (Qf is inert there). Returns
+    per factor dimension at rank r <= 2, rising to _PLAIN_SHARP_QF[r]
+    once the loadings are sharp (#1076; see _sharp_factor_rule);
+    2**nodes_log2 scrambled Sobol at r >= 3 (Qf is inert there). Returns
     (m_post, v_post, logZ) with logZ = log P(winner) for evidence and
     model comparison. Verified against rejection-sampled Monte Carlo
     posteriors in the tests.
@@ -1008,7 +1078,8 @@ def update_winner_correlated(m, v, winner, V, beta2=1.0, Qf=7, eps=1e-3,
             return np.log(max(p, 1e-300)), g
 
     return _mixture_update(m, v, V, beta2, node, Qf=Qf, eps=eps, base=base,
-                           nodes_log2=nodes_log2)
+                           nodes_log2=nodes_log2,
+                           recentre_sharp=False)          # #1076: coherent
 
 
 def update_order_correlated(m, v, order, V, beta2=1.0, Qf=7, eps=1e-3,
@@ -1019,9 +1090,9 @@ def update_order_correlated(m, v, order, V, beta2=1.0, Qf=7, eps=1e-3,
     first to last finisher, best first (max-wins). A rank array (position of entrant i) is the inverse permutation and is
     silently wrong at K >= 3; convert it with order_from_positions (see
     winning.ratings.orders for the convention and a self-test).
-    Nodes as in
-    update_winner_correlated (Qf at rank <= 2, 2**nodes_log2 Sobol at
-    rank >= 3). Returns (m_post, v_post, logZ),
+    Nodes: Qf Gauss-Hermite at rank <= 2, recentred on the factor
+    posterior at _RECENTRED_QF[r] past the sharpness band; 2**nodes_log2
+    Sobol at rank >= 3). Returns (m_post, v_post, logZ),
     logZ = log P(order). Near-impossible orders degrade like
     order_loglik (finite moments, tiny logZ), never raise.
 
