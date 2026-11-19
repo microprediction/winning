@@ -9,6 +9,16 @@ space) and the winner by the exact n-ary likelihood message. We measure
 the posterior over the skill contrasts against the truth under each
 evidence set, averaged over seeded races.
 
+Two belief families run on the same draws. The diagonal arms
+(update_race) keep only the marginal variances between messages, so the
+price posterior 0.2 I + 0.1 11' (at n=8, tau2=0.25, unit prior) is
+carried as 0.3 I and every contrast variance is 0.6 instead of 0.4. The
+"_full" arms keep the full covariance: update_market_full is exact, and
+update_winner_full moment-matches the winner message against the full
+belief. Every arm is scored by the same predictive: the posterior
+covariance (common mode dropped, since it cancels from every ranking)
+added to the race's own factor and noise.
+
 Reproduce: OMP_NUM_THREADS=1 python research/win_nodes/exp1_two_evidence/run_two_evidence.py
 """
 import json, os, time
@@ -17,6 +27,8 @@ import numpy as np
 
 from winning.factor.races import race_probabilities
 from winning.ratings.market import update_race
+from winning.ratings.full import (update_market_full, update_winner_full,
+                                  _drop_common_mode, _belief_split)
 
 N, RANK, TAU2, BETA2, SEEDS = 8, 1, 0.25, 1.0, 400
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -35,11 +47,23 @@ def write_json_atomic(path, obj):
     os.replace(tmp, path)
 
 
+def predictive(m, S, V, D):
+    """Next-race win probabilities under belief N(m, S): performances
+    have covariance S + V V' + diag(D). The common mode of S cancels
+    from a ranking; the rest is split into loadings and a diagonal."""
+    B, psi = _belief_split(_drop_common_mode(np.asarray(S, float)))
+    return np.asarray(race_probabilities(-np.asarray(m), V=np.hstack([V, B]), D=D + psi))
+
+
+ARMS = ("prior", "outcome", "price", "both", "price_full", "both_full")
+
+
 def main():
     rng = np.random.default_rng(20261107)
-    err = {"prior": [], "outcome": [], "price": [], "both": []}
-    var = {"prior": [], "outcome": [], "price": [], "both": []}
-    hit_winner = {"prior": [], "outcome": [], "price": [], "both": []}
+    err = {k: [] for k in ARMS}
+    cvar = {k: [] for k in ARMS}       # mean posterior variance of a contrast m_i - m_j
+    var = {k: [] for k in ARMS}
+    hit_winner = {k: [] for k in ARMS}
     t0 = time.time()
     run_id = f"{time.strftime('%Y%m%dT%H%M%S', time.gmtime(t0))}-{os.getpid()}"
     # raw per-seed rows go to this run's own append-only log as they are
@@ -58,32 +82,42 @@ def main():
             f = rng.normal(size=RANK); eps = rng.normal(size=N)
             perf = s + V @ f + np.sqrt(D) * eps
             winner = int(np.argmax(perf))
-            posts = {
+            diag = {
                 "prior": (m0, v0),
                 "outcome": update_race(m0, v0, winner=winner, V=V, beta2=BETA2)[:2],
                 "price": update_race(m0, v0, p_market=p_market, tau2=TAU2, V=V, beta2=BETA2)[:2],
                 "both": update_race(m0, v0, winner=winner, p_market=p_market, tau2=TAU2, V=V, beta2=BETA2)[:2],
             }
+            posts = {k: (m, np.diag(v)) for k, (m, v) in diag.items()}
+            # the exact price posterior, kept whole, then the winner against it
+            mp, Sp, _ = update_market_full(m0, np.eye(N), p_market, tau2=TAU2, V=V, D=D)
+            mb, Sb, _ = update_winner_full(mp, Sp, winner, V=V, beta2=BETA2)
+            posts["price_full"] = (mp, Sp)
+            posts["both_full"] = (mb, Sb)
             # a second, independent running of the same race to score the posteriors
             f2 = rng.normal(size=RANK); eps2 = rng.normal(size=N)
             winner2 = int(np.argmax(s + V @ f2 + np.sqrt(D) * eps2))
             row = {"run_id": run_id, "seed": seed}
-            for k, (m, v) in posts.items():
+            for k, (m, S) in posts.items():
                 e = float(np.sqrt(np.mean((centred(m) - centred(s)) ** 2)))
-                vv = float(np.mean(v))
-                pred = np.asarray(race_probabilities(-np.asarray(m), V=V, D=D + np.asarray(v)))
-                ls = float(np.log(pred[winner2]))
-                err[k].append(e); var[k].append(vv); hit_winner[k].append(ls)
-                row[k] = {"rmse": e, "var": vv, "log_score": ls}
+                vv = float(np.mean(np.diag(S)))
+                dS = np.diag(S)
+                cv = float(np.mean([dS[i] + dS[j] - 2 * S[i, j]
+                                    for i, j in combinations(range(N), 2)]))
+                ls = float(np.log(predictive(m, S, V, D)[winner2]))
+                err[k].append(e); var[k].append(vv); cvar[k].append(cv); hit_winner[k].append(ls)
+                row[k] = {"rmse": e, "var": vv, "contrast_var": cv, "log_score": ls}
             log.write(json.dumps(row) + "\n"); log.flush()
 
     def se(x):
         return float(np.std(np.asarray(x), ddof=1) / np.sqrt(SEEDS))
     samples = {"rmse_contrast": err, "mean_posterior_var": var,
+               "mean_contrast_var": cvar,
                "mean_log_score_next_winner": hit_winner}
     out = {"n": N, "rank": RANK, "tau2": TAU2, "beta2": BETA2, "seeds": SEEDS,
            "rmse_contrast": {k: float(np.mean(e)) for k, e in err.items()},
            "mean_posterior_var": {k: float(np.mean(x)) for k, x in var.items()},
+           "mean_contrast_var": {k: float(np.mean(x)) for k, x in cvar.items()},
            "mean_log_score_next_winner": {k: sum(hit_winner[k]) / SEEDS for k in hit_winner},
            "standard_errors": {m: {k: se(x) for k, x in smp.items()} for m, smp in samples.items()},
            "paired_difference_standard_errors": {
@@ -98,8 +132,9 @@ def main():
         path = os.path.join(HERE, f"results_{run_id}.json")
     write_json_atomic(path, out)
     print("summary ->", path, " raw ->", log_path)
-    for k in ("prior", "outcome", "price", "both"):
-        print(f"{k:8s} rmse {out['rmse_contrast'][k]:.4f}  var {out['mean_posterior_var'][k]:.4f}"
+    for k in ARMS:
+        print(f"{k:10s} rmse {out['rmse_contrast'][k]:.4f}  var {out['mean_posterior_var'][k]:.4f}"
+              f"  contrast var {out['mean_contrast_var'][k]:.4f}"
               f"  next-winner log score {out['mean_log_score_next_winner'][k]:.4f}")
     print(f"{out['seconds']:.1f}s")
 

@@ -8,67 +8,139 @@
   "prior": 0.9191769120862907,
   "outcome": 0.8544995598380148,
   "price": 0.4019961197887447,
-  "both": 0.39879531314751204
+  "both": 0.39879531314751204,
+  "price_full": 0.4019961197887447,
+  "both_full": 0.39643176032557703
  },
  "mean_posterior_var": {
   "prior": 1.0,
-  "outcome": 0.8717688127730879,
+  "outcome": 0.8717688127730829,
   "price": 0.3,
-  "both": 0.2869138962621257
+  "both": 0.2869138962621256,
+  "price_full": 0.3000000000000002,
+  "both_full": 0.29381644807030205
+ },
+ "mean_contrast_var": {
+  "prior": 2.0,
+  "outcome": 1.7435376255461659,
+  "price": 0.6000000000000003,
+  "both": 0.5738277925242512,
+  "price_full": 0.4000000000000003,
+  "both_full": 0.3858661670178332
  },
  "mean_log_score_next_winner": {
   "prior": -2.061768626002769,
-  "outcome": -1.955498113863063,
-  "price": -1.6705818466507327,
-  "both": -1.6560225660097263
+  "outcome": -1.955498113863062,
+  "price": -1.670581846650733,
+  "both": -1.6560225660097267,
+  "price_full": -1.6723512547084345,
+  "both_full": -1.6587591158378594
  },
  "standard_errors": {
   "rmse_contrast": {
    "prior": 0.012577138722777844,
-   "outcome": 0.011451751540467524,
-   "price": 0.005629796954071446,
-   "both": 0.005432595555224638
+   "outcome": 0.011451751540467526,
+   "price": 0.005629796954071445,
+   "both": 0.005432595555224639,
+   "price_full": 0.005629796954071446,
+   "both_full": 0.005466313919054925
   },
   "mean_posterior_var": {
    "prior": 0.0,
-   "outcome": 0.0006712737938248517,
+   "outcome": 0.0006712737938248978,
    "price": 2.7790335273101198e-18,
-   "both": 0.00016266535316177035
+   "both": 0.0001626653531617689,
+   "price_full": 2.7790335273101198e-18,
+   "both_full": 8.012115126880994e-05
+  },
+  "mean_contrast_var": {
+   "prior": 0.0,
+   "outcome": 0.001342547587649795,
+   "price": 5.5580670546202395e-18,
+   "both": 0.0003253307063235381,
+   "price_full": 0.0,
+   "both_full": 0.00018313406004299434
   },
   "mean_log_score_next_winner": {
    "prior": 0.007636559140528418,
-   "outcome": 0.025691113919654025,
+   "outcome": 0.025691113919654156,
    "price": 0.039102321911331096,
-   "both": 0.03957895023012902
+   "both": 0.039578950230129015,
+   "price_full": 0.040453918918685716,
+   "both_full": 0.040427060283301564
   }
  },
  "paired_difference_standard_errors": {
   "rmse_contrast": {
-   "prior_minus_outcome": 0.005688234855751093,
+   "prior_minus_outcome": 0.005688234855751092,
    "prior_minus_price": 0.0125097325299839,
    "prior_minus_both": 0.01254246567879684,
+   "prior_minus_price_full": 0.012509732529983896,
+   "prior_minus_both_full": 0.012473074587890168,
    "outcome_minus_price": 0.01188503729453461,
    "outcome_minus_both": 0.01149417612232714,
-   "price_minus_both": 0.0021781752697703116
+   "outcome_minus_price_full": 0.01188503729453461,
+   "outcome_minus_both_full": 0.011594006524902013,
+   "price_minus_both": 0.0021781752697703116,
+   "price_minus_price_full": 2.9235710081006014e-18,
+   "price_minus_both_full": 0.0015289179676764304,
+   "both_minus_price_full": 0.0021781752697703116,
+   "both_minus_both_full": 0.0006729654103895427,
+   "price_full_minus_both_full": 0.0015289179676764306
   },
   "mean_posterior_var": {
-   "prior_minus_outcome": 0.0006712737938248517,
+   "prior_minus_outcome": 0.0006712737938248978,
    "prior_minus_price": 0.0,
-   "prior_minus_both": 0.00016266535316177022,
-   "outcome_minus_price": 0.0006712737938248517,
-   "outcome_minus_both": 0.0006079261317714001,
-   "price_minus_both": 0.00016266535316177035
+   "prior_minus_both": 0.00016266535316176894,
+   "prior_minus_price_full": 5.5580670546202395e-18,
+   "prior_minus_both_full": 8.01211512688099e-05,
+   "outcome_minus_price": 0.0006712737938248978,
+   "outcome_minus_both": 0.0006079261317714518,
+   "outcome_minus_price_full": 0.0006712737938248978,
+   "outcome_minus_both_full": 0.0006356343459953588,
+   "price_minus_both": 0.0001626653531617689,
+   "price_minus_price_full": 0.0,
+   "price_minus_both_full": 8.012115126880994e-05,
+   "both_minus_price_full": 0.0001626653531617689,
+   "both_minus_both_full": 8.255659462405419e-05,
+   "price_full_minus_both_full": 8.012115126880994e-05
+  },
+  "mean_contrast_var": {
+   "prior_minus_outcome": 0.001342547587649795,
+   "prior_minus_price": 0.0,
+   "prior_minus_both": 0.000325330706323538,
+   "prior_minus_price_full": 0.0,
+   "prior_minus_both_full": 0.00018313406004299404,
+   "outcome_minus_price": 0.001342547587649795,
+   "outcome_minus_both": 0.0012158522635429031,
+   "outcome_minus_price_full": 0.001342547587649795,
+   "outcome_minus_both_full": 0.001262418568589468,
+   "price_minus_both": 0.0003253307063235381,
+   "price_minus_price_full": 1.3895167636550599e-18,
+   "price_minus_both_full": 0.00018313406004299434,
+   "both_minus_price_full": 0.00032533070632353815,
+   "both_minus_both_full": 0.00014222953133520967,
+   "price_full_minus_both_full": 0.00018313406004299434
   },
   "mean_log_score_next_winner": {
-   "prior_minus_outcome": 0.02546157159639397,
+   "prior_minus_outcome": 0.0254615715963941,
    "prior_minus_price": 0.039306307012262086,
-   "prior_minus_both": 0.039983381737276974,
-   "outcome_minus_price": 0.03999364496616512,
-   "outcome_minus_both": 0.03530735139894768,
-   "price_minus_both": 0.009260997243166962
+   "prior_minus_both": 0.03998338173727697,
+   "prior_minus_price_full": 0.0406138430234545,
+   "prior_minus_both_full": 0.04073810517050972,
+   "outcome_minus_price": 0.039993644966165164,
+   "outcome_minus_both": 0.03530735139894769,
+   "outcome_minus_price_full": 0.04109410466105885,
+   "outcome_minus_both_full": 0.03753155972392266,
+   "price_minus_both": 0.009260997243166962,
+   "price_minus_price_full": 0.0014294040193602836,
+   "price_minus_both_full": 0.006714209525327168,
+   "both_minus_price_full": 0.009501896220010976,
+   "both_minus_both_full": 0.002976103979178502,
+   "price_full_minus_both_full": 0.006723266450933888
   }
  },
- "run_id": "20261109T043327-67126",
- "raw_log": "seeds_20261109T043327-67126.jsonl",
- "seconds": 104.34634399414062
+ "run_id": "20261119T225354-39091",
+ "raw_log": "seeds_20261119T225354-39091.jsonl",
+ "seconds": 347.6466519832611
 }
