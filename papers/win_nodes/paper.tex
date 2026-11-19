@@ -19,7 +19,7 @@
 \title{\textbf{Sampling-Free Inference with Win Nodes\\ in Bayes Nets and Correlated Bandits}}
 \author{Peter Cotton}
 \date{\normalsize First version: September 1, 2026.\\ This version:
-November 17, 2026.}
+November 19, 2026.}
 
 \begin{document}
 \maketitle
@@ -29,8 +29,8 @@ November 17, 2026.}
 correlated variables is largest or who won a contest, have long
 resisted exact treatment in Bayes nets. For correlated Gaussian
 variables the probability that one is the maximum is an orthant
-probability, which Bayesian optimization and reinforcement learning
-call intractable and approximate; rating systems such as TrueSkill
+probability, which Bayesian optimization calls intractable and
+approximates; rating systems such as TrueSkill
 approximate their posteriors by expectation propagation. We show
 that when the dependence among Gaussian variables runs through a few
 shared factors, the probability that each variable is the largest can
@@ -48,14 +48,18 @@ are the action probabilities of Thompson sampling.
 
 The probability that one of several correlated Gaussian quantities is
 the largest has a reputation for being intractable.
-\citet{tarbouriech2023} call it the key object of Bayesian
-reinforcement learning and say that computing it ``involves computing
-several complicated integrals with respect to the posterior and is
-intractable in most cases''; their Section~4 opens with ``computing
-this probability is intractable in general''. \citet{hennig2012} need the same probability over the candidate
-points of Bayesian optimization. They too call it intractable, citing
+\citet{hennig2012} need this probability over the candidate points of
+Bayesian optimization. They call it intractable, citing
 \citet{plackett1954}, and approximate it by expectation propagation
-at a cost of $O(n^4)$, which limits them to about fifty candidates.
+at a cost of $O(n^4)$, which keeps the number of candidates well
+below a thousand; their implementation uses fifty. In reinforcement
+learning, \citet{tarbouriech2023} base exploration on the posterior
+probability that each state-action pair is visited by an optimal
+policy, and say that computing it ``involves computing several
+complicated integrals with respect to the posterior and is
+intractable in most cases''. Their object is more general. In a
+bandit with a Gaussian posterior over the arms' mean rewards it
+reduces to the probability that each arm's mean is the largest.
 
 Using an observed ranking or winner as evidence has also relied on
 approximation. TrueSkill \citep{herbrich2007} writes the likelihood
@@ -86,13 +90,16 @@ evaluates all $n$ of them deterministically in time linear in $n$.
 We show that for factor-structured Gaussian Bayes nets this can be done. We
 add to the Gaussian variables a \emph{win node}, the deterministic
 node $W=\arg\max_i X_i$ with values in $\{1,\dots,n\}$, and ask for
-what any node in a graphical model must supply: its distribution
-given its parents, the derivative of that distribution with respect
-to the parents' means, and the likelihood of an observed value. When
+what any node in a graphical model must supply. Given its parents
+$W$ is determined, so the useful quantities are its distribution
+under a Gaussian belief about the parents, the derivative of that
+distribution with respect to the parents' means, and the likelihood
+of an observed value. When
 the dependence among the $X_i$ runs through a few shared factors, the
 lattice algorithm of \citet{cotton2026} for correlated contests gives
 all $n$ probabilities $\Pr(W=i)$ at once, and Section~\ref{sec:factor}
-derives from the same computation the Jacobian, the exact likelihood
+derives from the same computation products of the Jacobian with a
+vector, the exact likelihood
 of an observed winner, and the likelihoods of a quoted price and of a
 published place. The cost is linear in $n$ at fixed numerical
 resolution.
@@ -241,7 +248,8 @@ algorithm of \citet{cotton2026} builds that product once on a lattice
 at each factor node and reads every alternative's probability off it
 by dividing out that alternative's own term; the derivatives and the
 likelihood of an observed winner are further passes over the same
-arrays. The cost is linear in $n$.
+arrays. The cost of the probabilities, and of each product of the
+Jacobian with a vector, is linear in $n$.
 
 \subsection{The forward query}
 \label{sec:forward}
@@ -378,6 +386,22 @@ $\Phi\bigl((m_k-m_j)/\sqrt{d_k+d_j}\bigr)$, the binary probit
 comparison, which is TrueSkill's greater-than factor with no draw
 margin.
 
+The score gives the posterior moments. For a belief in which the
+means are independent, $m_j\sim N(\mu_j,v_j)$, and evidence $E$ whose
+likelihood after integrating over that belief is $L(\mu)$,
+\begin{equation}
+\mathbb{E}[m_j\mid E]\;=\;\mu_j+v_j\,\frac{\partial\log L}{\partial\mu_j},
+\qquad
+\operatorname{Var}(m_j\mid E)\;=\;v_j+v_j^2\,\frac{\partial^2\log L}{\partial\mu_j^2}.
+\label{eq:moments}
+\end{equation}
+The updates of this section use these identities for every kind of
+evidence, with the second derivative taken by differencing the score.
+When the event is a convex set of performances, as a winner, a top
+set or an ordered prefix is, $L$ is log-concave and every variance
+falls. Otherwise the curvature can be positive, and a variance can
+rise (Section~\ref{sec:places}).
+
 Observing the winner tells less than observing the full
 ranking, and Equation~\eqref{eq:obslik} is the likelihood of that
 smaller piece of evidence. The likelihood is exact; a moment
@@ -460,47 +484,65 @@ drawn from $N(0,I)$ and share one factor; a market quotes a price for
 each alternative from its own noisy view of the means, with
 $\tau^2=0.25$; the race is run and the winner recorded.
 
-Starting from
-the prior $N(0,I)$ we form three posteriors, one from the price, one
-from the winner, and one from the price followed by the winner, and
-compare each with the truth in two ways: the root mean square error of
-the posterior-mean contrasts against the true contrasts, and the log
-probability the posterior assigns to the winner of a second,
-independent running of the same race. Table~\ref{tab:price} reports
-the averages over the 400 races.
+Starting from the prior $N(0,I)$ we form posteriors from the price,
+from the winner, and from the price followed by the winner, and
+compare each with the truth in two ways: the root mean square error
+of the posterior-mean contrasts against the true contrasts, computed
+within each race and averaged, and the log probability the posterior
+assigns to the winner of a second, independent running of the same
+race. Table~\ref{tab:price} reports the averages over the 400 races.
+
+The price posterior is exact, with covariance
+$0.2\,I+0.1\,\mathbf{1}\mathbf{1}^\top$. Its common term shifts every
+mean together and cancels from every ranking, so the variance of a
+contrast $m_i-m_j$ is $0.4$. We carry this covariance into the winner
+update, which applies Equation~\eqref{eq:obslik} to the correlated
+belief and projects the result onto a Gaussian with full covariance.
+That projection is the only approximation in the composed row. On a
+race drawn in the same way, rejection sampling with four million draws
+agrees with the composed posterior to $0.005$ in the contrast means,
+against a Monte Carlo standard error of $0.003$; the diagonal
+composition is $0.18$ away (script
+\texttt{verify\_full\_winner} in the same folder).
 
 The price is worth far more than one observed winner, which is a
-single draw from the outcome. Adding the winner to the price improves
-both measures slightly. Contrast RMSE falls by $0.003$ with a paired
-standard error of $0.002$, and the log score rises by $0.015$ with a
-paired standard error of $0.009$. Neither difference is resolved at
-400 races.
+single draw from the outcome. Adding the winner to the price lowers
+contrast RMSE by $0.0056$, with a paired standard error of $0.0015$,
+and raises the log score by $0.014$, with a paired standard error of
+$0.007$. The first gain is resolved at 400 races and the second is
+about two standard errors.
 
-Between messages the belief is kept in the diagonal Gaussian family.
-The price posterior's means and marginal variances are exact. Its
-covariance is $0.2\,I+0.1\,\mathbf{1}\mathbf{1}^\top$, and only the
-diagonal, $0.3$, is carried forward. The variance of a contrast
-$m_i-m_j$ is then taken as $0.6$ where the exact value is $0.4$. This
-affects the log scores of both price rows and the winner update in
-the last row. The winner message is projected to a diagonal Gaussian
-as in Section~\ref{sec:observed}, so the composed row is a
-moment-matched posterior, not the exact one.
+Keeping only the diagonal of the price posterior, $0.3\,I$, sets every
+contrast variance to $0.6$ instead of $0.4$. The winner then moves the
+means too far, and the composed contrast RMSE is worse than the exact
+one by $0.0024$, with a paired standard error of $0.0007$. With the
+diagonal belief the gain from the winner shrinks to $0.003$ in RMSE
+with a paired standard error of $0.002$, which is not resolved. The
+log scores of the two families differ by less than two paired
+standard errors.
 
 \begin{table}[t]
 \centering
-\begin{tabular}{lccc}
+\begin{tabular}{lcccc}
 \toprule
-evidence & contrast RMSE & posterior variance & log score \\
+evidence & contrast RMSE & posterior var. & contrast var. & log score \\
 \midrule
-none (prior) & 0.919 & 1.000 & $-2.062$ \\
-winner only & 0.854 & 0.872 & $-1.956$ \\
-price only & 0.402 & 0.300 & $-1.671$ \\
-price, then winner & 0.399 & 0.287 & $-1.656$ \\
+none (prior) & 0.919 & 1.000 & 2.000 & $-2.062$ \\
+winner only & 0.854 & 0.872 & 1.744 & $-1.956$ \\
+price only & 0.402 & 0.300 & 0.400 & $-1.672$ \\
+price, then winner & 0.396 & 0.294 & 0.386 & $-1.659$ \\
+\addlinespace
+\multicolumn{5}{l}{\emph{price posterior kept diagonal}}\\
+price only & 0.402 & 0.300 & 0.600 & $-1.671$ \\
+price, then winner & 0.399 & 0.287 & 0.574 & $-1.656$ \\
 \bottomrule
 \end{tabular}
 \caption{One race, two kinds of evidence, averaged over 400 seeded
-races with market noise $\tau^2=0.25$. Script:
-\texttt{research/win\_nodes/exp1\_two\_evidence}.}
+races with market noise $\tau^2=0.25$. Posterior variance is the
+mean marginal variance and contrast variance the mean variance of
+$m_i-m_j$. The lower rows keep only the diagonal of the price
+posterior. Every row is scored with its own posterior covariance.
+Script: \texttt{research/win\_nodes/exp1\_two\_evidence}.}
 \label{tab:price}
 \end{table}
 
@@ -547,7 +589,14 @@ on one lattice, for any $k$.
 The membership of one entrant among the first $k$ is the top-$k$ query of
 \citet{cotton2026}; the gradient of the membership probability in
 $m$, divided by that probability, is the score. (The engine's Jacobian
-row is taken in min-wins means and enters with its sign reversed.) At $k=1$ all
+row is taken in min-wins means and enters with its sign reversed.)
+For $1<k<n$ the event is a union of convex sets and not itself
+convex, so Equation~\eqref{eq:moments} can raise a rival's variance.
+With three entrants whose means and noises are independent $N(0,1)$,
+observing that entrant~1 is among the first two raises each rival's
+variance to $1+(8\sqrt3-9)/(128\pi)\approx1.012$, and to $1.284$ when
+entrant~1's prior mean is $-4$; the implementation reproduces both
+values. At $k=1$ all
 three are the observed winner, and the prefix at $k=n$ is the full
 order; both reductions are checked to the tolerance of the existing
 updates, and every message is checked against rejection-sampled
@@ -567,7 +616,7 @@ named entrant in the first three 15 percent. Every gain is at
 least fifteen paired standard errors. The named entrant is drawn
 uniformly from the first three and the three ordered entrants
 uniformly from the field, so the choice of who is named carries no
-information.
+information beyond the reported membership or order.
 \begin{table}[t]
 \centering
 \begin{tabular}{lccc}
@@ -705,10 +754,19 @@ independent $e_i \sim N(0, d_{0i})$, $d_{0i} > 0$. The prior is
 $\theta \sim N(0, \Sigma_0)$ with $\Sigma_0 = V V' +
 \mathrm{diag}(d_0)$, which has factor form.
 
-Linear Thompson sampling
-\citep{agrawal2013}, the version \citet{chapelle2011} evaluated on
-display advertising and news recommendation, is this model without
-the residual, with factor rank equal to the number of features. A
+Linear Thompson sampling \citep{agrawal2013} is this model without
+the residual, with factor rank equal to the number of features.
+Without the residual every $d_i$ is zero, which the conditional
+densities of Section~\ref{sec:forward} exclude, so that boundary
+needs a small residual or separate treatment of the degenerate
+Gaussian, and arms with identical features tie. \citet{chapelle2011}
+evaluated Thompson sampling on display advertising and news
+recommendation with a logistic click model and a Gaussian
+approximation to the posterior of its coefficients, not with the
+Gaussian rewards assumed here. The logistic link is increasing, so
+the arm with the largest linear predictor has the largest click
+probability, and the win node applies to their approximate
+posterior, whose error it inherits. A
 Gaussian-process prior with a kernel of finitely many features and an
 independent residual has this form exactly. A dense kernel does not,
 and an inducing-point approximation to one has a dense residual
@@ -787,12 +845,13 @@ alternatives. Thompson sampling draws one sample $\tilde{\theta}$ and
 chooses the alternative with the largest sampled value, so it chooses
 $i$ with probability $p_i=\Pr(W=i)$.
 
-Lemma~8 of
-\citet{tarbouriech2023} states the general version: the expected
-fraction of pulls each arm receives under Thompson sampling equals
-its posterior probability of being best. Choosing $i$ with the
+Conditional on the data $\mathcal{D}_t$ at step $t$, Thompson
+sampling chooses $i$ with probability
+$\Pr(\theta_i=\max_j\theta_j\mid\mathcal{D}_t)$. Choosing $i$ with the
 computed probability $\hat p_i$ is therefore Thompson sampling up to
-the evaluation error of Section~\ref{sec:checks}. The policy is still
+the evaluation error of Section~\ref{sec:checks}. Lemma~8 of
+\citet{tarbouriech2023} is the analogue for Markov decision
+processes, stated for occupancy measures. The policy is still
 randomized. Only the evaluation of its probabilities is
 deterministic.
 
@@ -816,7 +875,7 @@ $0.760$.
 
 The \emph{VBOS policy} is the variational Bayesian optimistic sampling
 rule of \citet{odonoghue2021}, extended by \citet{tarbouriech2023}. In
-the near-closed form of \citet{menet2026} it is
+the near-closed form of \citet[Proposition~5]{menet2025} it is
 \begin{equation}
 \tilde{\pi}_i \;=\; v\!\left(\frac{m_i - \kappa^*}{s_i}\right),
 \qquad v(c) = \exp\!\Bigl(-\tfrac{1}{8}\bigl(\sqrt{c^2 + 4} -
@@ -986,8 +1045,7 @@ an independent regime and in one where each half of the arms shares
 a factor carrying $0.75$ of the prior variance. The paired
 differences, $-3.0\pm12.0$ and $+1.9\pm8.0$ at 95\%, are consistent
 with zero, as expected from the equality of the exact policies
-(Lemma~8 of \citealt{tarbouriech2023}) up to numerical evaluation
-error. Used as the policy, the
+(Section~\ref{sec:surrogates}) up to numerical evaluation error. Used as the policy, the
 VBOS approximation has ten to twelve percent more regret than
 Thompson sampling, a paired difference of $16.1\pm10.6$ and
 $14.7\pm7.4$, with its action distribution at total-variation
@@ -1088,11 +1146,16 @@ implemented in the \texttt{winning} package; the full treatment,
 including observed top-$k$ sets, is work in progress.
 
 \emph{Off-policy evaluation.} The replay method of \citet{li2011}
-needs a uniformly random log, because the sampler's own propensities
-were not available, and discards every logged event whose random arm
-differs from the policy's choice. With the propensities computed, the
-log of a correlated Thompson sampler can be used directly. This paper
-does not test that.
+assumes a uniformly random log, and they note that rejection sampling
+extends it to any randomized logging policy whose propensities are
+known. For a correlated Thompson sampler the computed probabilities
+supply those propensities. If the logged actions were drawn from the
+computed $\hat p$, then $\hat p$ is the true propensity. If they were
+drawn by posterior sampling, the true propensity is $p$, and weighting
+by $1/\hat p_i$ introduces the ratio $p_i/\hat p_i$, which a small
+absolute error does not control for a rarely chosen arm. Evaluating
+an adaptive policy also has to account for the history it would have
+produced. This paper does not test any of this.
 
 \begin{thebibliography}{99}
 
