@@ -47,32 +47,32 @@
     </div>
   </header>
   <main>
-    <h1>The classic engine, and when to prefer it</h1>
+    <h1>The classic engine</h1>
     <p class="lead">The package ships two race engines. The
-    <strong>front door</strong> (<code>race_probabilities</code> /
+    <em>front door</em> (<code>race_probabilities</code> /
     <code>abilities_from_race</code>) is preferred for most purposes; the
-    <strong>classic</strong> engine (<code>winning.classic</code>, the
+    <em>classic</em> engine (<code>winning.classic</code>, the
     2021 SIAM paper's implementation) is retained, maintained, and for
-    one kind of input it is the only correct choice. The rule that
-    decides between them is not new-versus-old. It is
-    <em>provenance</em>: what format does your distribution arrive in?</p>
+    one kind of input it is the only correct choice. The choice between
+    them depends on <em>provenance</em>, not age: what format does your
+    distribution arrive in?</p>
 
     <h2>The two primitives</h2>
     <p>The engines disagree about what a probability distribution
     <em>is</em>.</p>
-    <p>To the <strong>front door</strong>, a distribution is a
+    <p>To the <em>front door</em>, a distribution is a
     <em>formula</em>: a standardized survival/density callable evaluated
     exactly, at machine precision, wherever the engine asks. The lattice
     discretizes only the one-dimensional integral over the winning
     value, and because that integrand is smooth and dies in both tails,
-    the quadrature is spectrally accurate &mdash; machine precision by
+    the quadrature is spectrally accurate, reaching machine precision by
     33 lattice points on asymmetric, nearly tied fields. Ties have
     probability zero by construction, so nothing about them needs
     tracking.</p>
-    <p>To the <strong>classic</strong> engine, the atom vector on the
+    <p>To the <em>classic</em> engine, the atom vector on the
     lattice <em>is</em> the distribution. Any probabilities from
-    anywhere &mdash; an empirical histogram of finish times, integer
-    scores, bootstrap output &mdash; are a first-class citizen, with no
+    anywhere (an empirical histogram of finish times, integer
+    scores, bootstrap output) are a first-class citizen, with no
     smoothness assumed. Atoms tie with real, fixed, positive
     probability, and the engine's <em>multiplicity calculus</em> (the
     conditional expected number of runners sharing the winning value)
@@ -86,7 +86,7 @@
     <table class="cmp">
       <tr><th>Your distribution arrives as&hellip;</th><th>Front door</th><th>Classic</th></tr>
       <tr>
-        <td>a <strong>formula</strong> (normal, Gumbel, skew-normal, any
+        <td>a <em>formula</em> (normal, Gumbel, skew-normal, any
         standardized callable)</td>
         <td>native; win probabilities at <span class="num">1e-16</span>
         from 65 points (measured)</td>
@@ -95,24 +95,24 @@
         (measured)</td>
       </tr>
       <tr>
-        <td><strong>atoms</strong> (empirical data, integer scores, real
+        <td><em>atoms</em> (empirical data, integer scores, real
         dead-heat mass)</td>
         <td>must be smoothed into a callable, which <em>deletes the
-        dead-heat mass</em> &mdash; a model error no refinement
+        dead-heat mass</em>, a model error no refinement
         recovers</td>
         <td>native and exact, ties priced by the multiplicity
         calculus</td>
       </tr>
     </table>
-    <p>That whole table is one sentence: <strong>formulas to the front
-    door, atoms to classic.</strong> Both directions of conversion cost
+    <p>The table reduces to one rule: <em>formulas to the front
+    door, atoms to classic</em>. Both directions of conversion cost
     are pinned in the test suite, not just asserted here.</p>
 
-    <h2>Why the front door is preferred for most purposes</h2>
-    <p>Most statistical work starts from a formula &mdash; a parametric
-    noise law with locations to estimate &mdash; and on that side the
+    <h2>Front-door capabilities</h2>
+    <p>Most statistical work starts from a formula (a parametric
+    noise law with locations to estimate). On that side the
     front door brings everything the classic engine does not have:
-    the five correlation grammars (factor, block, nested, tree) with one
+    the four correlation grammars (factor, block, nested, tree) with one
     <code>O(nLQ)</code> shared-field pass; exact Jacobians whose
     off-diagonals are the photo-finish tie densities (the substitution
     graph); removal counterfactuals from the same field; inversion
@@ -121,16 +121,16 @@
     The classic engine is independent-only and prices one thing:
     the race it was given.</p>
 
-    <h2>Why classic is retained</h2>
+    <h2>Uses of the classic engine</h2>
     <ul>
-      <li><strong>It is the only correct engine for atomic data.</strong>
+      <li><em>It is the only correct engine for atomic data.</em>
       Real dead heats are events with mass; the front door cannot
       represent them at all.</li>
-      <li><strong>Exotics and betting-market vocabulary.</strong> State
+      <li><em>Exotics and betting-market vocabulary.</em> State
       prices, dividends, place/show pricing on genuinely discrete
       results live here.</li>
-      <li><strong>It is the reference implementation of the SIAM 2021
-      paper</strong>, parity-locked across the R and JavaScript ports,
+      <li><em>It is the reference implementation of the SIAM 2021
+      paper</em>, parity-locked across the R and JavaScript ports,
       and the historical root of everything else in the package.</li>
     </ul>
 
@@ -141,7 +141,7 @@
     kernels' factor shifts (linear interpolation of gridded messages).
     Those are exactly the spots where cross-language parity sits at
     <span class="num">1e-6</span>&ndash;<span class="num">1e-7</span>
-    instead of <span class="num">1e-15</span> &mdash; the residue of
+    instead of <span class="num">1e-15</span>. That gap is the residue of
     tabulation inside an otherwise formula-based engine, and consistent
     with everything above.</p>
     <p>The deprecation aliases (<code>winning.lattice_calibration</code>
