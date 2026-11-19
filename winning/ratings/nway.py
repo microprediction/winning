@@ -748,6 +748,13 @@ def _order_pass(m, sd, order, L=2001, base="normal", curves=None):
         u = u / mx
         su += np.log(mx)
     denom = float(np.sum(u * T[n]))
+    # the last stage's denominator underflows like the loop's: it alone
+    # had no guard, and a far factor node raised ZeroDivisionError
+    # (order_loglik at means [-27, -21.9, 26.1, -34.8], order [3, 0, 1, 2])
+    if denom <= _ORDER_TINY * u.max() and log_ok:
+        return in_logs()
+    if denom <= 0.0:
+        return logP, grad
     grad[order[-1]] = float(np.sum(u * (-g[n - 1]))) / denom
     return logP, grad
 
