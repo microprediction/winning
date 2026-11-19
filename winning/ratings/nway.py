@@ -1053,8 +1053,7 @@ def update_winner_correlated(m, v, winner, V, beta2=1.0, Qf=7, eps=1e-3,
     conditionals with posterior node weights. Nodes: Qf Gauss-Hermite
     per factor dimension at rank r <= 2, rising to _PLAIN_SHARP_QF[r]
     once the loadings are sharp (#1076; see _sharp_factor_rule);
-    2**nodes_log2 scrambled Sobol at
-    r >= 3 (Qf is inert there). Returns
+    2**nodes_log2 scrambled Sobol at r >= 3 (Qf is inert there). Returns
     (m_post, v_post, logZ) with logZ = log P(winner) for evidence and
     model comparison. Verified against rejection-sampled Monte Carlo
     posteriors in the tests.
@@ -1091,8 +1090,7 @@ def update_order_correlated(m, v, order, V, beta2=1.0, Qf=7, eps=1e-3,
     first to last finisher, best first (max-wins). A rank array (position of entrant i) is the inverse permutation and is
     silently wrong at K >= 3; convert it with order_from_positions (see
     winning.ratings.orders for the convention and a self-test).
-    Nodes as in
-    update_winner_correlated (Qf at rank <= 2, recentred on the factor
+    Nodes: Qf Gauss-Hermite at rank <= 2, recentred on the factor
     posterior at _RECENTRED_QF[r] past the sharpness band; 2**nodes_log2
     Sobol at rank >= 3). Returns (m_post, v_post, logZ),
     logZ = log P(order). Near-impossible orders degrade like
