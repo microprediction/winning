@@ -552,6 +552,21 @@ def _curve_rows(curve, x, m_j):
 # are representable.
 _ORDER_TINY = 1e-250
 
+# An intermediate stage can lose precision while staying above
+# _ORDER_TINY (far-apart fields at log P ~ -800 left a gradient entry at
+# 0 instead of 14.05, #1079). P depends on the means only through their
+# differences, so the exact gradient sums to zero: a sum this large
+# against the gradient's scale sends the Gaussian pass to the log domain.
+# Ordinary fields sit below 1e-13 and far-apart ones that are right
+# below 1e-8; the two failures found were at 7e-3 and 0.33.
+_ORDER_SHIFT_TOL = 1e-6
+
+
+def _shift_broken(grad):
+    """Rows of grad (..., n) whose sum breaks the shift invariance."""
+    return (np.abs(grad.sum(axis=-1))
+            > _ORDER_SHIFT_TOL * (np.abs(grad).max(axis=-1) + 1.0))
+
 
 def _log_cum(a, logdx):
     """Log of the trapezoidal cumulative integral of exp(a), row-wise:
@@ -759,6 +774,8 @@ def _order_pass(m, sd, order, L=2001, base="normal", curves=None):
         grad[order[-1]] = -float(np.sum(grad))
         return logP, grad
     grad[order[-1]] = float(np.sum(u * (-g[n - 1]))) / denom
+    if log_ok and _shift_broken(grad):
+        return in_logs()                                   # #1079
     return logP, grad
 
 
@@ -1248,6 +1265,8 @@ def _order_pass_batch(Ms, sd, order, L=None, base="normal", curves=None):
     # gives the last entry as the negated sum of the rest
     grad[:, order[-1]] = np.where(ok, num / np.where(ok, denom, 1.0),
                                   np.where(alive, -grad.sum(axis=1), 0.0))
+    if base == "normal" and curves is None:
+        redo |= alive & _shift_broken(grad)                # #1079
     if redo.any() and base == "normal" and curves is None:
         logP[redo], grad[redo] = _order_pass_log(Ms[redo], sd, order, x)
     return logP, grad
