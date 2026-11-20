@@ -511,25 +511,27 @@ def update_ranking(m, v, order, beta2=1.0, base="normal"):
     return m, v
 
 
-def _base_rows(x, m_j, sd_j, base):
+def _base_rows(x, m_j, sd_j, base, want_cdf=True):
     """Max-wins density, its m-derivative, and CDF for one player.
 
     The engine's bases are standardized min-wins laws (S, f, fp at z);
     this module is max-wins, so evaluate at -z: for X = -Y,
     f_max(z) = f_min(-z), P(X < x) = S_min(-z), and
     d/dm [f_min(-z)/sd] = fp_min(-z)/sd^2. Gaussian reduces to the
-    former hardcoded rows exactly (fp = -z f gives g z / sd)."""
+    former hardcoded rows exactly (fp = -z f gives g z / sd).
+    want_cdf=False returns None for the CDF: the order passes use only the
+    last finisher's, and ndtr was half the cost of building the rows."""
     z = (x - m_j) / sd_j
     if base == "normal":
         g = np.exp(-0.5 * z * z) / (sd_j * np.sqrt(2 * np.pi))
-        return g, g * z / sd_j, ndtr(z)
+        return g, g * z / sd_j, (ndtr(z) if want_cdf else None)
     from ..factor.races import BASES
     fn = base if callable(base) else BASES[base]
     S_u, f_u, fp_u = fn(-z)
     return f_u / sd_j, fp_u / (sd_j * sd_j), np.maximum(S_u, 1e-300)
 
 
-def _curve_rows(curve, x, m_j):
+def _curve_rows(curve, x, m_j, want_cdf=True):
     """Density, its m-derivative, and CDF of one player's predictive
     marginal on the lattice x: the _base_rows contract served from a
     _predictive_curves tuple. d/dm f(x - m) = -fp(x - m)."""
@@ -538,6 +540,8 @@ def _curve_rows(curve, x, m_j):
     shape = np.shape(x - m_j)
     g = np.interp(xj, u, f, left=0.0, right=0.0).reshape(shape)
     dg = -np.interp(xj, u, fp, left=0.0, right=0.0).reshape(shape)
+    if not want_cdf:
+        return g, dg, None
     F = np.interp(xj, u, cdf, left=0.0, right=1.0).reshape(shape)
     return g, dg, F
 
@@ -696,14 +700,14 @@ def _order_pass(m, sd, order, L=2001, base="normal", curves=None):
         c = np.cumsum(u[::-1])[::-1] * dx
         return c - 0.5 * dx * (u + u[-1])
 
-    def rows(j):
+    def rows(j, want_cdf):
         if curves is not None:
-            return _curve_rows(curves[j], x, m[j])
-        return _base_rows(x, m[j], sd[j], base)
+            return _curve_rows(curves[j], x, m[j], want_cdf)
+        return _base_rows(x, m[j], sd[j], base, want_cdf)
 
     g = np.empty((n, L)); dg = np.empty((n, L))
-    for t, j in enumerate(order):
-        g[t], dg[t], _ = rows(j)
+    for t, j in enumerate(order):       # only the last finisher's CDF is used
+        g[t], dg[t], F_last = rows(j, t == n - 1)
 
     log_ok = base == "normal" and curves is None
 
@@ -714,7 +718,7 @@ def _order_pass(m, sd, order, L=2001, base="normal", curves=None):
 
     # forward sweep: scaled T_t for t = n .. 2
     T = np.empty((n + 1, L)); sT = np.zeros(n + 1)
-    T[n] = rows(order[-1])[2]
+    T[n] = F_last
     for t in range(n - 1, 1, -1):
         raw = cum(g[t - 1] * T[t + 1])
         mx = raw.max()
@@ -1199,17 +1203,19 @@ def _order_pass_batch(Ms, sd, order, L=None, base="normal", curves=None):
         c = np.cumsum(u[:, ::-1], axis=1)[:, ::-1] * dx
         return c - 0.5 * dx * (u + u[:, -1:])
 
-    def rows(j):
+    def rows(j, want_cdf):
         if curves is not None:
-            return _curve_rows(curves[j], x[None, :], Ms[:, j][:, None])
-        return _base_rows(x[None, :], Ms[:, j][:, None], sd[j], base)
+            return _curve_rows(curves[j], x[None, :], Ms[:, j][:, None],
+                               want_cdf)
+        return _base_rows(x[None, :], Ms[:, j][:, None], sd[j], base,
+                          want_cdf)
 
     g = np.empty((n, Q, L)); dg = np.empty((n, Q, L))
-    for t, j in enumerate(order):
-        g[t], dg[t], _ = rows(j)
+    for t, j in enumerate(order):       # only the last finisher's CDF is used
+        g[t], dg[t], F_last = rows(j, t == n - 1)
 
     T = np.empty((n + 1, Q, L)); sT = np.zeros((n + 1, Q))
-    T[n] = rows(order[-1])[2]
+    T[n] = F_last
     alive = np.ones(Q, dtype=bool)
     redo = np.zeros(Q, dtype=bool)        # rows to rerun in logs (#655)
     for t in range(n - 1, 1, -1):
