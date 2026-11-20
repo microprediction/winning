@@ -55,8 +55,8 @@
       "stopped": 171,
       "mean_n_stopped": 80.08771929824562,
       "pcs": 0.9707602339181286,
-      "tv_median": 0.0,
-      "tv_p90": 0.0
+      "tv_median": null,
+      "tv_p90": null
     },
     "bonf": {
       "mean_n": 132.515,
@@ -64,8 +64,8 @@
       "stopped": 170,
       "mean_n_stopped": 85.31176470588235,
       "pcs": 0.9705882352941176,
-      "tv_median": 0.0,
-      "tv_p90": 0.0
+      "tv_median": null,
+      "tv_p90": null
     },
     "mc": {
       "mean_n": 126.97,
@@ -73,8 +73,8 @@
       "stopped": 173,
       "mean_n_stopped": 84.35838150289017,
       "pcs": 0.9653179190751445,
-      "tv_median": 0.0,
-      "tv_p90": 0.0
+      "tv_median": null,
+      "tv_p90": null
     },
     "mc_certificate_worst_tv": 0.0026040488237236443
   },
@@ -112,8 +112,8 @@
       "stopped": 165,
       "mean_n_stopped": 61.86060606060606,
       "pcs": 0.9818181818181818,
-      "tv_median": 0.0,
-      "tv_p90": 0.0
+      "tv_median": null,
+      "tv_p90": null
     },
     "bonf": {
       "mean_n": 83.88,
@@ -121,8 +121,8 @@
       "stopped": 182,
       "mean_n_stopped": 52.61538461538461,
       "pcs": 0.9725274725274725,
-      "tv_median": 0.0,
-      "tv_p90": 0.0
+      "tv_median": null,
+      "tv_p90": null
     },
     "mc": {
       "mean_n": 79.38,
@@ -130,8 +130,8 @@
       "stopped": 183,
       "mean_n_stopped": 49.595628415300546,
       "pcs": 0.9726775956284153,
-      "tv_median": 0.0,
-      "tv_p90": 0.0
+      "tv_median": null,
+      "tv_p90": null
     },
     "mc_certificate_worst_tv": 0.0011894731929076462
   },
@@ -169,8 +169,8 @@
       "stopped": 168,
       "mean_n_stopped": 69.42261904761905,
       "pcs": 0.9642857142857143,
-      "tv_median": 0.0,
-      "tv_p90": 0.0
+      "tv_median": null,
+      "tv_p90": null
     },
     "bonf": {
       "mean_n": 126.365,
@@ -178,8 +178,8 @@
       "stopped": 165,
       "mean_n_stopped": 68.32121212121213,
       "pcs": 0.9696969696969697,
-      "tv_median": 0.0,
-      "tv_p90": 0.0
+      "tv_median": null,
+      "tv_p90": null
     },
     "mc": {
       "mean_n": 119.0,
@@ -187,8 +187,8 @@
       "stopped": 169,
       "mean_n_stopped": 67.45562130177515,
       "pcs": 0.9585798816568047,
-      "tv_median": 0.0,
-      "tv_p90": 0.0
+      "tv_median": null,
+      "tv_p90": null
     },
     "mc_certificate_worst_tv": 0.0007380517465650271
   }

@@ -206,6 +206,10 @@ def run_config(kind, c, rng, log=None, run_id=None, rng_extra=None,
     JSON line (regime, seed, run id, the raw stopped_n / correct / TV
     values) as it finishes, so an interrupted run keeps what it measured.
     The logging consumes no random numbers and changes no statistic."""
+    if rng_extra is None:
+        rng_extra = np.random.default_rng(SEEDS[kind] + 1000)
+    if rng_mc is None:
+        rng_mc = np.random.default_rng(SEEDS[kind] + 2000)
     V, sigma = make_config(kind, c)
     rules = RULES
     out = {r: {"stopped_n": [], "correct": [], "tv_vs_exact": []}
@@ -287,10 +291,15 @@ def run_config(kind, c, rng, log=None, run_id=None, rng_extra=None,
             mean_n_stopped=(float(stopped[dec].mean()) if dec.any()
                             else None),
             pcs=float(corr[dec].mean()) if dec.any() else None,
+            # TV against the exact rule is measured only for indep and
+            # vbos; it is zero for exact itself and unmeasured (None) for
+            # the rules added later.
             tv_median=(float(np.median(out[r]["tv_vs_exact"]))
-                       if out[r]["tv_vs_exact"] else 0.0),
+                       if out[r]["tv_vs_exact"]
+                       else (0.0 if r == "exact" else None)),
             tv_p90=(float(np.quantile(out[r]["tv_vs_exact"], 0.9))
-                    if out[r]["tv_vs_exact"] else 0.0),
+                    if out[r]["tv_vs_exact"]
+                    else (0.0 if r == "exact" else None)),
         )
     summary["mc_certificate_worst_tv"] = float(cert_worst)
     return summary
@@ -394,7 +403,8 @@ if __name__ == "__main__":
             print(f"  {r:6s} mean n {row['mean_n']:6.1f}  "
                   f"PCS {row['pcs'] if row['pcs'] is not None else 'NA'}  "
                   f"censored {row['censored']:3d}  "
-                  f"TV med/p90 {row['tv_median']:.3f}/{row['tv_p90']:.3f}")
+                  + ("TV med/p90 n/a" if row['tv_median'] is None else
+                     f"TV med/p90 {row['tv_median']:.3f}/{row['tv_p90']:.3f}"))
     log.close()
     results["provenance"]["wall_seconds"] = round(time.time() - t0, 1)
     write_json_atomic(args.out, results)

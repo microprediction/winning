@@ -661,7 +661,7 @@ Table~\ref{tab:price}, with 1{,}600 seeded races and one message per
 race. Taking the full order's reduction in contrast error as the
 whole, the first three in order with the rest behind keep
 71 percent of it, the first three as a set
-62 percent, the winner alone 34 percent, the order among
+63 percent, the winner alone 34 percent, the order among
 three named entrants 22 percent, and the membership of one
 named entrant in the first three 15 percent. Every gain is at
 least fifteen paired standard errors. The named entrant is drawn
@@ -684,6 +684,10 @@ full order & 0.702 & 0.656 & $-1.841$ \\
 \bottomrule
 \end{tabular}
 \caption{One race, one outcome message each, ranked by information.
+The updates of Section~\ref{sec:places} return posterior means and
+variances, so the log score here uses the diagonal projection of each
+posterior, and the factor loadings of the race. Unlike
+Table~\ref{tab:price}, it is not the full posterior predictive.
 Script: \texttt{research/win\_nodes/exp2\_place\_evidence}.}
 \label{tab:places}
 \end{table}
@@ -1218,23 +1222,28 @@ the excursion functionals then belong to the sampling methods of
 in total variation with every marginal held fixed, even with a single
 shared factor (the index-fund example of Section~\ref{sec:examples}, with many
 independent funds). The
-comparison with counted posterior draws depends on rank. On the
-posteriors of the two experiments, where the centered loadings have
-rank at most two, one evaluation for a hundred alternatives takes
-about ten milliseconds and agreed with a $2^{15}$-node factor rule to
-about $10^{-6}$ per entry at ten posteriors from the experiments.
+comparison with counted posterior draws depends on rank and on how
+sharp the posterior is. At ten posteriors from the experiments of
+Section~\ref{sec:applications} (two factors, but prior loadings of
+centered rank zero or one, with fifty bandit arms or a hundred
+systems; \texttt{research/rs\_crn/exp3\_quadrature}), one
+evaluation took $4$ to $9$ milliseconds and agreed with a
+$2^{15}$-node factor rule to about $10^{-6}$ per entry.
 
 The script in \texttt{research/win\_nodes/timing} times
 one evaluation against counting draws, single threaded, on
-hundred-arm posteriors of a linear sampler of rank one to five
-(2,000 pulls, one posterior per rank). One evaluation took $13$
-milliseconds at rank one, $0.12$ seconds at rank two, $1.1$ seconds
-at rank three, and $8.6$ and $6.9$ seconds at ranks four and five,
-where the default rule's node count is set by sharpness rather than
-rank. Counting draws ran at about $0.15$ seconds per $200{,}000$ at
+hundred-arm posteriors of a linear sampler with generic random
+loadings of rank one to five (2,000 pulls, one posterior per rank).
+ One evaluation took $14$
+milliseconds at rank one, $0.13$ seconds at rank two, $1.1$ seconds
+at rank three, and $8.8$ and $7.1$ seconds at ranks four and five.
+Their rank-two cost exceeds that of the experiment posteriors because
+generic loadings keep their full centered rank; it did not change
+when the pulls were cut to 100. Cost is not monotone in rank above
+three, where the default rule changes. Counting draws took $0.14$ to $0.18$ seconds per $200{,}000$ at
 every rank. In the time of one evaluation one can therefore count
-about $18{,}000$ draws at rank one, which estimate an entry near
-$0.01$ to seven percent of itself, $1.8\times10^5$ draws at rank two
+about $17{,}000$ draws at rank one, which estimate an entry near
+$0.01$ to eight percent of itself, $1.8\times10^5$ draws at rank two
 and $1.6\times10^6$ to $10^7$ at ranks three to five. A standard
 error of $10^{-6}$ on an entry near $0.01$ would take about $10^{10}$
 draws. The win node is the better tool at rank one or two, or when

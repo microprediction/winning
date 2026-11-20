@@ -8,15 +8,23 @@ evaluation. Single thread, median of repeated runs. The posteriors are
 those of a linear sampler: arms with r random features, prior
 N(0, V V' + 0.25 I), 2,000 pulls spread over the arms.
 
-Reproduce: OMP_NUM_THREADS=1 python research/win_nodes/timing/run_timing.py
+Reproduce: python research/win_nodes/timing/run_timing.py
+The script pins every BLAS/OpenMP pool to one thread before numpy is
+imported. Every raw duration goes to a per-run append-only log
+(timings_<run>.jsonl) as it is measured; results.json is the summary.
 Timings are machine dependent; results.json records the platform.
 """
-import json
 import os
-import platform
-import time
 
-import numpy as np
+for _v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
+           "VECLIB_MAXIMUM_THREADS", "NUMEXPR_NUM_THREADS"):
+    os.environ[_v] = "1"
+
+import json                                                # noqa: E402
+import platform                                            # noqa: E402
+import time                                                # noqa: E402
+
+import numpy as np                                         # noqa: E402
 
 from winning.factor.races import race_probabilities
 
@@ -43,11 +51,24 @@ def posterior(r, rng):
     return m, B, d
 
 
-def median_time(f):
+def median_time(f, log, **meta):
     ts = []
-    for _ in range(REPEAT):
+    for i in range(REPEAT):
         t = time.perf_counter(); f(); ts.append(time.perf_counter() - t)
+        log.write(json.dumps(dict(meta, repeat=i, seconds=ts[-1])) + "\n")
+        log.flush()
     return float(np.median(ts))
+
+
+def blas_threads():
+    """Effective thread limits of the loaded BLAS/OpenMP pools."""
+    try:
+        from threadpoolctl import threadpool_info
+        return [dict(api=i.get("user_api"), lib=i.get("internal_api"),
+                     threads=i.get("num_threads")) for i in threadpool_info()]
+    except ImportError:
+        return "threadpoolctl unavailable; env pinned to 1"
+
 
 
 def count_draws(m, B, d, M, rng):
@@ -57,12 +78,17 @@ def count_draws(m, B, d, M, rng):
 
 def main():
     rng = np.random.default_rng(20261119)
+    run_id = time.strftime("%Y%m%dT%H%M%S", time.gmtime()) + f"-{os.getpid()}"
+    log = open(os.path.join(HERE, f"timings_{run_id}.jsonl"), "x")
     rows = []
     for r in range(1, 6):
         m, B, d = posterior(r, rng)
         race_probabilities(-m, V=-B, D=d)                 # warm up
-        t_eval = median_time(lambda: race_probabilities(-m, V=-B, D=d))
-        t_draw = median_time(lambda: count_draws(m, B, d, 20_000, rng)) / 20_000
+        t_eval = median_time(lambda: race_probabilities(-m, V=-B, D=d),
+                             log, run=run_id, rank=r, what="eval")
+        t_draw = median_time(lambda: count_draws(m, B, d, 20_000, rng),
+                             log, run=run_id, rank=r,
+                             what="20000 draws") / 20_000
         rows.append(dict(rank=r, eval_seconds=t_eval, seconds_per_draw=t_draw,
                          draws_in_one_eval=int(t_eval / t_draw),
                          seconds_200k_draws=200_000 * t_draw))
@@ -71,7 +97,9 @@ def main():
     out = dict(n=N, pulls=PULLS, repeat=REPEAT, rows=rows,
                platform=platform.platform(), processor=platform.processor(),
                python=platform.python_version(), numpy=np.__version__,
-               threads=os.environ.get("OMP_NUM_THREADS"))
+               blas_threads=blas_threads(), run=run_id,
+               raw_log=os.path.basename(log.name))
+    log.close()
     with open(os.path.join(HERE, "results.json"), "w") as f:
         json.dump(out, f, indent=1)
 
