@@ -19,7 +19,7 @@
 \title{\textbf{Sampling-Free Inference with Win Nodes\\ in Bayes Nets and Correlated Bandits}}
 \author{Peter Cotton}
 \date{\normalsize First version: September 1, 2026.\\ This version:
-November 19, 2026.}
+November 20, 2026.}
 
 \begin{document}
 \maketitle
@@ -31,16 +31,19 @@ resisted exact treatment in Bayes nets. For correlated Gaussian
 variables the probability that one is the maximum is an orthant
 probability, which Bayesian optimization calls intractable and
 approximates; rating systems such as TrueSkill
-approximate their posteriors by expectation propagation. We show
-that when the dependence among Gaussian variables runs through a few
-shared factors, the probability that each variable is the largest can
-be computed deterministically, at fixed factor rank and quadrature
-resolution, at a cost linear in the number of variables, by a recent
-algorithm for correlated contests, and that the
-same computation gives the derivatives of these probabilities, the
-likelihood of an observed winner, and the likelihoods of a quoted
-price and of a published place. Under a posterior, the probabilities
-are the action probabilities of Thompson sampling.
+approximate their posteriors by expectation propagation. When the
+dependence among Gaussian variables runs through a few shared
+factors, a recent algorithm for correlated contests computes the
+probability that each variable is the largest deterministically, at
+a cost linear in the number of variables at fixed factor rank and
+quadrature resolution, together with its derivatives. We cast that
+computation as a win node in a Bayes net and add the evidence such a
+node meets in practice: an observed winner, a quoted price and a
+published place, with their likelihoods and posterior updates. We also show that the posteriors
+of simulation under common random numbers and of a bandit whose arms
+share features stay in factor form after every update. Under a
+posterior, the probabilities are the action probabilities of Thompson
+sampling.
 \end{abstract}
 
 \section{Introduction}
@@ -81,13 +84,15 @@ $p_i=\Pr(X_i=\max_j X_j)$ is a one-dimensional integral, the
 random-utility representation of \citet{domencich1975}. With
 correlated components it becomes an orthant probability in $n-1$
 dimensions. Some special covariances have closed forms: for a
-symmetric Gaussian random walk, $X_t=\sum_{r\le t}\xi_r$, the classical
-results of Sparre Andersen give $p_t=q_{t-1}q_{n-t}$ with
+symmetric Gaussian random walk, $X_t=\sum_{r=1}^{t}\xi_r$ with
+independent $N(0,\sigma^2)$ increments, the classical results of
+\citet{andersen1953} give $p_t=q_{t-1}q_{n-t}$ with
 $q_k=\binom{2k}{k}4^{-k}$, all $n$ of them in $O(n)$ operations. For a
-general factor-structured covariance we know of no earlier method that
-evaluates all $n$ of them deterministically in time linear in $n$.
+general factor-structured covariance we know of no method before
+\citet{cotton2026} that evaluates all $n$ of them deterministically in
+time linear in $n$ at fixed factor rank.
 
-We show that for factor-structured Gaussian Bayes nets this can be done. We
+We
 add to the Gaussian variables a \emph{win node}, the deterministic
 node $W=\arg\max_i X_i$ with values in $\{1,\dots,n\}$, and ask for
 what any node in a graphical model must supply. Given its parents
@@ -97,12 +102,15 @@ distribution with respect to the parents' means, and the likelihood
 of an observed value. When
 the dependence among the $X_i$ runs through a few shared factors, the
 lattice algorithm of \citet{cotton2026} for correlated contests gives
-all $n$ probabilities $\Pr(W=i)$ at once, and Section~\ref{sec:factor}
-derives from the same computation products of the Jacobian with a
-vector, the exact likelihood
-of an observed winner, and the likelihoods of a quoted price and of a
-published place. The cost is linear in $n$ at fixed numerical
-resolution.
+all $n$ probabilities $\Pr(W=i)$ at once, with products of the
+Jacobian with a vector; Sections~\ref{sec:forward}
+and~\ref{sec:jacobian} restate these. The new material is the
+evidence of Sections~\ref{sec:observed} to~\ref{sec:places}, an
+observed winner, a quoted price and a published place, with the
+posterior updates they imply, the closure of two standard posteriors in
+Section~\ref{sec:posteriors}, and the applications of
+Section~\ref{sec:applications}. The cost is linear in $n$ at fixed
+factor rank and numerical resolution.
 
 None of these queries is answered by the univariate marginals alone.
 Which alternative is best, which sensor reads the extreme, and which
@@ -178,7 +186,8 @@ each index fund's $p_i\to1/(2(n-1))$, so the total-variation distance
 between the true distribution of $W$ and the uniform one tends to
 $1/2-1/n$. With $n=100$ and $\epsilon=10^{-4}$, $p_1=0.493$ against
 $1/n=0.01$. If $k$ independent funds take the place of fund 1, each
-of them is the best with probability tending to $1/(k+1)$, and the
+of them is the best with probability tending to $1/(k+1)$ for
+$1\le k<n$, and the
 total-variation distance tends to $k/(k+1)-k/n$, which is $0.81$ for
 $n=100$ and $k=9$.
 
@@ -203,34 +212,39 @@ order-statistic queries. For latent Gaussian fields, \citet{bolin2015}
 compute excursion sets and exceedance probabilities by sequential
 importance sampling; those functionals are outside this paper.
 
-GHK \citep{geweke1989,hajivassiliou1996} is the standard method for
+GHK \citep{geweke1989,keane1994,hajivassiliou1996} is the standard method for
 the orthant probabilities behind $p_i$, and \citet{cotton2026}
 compares it in detail with the factor computation used here. GHK
 writes one orthant probability as a nested sequence of truncated
 normal probabilities and simulates it, at $O(n^2)$ per draw for a
 single alternative.
 
-Within the scope of this paper, factor dependence, the win node improves on it in three respects. It gives
-all $n$ probabilities in one pass, where GHK needs $n$ runs. Its cost
-is linear in $n$. The cost of all $n$ probabilities by GHK grows
-empirically as $n^{2.8}$ beyond $n=200$, where \citet{cotton2026}
+For factor dependence, the case this paper treats, the win node
+differs from GHK in three ways. First, it gives all $n$ probabilities
+in one pass, where GHK needs $n$ runs. Second, its cost is linear in
+$n$ at fixed factor rank and resolution, while the cost of all $n$
+probabilities by GHK grows empirically as $n^{2.9}$ beyond $n=200$, where \citet{cotton2026}
 already measures a gap of two orders of magnitude.
 
-With fixed quadrature nodes
+Third, with fixed quadrature nodes
 it is deterministic: the probabilities and their Jacobian are a
 reproducible numerical map, with integration error but no simulation
-noise. Randomized nodes such as scrambled Sobol bring back an error
-that varies with the scramble, and the logarithm of an unbiased
+noise. The default rule uses scrambled Sobol nodes only with a fixed
+scramble, so it stays deterministic. Re-randomized nodes bring back an
+error that varies with the scramble, and the logarithm of an unbiased
 randomized estimate, which is what a log-likelihood needs, is biased
 downward. Outside this scope, for dense high-rank covariance where
 accuracy is paramount, \citet{cotton2026} recommends GHK.
 
 For independent components, \citet{menet2025} write $p_i$ as the
 one-dimensional integral of Equation~\eqref{eq:integral} without
-factors (their Equation~2), and their Proposition~1 evaluates it by
+factors (their Equation~1), and their Proposition~1 evaluates it by
 quadrature on a shared set of integration points with a convergence
 guarantee. Equation~\eqref{eq:cavity} is that evaluator applied
-conditionally on the factors and averaged over them.
+conditionally on the factors and averaged over them. Conditioning on
+a shared factor to reduce a multinomial probit probability to
+quadrature over a product of normal distribution functions goes back
+to \citet{butler1982}, who evaluate one probability at a time.
 
 \section{The win node on factor-structured parents}
 \label{sec:factor}
@@ -254,10 +268,8 @@ Jacobian with a vector, is linear in $n$.
 \subsection{The forward query}
 \label{sec:forward}
 
-This subsection and the two that follow restate the forward query, its
-Jacobian and the winner likelihood of \citet{cotton2026} in the
-notation of a win node. The new material in this section is the
-evidence of Sections~\ref{sec:price} to~\ref{sec:places}.
+This subsection and the next restate the forward query and its
+Jacobian from \citet{cotton2026} in the notation of a win node.
 
 Let the parents have factor form:
 \begin{equation}
@@ -306,9 +318,9 @@ gives all $n$ probabilities in $O(nLQ)$. The accuracy depends on
 $L$, on the lattice window and on $Q$, and the $Q$ needed grows with
 the number of factors and the geometry of $B$. The same conditional
 independence gives top-$k$ membership, with the product replaced by
-the distribution of the number of components above $x$. Top-$k$
-nodes, with their derivatives, the likelihood of an observed top-$k$
-set, are the subject of work in progress.
+the distribution of the number of components above $x$. The
+likelihoods of an observed top-$k$ set, an ordered prefix and a
+top-$k$ membership are in Section~\ref{sec:places}.
 
 Only differences between loadings matter. Let $P = I - \mathbf{1}
 \mathbf{1}'/n$ and write $B z = (PB) z + \mathbf{1}(\bar{b}' z)$,
@@ -317,9 +329,12 @@ every component by the same amount and changes no ranking, so
 $p(m, B, d) = p(m, PB, d)$. The number of factor dimensions the
 integral has to resolve is the rank of $PB$, which centering can
 reduce below the rank of $B$. The exact probabilities are also
-unchanged by any orthogonal rotation of the columns of $B$. The
-numerical properties of the quadrature, including its dependence on
-orientation, are treated in \citet{cotton2026}.
+unchanged by any orthogonal rotation of the columns of $B$. A fixed
+set of quadrature nodes is not, so the computed probabilities can
+depend slightly on orientation; the updates of Section~\ref{sec:observed}
+onwards put the loadings in a canonical form first. The factor rule
+and its dependence on the sharpness of the field are treated in
+\citet[\S4.1]{cotton2026}.
 
 The lattice in $x$ and the quadrature over $z$ have finite
 resolution, so the evaluation of Equation~\eqref{eq:cavity} has
@@ -369,16 +384,17 @@ a product of $n-1$ normal distribution functions. The likelihood is
 the average of that product over $z$ and $u$:
 \begin{equation}
 \Pr(W=k\mid m)\;=\;\mathbb{E}_{z,u}\prod_{j\ne k}
-\Phi\!\left(\frac{m_k-m_j+(Bz)_k-(Bz)_j+u\sqrt{d_k}}
-{\sqrt{d_j}}\right).
+\Phi\Bigl(\bigl(m_k-m_j+(Bz)_k-(Bz)_j+u\sqrt{d_k}\,\bigr)\big/\sqrt{d_j}\Bigr).
 \label{eq:obslik}
 \end{equation}
 
 The score, the gradient in $m$ of the logarithm of
 Equation~\eqref{eq:obslik}, is a
 weighted sum of Mills ratios over the quadrature nodes, the weight of
-each node being its posterior probability given the win. It is
-computed in one extra pass over the arrays the likelihood already
+each node being its posterior probability given the win.
+Equivalently, it is a row of the Jacobian of
+Section~\ref{sec:jacobian} divided by the likelihood, which is how the
+implementation computes it, in one extra pass over the arrays the likelihood already
 builds, so the message an observed win node passes to its Gaussian
 parents carries exact first-order information. At
 $n=2$ with no factors the likelihood is
@@ -395,12 +411,29 @@ likelihood after integrating over that belief is $L(\mu)$,
 \operatorname{Var}(m_j\mid E)\;=\;v_j+v_j^2\,\frac{\partial^2\log L}{\partial\mu_j^2}.
 \label{eq:moments}
 \end{equation}
-The updates of this section use these identities for every kind of
-evidence, with the second derivative taken by differencing the score.
+The winner and place updates of this section use these identities
+(the price update of Section~\ref{sec:price} is conjugate and needs
+none), with the second derivative taken by differencing the score.
 When the event is a convex set of performances, as a winner, a top
-set or an ordered prefix is, $L$ is log-concave and every variance
-falls. Otherwise the curvature can be positive, and a variance can
+set or an ordered prefix is (each an intersection of half-spaces),
+$L$ is log-concave by Pr\'ekopa's theorem \citep{prekopa1973}, since
+it integrates the indicator of a convex set against a Gaussian
+density, and every variance falls. Otherwise the curvature can be positive, and a variance can
 rise (Section~\ref{sec:places}).
+
+For a correlated belief $m\sim N(\mu,\Sigma_0)$ the identities are
+\begin{equation}
+\mathbb{E}[m\mid E]=\mu+\Sigma_0\nabla_\mu\log L,
+\qquad
+\operatorname{Cov}(m\mid E)=\Sigma_0+\Sigma_0\bigl(\nabla_\mu^2\log L\bigr)\Sigma_0,
+\label{eq:moments-full}
+\end{equation}
+with the full Hessian. To compute $L$, the belief is added to the
+parents. Any common part $c\,\mathbf{1}\mathbf{1}'$ of $\Sigma_0$
+shifts every performance equally and cancels from every ranking; the
+rest splits into further loadings and additions to the $d_j$. For
+$\Sigma_0=\alpha I+\beta\mathbf{1}\mathbf{1}'$ this adds $\alpha$ to
+each $d_j$ and nothing else.
 
 Observing the winner tells less than observing the full
 ranking, and Equation~\eqref{eq:obslik} is the likelihood of that
@@ -409,12 +442,12 @@ approximation enters only if the user then projects the posterior
 onto a Gaussian family, as expectation propagation does.
 Equation~\eqref{eq:obslik} is the
 multinomial probit likelihood, and with its score it is the
-estimation core of \citet[\S5]{cotton2026}.
+estimation core of \texttt{MultinomialProbit.jl} (Section~\ref{sec:software}).
 
-The implementation used
-here agrees with finite differences and with dual-number automatic
-differentiation to $10^{-10}$. That checks the differentiation of the
-implemented numerical likelihood, not its accuracy against the
+The implemented score is checked against central differences in the
+package's tests, and against forward-mode automatic differentiation
+in \texttt{MultinomialProbit.jl}. That checks the differentiation of
+the implemented numerical likelihood, not its accuracy against the
 continuum likelihood.
 
 \subsection{A quoted price as evidence}
@@ -432,7 +465,7 @@ Section~\ref{sec:forward} under the market's loadings and noise. The
 inversion of \citet[\S5]{cotton2026} recovers $m+\eta$ from $p$ up to
 one common level, because the prices sum to one and so carry $n-1$
 numbers, not $n$. The observation therefore lives on the
-contrast space, $y=P(m+\eta)$ with $P=I-\mathbf{1}\mathbf{1}^\top/n$,
+contrast space, $y=P(m+\eta)$ with $P=I-\mathbf{1}\mathbf{1}'/n$,
 and it is linear and Gaussian in $m$.
 
 With a belief $N(\mu,\mathrm{diag}\,v)$ the
@@ -459,8 +492,8 @@ $c$, and leaves entrant 1's where it was, so the average moves. Entrant
 The price model adds one parameter, the market noise $\tau^2$. To
 estimate it, take a history of races with prices, compute the
 likelihood of all the observed prices as a function of $\tau^2$, and
-choose the $\tau^2$ that maximises it; \citet[\S5]{cotton2026} does
-this. A market priced
+choose the $\tau^2$ that maximises it; the \texttt{tune\_history}
+function of the \texttt{winning} package does this. A market priced
 under a different model from the outcome, or with a longshot bias, is
 inverted under its own model and then read as evidence under this
 one; the inversion is agnostic about where the prices came from.
@@ -480,27 +513,32 @@ price update is applied first and the observed-winner message of
 Equation~\eqref{eq:obslik} is applied to the updated belief.
 
 We simulate 400 races. In each race eight alternatives have means
-drawn from $N(0,I)$ and share one factor; a market quotes a price for
+drawn from $N(0,I)$ and share one factor, with loadings drawn
+independently from $N(0,0.36)$ and performance noise variance
+$d_i=1$; a market quotes a price for
 each alternative from its own noisy view of the means, with
 $\tau^2=0.25$; the race is run and the winner recorded.
 
 Starting from the prior $N(0,I)$ we form posteriors from the price,
 from the winner, and from the price followed by the winner, and
 compare each with the truth in two ways: the root mean square error
-of the posterior-mean contrasts against the true contrasts, computed
+of the posterior-mean contrasts against the true contrasts,
+$\bigl(\tfrac1n\lVert P(\hat\mu-m)\rVert^2\bigr)^{1/2}$, computed
 within each race and averaged, and the log probability the posterior
 assigns to the winner of a second, independent running of the same
 race. Table~\ref{tab:price} reports the averages over the 400 races.
 
 The price posterior is exact, with covariance
-$0.2\,I+0.1\,\mathbf{1}\mathbf{1}^\top$. Its common term shifts every
+$0.2\,I+0.1\,\mathbf{1}\mathbf{1}'$. Its common term shifts every
 mean together and cancels from every ranking, so the variance of a
 contrast $m_i-m_j$ is $0.4$. We carry this covariance into the winner
 update, which applies Equation~\eqref{eq:obslik} to the correlated
-belief and projects the result onto a Gaussian with full covariance.
+belief, adding $0.2$ to each $d_j$, and projects the result onto a
+Gaussian by Equation~\eqref{eq:moments-full}.
 That projection is the only approximation in the composed row. On a
-race drawn in the same way, rejection sampling with four million draws
-agrees with the composed posterior to $0.005$ in the contrast means,
+race drawn in the same way, with the winner fixed as entrant~4, an
+event of probability about $0.009$, rejection sampling keeps $35{,}184$
+of four million draws and agrees with the composed posterior to $0.005$ in the contrast means,
 against a Monte Carlo standard error of $0.003$; the diagonal
 composition is $0.18$ away (script
 \texttt{verify\_full\_winner} in the same folder).
@@ -542,6 +580,9 @@ races with market noise $\tau^2=0.25$. Posterior variance is the
 mean marginal variance and contrast variance the mean variance of
 $m_i-m_j$. The lower rows keep only the diagonal of the price
 posterior. Every row is scored with its own posterior covariance.
+The winner-only row starts from the diagonal prior and uses
+Equation~\eqref{eq:moments}, so its contrast variance is twice its
+marginal variance.
 Script: \texttt{research/win\_nodes/exp1\_two\_evidence}.}
 \label{tab:price}
 \end{table}
@@ -557,14 +598,17 @@ the shared factors each has a one-dimensional lattice form, so each
 passes through the same mixture over factor nodes as
 Equation~\eqref{eq:obslik}.
 
-Write $f_i$ and $\Phi_i$ for the conditional density and distribution
-function of entrant $i$'s performance, and $S_i=1-\Phi_i$. For the set
+Write $f_i=f_{i|z}$ and $\Phi_i=F_{i|z}$ for the conditional density
+and distribution function of entrant $i$'s performance given the
+factors, as in Section~\ref{sec:forward}, and $S_i=1-\Phi_i$. Each
+probability below is computed on the lattice at each factor node and
+averaged over the nodes. For the set
 $T$ of the first $k$ in unknown order, with $1\le k<n$, let $G=\prod_{j\notin T}\Phi_j$
 be the distribution function of the best outsider and
 $H=\prod_{i\in T}S_i$ the probability that every member is above
 $x$. Then
 \begin{equation}
-\Pr(\text{first } k = T)\;=\;\int G'(x)\,H(x)\,dx\;=\;-\int G(x)\,H'(x)\,dx .
+\Pr(\text{first } k = T)\;=\;\int \frac{dG}{dx}\,H(x)\,dx\;=\;-\int G(x)\,\frac{dH}{dx}\,dx .
 \label{eq:topset}
 \end{equation}
 Differentiating either form gives the gradient of this probability
@@ -581,13 +625,20 @@ behind, let $N=\{i_1,\dots,i_k\}$ be the named entrants, let
 $A_k(x)=f_{i_k}(x)\prod_{l\notin N}\Phi_l(x)$ be the density that
 the last named entrant finishes at $x$ with every unnamed entrant
 below, and recursively let
-$A_j(x)=f_{i_j}(x)\int_{-\infty}^{x}A_{j+1}$ be the density that
-entrant $i_j$ finishes at $x$ ahead of the rest of the prefix. The
-probability of the prefix is $\int A_1$, which is $k$ cumulative sums
-on one lattice, for any $k$.
+$A_j(x)=f_{i_j}(x)\int_{-\infty}^{x}A_{j+1}(u)\,du$ be the density
+that entrant $i_j$ finishes at $x$ ahead of $i_{j+1},\dots,i_k$ in
+that order, with every unnamed entrant behind $i_k$. The probability
+of the prefix is $\int A_1(x)\,dx$, which takes $k-1$ cumulative sums
+and one total on one lattice, for any $k$. The order among $k$ named
+entrants, with the others unconstrained, is the same recurrence
+started from $A_k=f_{i_k}$, without the product over unnamed
+entrants. The implementation takes the score of the ordered prefix by central
+differences of the lattice log-probability, which costs $2n$ further
+passes, and that of the order among named entrants analytically, by
+one forward and one adjoint pass.
 
-The membership of one entrant among the first $k$ is the top-$k$ query of
-\citet{cotton2026}; the gradient of the membership probability in
+The membership of one entrant among the first $k$ is the top-$k$
+query of the \texttt{winning} package; the gradient of the membership probability in
 $m$, divided by that probability, is the score. (The engine's Jacobian
 row is taken in min-wins means and enters with its sign reversed.)
 For $1<k<n$ the event is a union of convex sets and not itself
@@ -610,7 +661,7 @@ Table~\ref{tab:price}, with 1{,}600 seeded races and one message per
 race. Taking the full order's reduction in contrast error as the
 whole, the first three in order with the rest behind keep
 71 percent of it, the first three as a set
-62 percent, the winner alone 34 percent, the order among
+63 percent, the winner alone 34 percent, the order among
 three named entrants 22 percent, and the membership of one
 named entrant in the first three 15 percent. Every gain is at
 least fifteen paired standard errors. The named entrant is drawn
@@ -628,11 +679,15 @@ one named entrant in the first three & 0.867 & 0.947 & $-2.030$ \\
 order among three named & 0.854 & 0.921 & $-2.015$ \\
 winner only & 0.830 & 0.872 & $-1.967$ \\
 first three as a set & 0.775 & 0.775 & $-1.918$ \\
-first three in order, rest behind & 0.759 & 0.749 & $-1.891$ \\
+first three in order, rest behind & 0.759 & 0.748 & $-1.891$ \\
 full order & 0.702 & 0.656 & $-1.841$ \\
 \bottomrule
 \end{tabular}
 \caption{One race, one outcome message each, ranked by information.
+The updates of Section~\ref{sec:places} return posterior means and
+variances, so the log score here uses the diagonal projection of each
+posterior, and the factor loadings of the race. Unlike
+Table~\ref{tab:price}, it is not the full posterior predictive.
 Script: \texttt{research/win\_nodes/exp2\_place\_evidence}.}
 \label{tab:places}
 \end{table}
@@ -765,8 +820,8 @@ recommendation with a logistic click model and a Gaussian
 approximation to the posterior of its coefficients, not with the
 Gaussian rewards assumed here. The logistic link is increasing, so
 the arm with the largest linear predictor has the largest click
-probability, and the win node applies to their approximate
-posterior, whose error it inherits. A
+probability, and the win node, with a small residual added, applies
+to their approximate posterior, whose error it inherits. A
 Gaussian-process prior with a kernel of finitely many features and an
 independent residual has this form exactly. A dense kernel does not,
 and an inducing-point approximation to one has a dense residual
@@ -777,7 +832,7 @@ With per-arm pull counts $c$, the posterior precision is
 $A = \Sigma_0^{-1} + \sigma_n^{-2}\,\mathrm{diag}(c)$.
 Equation~\eqref{eq:wood1} applied to $\Sigma_0$ puts $A$ in the form
 of Equation~\eqref{eq:diagminus}, with $a_i = d_{0i}^{-1} + c_i
-\sigma_n^{-2}$, $S = M_0^{-1}$ and $M_0 = I_\rho + V'
+\sigma_n^{-2}$, $U=\mathrm{diag}(d_0)^{-1}V$, $S = M_0^{-1}$ and $M_0 = I_\rho + V'
 \mathrm{diag}(d_0)^{-1} V$, and the rest of Section~\ref{sec:crn}
 applies unchanged. The posterior is exactly factor plus diagonal
 after every pull, with no more factors than the prior.
@@ -806,9 +861,14 @@ All numbers in this section come from committed, seeded scripts in
 the public repository. Monte Carlo is used only as a check.
 
 The accuracy of the factor computation is
-studied in \citet{cotton2026}. On ten posteriors from the experiments
+studied in \citet{cotton2026}. The default evaluator uses a lattice of
+$L=257$ points in $x$. Its factor rule is Gauss--Hermite, with an
+order that grows with the sharpness of the field, meaning how many
+residual standard deviations the factors move an entrant; when the
+field is sharp it hands over to an equal-weight quantile grid at rank
+one and to $8{,}192$ scrambled-Sobol nodes at higher rank. On ten posteriors from the experiments
 of Section~\ref{sec:applications}, raising the lattice from $257$ to
-$2{,}049$ points changes no entry by more than $4 \times 10^{-16}$,
+$2{,}049$ points changes no entry by more than $2 \times 10^{-16}$,
 and replacing the default factor rule by $2^{15}$ scrambled-Sobol
 nodes changes no entry by more than $1.2 \times 10^{-6}$. Both are
 comparisons between numerical rules. Four million Monte Carlo draws
@@ -818,10 +878,18 @@ standard errors, which is too coarse to confirm agreement at
 $10^{-6}$.
 
 A three-alternative case has a closed form: means zero, one factor
-with loadings $(0,1,3)$ and residual variances $0.1$. There the
-default factor rule is in error by $2.3 \times 10^{-4}$, while refining
-the lattice changes the answer by less than $10^{-16}$. The factor
-rule, and not the lattice, limits the accuracy in that case. No error
+with loadings $(0,1,3)$ and residual variances $0.1$. Each $p_i$ is a
+bivariate normal orthant probability,
+$\tfrac14+\tfrac1{2\pi}\arcsin\varrho_i$, where $\varrho_i$ is the
+correlation of $X_i-X_j$ and $X_i-X_k$, which gives
+$p=(0.44141,\,0.08940,\,0.46919)$. The default rule is in error by
+$2.3 \times 10^{-4}$, both in the largest entry and in total
+variation, while refining the lattice changes the answer by less than
+$10^{-16}$. The factor rule, and not the lattice, limits the accuracy
+in that case. The field is sharp: the factor moves entrant~3 by
+$3/\sqrt{0.1}\approx9.5$ residual standard deviations, so the
+integrand is close to a step in $z$, which is harder than at the
+experiment posteriors. No error
 bound is proved. The script is
 \texttt{research/rs\_crn/exp3\_quadrature}.
 
@@ -875,7 +943,7 @@ $0.760$.
 
 The \emph{VBOS policy} is the variational Bayesian optimistic sampling
 rule of \citet{odonoghue2021}, extended by \citet{tarbouriech2023}. In
-the near-closed form of \citet[Proposition~5]{menet2025} it is
+the near-closed form of \citet[Proposition~5, ``Fast VAPOR'']{menet2025} it is
 \begin{equation}
 \tilde{\pi}_i \;=\; v\!\left(\frac{m_i - \kappa^*}{s_i}\right),
 \qquad v(c) = \exp\!\Bigl(-\tfrac{1}{8}\bigl(\sqrt{c^2 + 4} -
@@ -887,16 +955,17 @@ policy departs from $p$ on purpose, and its regret analysis depends
 on that departure. Its distance from $p$ matters because
 \citet{menet2026} use it as the trainable substitute for $p$.
 
-Both approximations ignore correlation, and the second example of
-Section~\ref{sec:examples} shows how large the resulting error can be.
+Both approximations ignore correlation, and the index-fund example of
+Section~\ref{sec:examples}, with $k$ independent funds, shows how
+large the resulting error can be.
 A simpler example fixes the mean gap and varies the size of a shared
 shock. Let $\theta_1 = 3 + Z + \varepsilon_1$ and
-$\theta_2 = Z + \varepsilon_2$, with $Z \sim N(0, \tau^2)$ and
+$\theta_2 = Z + \varepsilon_2$, with $Z \sim N(0, \omega^2)$ and
 independent $\varepsilon_i \sim N(0, 1)$. The shared $Z$ cancels from
 the difference, so $p_1 = \Phi(3/\sqrt{2}) \approx 0.983$ for every
-$\tau$. F-LITE sees only the marginal variances $1 + \tau^2$ and gives
-$\Phi\bigl(3 / (2\sqrt{1 + \tau^2})\bigr)$, which is $0.933$ at
-$\tau = 0$, $0.682$ at $\tau = 3$, and tends to one half as $\tau$
+$\omega$. F-LITE sees only the marginal variances $1 + \omega^2$ and gives
+$\Phi\bigl(3 / (2\sqrt{1 + \omega^2})\bigr)$, which is $0.933$ at
+$\omega = 0$, $0.682$ at $\omega = 3$, and tends to one half as $\omega$
 grows.
 
 \subsection{Stopping a simulation study}
@@ -908,7 +977,7 @@ Section~\ref{sec:crn} and asks when it can stop. A study stops when
 it is confident enough that it has found the best system. The
 question is whether a stopping rule that uses the computed
 probabilities stops earlier than rules that use the marginal
-approximations, and whether it still selects the best system as often
+approximations, why, and whether it still selects the best system as often
 as its confidence level promises.
 
 The setting is the posterior of Section~\ref{sec:crn} with $n = 100$
@@ -919,7 +988,11 @@ fraction of that variance that comes from the shared inputs. The
 posterior uses the outputs of all $n$ systems jointly, so its
 marginal variances still differ between regimes: after 20 replicates each $\theta_i$ has
 posterior variance $0.048$ in the independent regime and $0.027$ in
-the aligned one. The comparison is between rules within a regime.
+the aligned and opposed ones. The difference comes from the
+idiosyncratic variance of a replicate, which is $1$ in the independent
+regime and $0.4$ in the other two; in the aligned regime the shared
+shock cannot be told apart from the common level of the means, and
+adds only to that level. The comparison is between rules within a regime.
 
 Correlation can mislead a marginal-only rule in two directions. If
 the leading systems move together, their difference is less uncertain
@@ -930,43 +1003,65 @@ control.
 
 \begin{itemize}
 \item \emph{Independent}: factor share zero. This is the control.
-\item \emph{Aligned}: every system loads on the same stream, with
-factor share $0.6$. Differences between systems then vary less than
+\item \emph{Aligned}: every system loads $\sqrt{0.6}$ on the first
+stream, a factor share of $0.6$. Differences between systems then vary less than
 their marginal variances suggest. Every row of $B$ is the same, so
 $PB = 0$ and the computed probabilities are those of an independent
 contest, which the marginal rules do not know. This is the shared
 shock example of Section~\ref{sec:surrogates} with a hundred systems.
-\item \emph{Opposed}: half the systems load positively and half
-negatively on one stream, with factor share $0.6$. Differences
+\item \emph{Opposed}: the first fifty systems load $\sqrt{0.6}$ and
+the rest $-\sqrt{0.6}$ on the first stream, a factor share of $0.6$. Differences
 between systems in opposite halves then vary more than their marginal
-variances suggest.
+variances suggest, and differences within a half vary less: after 20
+replicates the contrast variances are $0.068$ and $0.039$, against
+$0.054$ implied by the marginals.
 \end{itemize}
 
-Three stopping rules differ only in how they estimate $p$: the win
-node of Section~\ref{sec:factor}, F-LITE and the VBOS policy. After
-every replicate a rule recomputes its estimate, and it stops the
-first time the largest entry reaches $1 - \delta$, with
-$\delta = 0.05$, selecting that entry. A fourth rule, drawing $M$
-samples from the correlated posterior and counting argmax
-frequencies, uses the correlation and costs $O(M n \rho)$. At
-$p=0.95$, $M=500$ draws give a standard error of $0.0097$, and a
-95\% margin of $0.01$ needs about $1{,}800$. It was not run.
+Six stopping rules differ only in how they estimate $p$. After every
+replicate a rule recomputes its estimate, and it stops the first time
+the largest entry reaches $1 - \delta$, with $\delta = 0.05$,
+selecting that entry. The rules are:
+\begin{itemize}
+\item the \emph{win node} of Section~\ref{sec:factor}, on the
+correlated posterior;
+\item \emph{F-LITE} and the \emph{VBOS policy}, on the marginals;
+\item \emph{exact marginals}: the win node applied to the marginal
+means and variances with the correlation dropped. This is the
+probability F-LITE approximates, computed exactly, so it separates the
+cost of F-LITE's threshold step from the cost of ignoring
+correlation;
+\item a \emph{pairwise bound}
+$1-\sum_{j\ne i}\Phi\bigl(-(m_i-m_j)/s_{ij}\bigr)\le p_i$, with
+$s_{ij}$ the correlated posterior standard deviation of
+$\theta_i-\theta_j$. It uses the correlation through the contrasts
+and is conservative;
+\item \emph{counting}: $M=2{,}000$ draws from the correlated posterior
+per step, at cost $O(Mn\rho)$. At $p=0.95$ its standard error is
+$0.0049$.
+\end{itemize}
+The last three rules draw their replicates from a separate random
+stream once the first three have all stopped, so the first three rows
+of each regime reproduce exactly whichever rules are run.
 
 With the true probabilities the rule has a Bayesian guarantee. Let
-$\tau$ be the first time $\max_i p_i \ge 1 - \delta$, let $B_r$ be
-the budget of replicates, and on $\{\tau \le B_r\}$ let $I$ be the
-selected alternative and $I^*$ the best. Then
+$\nu$ be the first time $\max_i p_i \ge 1 - \delta$, let $B_r$ be
+the budget of replicates, and on $\{\nu \le B_r\}$ let $J$ be the
+selected alternative and $J^*$ the best. Then
 \begin{equation}
-\Pr(I \ne I^* \mid \tau \le B_r)
-\;=\; \mathbb{E}\bigl[1 - p_I(\mathcal{D}_\tau) \mid \tau \le B_r\bigr]
+\Pr(J \ne J^* \mid \nu \le B_r)
+\;=\; \mathbb{E}\bigl[1 - p_J(\mathcal{D}_\nu) \mid \nu \le B_r\bigr]
 \;\le\; \delta .
 \end{equation}
 Optional stopping does not affect this statement, which averages over
 the prior. It is not a frequentist guarantee for a fixed $\theta$.
 
-For computed probabilities with $\|\hat p - p\|_\infty \le \eta$ at
-stopping, the error is at most $\delta + \eta$, and a threshold of
-$1 - \delta + \eta$ restores $\delta$. At the ten posteriors measured
+For computed probabilities with $\|\hat p - p\|_\infty \le \gamma$ at
+stopping, the error is at most $\delta + \gamma$, and a threshold of
+$1 - \delta + \gamma$ restores $\delta$. This holds because $\hat p$ is
+a deterministic function of the data, so the stopping time and the
+selection $\hat J=\arg\max_i\hat p_i$ are functions of the data too,
+and at stopping $p_{\hat J}\ge\hat p_{\hat J}-\gamma\ge1-\delta-\gamma$
+whether or not $\hat J$ maximizes $p$. At the ten posteriors measured
 in Section~\ref{sec:checks}, the default evaluator agreed with a
 $2^{15}$-node factor rule to about $10^{-6}$ per entry. That is
 agreement between two rules at those posteriors and not a bound on
@@ -990,14 +1085,23 @@ regime & rule & mean replicates & realized PCS & censored of 200 \\
 independent & win node & 126.5 & 0.971 & 29 \\
             & F-LITE & 188.7 & 1.000 & 57 \\
             & VBOS  & 252.9 & 1.000 & 88 \\
+            & exact marginals & 126.5 & 0.971 & 29 \\
+            & pairwise bound & 132.5 & 0.971 & 30 \\
+            & counting & 127.0 & 0.965 & 27 \\
 \addlinespace
 aligned     & win node & \phantom{0}81.2 & 0.973 & 17 \\
             & F-LITE & 175.2 & 1.000 & 53 \\
             & VBOS  & 236.7 & 1.000 & 90 \\
+            & exact marginals & 121.0 & 0.982 & 35 \\
+            & pairwise bound & \phantom{0}83.9 & 0.973 & 18 \\
+            & counting & \phantom{0}79.4 & 0.973 & 17 \\
 \addlinespace
 opposed     & win node & 122.7 & 0.970 & 33 \\
             & F-LITE & 188.6 & 0.993 & 64 \\
             & VBOS  & 244.2 & 1.000 & 92 \\
+            & exact marginals & 122.3 & 0.964 & 32 \\
+            & pairwise bound & 126.4 & 0.970 & 35 \\
+            & counting & 119.0 & 0.959 & 31 \\
 \bottomrule
 \end{tabular}
 \caption{Stopping at nominal $95\%$ confidence. Each regime has 200
@@ -1009,16 +1113,34 @@ best system. The stopped runs differ by rule.}
 \end{table}
 
 In Table~\ref{tab:stopping}, every rule's realized PCS among its
-stopped runs is above nominal. The lowest, the win node rule's
-$0.970$ in the opposed regime, has 167 stopped runs and a standard
-error of $0.013$.
+stopped runs is above nominal. The lowest, the counting rule's
+$0.959$ in the opposed regime, has 169 stopped runs and a standard
+error of $0.015$. In the correlated regimes counting stops a little
+earlier than the win node, after $79.4$ and $119.0$ replicates
+against $81.2$ and $122.7$, with lower PCS in two regimes, which is
+what a threshold crossed on Monte Carlo noise would do.
 
-At this common nominal threshold and budget, the two marginal rules
-used $1.5$ to $2.9$ times the capped mean replicates of the win node
-rule, and hit the budget far more often. The gap is largest in the
-aligned regime, where the win node rule stops after $81.2$ replicates
-on average, against $175.2$ and $236.7$, and stops in 183 of 200
-runs, against 147 and 110. The thresholds are nominal and not
+At this common nominal threshold and budget, F-LITE and the VBOS
+policy used $1.5$ to $2.9$ times the capped mean replicates of the
+win node rule, and hit the budget far more often. The exact-marginals
+rule splits that gap. In the independent regime it is the win node,
+so all of F-LITE's extra $62$ replicates come from its threshold
+step. In the opposed regime it costs the same as the win node: the
+marginals understate cross-half contrast variance and overstate
+within-half contrast variance, and here the two roughly cancel, and F-LITE's extra $66$ replicates again come from the
+threshold step. Only in the aligned regime does ignoring correlation
+cost replicates: exact marginals need $121.0$ against the win node's
+$81.2$, so of F-LITE's extra $94$ replicates, $40$ come from ignoring
+correlation and $54$ from the threshold step.
+
+The three correlation-aware rules are close. The pairwise bound costs
+three to five percent more than the win node, and counting
+$2{,}000$ draws costs about the same, with the PCS shortfall noted
+above. At $n=100$ the pairwise bound is cheap, so this experiment
+does not show the win node to be necessary for stopping. What it
+shows is that correlation matters where the marginals overstate
+contrast variance, and that a rule which uses the contrasts, exactly
+or conservatively, recovers it. The thresholds are nominal and not
 calibrated to a common PCS, so these ratios compare spend at a common
 threshold. They do not compare spend at a matched true error.
 
@@ -1039,31 +1161,41 @@ computed probabilities was $0.0026$, which is the noise of the check.
 Does choosing arms from the computed probabilities reproduce Thompson
 sampling when the arms are correlated? On the bandit of
 Section~\ref{sec:bandit-posterior}, with $n=50$ arms, horizon 200 and
-100 replications, choosing arms with the computed probabilities gives
-cumulative Bayes regret within two percent of Thompson sampling's, in
-an independent regime and in one where each half of the arms shares
-a factor carrying $0.75$ of the prior variance. The paired
-differences, $-3.0\pm12.0$ and $+1.9\pm8.0$ at 95\%, are consistent
-with zero, as expected from the equality of the exact policies
-(Section~\ref{sec:surrogates}) up to numerical evaluation error. Used as the policy, the
-VBOS approximation has ten to twelve percent more regret than
-Thompson sampling, a paired difference of $16.1\pm10.6$ and
-$14.7\pm7.4$, with its action distribution at total-variation
-distance $0.13$ to $0.16$ from the computed probabilities. F-LITE
-has three to six percent more, $5.7\pm11.3$ and $6.8\pm7.2$, at
-total-variation distance about $0.06$. The script is
+100 replications, reward noise $\sigma_n=1$ and unit prior variance
+per arm, there are two regimes: independent arms, and one where the
+first and second halves of the arms each load $\sqrt{0.75}$ on their
+own factor, which then carries $0.75$ of the prior variance. Choosing
+arms with the computed probabilities gives cumulative Bayes regret
+whose point estimates are within two percent of Thompson sampling's
+($170$ and $119$). The paired differences, $-3.0\pm12.0$ and
+$+1.9\pm8.0$ at 95\%, are consistent with zero, as expected from the
+equality of the exact policies (Section~\ref{sec:surrogates}) up to
+numerical evaluation error; paired bootstrap intervals for the
+relative difference are $-8.5$ to $+5.5$ percent and $-5.0$ to $+8.4$
+percent. Used as the policy, the VBOS approximation has nine to
+twelve percent more regret than Thompson sampling, a paired difference of
+$16.1\pm10.6$ and $14.7\pm7.4$, with its action distribution at
+median total-variation distance $0.13$ to $0.16$ from the computed
+probabilities over checkpoints along its own trajectory. F-LITE's point estimates are
+three to six percent higher, $5.7\pm11.3$ and $6.8\pm7.2$, intervals
+that include zero, so that difference is not resolved at 100
+replications; its median total-variation distance is about $0.06$. The script is
 \texttt{research/rs\_crn/exp2\_bandit}.
 
 \section{Software}
+\label{sec:software}
 
 The factor win node, its top-$k$ relatives, both Jacobian blocks,
 the calibration inverses, and the evidence messages of
-Sections~\ref{sec:observed}--\ref{sec:places}, all through one
-function (\texttt{update\_race}: prices, winner, order, prefix, top
-set, membership), are in the \texttt{winning} package of
+Sections~\ref{sec:observed}--\ref{sec:places} are in the \texttt{winning} package of
 \citet{cotton2026}: a Python reference with R, JavaScript, Julia and
 Rust ports, each checked against the same embedded reference
-vectors, most to $10^{-15}$. The
+vectors, most to $10^{-15}$. One function, \texttt{update\_race}, takes a
+price and any one outcome (winner, order, prefix, top set or
+membership) on a diagonal belief, and projects to the diagonal after
+the price. The exact composition of Section~\ref{sec:compose}, which
+keeps the full covariance, uses \texttt{update\_market\_full} and
+\texttt{update\_winner\_full}. The
 observed win node, Equation~\eqref{eq:obslik} with its analytic
 score, is the estimation core of \texttt{MultinomialProbit.jl}, whose
 score is also checked by forward-mode automatic differentiation
@@ -1090,22 +1222,35 @@ the excursion functionals then belong to the sampling methods of
 in total variation with every marginal held fixed, even with a single
 shared factor (the index-fund example of Section~\ref{sec:examples}, with many
 independent funds). The
-comparison with counted posterior draws depends on rank. On the
-posteriors of the two experiments, where the centered loadings have
-rank at most two, one evaluation for a hundred alternatives takes
-about ten milliseconds and agreed with a $2^{15}$-node factor rule to
-about $10^{-6}$ per entry at ten posteriors from the experiments.
+comparison with counted posterior draws depends on rank and on how
+sharp the posterior is. At ten posteriors from the experiments of
+Section~\ref{sec:applications} (two factors, but prior loadings of
+centered rank zero or one, with fifty bandit arms or a hundred
+systems; \texttt{research/rs\_crn/exp3\_quadrature}), one
+evaluation took $4$ to $9$ milliseconds and agreed with a
+$2^{15}$-node factor rule to about $10^{-6}$ per entry.
 
-Counting draws for ten milliseconds gives about twenty thousand
-draws, which estimate an entry near $0.01$ to seven percent of
-itself. A standard error of $10^{-6}$ on an entry near $0.01$
-would take about $10^{10}$ draws.
-
-At factor ranks three to five, on single hundred-arm
-posteriors of a linear sampler, one evaluation takes $0.3$ to $1$
-second and $200{,}000$ draws take $0.3$ second, with errors of the
-same order. The win node is faster than counting at low rank, and
-the rank that matters is that of the centered loadings.
+The script in \texttt{research/win\_nodes/timing} times
+one evaluation against counting draws, single threaded, on
+hundred-arm posteriors of a linear sampler with generic random
+loadings of rank one to five (2,000 pulls, one posterior per rank).
+ One evaluation took $14$
+milliseconds at rank one, $0.13$ seconds at rank two, $1.1$ seconds
+at rank three, and $8.8$ and $7.1$ seconds at ranks four and five.
+Their rank-two cost exceeds that of the experiment posteriors because
+generic loadings keep their full centered rank; it did not change
+when the pulls were cut to 100. Cost is not monotone in rank above
+three, where the default rule changes. Counting draws took $0.14$ to $0.18$ seconds per $200{,}000$ at
+every rank. In the time of one evaluation one can therefore count
+about $17{,}000$ draws at rank one, which estimate an entry near
+$0.01$ to eight percent of itself, $1.8\times10^5$ draws at rank two
+and $1.6\times10^6$ to $10^7$ at ranks three to five. A standard
+error of $10^{-6}$ on an entry near $0.01$ would take about $10^{10}$
+draws. The win node is the better tool at rank one or two, or when
+small probabilities, derivatives or deterministic output are needed.
+At rank three and above, counting draws is faster for the precision
+a stopping rule or Thompson-style policy needs. The rank that matters
+is that of the centered loadings.
 
 \emph{Exactness of the posteriors.} The derivations of
 Section~\ref{sec:posteriors} are exact because the observations are
@@ -1142,8 +1287,10 @@ which the win node does not supply, and this paper does not run it.
 
 \emph{Top-$k$ nodes.} The win node is the $k=1$ case of a top-$k$
 node. For factor parents the forward query and its derivatives are
-implemented in the \texttt{winning} package; the full treatment,
-including observed top-$k$ sets, is work in progress.
+implemented in the \texttt{winning} package, and so are the observed
+sets, prefixes and memberships of Section~\ref{sec:places}. A top-$k$
+node coupled to other order nodes in a larger network is not treated
+here.
 
 \emph{Off-policy evaluation.} The replay method of \citet{li2011}
 assumes a uniformly random log, and they note that rejection sampling
@@ -1163,10 +1310,19 @@ produced. This paper does not test any of this.
 N.~Goyal. Thompson sampling for contextual bandits with linear
 payoffs. In \emph{ICML}, 2013.
 
+\bibitem[Andersen(1953)]{andersen1953} E.~Sparre Andersen. On the
+fluctuations of sums of random variables. \emph{Mathematica
+Scandinavica}, 1:263--285, 1953; II, 2:195--223, 1954.
+
 \bibitem[Bolin and Lindgren(2015)]{bolin2015} D.~Bolin and
 F.~Lindgren. Excursion and contour uncertainty regions for latent
 Gaussian models. \emph{J.\ R.\ Statist.\ Soc.\ B} 77(1):85--106,
 2015.
+
+\bibitem[Butler and Moffitt(1982)]{butler1982} J.~S. Butler and
+R.~Moffitt. A computationally efficient quadrature procedure for the
+one-factor multinomial probit model. \emph{Econometrica},
+50(3):761--764, 1982.
 
 \bibitem[Chapelle and Li(2011)]{chapelle2011} O.~Chapelle and L.~Li.
 An empirical evaluation of Thompson sampling. In \emph{Advances in
@@ -1206,14 +1362,19 @@ Graepel]{herbrich2007} R.~Herbrich, T.~Minka, and T.~Graepel.
 TrueSkill: a Bayesian skill rating system. In \emph{Advances in
 Neural Information Processing Systems~19}, 2007.
 
+\bibitem[Keane(1994)]{keane1994} M.~P. Keane. A computationally
+practical simulation estimator for panel data. \emph{Econometrica},
+62(1):95--116, 1994.
+
 \bibitem[Li et~al.(2011)Li, Chu, Langford, and Wang]{li2011} L.~Li,
 W.~Chu, J.~Langford, and X.~Wang. Unbiased offline evaluation of
 contextual-bandit-based news article recommendation algorithms. In
 \emph{WSDM}, 2011.
 
 \bibitem[Menet et~al.(2025)Menet, Huebotter, Kassraie, and
-Krause]{menet2025} N.~Menet, J.~Huebotter, P.~Kassraie, and
-A.~Krause. Efficiently estimating Gaussian probability of maximality.
+Krause]{menet2025} N.~Menet, J.~H\"ubotter, P.~Kassraie, and
+A.~Krause. LITE: Efficiently estimating Gaussian probability of
+maximality.
 In \emph{AISTATS}, 2025. arXiv:2501.13535.
 
 \bibitem[Menet et~al.(2026)Menet, Terzi\'c, Hersche, Krause, and
@@ -1221,10 +1382,10 @@ Rahimi]{menet2026} N.~Menet, A.~Terzi\'c, M.~Hersche, A.~Krause, and
 A.~Rahimi. Thompson sampling via fine-tuning of LLMs. In
 \emph{ICLR}, 2026. arXiv:2510.13328.
 
-\bibitem[M\"uller et~al.(2019)M\"uller, Nesterov, and
+\bibitem[M\"uller et~al.(2022)M\"uller, Nesterov, and
 Shikhman]{muller2019} D.~M\"uller, Y.~Nesterov, and V.~Shikhman.
-Discrete choice prox-functions on the simplex. arXiv:1909.05591,
-2019.
+Discrete choice prox-functions on the simplex. \emph{Mathematics of
+Operations Research}, 47(1):485--507, 2022. arXiv:1909.05591.
 
 \bibitem[O'Donoghue and Lattimore(2021)]{odonoghue2021}
 B.~O'Donoghue and T.~Lattimore. Variational Bayesian optimistic
@@ -1234,6 +1395,10 @@ sampling. In \emph{Advances in Neural Information Processing Systems
 \bibitem[Plackett(1954)]{plackett1954} R.~L. Plackett. A reduction
 formula for normal multivariate integrals. \emph{Biometrika},
 41(3--4):351--360, 1954.
+
+\bibitem[Pr\'ekopa(1973)]{prekopa1973} A.~Pr\'ekopa. On logarithmic
+concave measures and functions. \emph{Acta Scientiarum Mathematicarum
+(Szeged)}, 34:335--343, 1973.
 
 \bibitem[Ridgway(2016)]{ridgway2016} J.~Ridgway. Computation of
 Gaussian orthant probabilities in high dimension. \emph{Statistics
