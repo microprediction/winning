@@ -9,6 +9,7 @@ cell is never a pass.
 """
 import json
 import os
+import sys
 import time
 
 import numpy as np
@@ -19,6 +20,12 @@ from winning.ratings.verify import (CHECKS, PROFILES, Report, Result,
 from winning.ratings.verify import marks
 
 FAST_BUDGET_S = 60.0
+# The Windows runner does this profile's memory-bound array work about
+# twice as slowly as the Linux one (157s vs 81s of CPU, run alone, same
+# numpy and scipy), and under pytest-xdist it ran 264-291s against the
+# 240s cap on most nights. Pushes and pull requests gate on Linux;
+# Windows runs only in the nightly grid.
+_CPU_FACTOR = 2.0 if sys.platform == "win32" else 1.0
 
 
 def test_fast_profile_is_clean():
@@ -33,7 +40,7 @@ def test_fast_profile_is_clean():
     assert not rep.failed and not rep.underpowered, rep.to_markdown()
     assert rep.exit_code == 0
     if os.environ.get("CI"):
-        assert cpu < 4 * FAST_BUDGET_S, f"fast profile took {cpu:.0f}s of CPU"
+        assert cpu < 4 * FAST_BUDGET_S * _CPU_FACTOR, f"fast profile took {cpu:.0f}s of CPU"
 
 
 def test_registry_is_well_formed():
