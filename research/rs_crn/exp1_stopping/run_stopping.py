@@ -43,6 +43,21 @@ the marginal-only rule in both directions:
               and its realized PCS falls below nominal).
 Both distortions vanish at c = 0 (no shared factor), which is the
 control row.
+
+Three further rules separate the effect of correlation from the
+threshold bias of the marginal surrogates (added 2026-11-19):
+  marg   -- the EXACT independent-marginal probabilities: the race on
+            the marginal sds with no factor (Menet et al. 2025, Prop. 1
+            without the threshold step). Ignores correlation only.
+  bonf   -- a correlation-aware lower bound from the exact pairwise
+            contrast variances: max_i 1 - sum_j Phi(-(m_i-m_j)/s_ij),
+            s_ij^2 = d_i + d_j + |w_i - w_j|^2. Stops when >= 1 - delta.
+  mc     -- counting the argmax of MC_DRAWS draws from the correlated
+            posterior (its own random stream).
+The original three rules see exactly the random numbers they saw
+before: data are drawn from the experiment stream for as long as the
+original loop would have drawn them, and from a separate stream after
+that, so the original rows reproduce bit for bit.
 """
 import json
 import os
@@ -65,6 +80,9 @@ N_MAX = 400         # replicate budget
 REPS = 200          # experiment replications per configuration
 CERT_EVERY = 50     # Monte Carlo certification cadence (per config)
 MC_CERT = 200_000
+MC_DRAWS = 2_000    # draws per step for the counting rule
+OLD_RULES = ("exact", "indep", "vbos")
+RULES = OLD_RULES + ("marg", "bonf", "mc")
 # One fixed seed per regime (was hash((kind, c)), which is randomized per
 # process by PYTHONHASHSEED and so not reproducible).
 SEEDS = {"independent": 20261101, "aligned": 20261102, "opposed": 20261103}
@@ -159,13 +177,37 @@ def vbos_policy(m, s):
     return p / p.sum()
 
 
-def run_config(kind, c, rng, log=None, run_id=None):
+def marg_pom(m, s):
+    """Exact probabilities if the systems were independent with these
+    marginal sds: the race with no factor."""
+    return race_probabilities(-m, D=s ** 2)
+
+
+def bonferroni_lcb(m, W, d):
+    """Per-system lower bound on P(i best) from exact pairwise contrasts."""
+    var = (d[:, None] + d[None, :]
+           + ((W[:, None, :] - W[None, :, :]) ** 2).sum(-1))
+    np.fill_diagonal(var, 1.0)
+    z = (m[:, None] - m[None, :]) / np.sqrt(var)
+    tail = norm.cdf(-z)
+    np.fill_diagonal(tail, 0.0)
+    return 1.0 - tail.sum(1)
+
+
+def mc_pom(m, W, d, rng_mc):
+    draws = (m[None, :] + rng_mc.normal(size=(MC_DRAWS, W.shape[1])) @ W.T
+             + rng_mc.normal(size=(MC_DRAWS, len(m))) * np.sqrt(d))
+    return np.bincount(draws.argmax(1), minlength=len(m)) / MC_DRAWS
+
+
+def run_config(kind, c, rng, log=None, run_id=None, rng_extra=None,
+               rng_mc=None):
     """One regime. If `log` is an open file, every replication appends one
     JSON line (regime, seed, run id, the raw stopped_n / correct / TV
     values) as it finishes, so an interrupted run keeps what it measured.
     The logging consumes no random numbers and changes no statistic."""
     V, sigma = make_config(kind, c)
-    rules = ("exact", "indep", "vbos")
+    rules = RULES
     out = {r: {"stopped_n": [], "correct": [], "tv_vs_exact": []}
            for r in rules}
     cert_worst = 0.0
@@ -177,17 +219,30 @@ def run_config(kind, c, rng, log=None, run_id=None):
         certify = (rep % CERT_EVERY == 0)
         rep_tv = {r: [] for r in rules}
         rep_cert = None
+        old_drawing = True       # would the original loop still draw here?
         for n in range(1, N_MAX + 1):
-            F = rng.normal(size=RHO)
-            eps = rng.normal(0.0, sigma)
+            src = rng if old_drawing else rng_extra
+            F = src.normal(size=RHO)
+            eps = src.normal(0.0, sigma)
             ysum += mu_true + V @ F + eps
+            old_live = any(live[r] for r in OLD_RULES)
+            if not old_live:
+                old_drawing = False   # the original loop broke at this step
             if not any(live.values()):
                 break
             mu_n, W, d, sd = posterior_factor_form(n, ysum / n, V, sigma)
-            p_exact = exact_pom(mu_n, W, d)
-            p_indep = flite_pom(mu_n, sd)
-            p_vbos = vbos_policy(mu_n, sd)
-            if certify and n == 20:
+            # the original three are evaluated exactly while the original
+            # loop would have run; the new rules need none of them
+            if old_live:
+                p_exact = exact_pom(mu_n, W, d)
+                p_indep = flite_pom(mu_n, sd)
+                p_vbos = vbos_policy(mu_n, sd)
+            else:
+                p_exact = p_indep = p_vbos = None
+            p_marg = marg_pom(mu_n, sd) if live["marg"] else None
+            p_bonf = bonferroni_lcb(mu_n, W, d) if live["bonf"] else None
+            p_mc = mc_pom(mu_n, W, d, rng_mc) if live["mc"] else None
+            if certify and n == 20 and old_live:
                 draws = (mu_n[None, :]
                          + rng.normal(size=(MC_CERT, RHO)) @ W.T
                          + rng.normal(size=(MC_CERT, K)) * np.sqrt(d))
@@ -195,9 +250,10 @@ def run_config(kind, c, rng, log=None, run_id=None):
                 rep_cert = float(0.5 * np.abs(counts - p_exact).sum())
                 cert_worst = max(cert_worst, rep_cert)
             for r, p in (("exact", p_exact), ("indep", p_indep),
-                         ("vbos", p_vbos)):
+                         ("vbos", p_vbos), ("marg", p_marg),
+                         ("bonf", p_bonf), ("mc", p_mc)):
                 if live[r]:
-                    if r != "exact":
+                    if r in ("indep", "vbos"):
                         tv_n = 0.5 * np.abs(p - p_exact).sum()
                         out[r]["tv_vs_exact"].append(tv_n)
                         rep_tv[r].append(float(tv_n))
@@ -325,11 +381,15 @@ if __name__ == "__main__":
         if args.only and kind != args.only:
             continue
         rng = np.random.default_rng(SEEDS[kind])
+        rng_extra = np.random.default_rng(SEEDS[kind] + 1000)
+        rng_mc = np.random.default_rng(SEEDS[kind] + 2000)
         results[f"{kind}_c{c}"] = run_config(kind, c, rng, log=log,
-                                             run_id=run_id)
+                                             run_id=run_id,
+                                             rng_extra=rng_extra,
+                                             rng_mc=rng_mc)
         s = results[f"{kind}_c{c}"]
         print(f"[{kind} c={c}] cert TV {s['mc_certificate_worst_tv']:.4f}")
-        for r in ("exact", "indep", "vbos"):
+        for r in RULES:
             row = s[r]
             print(f"  {r:6s} mean n {row['mean_n']:6.1f}  "
                   f"PCS {row['pcs'] if row['pcs'] is not None else 'NA'}  "

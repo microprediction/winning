@@ -1,0 +1,47 @@
+{
+ "n": 100,
+ "pulls": 2000,
+ "repeat": 7,
+ "rows": [
+  {
+   "rank": 1,
+   "eval_seconds": 0.013122458010911942,
+   "seconds_per_draw": 7.337520481087267e-07,
+   "draws_in_one_eval": 17884,
+   "seconds_200k_draws": 0.14675040962174535
+  },
+  {
+   "rank": 2,
+   "eval_seconds": 0.12126645818352699,
+   "seconds_per_draw": 6.790291401557624e-07,
+   "draws_in_one_eval": 178588,
+   "seconds_200k_draws": 0.1358058280311525
+  },
+  {
+   "rank": 3,
+   "eval_seconds": 1.09338766685687,
+   "seconds_per_draw": 6.850457983091473e-07,
+   "draws_in_one_eval": 1596079,
+   "seconds_200k_draws": 0.13700915966182947
+  },
+  {
+   "rank": 4,
+   "eval_seconds": 8.600001625018194,
+   "seconds_per_draw": 8.713833522051573e-07,
+   "draws_in_one_eval": 9869366,
+   "seconds_200k_draws": 0.17427667044103146
+  },
+  {
+   "rank": 5,
+   "eval_seconds": 6.895362708950415,
+   "seconds_per_draw": 8.603145484812557e-07,
+   "draws_in_one_eval": 8014932,
+   "seconds_200k_draws": 0.17206290969625115
+  }
+ ],
+ "platform": "macOS-15.5-arm64-arm-64bit",
+ "processor": "arm",
+ "python": "3.10.12",
+ "numpy": "1.26.4",
+ "threads": "1"
+}
