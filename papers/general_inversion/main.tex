@@ -24,7 +24,7 @@ scripts behind every number in this paper live at
 \texttt{github.com/microprediction/winning}; this revision's tables were
 produced at repository tag \texttt{paper-r12}, package version
 \texttt{1.4.0}.}}
-\date{Original version: 1 September 2026\\ This version: 11 November 2026}
+\date{Original version: 1 September 2026\\ This version: 23 November 2026}
 
 \begin{document}
 \maketitle
@@ -34,7 +34,7 @@ Multinomial probit choice probabilities over $n$ alternatives are
 Gaussian orthant integrals, computed by simulation for thirty years, one
 expensive integral per alternative. Inversion, which is to say determining item
 attractiveness consistent with a prescribed choice probability vector, is even more difficult and has been
-considered impractical for correlated contests when $n$ is large. Yet here, for families lying within a grammar including factor, block and hierarchical covariance structures, we exhibit a calibration tested at $n=1{,}000{,}000$ reproducing probabilities to very high accuracy, even in the extreme tail. We must return to much smaller problems for any performance comparison to be possible due to limitations of the prior art. The Geweke--Hajivassiliou--Keane simulator is the standard (and still appropriate for high rank) but is over a hundred times slower
+considered impractical for correlated contests when $n$ is large. Yet here, for families lying within a grammar including factor, block and hierarchical covariance structures, we exhibit a calibration tested at $n=1{,}000{,}000$ reproducing probabilities to very high accuracy, even in the extreme tail. Comparison with existing methods is possible only on much smaller problems. The Geweke--Hajivassiliou--Keane simulator is the standard (and still appropriate for high rank) but is over a hundred times slower
 already at $n=200$, and its measured cost grows roughly as $n^{2.9}$ while
 ours is linear. Furthermore the independent and factor implementations apply to any sufficiently regular continuous performance distribution, while the current block, nested and tree kernels are Gaussian: the Thurstone--Mosteller model families
 thereby become a practical alternative to logit at modern scale.
@@ -222,10 +222,10 @@ dense $\Sigma$ & fitted grammar $+$ residual factors (approx.) & \S\ref{sec:gene
 \caption{The covariance grammar.}\label{tab:grammar}
 \end{table}
 
-Our chief contribution is scaling. We seek to bring probit modeling to a qualitatively different problem space.  To put it in perspective, we note that on one desktop machine, the forward computation of all-$n$ probabilities from known utilities, assuming a rank-one factor and using the Rust kernels, takes $0.12$, $1.2$, and $18$ seconds respectively for $n=10^{4},10^{5},10^{6}$. That speed was unthinkable previously.
+Our chief contribution is scaling. We seek to bring probit modeling to a qualitatively different problem space.  To put it in perspective, we note that on one desktop machine, the forward computation of all-$n$ probabilities from known utilities, assuming a rank-one factor and using the Rust kernels, takes $0.12$, $1.2$, and $18$ seconds respectively for $n=10^{4},10^{5},10^{6}$ (\texttt{bench.py scale}). That speed was unthinkable previously.
 
 The inversion is the tougher problem yet at $n=10^{6}$ this takes under two minutes for the independent case, and the rank-one factor problem can be solved at this
-extreme scale also, in around twelve minutes.
+extreme scale also, in around twelve minutes (\texttt{bench.py invertmillion}).
 
 Comparisons die well before this scale, as far as we know. Other approaches are considered in detail presently, but briefly, if the comparison set is taken to be those approaches providing smoothness suitable for inversion, GHK is generally regarded as leading that category.
 
@@ -529,7 +529,7 @@ $1\times10^{-5}$. On a fine Gaussian lattice, where the quadrature error
 is far below either figure, $J$ and $J_0$ cannot be told apart. To be clear these are the largest disagreement with the finite differences, relative to the largest
 entry of the matrix.}
 
-Columns and row sums do not behave the same numerically. Columns sum to zero identically. The quotient
+Column and row sums do not behave the same numerically. Columns sum to zero identically. The quotient
 divides by the lattice total, so $\mathbf{1}^{\top}J=0$ whatever the
 lattice does, at $6\times10^{-17}$ from the coarsest grid to the finest.
 Rows sum to zero only as the quadrature converges (translation
@@ -746,7 +746,7 @@ near-step and Gauss--Hermite fails at any order (measured at cluster
 sharpness $18$: $5\times10^{-2}$ of total variation against a
 four-million-path referee).\footnote{At time of writing, the shipped kernels warn past sharpness $3$ and
 direct such fields to the factor grammar whose node family escalates
-automatically. However porting that escalation to the hierarchical kernels is not yet complete.}
+automatically. However, porting that escalation to the hierarchical kernels is not yet complete.}
 
 The hierarchical kernels place their lattice by the same envelope
 principle as \S\ref{sec:lattice}: for the lower endpoint every
@@ -785,7 +785,7 @@ X_i=\mu_i+v_i\,a_{c(i)}+\sum_{t\,\in\,\mathrm{anc}(c(i))}\lambda_t b_t
 with the leaf-cluster construction of \S\ref{sec:blocks} restricted to
 scalar loadings, $v_i\in\R$ and $a_c\sim N(0,1)$: the shipped tree
 kernels take rank-one leaf-cluster effects, where the block kernels
-support rank $r$, and they refuse a rank-$r$ leaf loading.
+support rank $r$, and they refuse a leaf loading of higher rank.
 
 The implied covariance is hierarchical. Two contestants share the variance of
 exactly their common ancestors. The root's effect is common to every contestant; hence, it
@@ -1112,7 +1112,7 @@ and Gram-approximate across clusters: with $u_i(x)=h_i(x)R_{c(i)}(x)$ the
 leaf-cavity integrand of \S\ref{sec:tree} and $G_{\mathrm{root}}$ the
 root message, the cross-cluster tie density is taken as
 $w_{ij}\approx\int u_i(x)\,u_j(x)\,G_{\mathrm{root}}(x)^{-1}\,dx$, which is
-exact when the two clusters share no ancestor effect below the root (it
+exact when neither cluster has an ancestor effect below the root (it
 is then the block formula) and an approximation otherwise; within a
 cluster the exact conditional tie density replaces it, and the diagonal
 is minus the row sum. That approximation is safe for
@@ -1380,7 +1380,7 @@ correlated fields on which the damped iteration stalls at a residual
 near $10^{-4}$ instead of converging: at $n=200$, rank-two loadings drawn
 $N(0,1.6^2)$ against idiosyncratic variances in $[0.15,0.25]$, priced on
 a fixed $15\times15$ Gauss--Hermite rule
-(\texttt{research/experiments/exp23\_newton\_cg/run\_newton\_cg3.py}).
+(\texttt{research/experiments/\allowbreak exp23\_newton\_cg/\allowbreak run\_newton\_cg3.py}).
 The mechanism is spectral. Strongly correlated alternatives have large
 mutual tie conductances $w_{ij}$, so their own-slopes
 $|\tilde s_i|=\sum_{j\ne i}w_{ij}$ are large, while a coordinated shift of
@@ -1691,8 +1691,8 @@ seconds ($1.0$ of them the fit) against $18.5$ for a $10^6$-draw
 simulation, and agrees with it at its noise floor on the resolved bulk.
 
 The tail is harder to check, and we are careful about what the check
-establishes. For the $82$ percent of alternatives with zero simulation
-wins, agreement is unverifiable entry by entry. Worse, that set is
+establishes. For the $82$ percent of the $1{,}563$ alternatives priced below $10^{-5}$
+that take no simulation win, agreement is unverifiable entry by entry. Worse, that set is
 selected by the same simulation that would have to certify it, so a
 fixed-set binomial bound does not apply to it.
 
@@ -1702,7 +1702,8 @@ differs from the one above). Fix the zero-win set on one
 half of the draws, then count the wins an independent second half places
 anywhere in that set. Because the set is fixed before the second half is
 looked at, its count is binomial in the set's true mass, and a
-Clopper--Pearson interval is valid.
+Clopper--Pearson interval is valid. The referee draws from the fitted
+factor race, so this tests the pricing and not the fit.
 
 On a dense $n=2000$ correlation with three global factors (loadings
 $N(0,0.25)$), a forty-block layer (loading $0.45$) and idiosyncratic
@@ -1854,21 +1855,23 @@ way: for each alternative separately, integrate the conditional
 independent-race integrand over the same Gauss--Hermite factor nodes
 (the construction of \citet{butler1982}; \texttt{mvtnorm}'s
 \texttt{lpRR}/\texttt{slpRR} are its Monte Carlo form). With the same
-nodes and the same lattice the two computations are algebraically
+nodes and a lattice of the same size the two computations are algebraically
 identical, and the measurement
 confirms it: at $n=200$, rank~2, the per-alternative
 version agrees with the shared field to total variation
 $3\times10^{-15}$ and costs $1{,}270$ times as much ($17.5$\,s against
-$14$\,ms; the committed \texttt{bench.py bm}). The comparison isolates
-the paper's contribution exactly: not the conditioning, which is forty
-years old, but the field shared across alternatives.
+$14$\,ms; the committed \texttt{bench.py bm}). The ratio is of two programs, a NumPy loop against a compiled kernel, so it
+overstates the saving from sharing alone, which is the factor of $n$ in
+the operation count. What differs between the arms is not the
+conditioning, which is forty years old, but the field shared across
+alternatives.
 
 \paragraph{Against the field.} All-$n$ choice probabilities under the rank-2
 factor covariance family of \S\ref{sec:factor}, against a
 $2^{20}$-point QMC reference. Tail is the maximum absolute log-error over
 reference probabilities in $[10^{-4},10^{-3}]$; the $n=10$ draw has none.
 Frequency simulation is run at wall clock matched to the lattice and at ten
-times that budget; ``zeros'' counts tail alternatives that received no draws.
+times that budget.
 
 \begin{center}\small
 \begin{tabular}{lrrrrr}
@@ -1925,9 +1928,14 @@ discretization itself.
 \paragraph{Stress boundaries.} An adversarial battery pushes each failure
 axis until something gives. Depth: against pure-relative adaptive
 quadrature, relative error is $4\times10^{-13}$ at $p\approx10^{-30}$ and
-$2\times10^{-8}$ at $p\approx10^{-50}$, with the first genuine breakdown
-near $p\approx10^{-119}$, a laggard twenty-five standard deviations behind.
-Inversion: the round trip $p\to\mu\to p$ holds $2\times10^{-9}$ in log even when
+$2\times10^{-8}$ at $p\approx10^{-50}$. That depth is for independent performances. Under a factor
+covariance the outer rule sets the limit: in the two-runner race
+$X_1=a-Z+\epsilon_1$, $X_2=Z+\epsilon_2$, where $p_1=\Phi(-a/\sqrt6)$ in closed
+form, the default fifteen-node rule is within $0.2$ percent at
+$p\approx5\times10^{-10}$ and low by a factor of twelve at $10^{-20}$, and an
+inversion on the same rule converges without noticing, so targets that
+deep need a higher-order rule (\texttt{break.py}, section I).
+Inversion: the round trip $p\to\mu\to p$ holds to $2\times10^{-9}$ in log even when
 the target contains a $10^{-10}$ entry or ties at the $10^{-9}$ level. The
 Gumbel base reproduces softmax to $10^{-15}$ at $n=1000$; exact duplicates
 split exactly, and an $\epsilon$ perturbation moves the split linearly.
@@ -2021,7 +2029,9 @@ forty do, and in this design it is the only cell that ever empties: every
 empty-cell replication is that alternative. On those thirteen an
 unpenalized optimizer returns a tolerance-dependent point on a boundary
 sequence rather than a maximizer. Forty replications, with the arms paired by construction
-since every method sees the same draw:
+since every method sees the same draw; RMSE is over the sixteen alternatives
+with true share above one percent, and the simulator seed is the same in
+every replication:
 
 \begin{center}\small
 \begin{tabular}{lrrr}
@@ -2171,12 +2181,15 @@ Natarajan]{ahipasaoglu2019} S.~D. Ahipasaoglu, X.~Li, K.~Natarajan. A
 convex optimization approach for computing correlated choice
 probabilities with many alternatives. \emph{IEEE Transactions on
 Automatic Control} 64:190--205, 2019.
+\href{https://doi.org/10.1109/tac.2018.2875673}{\nolinkurl{doi:10.1109/tac.2018.2875673}}.
 \bibitem[Albert and Chib(1993)]{albert1993} J.~H. Albert, S.~Chib.
 Bayesian analysis of binary and polychotomous response data.
 \emph{JASA} 88:669--679, 1993.
+\href{https://doi.org/10.1080/01621459.1993.10476321}{\nolinkurl{doi:10.1080/01621459.1993.10476321}}.
 \bibitem[Batram and Bauer(2019)]{batram2019} M.~Batram, D.~Bauer.
 On consistency of the MACML approach to discrete choice modelling.
 \emph{Journal of Choice Modelling} 30:1--16, 2019.
+\href{https://doi.org/10.1016/j.jocm.2018.10.001}{\nolinkurl{doi:10.1016/j.jocm.2018.10.001}}.
 \bibitem[Bauer et~al.(2026)]{bauerRprobit} D.~Bauer, M.~Batram,
 S.~B\"uscher, L.~Oelschl\"ager, T.~T. Bui. \emph{Rprobit: Estimation of
 Multinomial Probit Models}. R package version 1.0.0, 2026.
@@ -2188,82 +2201,106 @@ Betting Markets}, Academic Press, 1994, 183--198.
 \bibitem[Berry(1994)]{berry1994} S.~Berry.
 Estimating discrete-choice models of product differentiation.
 \emph{RAND Journal of Economics} 25(2):242--262, 1994.
+\href{https://doi.org/10.2307/2555829}{\nolinkurl{doi:10.2307/2555829}}.
 \bibitem[Bhat(2011)]{bhat2011} C.~R. Bhat.
 The maximum approximate composite marginal likelihood (MACML) estimation of
 multinomial probit-based unordered response choice models.
 \emph{Transportation Research Part B} 45(7):923--939, 2011.
+\href{https://doi.org/10.1016/j.trb.2011.04.005}{\nolinkurl{doi:10.1016/j.trb.2011.04.005}}.
 \bibitem[B\"orsch-Supan and Hajivassiliou(1993)]{borschsupan1993}
 A.~B\"orsch-Supan, V.~Hajivassiliou. Smooth unbiased multivariate probability
 simulators for maximum likelihood estimation of limited dependent variable
 models. \emph{Journal of Econometrics} 58:347--368, 1993.
+\href{https://doi.org/10.1016/0304-4076(93)90049-b}{\nolinkurl{doi:10.1016/0304-4076(93)90049-b}}.
 \bibitem[Botev(2017)]{botev2017} Z.~I. Botev.
 The normal law under linear restrictions: simulation and estimation via minimax
 tilting. \emph{Journal of the Royal Statistical Society B} 79(1):125--148, 2017.
+\href{https://doi.org/10.1111/rssb.12162}{\nolinkurl{doi:10.1111/rssb.12162}}.
 \bibitem[Butler and Moffitt(1982)]{butler1982} J.~S. Butler and R.~Moffitt.
 A computationally efficient quadrature procedure for the one-factor
 multinomial probit model. \emph{Econometrica} 50(3):761--764, 1982.
+\href{https://doi.org/10.2307/1912613}{\nolinkurl{doi:10.2307/1912613}}.
 \bibitem[Cappellari and Jenkins(2003)]{cappellari2003} L.~Cappellari,
 S.~P. Jenkins. Multivariate probit regression using simulated maximum
 likelihood. \emph{Stata Journal} 3(3):278--294, 2003.
+\href{https://doi.org/10.1177/1536867x0300300305}{\nolinkurl{doi:10.1177/1536867x0300300305}}.
 \bibitem[Chellel(2018)]{chellel2018} K.~Chellel. The gambler who
 cracked the horse-racing code. \emph{Bloomberg Businessweek}, May 3,
 2018.
-\bibitem[Chiong et al.(2016)]{chiong2016} K.~Chiong, A.~Galichon, M.~Shum.
+\bibitem[Chiong et al.(2016)]{chiong2016} K.~X. Chiong, A.~Galichon, M.~Shum.
 Duality in dynamic discrete-choice models.
 \emph{Quantitative Economics} 7(1):83--115, 2016.
+\href{https://doi.org/10.3982/qe436}{\nolinkurl{doi:10.3982/qe436}}.
 \bibitem[Clark(1961)]{clark1961} C.~E. Clark.
 The greatest of a finite set of random variables.
 \emph{Operations Research} 9:145--162, 1961.
+\href{https://doi.org/10.1287/opre.9.2.145}{\nolinkurl{doi:10.1287/opre.9.2.145}}.
 \bibitem[Cotton(2021)]{cotton2021} P.~Cotton.
 Inferring relative ability from winning probability in multientrant contests.
 \emph{SIAM Journal on Financial Mathematics} 12(1):295--317, 2021.
-\bibitem[Cotton(2026)]{cottonsurvey} P.~Cotton. Probit versus logit:
-a survey of empirical accuracy. SSRN working paper, 2026.
+\href{https://doi.org/10.1137/19m1276261}{\nolinkurl{doi:10.1137/19m1276261}}.
+\bibitem[Cotton(2026)]{cottonsurvey} P.~Cotton. Think before rescaling
+probabilities to unity: evidence from thirty-nine tests of linear versus
+Gaussian renormalization. SSRN working paper 7745403, 2026.
 \bibitem[Croissant(2020)]{croissant2020} Y.~Croissant.
 Estimation of random utility models in R: the mlogit package.
 \emph{Journal of Statistical Software} 95(11):1--41, 2020.
+\href{https://doi.org/10.18637/jss.v095.i11}{\nolinkurl{doi:10.18637/jss.v095.i11}}.
 \bibitem[Danskin(1966)]{danskin1966} J.~M. Danskin. The theory of
 max-min, with applications. \emph{SIAM Journal on Applied Mathematics}
 14(4):641--664, 1966.
+\href{https://doi.org/10.1137/0114053}{\nolinkurl{doi:10.1137/0114053}}.
 \bibitem[Domencich and McFadden(1975)]{domencich1975} T.~A. Domencich,
 D.~McFadden. \emph{Urban Travel Demand: A Behavioral Analysis}.
 North-Holland, Amsterdam, 1975.
 \bibitem[Fosgerau et~al.(2013)Fosgerau, McFadden and Bierlaire]{fosgerau2013}
 M.~Fosgerau, D.~McFadden, M.~Bierlaire. Choice probability generating
 functions. \emph{Journal of Choice Modelling} 8:1--18, 2013.
+\href{https://doi.org/10.1016/j.jocm.2013.05.002}{\nolinkurl{doi:10.1016/j.jocm.2013.05.002}}.
 \bibitem[Galichon and Salani\'e(2022)]{galichon2022} A.~Galichon,
 B.~Salani\'e. Cupid's invisible hand: social surplus and identification in
 matching models. \emph{Review of Economic Studies} 89(5):2600--2629, 2022.
+\href{https://doi.org/10.1093/restud/rdab090}{\nolinkurl{doi:10.1093/restud/rdab090}}.
 \bibitem[Gates(2006)]{gates2006} R.~Gates.
 A Mata Geweke--Hajivassiliou--Keane multivariate normal simulator.
 \emph{Stata Journal} 6(2):190--213, 2006.
+\href{https://doi.org/10.1177/1536867x0600600203}{\nolinkurl{doi:10.1177/1536867x0600600203}}.
 \bibitem[Genz(1992)]{genz1992} A.~Genz.
 Numerical computation of multivariate normal probabilities.
 \emph{Journal of Computational and Graphical Statistics} 1:141--149, 1992.
+\href{https://doi.org/10.1080/10618600.1992.10477010}{\nolinkurl{doi:10.1080/10618600.1992.10477010}}.
 \bibitem[Geweke(1989)]{geweke1989} J.~Geweke.
 Bayesian inference in econometric models using Monte Carlo integration.
 \emph{Econometrica} 57:1317--1339, 1989.
+\href{https://doi.org/10.2307/1913710}{\nolinkurl{doi:10.2307/1913710}}.
 \bibitem[Hajivassiliou et al.(1996)]{hajivassiliou1996} V.~Hajivassiliou,
 D.~McFadden, P.~Ruud. Simulation of multivariate normal rectangle probabilities
-and their derivatives. \emph{Journal of Econometrics} 72:85--134, 1996.
+and their derivatives: theoretical and computational results.
+\emph{Journal of Econometrics} 72:85--134, 1996.
+\href{https://doi.org/10.1016/0304-4076(94)01716-6}{\nolinkurl{doi:10.1016/0304-4076(94)01716-6}}.
 \bibitem[Harville(1973)]{harville1973} D.~A. Harville. Assigning
 probabilities to the outcomes of multi-entry competitions.
 \emph{Journal of the American Statistical Association}
 68(342):312--316, 1973.
+\href{https://doi.org/10.1080/01621459.1973.10482425}{\nolinkurl{doi:10.1080/01621459.1973.10482425}}.
 \bibitem[Imai and van Dyk(2005)]{imai2005} K.~Imai, D.~A. van Dyk.
 MNP: R package for fitting the multinomial probit model.
 \emph{Journal of Statistical Software} 14(3):1--32, 2005.
+\href{https://doi.org/10.18637/jss.v014.i03}{\nolinkurl{doi:10.18637/jss.v014.i03}}.
 \bibitem[Kalbfleisch and Prentice(2002)]{kalbfleisch2002}
 J.~D. Kalbfleisch, R.~L. Prentice. \emph{The Statistical Analysis of
 Failure Time Data}. 2nd ed., Wiley, 2002.
+\href{https://doi.org/10.1002/9781118032985}{\nolinkurl{doi:10.1002/9781118032985}}.
 \bibitem[Keane(1994)]{keane1994} M.~P. Keane.
 A computationally practical simulation estimator for panel data.
 \emph{Econometrica} 62:95--116, 1994.
+\href{https://doi.org/10.2307/2951477}{\nolinkurl{doi:10.2307/2951477}}.
 \bibitem[Kitagawa et~al.(2019)Kitagawa, M\'erigot and
 Thibert]{kitagawa2019} J.~Kitagawa, Q.~M\'erigot, B.~Thibert.
 Convergence of a Newton algorithm for semi-discrete optimal transport.
 \emph{Journal of the European Mathematical Society} 21(9):2603--2651,
 2019.
+\href{https://doi.org/10.4171/jems/889}{\nolinkurl{doi:10.4171/jems/889}}.
 \bibitem[Lerman and Manski(1981)]{lerman1981} S.~Lerman, C.~Manski.
 On the use of simulated frequencies to approximate choice probabilities.
 In C.~F. Manski, D.~McFadden (eds.), \emph{Structural Analysis of
@@ -2273,30 +2310,37 @@ Hausegger]{levy2021} B.~L\'evy, R.~Mohayaee, S.~von Hausegger. A fast
 semidiscrete optimal transport algorithm for a unique reconstruction of
 the early Universe. \emph{Monthly Notices of the Royal Astronomical
 Society} 506(1):1165--1185, 2021.
+\href{https://doi.org/10.1093/mnras/stab1676}{\nolinkurl{doi:10.1093/mnras/stab1676}}.
 \bibitem[Li(2018)]{li2018} L.~Li. A general method for demand
 inversion. arXiv:1802.04444 (2018).
 \bibitem[Lindgren et al.(2011)]{lindgren2011} F.~Lindgren, H.~Rue,
 J.~Lindstr\"om. An explicit link between Gaussian fields and Gaussian Markov
 random fields: the stochastic partial differential equation approach.
 \emph{Journal of the Royal Statistical Society B} 73(4):423--498, 2011.
+\href{https://doi.org/10.1111/j.1467-9868.2011.00777.x}{\nolinkurl{doi:10.1111/j.1467-9868.2011.00777.x}}.
 \bibitem[Loaiza-Maya and Nibbering(2022)]{loaizamaya2022} R.~Loaiza-Maya,
 D.~Nibbering. Scalable Bayesian estimation in the multinomial probit
 model. \emph{Journal of Business \& Economic Statistics}
 40(4):1678--1690, 2022.
+\href{https://doi.org/10.1080/07350015.2021.1961788}{\nolinkurl{doi:10.1080/07350015.2021.1961788}}.
 \bibitem[L\'opez de Prado(2016)]{lopezdeprado2016} M.~L\'opez de Prado.
 Building diversified portfolios that outperform out of sample.
 \emph{Journal of Portfolio Management} 42(4):59--69, 2016.
+\href{https://doi.org/10.3905/jpm.2016.42.4.059}{\nolinkurl{doi:10.3905/jpm.2016.42.4.059}}.
 \bibitem[Luce(1959)]{luce1959} R.~D. Luce. \emph{Individual Choice
 Behavior: A Theoretical Analysis}. Wiley, 1959.
 \bibitem[McCulloch and Rossi(1994)]{mcculloch1994} R.~McCulloch, P.~Rossi.
 An exact likelihood analysis of the multinomial probit model.
 \emph{Journal of Econometrics} 64:207--240, 1994.
+\href{https://doi.org/10.1016/0304-4076(94)90064-7}{\nolinkurl{doi:10.1016/0304-4076(94)90064-7}}.
 \bibitem[McFadden(1981)]{mcfadden1981} D.~McFadden.
 Econometric models of probabilistic choice. In C.~Manski, D.~McFadden,
-eds., \emph{Structural Analysis of Discrete Data}, MIT Press, 1981.
+eds., \emph{Structural Analysis of Discrete Data with Econometric
+Applications}, pp.~198--272. MIT Press, 1981.
 \bibitem[Mendell and Elston(1974)]{mendell1974} N.~Mendell, R.~Elston.
 Multifactorial qualitative traits: genetic analysis and prediction of
 recurrence risks. \emph{Biometrics} 30:41--57, 1974.
+\href{https://doi.org/10.2307/2529616}{\nolinkurl{doi:10.2307/2529616}}.
 \bibitem[Minka(2001)]{minka2001} T.~P. Minka. Expectation propagation
 for approximate Bayesian inference. In \emph{Proceedings of the
 Seventeenth Conference on Uncertainty in Artificial Intelligence (UAI
@@ -2305,17 +2349,21 @@ Seventeenth Conference on Uncertainty in Artificial Intelligence (UAI
 V.~K. Mishra, K.~Natarajan, H.~Tao, C.-P. Teo. Choice prediction with
 semidefinite optimization when utilities are correlated. \emph{IEEE
 Transactions on Automatic Control} 57(10):2450--2463, 2012.
+\href{https://doi.org/10.1109/tac.2012.2211175}{\nolinkurl{doi:10.1109/tac.2012.2211175}}.
 \bibitem[Mosteller(1951)]{mosteller1951} F.~Mosteller. Remarks on the
 method of paired comparisons: I. The least squares solution assuming
 equal standard deviations and equal correlations. \emph{Psychometrika}
 16:3--9, 1951.
+\href{https://doi.org/10.1007/bf02313422}{\nolinkurl{doi:10.1007/bf02313422}}.
 \bibitem[M\"uller et~al.(2022)M\"uller, Nesterov and Shikhman]{muller2022}
 D.~M\"uller, Y.~Nesterov, V.~Shikhman. Discrete choice prox-functions on
 the simplex. \emph{Mathematics of Operations Research} 47(1):485--507,
 2022.
+\href{https://doi.org/10.1287/moor.2021.1136}{\nolinkurl{doi:10.1287/moor.2021.1136}}.
 \bibitem[Pearlmutter(1994)]{pearlmutter1994} B.~A. Pearlmutter.
 Fast exact multiplication by the Hessian. \emph{Neural Computation}
 6(1):147--160, 1994.
+\href{https://doi.org/10.1162/neco.1994.6.1.147}{\nolinkurl{doi:10.1162/neco.1994.6.1.147}}.
 \bibitem[Riihim\"aki et~al.(2013)Riihim\"aki, Jyl\"anki and
 Vehtari]{riihimaki2013} J.~Riihim\"aki, P.~Jyl\"anki, A.~Vehtari. Nested
 expectation propagation for Gaussian process classification with a
@@ -2325,19 +2373,23 @@ Research} 14:75--109, 2013.
 for best-arm identification. \emph{Operations Research}
 68(6):1625--1647, 2020. Algorithm~4 appears in the expanded preprint,
 arXiv:1602.08448.
+\href{https://doi.org/10.1287/opre.2019.1911}{\nolinkurl{doi:10.1287/opre.2019.1911}}.
 \bibitem[Solow(1990)]{solow1990} A.~R. Solow.
 A method for approximating multivariate normal orthant probabilities.
 \emph{Journal of Statistical Computation and Simulation} 37:225--229, 1990.
+\href{https://doi.org/10.1080/00949659008811306}{\nolinkurl{doi:10.1080/00949659008811306}}.
 \bibitem[StataCorp(2023)]{statacorp2023} StataCorp.
 \emph{Stata 18 Choice Models Reference Manual} (entry
 \texttt{cmmprobit}). Stata Press, College Station, TX, 2023.
 \bibitem[Stern(1992)]{stern1992} S.~Stern.
 A method for smoothing simulated moments of discrete probabilities in
 multinomial probit models. \emph{Econometrica} 60:943--952, 1992.
+\href{https://doi.org/10.2307/2951573}{\nolinkurl{doi:10.2307/2951573}}.
 \bibitem[Thurstone(1927)]{thurstone1927} L.~L. Thurstone.
 A law of comparative judgment. \emph{Psychological Review} 34:273--286, 1927.
+\href{https://doi.org/10.1037/h0070288}{\nolinkurl{doi:10.1037/h0070288}}.
 \bibitem[Train(2009)]{train2009} K.~Train.
-\emph{Discrete Choice Methods with Simulation}. 2nd ed., Cambridge, 2009.
+\emph{Discrete Choice Methods with Simulation}. 2nd ed., Cambridge University Press, 2009.
 \end{thebibliography}
 \appendix
 \section{Extrapolated GHK cost brackets}\label{app:extrap}

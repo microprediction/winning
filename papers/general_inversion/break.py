@@ -15,6 +15,7 @@ Sections:
   B  ability spread             D  Gumbel base = softmax, exactly
   E  duplicates and continuity  F  inversion round-trip, hostile targets
   G  Jacobian vs central FD     H  factor strength (the real boundary)
+  I  correlated tail depth against a closed form (the outer rule's reach)
 
 Run: python break.py
 """
@@ -39,7 +40,12 @@ def indep_exact(mu, sd, i, depth=20):
             if j != i:
                 v *= norm.sf(x, mu[j], sd[j])
         return v
-    return quad(f, mu[i] - depth * sd[i], mu[i] + depth * sd[i],
+    # The window must reach the leaders as well as runner i: a laggard's
+    # winning mass sits near the front of the field, not near its own mean.
+    # A window on mu[i] alone kept 2% of the k=25 integral (external
+    # review, 2026-11-23: true value 1.445e-117, lattice within 4.4%).
+    lo = min(mu[i] - depth * sd[i], float(np.min(mu - depth * sd)))
+    return quad(f, lo, mu[i] + depth * sd[i],
                 limit=800, epsabs=0.0, epsrel=1e-12)
 
 
@@ -143,3 +149,25 @@ for label, (F, W) in (("GH-7", hermite_nodes(2, 7)),
           f"TV {0.5 * np.abs(p - ref).sum():.2e}")
 print("  verdict: heavy correlation wants QMC factor nodes, not deeper"
       " polynomial rules")
+
+print("== I: correlated tail depth, closed form (default 15-node rule) ==")
+# X1 = a - Z + e1, X2 = Z + e2, all standard normal: correlation -0.5 and
+# p1 = Phi(-a / sqrt 6) exactly. The 15 Gauss-Hermite nodes stop at
+# |f| = 6.36, so a tail event needing a larger factor draw is underpriced,
+# and an inversion on the same rule converges to the wrong contrast
+# (external review, 2026-11-23). The rule is passed explicitly so the
+# check does not depend on the dispatch defaults.
+from scipy.special import log_ndtr
+from winning.factor.races import abilities_from_race
+V2, D2 = np.array([[-1.0], [1.0]]), np.ones(2)
+F15, W15 = hermite_nodes(1, 15)
+for a in (15.0, 22.68800704):
+    p1 = race_probabilities(np.array([a, 0.0]), V=V2, D=D2, F=F15, W=W15)[0]
+    exact = float(np.exp(log_ndtr(-a / np.sqrt(6.0))))
+    print(f"  a={a:<12g} rule {p1:.4e}  closed form {exact:.4e}  "
+          f"closed/rule {exact / p1:.4f}")
+m2 = abilities_from_race(np.array([1e-20, 1.0 - 1e-20]), V=V2, D=D2,
+                         F=F15, W=W15)
+a_hat = float(m2[0] - m2[1])
+print(f"  inverse of 1e-20 returns a={a_hat:.4f}, whose closed-form "
+      f"probability is {float(np.exp(log_ndtr(-a_hat / np.sqrt(6.0)))):.3e}")
