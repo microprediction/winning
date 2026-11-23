@@ -10,7 +10,7 @@ index. Paths are repo-relative.
 |---|---|
 | GHK table: 200x / 5x at n=200, times and TV | `bench.py ghk` |
 | GHK cost law n^2.8 points | `bench.py law` |
-| Scale: 0.18 s / 2.7 s / 29 s at 1e4..1e6 | `bench.py scale` |
+| Scale: 0.12 s / 1.2 s / 18 s at 1e4..1e6 (quiet machine, 2026-11-11; `timings_2026-11-11/retime.json` at tag `paper-r12`) | `bench.py scale` |
 | Against-the-field table (Genz, frequency, ME, Clark) | `bench.py alt` |
 | Genz n=200 single probability: 0.43 s at maxpts=250k, agreement to 4-5 digits (six digits needs multi-second budgets) | `bench.py genz200` (pinned 2026-08-27; supersedes an earlier 4.6 s / six-digit note taken at a different tolerance) |
 | Referee agreement (mvtnorm within own bound; Botev 2.2e-4 at 3e-10; quadrature 1.9e-15; invariance battery) | `referee_cases.py` + `referee.R` + `referee_check.py` |
