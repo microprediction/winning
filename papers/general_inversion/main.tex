@@ -1691,8 +1691,8 @@ seconds ($1.0$ of them the fit) against $18.5$ for a $10^6$-draw
 simulation, and agrees with it at its noise floor on the resolved bulk.
 
 The tail is harder to check, and we are careful about what the check
-establishes. For the $82$ percent of alternatives with zero simulation
-wins, agreement is unverifiable entry by entry. Worse, that set is
+establishes. For the $82$ percent of the $1{,}563$ alternatives priced below $10^{-5}$
+that take no simulation win, agreement is unverifiable entry by entry. Worse, that set is
 selected by the same simulation that would have to certify it, so a
 fixed-set binomial bound does not apply to it.
 
@@ -1702,7 +1702,8 @@ differs from the one above). Fix the zero-win set on one
 half of the draws, then count the wins an independent second half places
 anywhere in that set. Because the set is fixed before the second half is
 looked at, its count is binomial in the set's true mass, and a
-Clopper--Pearson interval is valid.
+Clopper--Pearson interval is valid. The referee draws from the fitted
+factor race, so this tests the pricing and not the fit.
 
 On a dense $n=2000$ correlation with three global factors (loadings
 $N(0,0.25)$), a forty-block layer (loading $0.45$) and idiosyncratic
@@ -1854,14 +1855,16 @@ way: for each alternative separately, integrate the conditional
 independent-race integrand over the same Gauss--Hermite factor nodes
 (the construction of \citet{butler1982}; \texttt{mvtnorm}'s
 \texttt{lpRR}/\texttt{slpRR} are its Monte Carlo form). With the same
-nodes and the same lattice the two computations are algebraically
+nodes and a lattice of the same size the two computations are algebraically
 identical, and the measurement
 confirms it: at $n=200$, rank~2, the per-alternative
 version agrees with the shared field to total variation
 $3\times10^{-15}$ and costs $1{,}270$ times as much ($17.5$\,s against
-$14$\,ms; the committed \texttt{bench.py bm}). The comparison isolates
-the paper's contribution exactly: not the conditioning, which is forty
-years old, but the field shared across alternatives.
+$14$\,ms; the committed \texttt{bench.py bm}). The ratio is of two programs, a NumPy loop against a compiled kernel, so it
+overstates the saving from sharing alone, which is the factor of $n$ in
+the operation count. What differs between the arms is not the
+conditioning, which is forty years old, but the field shared across
+alternatives.
 
 \paragraph{Against the field.} All-$n$ choice probabilities under the rank-2
 factor covariance family of \S\ref{sec:factor}, against a
@@ -1925,8 +1928,13 @@ discretization itself.
 \paragraph{Stress boundaries.} An adversarial battery pushes each failure
 axis until something gives. Depth: against pure-relative adaptive
 quadrature, relative error is $4\times10^{-13}$ at $p\approx10^{-30}$ and
-$2\times10^{-8}$ at $p\approx10^{-50}$, with the first genuine breakdown
-near $p\approx10^{-119}$, a laggard twenty-five standard deviations behind.
+$2\times10^{-8}$ at $p\approx10^{-50}$. That depth is for independent performances. Under a factor
+covariance the outer rule sets the limit: in the two-runner race
+$X_1=a-Z+\epsilon_1$, $X_2=Z+\epsilon_2$, where $p_1=\Phi(-a/\sqrt6)$ in closed
+form, the default fifteen-node rule is within $0.2$ percent at
+$p\approx5\times10^{-10}$ and low by a factor of twelve at $10^{-20}$, and an
+inversion on the same rule converges without noticing, so targets that
+deep need a higher-order rule (\texttt{break.py}, section I).
 Inversion: the round trip $p\to\mu\to p$ holds to $2\times10^{-9}$ in log even when
 the target contains a $10^{-10}$ entry or ties at the $10^{-9}$ level. The
 Gumbel base reproduces softmax to $10^{-15}$ at $n=1000$; exact duplicates
@@ -2021,7 +2029,9 @@ forty do, and in this design it is the only cell that ever empties: every
 empty-cell replication is that alternative. On those thirteen an
 unpenalized optimizer returns a tolerance-dependent point on a boundary
 sequence rather than a maximizer. Forty replications, with the arms paired by construction
-since every method sees the same draw:
+since every method sees the same draw; RMSE is over the sixteen alternatives
+with true share above one percent, and the simulator seed is the same in
+every replication:
 
 \begin{center}\small
 \begin{tabular}{lrrr}
