@@ -2,7 +2,7 @@ Gain by the full-menu rank of the item chosen, pooled over Sushi, Jester file 1,
 
 rank of chosen item         1       2       3       4       5       6       7       8       9      10
 share of outcomes       0.173   0.130   0.127   0.104   0.099   0.101   0.079   0.072   0.072   0.044
-mean gain              -0.062  -0.045  -0.034  -0.004  +0.009  +0.019  +0.050  +0.058  +0.101  +0.171
+mean gain              -0.061  -0.045  -0.034  -0.004  +0.009  +0.019  +0.050  +0.058  +0.100  +0.171
 
 contributions sum to +0.0043
 
@@ -11,10 +11,10 @@ Probability that the full-field favourite finishes second
 
 collection              observed  exact PL exact CaseV   PL err  CaseV err  removed  seq CaseV
 Political goals            0.123     0.318       0.284   +0.195     +0.161    17.6%      0.309
-GSS job values             0.186     0.303       0.252   +0.116     +0.066    43.2%      0.294
+GSS job values             0.186     0.303       0.252   +0.116     +0.066    43.3%      0.294
 GSS socialization          0.191     0.302       0.257   +0.110     +0.065    40.9%      0.294
 Sushi                      0.206     0.250       0.196   +0.045     -0.009   120.8%      0.245
-Jester file 1              0.138     0.160       0.142   +0.022     +0.004    82.5%      0.158
+Jester file 1              0.138     0.160       0.142   +0.022     +0.004    82.3%      0.158
 
 Both model columns are exact ordering laws. Removing the winner and
 renormalizing proportionally IS the Plackett-Luce ranking law, by the
@@ -22,4 +22,3 @@ Gumbel-top-k identity, so the PL column is that model's own prediction and
 not a heuristic. The Case V column is the one-dimensional integral for
 P(rank = 2). The last column is the sequential Gaussian rule, shown only to
 record that it is not the Gaussian ordering law.
-EXIT=0
