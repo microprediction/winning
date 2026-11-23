@@ -489,7 +489,7 @@ $1\times10^{-5}$. On a fine Gaussian lattice, where the quadrature error
 is far below either figure, $J$ and $J_0$ cannot be told apart. To be clear these are the largest disagreement with the finite differences, relative to the largest
 entry of the matrix.}
 
-Columns and row sums do not behave the same numerically. Columns sum to zero identically. The quotient
+Column and row sums do not behave the same numerically. Columns sum to zero identically. The quotient
 divides by the lattice total, so $\mathbf{1}^{\top}J=0$ whatever the
 lattice does, at $6\times10^{-17}$ from the coarsest grid to the finest.
 Rows sum to zero only as the quadrature converges (translation
@@ -685,7 +685,7 @@ near-step and Gauss--Hermite fails at any order (measured at cluster
 sharpness $18$: $5\times10^{-2}$ of total variation against a
 four-million-path referee).\footnote{At time of writing, the shipped kernels warn past sharpness $3$ and
 direct such fields to the factor grammar whose node family escalates
-automatically. However porting that escalation to the hierarchical kernels is not yet complete.}
+automatically. However, porting that escalation to the hierarchical kernels is not yet complete.}
 
 The hierarchical kernels place their lattice by the same envelope
 principle as \S\ref{sec:lattice}: for the lower endpoint every
@@ -721,7 +721,7 @@ X_i=\mu_i+v_i\,a_{c(i)}+\sum_{t\,\in\,\mathrm{anc}(c(i))}\lambda_t b_t
 with the leaf-cluster construction of \S\ref{sec:blocks} restricted to
 scalar loadings, $v_i\in\R$ and $a_c\sim N(0,1)$: the shipped tree
 kernels take rank-one leaf-cluster effects, where the block kernels
-support rank $r$, and they refuse a rank-$r$ leaf loading.
+support rank $r$, and they refuse a leaf loading of higher rank.
 
 The implied covariance is hierarchical. Two contestants share the variance of
 exactly their common ancestors. The root's effect is common to every contestant; hence, it
@@ -1659,7 +1659,7 @@ factor covariance family of \S\ref{sec:factor}, against a
 $2^{20}$-point QMC reference. Tail is the maximum absolute log-error over
 reference probabilities in $[10^{-4},10^{-3}]$; the $n=10$ draw has none.
 Frequency simulation is run at wall clock matched to the lattice and at ten
-times that budget; ``zeros'' counts tail alternatives that received no draws.
+times that budget.
 
 \begin{center}\small
 \begin{tabular}{lrrrrr}

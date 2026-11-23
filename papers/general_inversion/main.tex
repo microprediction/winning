@@ -222,10 +222,10 @@ dense $\Sigma$ & fitted grammar $+$ residual factors (approx.) & \S\ref{sec:gene
 \caption{The covariance grammar.}\label{tab:grammar}
 \end{table}
 
-Our chief contribution is scaling. We seek to bring probit modeling to a qualitatively different problem space.  To put it in perspective, we note that on one desktop machine, the forward computation of all-$n$ probabilities from known utilities, assuming a rank-one factor and using the Rust kernels, takes $0.12$, $1.2$, and $18$ seconds respectively for $n=10^{4},10^{5},10^{6}$. That speed was unthinkable previously.
+Our chief contribution is scaling. We seek to bring probit modeling to a qualitatively different problem space.  To put it in perspective, we note that on one desktop machine, the forward computation of all-$n$ probabilities from known utilities, assuming a rank-one factor and using the Rust kernels, takes $0.12$, $1.2$, and $18$ seconds respectively for $n=10^{4},10^{5},10^{6}$ (\texttt{bench.py scale}). That speed was unthinkable previously.
 
 The inversion is the tougher problem yet at $n=10^{6}$ this takes under two minutes for the independent case, and the rank-one factor problem can be solved at this
-extreme scale also, in around twelve minutes.
+extreme scale also, in around twelve minutes (\texttt{bench.py invertmillion}).
 
 Comparisons die well before this scale, as far as we know. Other approaches are considered in detail presently, but briefly, if the comparison set is taken to be those approaches providing smoothness suitable for inversion, GHK is generally regarded as leading that category.
 
@@ -529,7 +529,7 @@ $1\times10^{-5}$. On a fine Gaussian lattice, where the quadrature error
 is far below either figure, $J$ and $J_0$ cannot be told apart. To be clear these are the largest disagreement with the finite differences, relative to the largest
 entry of the matrix.}
 
-Columns and row sums do not behave the same numerically. Columns sum to zero identically. The quotient
+Column and row sums do not behave the same numerically. Columns sum to zero identically. The quotient
 divides by the lattice total, so $\mathbf{1}^{\top}J=0$ whatever the
 lattice does, at $6\times10^{-17}$ from the coarsest grid to the finest.
 Rows sum to zero only as the quadrature converges (translation
@@ -746,7 +746,7 @@ near-step and Gauss--Hermite fails at any order (measured at cluster
 sharpness $18$: $5\times10^{-2}$ of total variation against a
 four-million-path referee).\footnote{At time of writing, the shipped kernels warn past sharpness $3$ and
 direct such fields to the factor grammar whose node family escalates
-automatically. However porting that escalation to the hierarchical kernels is not yet complete.}
+automatically. However, porting that escalation to the hierarchical kernels is not yet complete.}
 
 The hierarchical kernels place their lattice by the same envelope
 principle as \S\ref{sec:lattice}: for the lower endpoint every
@@ -785,7 +785,7 @@ X_i=\mu_i+v_i\,a_{c(i)}+\sum_{t\,\in\,\mathrm{anc}(c(i))}\lambda_t b_t
 with the leaf-cluster construction of \S\ref{sec:blocks} restricted to
 scalar loadings, $v_i\in\R$ and $a_c\sim N(0,1)$: the shipped tree
 kernels take rank-one leaf-cluster effects, where the block kernels
-support rank $r$, and they refuse a rank-$r$ leaf loading.
+support rank $r$, and they refuse a leaf loading of higher rank.
 
 The implied covariance is hierarchical. Two contestants share the variance of
 exactly their common ancestors. The root's effect is common to every contestant; hence, it
@@ -1112,7 +1112,7 @@ and Gram-approximate across clusters: with $u_i(x)=h_i(x)R_{c(i)}(x)$ the
 leaf-cavity integrand of \S\ref{sec:tree} and $G_{\mathrm{root}}$ the
 root message, the cross-cluster tie density is taken as
 $w_{ij}\approx\int u_i(x)\,u_j(x)\,G_{\mathrm{root}}(x)^{-1}\,dx$, which is
-exact when the two clusters share no ancestor effect below the root (it
+exact when neither cluster has an ancestor effect below the root (it
 is then the block formula) and an approximation otherwise; within a
 cluster the exact conditional tie density replaces it, and the diagonal
 is minus the row sum. That approximation is safe for
@@ -1380,7 +1380,7 @@ correlated fields on which the damped iteration stalls at a residual
 near $10^{-4}$ instead of converging: at $n=200$, rank-two loadings drawn
 $N(0,1.6^2)$ against idiosyncratic variances in $[0.15,0.25]$, priced on
 a fixed $15\times15$ Gauss--Hermite rule
-(\texttt{research/experiments/exp23\_newton\_cg/run\_newton\_cg3.py}).
+(\texttt{research/experiments/\allowbreak exp23\_newton\_cg/\allowbreak run\_newton\_cg3.py}).
 The mechanism is spectral. Strongly correlated alternatives have large
 mutual tie conductances $w_{ij}$, so their own-slopes
 $|\tilde s_i|=\sum_{j\ne i}w_{ij}$ are large, while a coordinated shift of
@@ -1868,7 +1868,7 @@ factor covariance family of \S\ref{sec:factor}, against a
 $2^{20}$-point QMC reference. Tail is the maximum absolute log-error over
 reference probabilities in $[10^{-4},10^{-3}]$; the $n=10$ draw has none.
 Frequency simulation is run at wall clock matched to the lattice and at ten
-times that budget; ``zeros'' counts tail alternatives that received no draws.
+times that budget.
 
 \begin{center}\small
 \begin{tabular}{lrrrrr}
@@ -1927,7 +1927,7 @@ axis until something gives. Depth: against pure-relative adaptive
 quadrature, relative error is $4\times10^{-13}$ at $p\approx10^{-30}$ and
 $2\times10^{-8}$ at $p\approx10^{-50}$, with the first genuine breakdown
 near $p\approx10^{-119}$, a laggard twenty-five standard deviations behind.
-Inversion: the round trip $p\to\mu\to p$ holds $2\times10^{-9}$ in log even when
+Inversion: the round trip $p\to\mu\to p$ holds to $2\times10^{-9}$ in log even when
 the target contains a $10^{-10}$ entry or ties at the $10^{-9}$ level. The
 Gumbel base reproduces softmax to $10^{-15}$ at $n=1000$; exact duplicates
 split exactly, and an $\epsilon$ perturbation moves the split linearly.
