@@ -511,25 +511,27 @@ def update_ranking(m, v, order, beta2=1.0, base="normal"):
     return m, v
 
 
-def _base_rows(x, m_j, sd_j, base):
+def _base_rows(x, m_j, sd_j, base, want_cdf=True):
     """Max-wins density, its m-derivative, and CDF for one player.
 
     The engine's bases are standardized min-wins laws (S, f, fp at z);
     this module is max-wins, so evaluate at -z: for X = -Y,
     f_max(z) = f_min(-z), P(X < x) = S_min(-z), and
     d/dm [f_min(-z)/sd] = fp_min(-z)/sd^2. Gaussian reduces to the
-    former hardcoded rows exactly (fp = -z f gives g z / sd)."""
+    former hardcoded rows exactly (fp = -z f gives g z / sd).
+    want_cdf=False returns None for the CDF: the order passes use only the
+    last finisher's, and ndtr was half the cost of building the rows."""
     z = (x - m_j) / sd_j
     if base == "normal":
         g = np.exp(-0.5 * z * z) / (sd_j * np.sqrt(2 * np.pi))
-        return g, g * z / sd_j, ndtr(z)
+        return g, g * z / sd_j, (ndtr(z) if want_cdf else None)
     from ..factor.races import BASES
     fn = base if callable(base) else BASES[base]
     S_u, f_u, fp_u = fn(-z)
     return f_u / sd_j, fp_u / (sd_j * sd_j), np.maximum(S_u, 1e-300)
 
 
-def _curve_rows(curve, x, m_j):
+def _curve_rows(curve, x, m_j, want_cdf=True):
     """Density, its m-derivative, and CDF of one player's predictive
     marginal on the lattice x: the _base_rows contract served from a
     _predictive_curves tuple. d/dm f(x - m) = -fp(x - m)."""
@@ -538,6 +540,8 @@ def _curve_rows(curve, x, m_j):
     shape = np.shape(x - m_j)
     g = np.interp(xj, u, f, left=0.0, right=0.0).reshape(shape)
     dg = -np.interp(xj, u, fp, left=0.0, right=0.0).reshape(shape)
+    if not want_cdf:
+        return g, dg, None
     F = np.interp(xj, u, cdf, left=0.0, right=1.0).reshape(shape)
     return g, dg, F
 
@@ -551,6 +555,21 @@ def _curve_rows(curve, x, m_j):
 # domain, which agrees with the linear pass to rounding wherever both
 # are representable.
 _ORDER_TINY = 1e-250
+
+# An intermediate stage can lose precision while staying above
+# _ORDER_TINY (far-apart fields at log P ~ -800 left a gradient entry at
+# 0 instead of 14.05, #1079). P depends on the means only through their
+# differences, so the exact gradient sums to zero: a sum this large
+# against the gradient's scale sends the Gaussian pass to the log domain.
+# Ordinary fields sit below 1e-13 and far-apart ones that are right
+# below 1e-8; the two failures found were at 7e-3 and 0.33.
+_ORDER_SHIFT_TOL = 1e-6
+
+
+def _shift_broken(grad):
+    """Rows of grad (..., n) whose sum breaks the shift invariance."""
+    return (np.abs(grad.sum(axis=-1))
+            > _ORDER_SHIFT_TOL * (np.abs(grad).max(axis=-1) + 1.0))
 
 
 def _log_cum(a, logdx):
@@ -681,14 +700,14 @@ def _order_pass(m, sd, order, L=2001, base="normal", curves=None):
         c = np.cumsum(u[::-1])[::-1] * dx
         return c - 0.5 * dx * (u + u[-1])
 
-    def rows(j):
+    def rows(j, want_cdf):
         if curves is not None:
-            return _curve_rows(curves[j], x, m[j])
-        return _base_rows(x, m[j], sd[j], base)
+            return _curve_rows(curves[j], x, m[j], want_cdf)
+        return _base_rows(x, m[j], sd[j], base, want_cdf)
 
     g = np.empty((n, L)); dg = np.empty((n, L))
-    for t, j in enumerate(order):
-        g[t], dg[t], _ = rows(j)
+    for t, j in enumerate(order):       # only the last finisher's CDF is used
+        g[t], dg[t], F_last = rows(j, t == n - 1)
 
     log_ok = base == "normal" and curves is None
 
@@ -699,7 +718,7 @@ def _order_pass(m, sd, order, L=2001, base="normal", curves=None):
 
     # forward sweep: scaled T_t for t = n .. 2
     T = np.empty((n + 1, L)); sT = np.zeros(n + 1)
-    T[n] = rows(order[-1])[2]
+    T[n] = F_last
     for t in range(n - 1, 1, -1):
         raw = cum(g[t - 1] * T[t + 1])
         mx = raw.max()
@@ -748,7 +767,19 @@ def _order_pass(m, sd, order, L=2001, base="normal", curves=None):
         u = u / mx
         su += np.log(mx)
     denom = float(np.sum(u * T[n]))
+    # the last stage's denominator underflows like the loop's: it alone
+    # had no guard, and a far factor node raised ZeroDivisionError
+    # (order_loglik at means [-27, -21.9, 26.1, -34.8], order [3, 0, 1, 2])
+    if denom <= _ORDER_TINY * u.max() and log_ok:
+        return in_logs()
+    if denom <= 0.0:
+        # P depends on the means only through their differences, so the
+        # gradient sums to zero and the last entry is the rest's negation
+        grad[order[-1]] = -float(np.sum(grad))
+        return logP, grad
     grad[order[-1]] = float(np.sum(u * (-g[n - 1]))) / denom
+    if log_ok and _shift_broken(grad):
+        return in_logs()                                   # #1079
     return logP, grad
 
 
@@ -900,8 +931,72 @@ def _recentre_nodes(F, logW, logp):
     return F2, logW2
 
 
+# The Hermite tensor is recentred past _FACTOR_LADDER_BAND (#1076). At
+# rank <= 2 the correlated updates integrated on the fixed 7^r tensor at
+# any sharpness: conditional on the factors the event probability turns
+# over on a scale of 1/sharpness, and seven prior-placed nodes miss it.
+# Against a 61-81-node reference (rank 1; 31^2 at rank 2), cross-checked
+# with a recentred one, order log Z was off by 0.16 at sharpness 2.5-3
+# and 0.39 at 3-4 (rank 1; 0.07 and 0.31 at rank 2). More prior-placed
+# nodes converge slowly (31 per factor still left 3.5e-3 at 3-4, for
+# 3.4x the time); moving them onto the factor posterior, as the Sobol
+# branch already does, converges fast: 11 recentred nodes at rank 1 left
+# 1.9e-4 at 2.5-3 and 1.2e-3 at 3-4 for 1.6-1.9x, and 9^2 at rank 2
+# left 8e-6 at 2-2.5 and 2.9e-3 at 3-4 for 1.8x. Below the band the 7^r
+# tensor is the better rule (5e-8 against 2e-5 at sharpness under 0.8)
+# and is kept to the bit; across it the event probability is the
+# mixture (1 - u) P_7 + u P_rc, and since u depends on the loadings and
+# variances alone, never on the means, that is ONE fixed rule on the
+# union of the nodes, whose mean gradient and differenced curvature are
+# those of the blended probability. A caller already at or above the
+# recentred order keeps their tensor throughout, as in the choice
+# likelihood's ladder (#1060).
+#
+# Winner events keep a fixed rule. A recentred rule depends on the
+# observed outcome, so the K winner probabilities came from K different
+# quadratures: they summed to one only to 1.8e-4 and the mean updates
+# averaged to zero only to 6e-5 (the verifier's identity.moments, whose
+# Gaussian winner floors are 1e-8; the fixed tensor meets them to 1e-15).
+# Order-type events sit at their lattice floors (1e-4) either way. So a
+# winner takes the prior-placed tensor at _PLAIN_SHARP_QF[r] past the
+# band instead: 15 nodes at rank 1 (winner log Z 1.6e-3 off at 2.5-3,
+# from 1.5e-2, for 2.1x) and 11 at rank 2 (3.1e-3 from 1.4e-2, 2.5x).
+_RECENTRED_QF = {1: 11, 2: 9}
+_PLAIN_SHARP_QF = {1: 15, 2: 11}
+
+
+def _sharp_factor_rule(m, v, V, beta2, node_logp_grad, F, logW,
+                       recentre=True):
+    """The rank <= 2 factor rule for the correlated updates: (F, logW)
+    unchanged below _FACTOR_LADDER_BAND in the smooth sharpness of the
+    canonical loadings against v + beta2, the recentred
+    _RECENTRED_QF[r] tensor past it (recentre=False: the prior-placed
+    _PLAIN_SHARP_QF[r] tensor), and their weight-u union across it."""
+    from ..likelihood import (_FACTOR_LADDER_BAND, _band_weight,
+                              _smooth_sharpness)
+    D = v + _beta_per_player(beta2, len(m))
+    u, _ = _band_weight(_smooth_sharpness(V, D)[0], _FACTOR_LADDER_BAND)
+    if u == 0.0:
+        return F, logW
+    r = V.shape[1]
+    Fh, Wh = _factor_grid(r, Qf=(_RECENTRED_QF if recentre
+                                 else _PLAIN_SHARP_QF)[r])
+    logWh = np.log(Wh)
+    if recentre:
+        sh = Fh @ V.T
+        logp0 = np.array([node_logp_grad(m + sh[q])[0]
+                          for q in range(len(Fh))])
+        if np.isfinite(np.max(logWh + logp0)):
+            Fh, logWh = _recentre_nodes(Fh, logWh, logp0)
+    if u == 1.0:
+        return Fh, logWh
+    return (np.vstack([F, Fh]),
+            np.concatenate([np.log1p(-u) + logW, np.log(u) + logWh]))
+
+
 def _mixture_update(m, v, V, beta2, node_logp_grad, Qf=7, eps=1e-3,
-                    base="normal", nodes_log2=10):
+                    base="normal", nodes_log2=10, convex_event=True,
+                    recentre_sharp=True):
     """Shared engine of the correlated updates. For Gaussian priors,
     E[s_j | event] = m_j + v_j d log P / d m_j and
     Var[s_j | event] = v_j + v_j^2 d^2 log P / d m_j^2 hold for any
@@ -909,18 +1004,30 @@ def _mixture_update(m, v, V, beta2, node_logp_grad, Qf=7, eps=1e-3,
     event probabilities over factor nodes, its gradient the posterior-
     node-weighted average of conditional gradients, and the diagonal
     curvature comes from central differences of that mixture gradient
-    (matching update_winner / update_ranking_exact's treatment)."""
+    (matching update_winner / update_ranking_exact's treatment).
+
+    convex_event says whether the event is a convex set of performances
+    (a winner, a top set, an ordered prefix: intersections of half-spaces).
+    Only then is P log-concave in m for a log-concave base, and only
+    then is positive curvature clipped as differencing noise. Top-k
+    membership for 1 < k < n is a union of such sets, and conditioning
+    on it can raise a rival's variance, so its curvature is kept."""
     m = np.asarray(m, dtype=float)
     v = np.asarray(v, dtype=float)
     V = _canonical_loadings(as_loadings(V, len(m)))   # #130
-    F, W = _factor_grid(V.shape[1], Qf=Qf, nodes_log2=nodes_log2)
+    r = V.shape[1]
+    F, W = _factor_grid(r, Qf=Qf, nodes_log2=nodes_log2)
     logW = np.log(W)
     shifts = F @ V.T                                  # (Q, n)
-    if V.shape[1] >= 3:
+    if r >= 3:
         # Sobol branch: recentre the cloud on the factor posterior (see
         # _recentre_nodes; the full-covariance path does the same)
         logp0 = np.array([node_logp_grad(m + shifts[q])[0] for q in range(len(F))])
         F, logW = _recentre_nodes(F, logW, logp0)
+        shifts = F @ V.T
+    elif (_RECENTRED_QF if recentre_sharp else _PLAIN_SHARP_QF).get(r, 0) > Qf:
+        F, logW = _sharp_factor_rule(m, v, V, beta2, node_logp_grad, F,
+                                     logW, recentre=recentre_sharp)
         shifts = F @ V.T
 
     def mixture(mm):
@@ -951,7 +1058,8 @@ def _mixture_update(m, v, V, beta2, node_logp_grad, Qf=7, eps=1e-3,
         gp, _ = mixture(m + ej)
         gm, _ = mixture(m - ej)
         d2[j] = (gp[j] - gm[j]) / (2 * step[j])
-    d2 = _clamp_d2(d2, base)
+    if convex_event:
+        d2 = _clamp_d2(d2, base)
     v_new = _floor_v(v, v + v ** 2 * d2, frac=1e-4)          # #660
     return m_new, v_new, float(logZ)
 
@@ -964,8 +1072,9 @@ def update_winner_correlated(m, v, winner, V, beta2=1.0, Qf=7, eps=1e-3,
     matching this module throughout). Conditional on f the race is the
     independent one update_winner serves; the update mixes those
     conditionals with posterior node weights. Nodes: Qf Gauss-Hermite
-    per factor dimension at rank r <= 2; 2**nodes_log2 scrambled Sobol
-    at r >= 3 (Qf is inert there). Returns
+    per factor dimension at rank r <= 2, rising to _PLAIN_SHARP_QF[r]
+    once the loadings are sharp (#1076; see _sharp_factor_rule);
+    2**nodes_log2 scrambled Sobol at r >= 3 (Qf is inert there). Returns
     (m_post, v_post, logZ) with logZ = log P(winner) for evidence and
     model comparison. Verified against rejection-sampled Monte Carlo
     posteriors in the tests.
@@ -990,7 +1099,8 @@ def update_winner_correlated(m, v, winner, V, beta2=1.0, Qf=7, eps=1e-3,
             return np.log(max(p, 1e-300)), g
 
     return _mixture_update(m, v, V, beta2, node, Qf=Qf, eps=eps, base=base,
-                           nodes_log2=nodes_log2)
+                           nodes_log2=nodes_log2,
+                           recentre_sharp=False)          # #1076: coherent
 
 
 def update_order_correlated(m, v, order, V, beta2=1.0, Qf=7, eps=1e-3,
@@ -1001,9 +1111,9 @@ def update_order_correlated(m, v, order, V, beta2=1.0, Qf=7, eps=1e-3,
     first to last finisher, best first (max-wins). A rank array (position of entrant i) is the inverse permutation and is
     silently wrong at K >= 3; convert it with order_from_positions (see
     winning.ratings.orders for the convention and a self-test).
-    Nodes as in
-    update_winner_correlated (Qf at rank <= 2, 2**nodes_log2 Sobol at
-    rank >= 3). Returns (m_post, v_post, logZ),
+    Nodes: Qf Gauss-Hermite at rank <= 2, recentred on the factor
+    posterior at _RECENTRED_QF[r] past the sharpness band; 2**nodes_log2
+    Sobol at rank >= 3). Returns (m_post, v_post, logZ),
     logZ = log P(order). Near-impossible orders degrade like
     order_loglik (finite moments, tiny logZ), never raise.
 
@@ -1093,17 +1203,19 @@ def _order_pass_batch(Ms, sd, order, L=None, base="normal", curves=None):
         c = np.cumsum(u[:, ::-1], axis=1)[:, ::-1] * dx
         return c - 0.5 * dx * (u + u[:, -1:])
 
-    def rows(j):
+    def rows(j, want_cdf):
         if curves is not None:
-            return _curve_rows(curves[j], x[None, :], Ms[:, j][:, None])
-        return _base_rows(x[None, :], Ms[:, j][:, None], sd[j], base)
+            return _curve_rows(curves[j], x[None, :], Ms[:, j][:, None],
+                               want_cdf)
+        return _base_rows(x[None, :], Ms[:, j][:, None], sd[j], base,
+                          want_cdf)
 
     g = np.empty((n, Q, L)); dg = np.empty((n, Q, L))
-    for t, j in enumerate(order):
-        g[t], dg[t], _ = rows(j)
+    for t, j in enumerate(order):       # only the last finisher's CDF is used
+        g[t], dg[t], F_last = rows(j, t == n - 1)
 
     T = np.empty((n + 1, Q, L)); sT = np.zeros((n + 1, Q))
-    T[n] = rows(order[-1])[2]
+    T[n] = F_last
     alive = np.ones(Q, dtype=bool)
     redo = np.zeros(Q, dtype=bool)        # rows to rerun in logs (#655)
     for t in range(n - 1, 1, -1):
@@ -1152,9 +1264,250 @@ def _order_pass_batch(Ms, sd, order, L=None, base="normal", curves=None):
         # ratio is invariant to the rescale; nothing further to track
     # last coordinate
     denom = (u * T[n]).sum(axis=1)
+    redo |= denom <= _ORDER_TINY * u.max(axis=1)      # as _order_pass
     ok = alive & (denom > 0)
     num = (u * (-g[n - 1])).sum(axis=1)
-    grad[:, order[-1]] = np.where(ok, num / np.where(ok, denom, 1.0), 0.0)
+    # an underflowed last stage on a live row: the shift invariance
+    # gives the last entry as the negated sum of the rest
+    grad[:, order[-1]] = np.where(ok, num / np.where(ok, denom, 1.0),
+                                  np.where(alive, -grad.sum(axis=1), 0.0))
+    if base == "normal" and curves is None:
+        redo |= alive & _shift_broken(grad)                # #1079
     if redo.any() and base == "normal" and curves is None:
         logP[redo], grad[redo] = _order_pass_log(Ms[redo], sd, order, x)
     return logP, grad
+
+
+# --- observed place: "i finished among the top k", and "the top-k set was S"
+
+def _require_normal_base(base, what):
+    if base != "normal":
+        raise NotImplementedError(
+            f"{what} is implemented for base='normal' only; the non-normal "
+            "predictive curves of update_winner are not yet threaded through "
+            "the top-k count program")
+
+
+def update_topk_correlated(m, v, member, k, V=None, beta2=1.0, Qf=7, eps=1e-3,
+                           base="normal", nodes_log2=10, points=513):
+    """Exact-moment posterior update from the evidence that entrant
+    `member` finished among the top k (max-wins), with optional shared
+    performance factors V as in update_winner_correlated. k = 1 is the
+    observed winner. Conditional on the factors the race is independent
+    and the event's probability is the top-k membership of
+    winning.factor.topk. Its Jacobian row is taken in the min-wins means
+    mu = -m, so the score in m is minus that row divided by the
+    probability; the mixture over factor nodes is _mixture_update's. Returns
+    (m_post, v_post, logZ) with logZ = log P(member in top k)."""
+    from ..factor.topk import top_k_probabilities, top_k_jacobian_row
+    _require_normal_base(base, "update_topk_correlated")
+    m = np.asarray(m, dtype=float)
+    n = len(m)
+    v = as_variance(v, n)
+    member = int(as_order([member], n, name="member")[0])        # #129
+    k = int(k)
+    if not 1 <= k <= n:
+        raise ValueError(f"k must lie in 1..{n}; got {k}")
+    if k == n:
+        return m.copy(), v.copy(), 0.0                 # everyone is in the top n
+    D = v + _beta_per_player(beta2, n)                 # Gaussian predictive per node
+    if V is None:
+        V = np.zeros((n, 1))
+
+    def node(mm):
+        mu = -np.asarray(mm, dtype=float)              # the engine speaks min-wins
+        q = float(np.asarray(top_k_probabilities(mu, k, D=D, points=points))[member])
+        row = np.asarray(top_k_jacobian_row(mu, member, k, D=D, points=points))
+        q = max(q, 1e-300)
+        return np.log(q), -row / q                     # d log q / d mm = -(dq/dmu)/q
+    return _mixture_update(m, v, V, beta2, node, Qf=Qf, eps=eps, base=base,
+                           nodes_log2=nodes_log2, convex_event=(k == 1))
+
+
+def _topset_logp_grad(mm, D, top, points=2001):
+    """log P(every entrant in `top` beat every entrant outside it) for
+    independent normal performances N(mm_j, D_j), max-wins, and its
+    gradient in mm. With G(x) = prod_{j not in top} Phi_j(x) the law of
+    the best outsider and H(x) = prod_{i in top} S_i(x) the chance every
+    member is above x,
+
+        P = int G'(x) H(x) dx = -int G(x) H'(x) dx,
+
+    and differentiating under either form gives one lattice sum per
+    entrant: dP/dm_i = int G' phi_i/sd_i prod_{i' in top, i' != i} S_i'
+    for a member (>= 0), dP/dm_j = int H' phi_j/sd_j prod_{l out, l != j}
+    Phi_l for an outsider (<= 0). The gradient sums to zero by
+    translation invariance, which the tests check."""
+    from scipy.special import log_ndtr
+    _trapz = getattr(np, "trapezoid", None) or np.trapz
+    mm = np.asarray(mm, dtype=float); D = np.asarray(D, dtype=float)
+    n = len(mm)
+    top = np.asarray(sorted(set(int(i) for i in top)), dtype=int)
+    out = np.asarray([j for j in range(n) if j not in set(top.tolist())], dtype=int)
+    sd = np.sqrt(D)
+    lo = float(np.min(mm - 9 * sd)); hi = float(np.max(mm + 9 * sd))
+    x = np.linspace(lo, hi, int(points)); dx = x[1] - x[0]
+    z = (x[:, None] - mm[None, :]) / sd[None, :]            # (L, n)
+    logPhi = log_ndtr(z); logS = log_ndtr(-z)
+    phi_over_sd = np.exp(-0.5 * z * z) / (np.sqrt(2 * np.pi) * sd[None, :])
+    logG = logPhi[:, out].sum(axis=1)                        # best outsider's cdf
+    logH = logS[:, top].sum(axis=1)                          # all members above x
+    # G'(x) = sum_l phi_l/sd_l prod_{l' != l} Phi_l'  = G * sum_l phi_l/(sd_l Phi_l)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        ratio_out = np.where(logPhi[:, out] > -700, phi_over_sd[:, out] / np.exp(logPhi[:, out]), 0.0)
+        ratio_top = np.where(logS[:, top] > -700, phi_over_sd[:, top] / np.exp(logS[:, top]), 0.0)
+    G = np.exp(logG); H = np.exp(logH)
+    Gp = G * ratio_out.sum(axis=1)
+    Hp = -H * ratio_top.sum(axis=1)
+    P = float(_trapz(Gp * H, dx=dx))
+    grad = np.zeros(n)
+    for a, i in enumerate(top):
+        # d/dm_i of H = H * phi_i/(sd_i S_i)
+        grad[i] = _trapz(Gp * H * ratio_top[:, a], dx=dx)
+    for b, j in enumerate(out):
+        # -d/dm_j of G = G * phi_j/(sd_j Phi_j); P = -int G H'
+        grad[j] = _trapz(Hp * G * ratio_out[:, b], dx=dx)
+    P = max(P, 1e-300)
+    return np.log(P), grad / P
+
+
+def update_topset_correlated(m, v, top, V=None, beta2=1.0, Qf=7, eps=1e-3,
+                             base="normal", nodes_log2=10, points=2001):
+    """Exact-moment posterior update from the evidence that the set `top`
+    of entrants finished ahead of everyone else, in unknown order
+    (max-wins): the qualifiers, the shortlist, the final. |top| = 1 is
+    the observed winner and |top| = n - 1 names the last finisher.
+    Shared performance factors V as in update_winner_correlated. Returns
+    (m_post, v_post, logZ) with logZ = log P(top set = `top`)."""
+    _require_normal_base(base, "update_topset_correlated")
+    m = np.asarray(m, dtype=float)
+    n = len(m)
+    v = as_variance(v, n)
+    top = [int(i) for i in as_order(top, n, name="top")]            # distinct, in range (#129)
+    if not 1 <= len(top) <= n - 1:
+        raise ValueError(f"top must name between 1 and {n - 1} entrants; got {len(top)}")
+    D = v + _beta_per_player(beta2, n)
+    if V is None:
+        V = np.zeros((n, 1))
+
+    def node(mm):
+        return _topset_logp_grad(mm, D, top, points=points)
+    return _mixture_update(m, v, V, beta2, node, Qf=Qf, eps=eps, base=base,
+                           nodes_log2=nodes_log2)
+
+
+def _prefix_logp(mm, D, prefix, points=2001):
+    """log P(prefix[0] first, prefix[1] second, ..., and every entrant not
+    named finishes behind the last named), independent normal
+    performances N(mm_j, D_j), max-wins. Nested integrals on one lattice:
+    the last named finishes at x with every unnamed below it,
+    A_k(x) = f_k(x) prod_{l unnamed} Phi_l(x); each earlier named must
+    finish above the next, A_j(x) = f_j(x) int_{-inf}^x A_{j+1}; and
+    P = int A_1. k cumulative sums, O(kL)."""
+    from scipy.special import log_ndtr
+    _trapz = getattr(np, "trapezoid", None) or np.trapz
+    mm = np.asarray(mm, dtype=float); D = np.asarray(D, dtype=float)
+    n = len(mm); sd = np.sqrt(D)
+    prefix = [int(i) for i in prefix]
+    rest = [j for j in range(n) if j not in set(prefix)]
+    lo = float(np.min(mm - 9 * sd)); hi = float(np.max(mm + 9 * sd))
+    x = np.linspace(lo, hi, int(points)); dx = x[1] - x[0]
+    z = (x[:, None] - mm[None, :]) / sd[None, :]
+    logf = -0.5 * z * z - 0.5 * np.log(2 * np.pi) - np.log(sd[None, :])
+    logPhi = log_ndtr(z)
+    below_rest = logPhi[:, rest].sum(axis=1) if rest else np.zeros(len(x))
+    A = np.exp(logf[:, prefix[-1]] + below_rest)
+    for i in reversed(prefix[:-1]):
+        C = np.concatenate([[0.0], np.cumsum(0.5 * (A[1:] + A[:-1])) * dx])   # int_{-inf}^x A
+        A = np.exp(logf[:, i]) * C
+    return float(np.log(max(_trapz(A, dx=dx), 1e-300)))
+
+
+def update_prefix_correlated(m, v, prefix, V=None, beta2=1.0, Qf=7, eps=1e-3,
+                             base="normal", nodes_log2=10, points=2001, h=1e-5):
+    """Exact-moment posterior update from an ordered top-k result with
+    the rest unplaced (max-wins): prefix lists the first k finishers in
+    order, and every entrant not named finished behind them. k = 1 is
+    the observed winner, k = n the full order. Shared factors V as in
+    update_winner_correlated. The conditional score is a central
+    difference of the lattice log-probability at relative step h, exact
+    for the fixed lattice to about h^2. Returns (m_post, v_post, logZ)."""
+    _require_normal_base(base, "update_prefix_correlated")
+    m = np.asarray(m, dtype=float)
+    n = len(m)
+    v = as_variance(v, n)
+    prefix = [int(i) for i in as_order(prefix, n, name="prefix")]        # distinct, in range (#129)
+    D = v + _beta_per_player(beta2, n)
+    if V is None:
+        V = np.zeros((n, 1))
+    step = float(h) * np.sqrt(D)
+
+    def node(mm):
+        lp = _prefix_logp(mm, D, prefix, points=points)
+        g = np.empty(n)
+        for j in range(n):
+            e = np.zeros(n); e[j] = step[j]
+            g[j] = (_prefix_logp(mm + e, D, prefix, points=points)
+                    - _prefix_logp(mm - e, D, prefix, points=points)) / (2 * step[j])
+        return lp, g
+    return _mixture_update(m, v, V, beta2, node, Qf=Qf, eps=eps, base=base,
+                           nodes_log2=nodes_log2)
+
+
+# --- a dead heat for first
+
+def _tie_logdens_grad(mm, D, tied, points=2001):
+    """log of the density that the entrants in `tied` finish level in
+    first place with everyone else behind, independent normal
+    performances N(mm_j, D_j), max-wins: int prod_{i tied} f_i(x)
+    prod_{j out} Phi_j(x) dx, and its gradient. For one tied entrant this
+    is the win probability; for two it is the tie density of the win
+    Jacobian's off-diagonal. The gradient sums to zero (translation)."""
+    from scipy.special import log_ndtr
+    _trapz = getattr(np, "trapezoid", None) or np.trapz
+    mm = np.asarray(mm, dtype=float); D = np.asarray(D, dtype=float)
+    n = len(mm); sd = np.sqrt(D)
+    tied = [int(i) for i in tied]
+    out = [j for j in range(n) if j not in set(tied)]
+    lo = float(np.min(mm - 9 * sd)); hi = float(np.max(mm + 9 * sd))
+    x = np.linspace(lo, hi, int(points)); dx = x[1] - x[0]
+    z = (x[:, None] - mm[None, :]) / sd[None, :]
+    logf = -0.5 * z * z - 0.5 * np.log(2 * np.pi) - np.log(sd[None, :])
+    logPhi = log_ndtr(z)
+    logh = logf[:, tied].sum(axis=1) + (logPhi[:, out].sum(axis=1) if out else 0.0)
+    h = np.exp(logh)
+    P = float(_trapz(h, dx=dx))
+    grad = np.zeros(n)
+    for i in tied:
+        grad[i] = _trapz(h * z[:, i] / sd[i], dx=dx)             # d log f_i / d m_i = z_i / sd_i
+    with np.errstate(divide="ignore", invalid="ignore"):
+        for j in out:
+            ratio = np.where(logPhi[:, j] > -700,
+                             np.exp(-0.5 * z[:, j] ** 2 - 0.5 * np.log(2 * np.pi) - logPhi[:, j]) / sd[j], 0.0)
+            grad[j] = -_trapz(h * ratio, dx=dx)                   # d log Phi_j / d m_j = -phi_j/(sd_j Phi_j)
+    P = max(P, 1e-300)
+    return np.log(P), grad / P
+
+
+def update_tie_correlated(m, v, tied, V=None, beta2=1.0, Qf=7, eps=1e-3,
+                          base="normal", nodes_log2=10, points=2001):
+    """Exact-moment posterior update from a dead heat: the entrants in
+    `tied` finished level in first place and everyone else behind them
+    (max-wins). The event has probability zero under a continuous
+    model, so its likelihood is a density, Bayes' rule applies to it as
+    to any density, and the evidence returned is a log density, not a
+    log probability. One tied entrant is the observed winner. Shared
+    factors V as in update_winner_correlated."""
+    _require_normal_base(base, "update_tie_correlated")
+    m = np.asarray(m, dtype=float)
+    n = len(m)
+    v = as_variance(v, n)
+    tied = [int(i) for i in as_order(tied, n, name="tied")]           # distinct, in range (#129)
+    D = v + _beta_per_player(beta2, n)
+    if V is None:
+        V = np.zeros((n, 1))
+
+    def node(mm):
+        return _tie_logdens_grad(mm, D, tied, points=points)
+    return _mixture_update(m, v, V, beta2, node, Qf=Qf, eps=eps, base=base,
+                           nodes_log2=nodes_log2)

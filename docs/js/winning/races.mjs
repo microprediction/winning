@@ -1,6 +1,6 @@
 // The general race: min-wins, normal/gumbel bases, winner-bulk lattice,
 // adaptive factor quadrature. Port of winning/factor/races.py.
-import { TINY, ndtr, logndtr, npdf, hermiteNodes, mean, checkOpts, OPT_HINTS, asLoadings, asIdio, gaugeCenter, firstPrimes, asFactorNodes, asWeights, asFactorLaw, asAbilities, asFiniteVector, asIterations, asTolerance, asCount, aitkenTrial, applyFloor, canonicalBasis, asPoints, kinkLattice } from "./core.mjs";
+import { TINY, ndtr, logndtr, npdf, hermiteNodes, mean, checkOpts, OPT_HINTS, asLoadings, asIdio, gaugeCenter, firstPrimes, asFactorLaw, asAbilities, asFiniteVector, asIterations, asTolerance, asCount, aitkenTrial, AITKEN_AGREE, applyFloor, canonicalBasis, asPoints, kinkLattice, baseSpan, baseKinks } from "./core.mjs";
 
 const EULER = 0.5772156649015329;
 
@@ -238,16 +238,34 @@ function midpointRule(Q) {
    each order is the one its side uses at the band's edge, so the band
    meets the unchanged rule outside it continuously at both ends. */
 const R1_BLEND_LO = 9.0, R1_BLEND_HI = 10.0;
-function rank1BlendRule(sharp) {
+/* The C1 smoothstep S(t) = t^2 (3 - 2t) and its slope 6 t (1 - t). */
+function smoothstep(t) {
+  return [t * t * (3.0 - 2.0 * t), 6.0 * t * (1.0 - t)];
+}
+/* slope: also dW/dsharp, node for node -- the weights move with the
+   sharpness and so with the sd that sets it (#783). A component of
+   mixture coefficient exactly zero is left out, as python's
+   as_factor_law drops it: its no-op nodes widened the race window and
+   at sharpness exactly 10 moved a share by 2.9 points (#783). */
+function rank1BlendRule(sharp, slope = false) {
   const t = (sharp - R1_BLEND_LO) / (R1_BLEND_HI - R1_BLEND_LO);
-  const w = t * t * (3.0 - 2.0 * t);
+  const [w, dS] = smoothstep(t);
   const g = hermiteNodes(1, 8 * R1_BLEND_LO);
   const m = midpointRule(8 * R1_BLEND_HI + 1);
-  return {
+  const dw = dS / (R1_BLEND_HI - R1_BLEND_LO);
+  const Q = m.W.length;
+  // kept in V's own axes, as python builds it
+  if (w === 1)
+    return { F: m.F, W: m.W, hermite: true, ...(slope && { dW: m.W.map(() => dw / Q) }) };
+  if (w === 0)
+    return { F: g.F, W: g.W, hermite: true, ...(slope && { dW: g.W.map(x => -dw * x) }) };
+  const rule = {
     F: g.F.concat(m.F),
-    W: g.W.map(x => (1.0 - w) * x).concat(m.W.map(() => w / m.W.length)),
-    hermite: true,   // kept in V's own axes, as python builds it
+    W: g.W.map(x => (1.0 - w) * x).concat(m.W.map(() => w / Q)),
+    hermite: true,
   };
+  if (slope) rule.dW = g.W.map(x => -dw * x).concat(m.W.map(() => dw / Q));
+  return rule;
 }
 
 /* Below the band the rank-one rule was Gauss-Hermite of order ceil(8 sharp),
@@ -258,35 +276,77 @@ function rank1BlendRule(sharp) {
    on (24, 25] GH(24) takes on GH(23) up to half weight; past 25 the
    parity-balanced pair GH(m-1)/2 + GH(m)/2 at order y = 5 sharp in
    [24, 34], sliding its lower half to GH(m+1) as y crosses (m, m+1); on
-   (71, 72] handed back to GH(72), the band's lower edge. */
+   (71, 72] handed back to GH(72), the band's lower edge. Each part is
+   (order, coefficient, d coefficient / d sharp); slope also returns
+   dW/dsharp (#783), zero where y is held at a clamp. */
 const R1_PAIR_FROM = 24, R1_PAIR_PER_SHARP = 5.0, R1_PAIR_CAP = 34;
-function rank1HermiteRule(sharp) {
-  const S = t => t * t * (3.0 - 2.0 * t);
+function rank1HermiteRule(sharp, slope = false) {
   const x = 8 * sharp, lo = R1_PAIR_FROM;
   let parts;
   if (x <= lo) {
-    const m = Math.floor(x), w = S(x - m);
-    parts = [[m, 1.0 - w], [m + 1, w]];
+    const m = Math.floor(x), [w, dS] = smoothstep(x - m), dw = 8 * dS;
+    parts = [[m, 1.0 - w, -dw], [m + 1, w, dw]];
   } else if (x <= lo + 1) {
-    const w = S(x - lo);
-    parts = [[lo - 1, 0.5 * w], [lo, 1.0 - 0.5 * w]];
+    const [w, dS] = smoothstep(x - lo), dw = 8 * dS;
+    parts = [[lo - 1, 0.5 * w, 0.5 * dw], [lo, 1.0 - 0.5 * w, -0.5 * dw]];
   } else {
-    const y = Math.min(Math.max(R1_PAIR_PER_SHARP * sharp, lo), R1_PAIR_CAP);
-    const m = Math.floor(y), w = S(y - m);
-    parts = [[m - 1, 0.5 * (1.0 - w)], [m, 0.5], [m + 1, 0.5 * w]];
+    const yRaw = R1_PAIR_PER_SHARP * sharp;
+    const y = Math.min(Math.max(yRaw, lo), R1_PAIR_CAP);
+    const dy = lo < yRaw && yRaw < R1_PAIR_CAP ? R1_PAIR_PER_SHARP : 0.0;
+    const m = Math.floor(y), [w, dS] = smoothstep(y - m), dw = dy * dS;
+    parts = [[m - 1, 0.5 * (1.0 - w), -0.5 * dw], [m, 0.5, 0.0],
+             [m + 1, 0.5 * w, 0.5 * dw]];
     const top = 8 * R1_BLEND_LO;
     if (x > top - 1) {
-      const v = S(x - (top - 1));
-      parts = parts.map(([q, c]) => [q, c * (1.0 - v)]).concat([[top, v]]);
+      const [v, dS2] = smoothstep(x - (top - 1)), dv = 8 * dS2;
+      parts = parts.map(([q, c, dc]) => [q, c * (1.0 - v), dc * (1.0 - v) - c * dv])
+        .concat([[top, v, dv]]);
     }
   }
-  const F = [], W = [];
-  for (const [q, c] of parts) {
+  // a part of zero coefficient has zero slope too (S is flat at both ends)
+  const F = [], W = [], dW = [];
+  for (const [q, c, dc] of parts) {
     if (!(c > 0.0)) continue;
     const g = hermiteNodes(1, q);
-    for (let i = 0; i < g.W.length; i++) { F.push(g.F[i]); W.push(c * g.W[i]); }
+    for (let i = 0; i < g.W.length; i++) {
+      F.push(g.F[i]); W.push(c * g.W[i]); dW.push(dc * g.W[i]);
+    }
   }
-  return { F, W, hermite: true };   // kept in V's own axes, as python builds it
+  // kept in V's own axes, as python builds it
+  return slope ? { F, W, hermite: true, dW } : { F, W, hermite: true };
+}
+
+/* How the AUTOMATIC rank-one rule moves with the sds (#783), python's
+   races._rank1_rule_sigma_slope. V gauge-centred and D validated, as
+   canonicalRule sees them. The nodes are fixed, but inside the smooth
+   intervals of the two rules above the weights W(sharp) move with
+   sharp = sqrt(2) max_i |V_i| / sigma_i, so with the sd of the runner j
+   attaining the max: dsharp/dsigma_j = -sharp/sigma_j, zero for the
+   rest. Returns { j, dsharp, F, dW } over the nodes whose weight moves,
+   or null where the rule is piecewise constant in sharp. A tie for the
+   max is a kink: the term goes to the FIRST runner attaining it (its
+   one-sided derivative as its sd falls; each other tied runner's column
+   is its one-sided derivative as its sd rises). */
+export function _autoRuleSigmaSlope(V, D) {
+  const n = V.length;
+  if (V[0].length !== 1) return null;
+  let sharp = 0, j = 0;
+  for (let i = 0; i < n; i++) {
+    const nv = Math.sqrt(V[i].reduce((a, b) => a + b * b, 0));
+    const ri = nv / Math.sqrt(Math.max(D[i], 1e-300));
+    if (ri > sharp) j = i;
+    sharp = Math.max(sharp, ri);
+  }
+  sharp *= Math.SQRT2;
+  let rule;
+  if (sharp > R1_BLEND_LO && sharp <= R1_BLEND_HI) rule = rank1BlendRule(sharp, true);
+  else if (Math.ceil(8 * sharp) > 80 || !(8 * sharp > 15)) return null;
+  else rule = rank1HermiteRule(sharp, true);
+  const F = [], dW = [];
+  for (let q = 0; q < rule.dW.length; q++)
+    if (rule.dW[q] !== 0) { F.push(rule.F[q]); dW.push(rule.dW[q]); }
+  if (!F.length) return null;
+  return { j, dsharp: -sharp / Math.sqrt(D[j]), F, dW };
 }
 
 function ruleFamily(V, D) {
@@ -424,9 +484,9 @@ function setup(mu, V, D, F, W, base) {
   baseResolution(fn);          // malformed metadata fails here, not mid-grid
   checkTails(fn);
   // a callable base may declare its own span, as python's
-  // getattr(base, "span", (12, 12)) (#106)
+  // getattr(base, "span", (12, 12)) (#106); plain or typed (#907)
   const span = typeof base === "function"
-    ? (Array.isArray(base.span) ? base.span : [12, 12])
+    ? (baseSpan(base) || [12, 12])
     : (SPANS[base] || [12, 12]);
   return { mu, V, D, F, W, fn, left: span[0], right: span[1] };
 }
@@ -505,7 +565,8 @@ function bulkWindow(Mall, sd, points, delta, fn = null) {
     return x0;
   };
   let pad = 2 * smax;
-  if (fn && Array.isArray(fn.span)) pad = Math.max(pad, 0.25 * Math.max(...fn.span) * smax);
+  const declared = baseSpan(fn);                                  // plain or typed (#907)
+  if (declared) pad = Math.max(pad, 0.25 * Math.max(...declared) * smax);
   const windowAt = d => {
     const step0 = Math.max(9 * smax, 1e-12);
     const lo0 = bracket(minOf(muLo) - 9 * smax, step0, x => G(x, muLo) <= d, -1);
@@ -827,10 +888,17 @@ function pairMixtureGap(target, proj, w, d0, d1, g0, h) {
   let g = g0, lo = -Infinity, hi = Infinity;
   for (let it = 0; it < 200; it++) {
     const u = proj.map(s => sign * (g - s) / sd);
-    let p = 0;
-    for (let q = 0; q < u.length; q++) p += w[q] * ndtr(u[q]);
-    let logp, ratio;
-    if (p > 1e-250) {
+    let a = 0;
+    for (let q = 0; q < u.length; q++) a += w[q] * ndtr(u[q]);
+    let logp, ratio, p = a;
+    if (a > 1e-250) {
+      // the NORMALIZED share, both tails accumulated in pairMixture's
+      // order, so the objective is bitwise the map certified against: the
+      // raw sum differed in the last bit and on a sharp plateau one ulp
+      // was a root chased to a gap of 2e48 (#902)
+      let b = 0;
+      for (let q = 0; q < u.length; q++) b += w[q] * ndtr(-u[q]);
+      p = a / (a + b);
       logp = Math.log(p);
       let d = 0;
       for (let q = 0; q < u.length; q++) d += w[q] * Math.exp(-0.5 * u[q] * u[q]);
@@ -846,10 +914,14 @@ function pairMixtureGap(target, proj, w, d0, d1, g0, h) {
     if (!Number.isFinite(f)) return null;
     if (f > 0) hi = g; else lo = g;
     let gn = ratio > 0 ? g - f * sd / ratio : NaN;
-    // quadratic convergence: from 1e-8 the step lands at rounding
-    if (Math.abs(f) < 1e-8 && lo < gn && gn < hi) return gn;
-    if (!(lo < gn && gn < hi)) {
-      if (Number.isFinite(lo) && Number.isFinite(hi)) gn = 0.5 * (lo + hi);
+    // Evaluate the next proposal in the loop even when f is tiny: a
+    // near-zero plateau derivative can make it worse, not quadratic (#954).
+    // while one side is open a Newton step is capped at h too: on a
+    // mixture plateau the ratio is ~1e-66 and the uncapped step
+    // (-6.7e64) set a bracket end bisection never came back from (#830)
+    const open = !(Number.isFinite(lo) && Number.isFinite(hi));
+    if (!(lo < gn && gn < hi) || (open && Math.abs(gn - g) > h)) {
+      if (!open) gn = 0.5 * (lo + hi);
       else { gn = f > 0 ? g - h : g + h; h *= 2; }
     }
     if (Math.abs(gn - g) <= 2 * Number.EPSILON * Math.max(Math.abs(g), sd)) return gn;
@@ -913,10 +985,12 @@ function pairClosedForm(st, nodesGiven, returnSlopes) {
 }
 
 export function raceProbabilities(mu, opts = {}) {
-  const { V = null, D = null, F = null, W = null, base = "normal",
+  const { V = null, D = null, F = null, W = null, base: base0 = "normal",
           points = 257, returnSlopes = false, window: win = "bulk",
           delta = 1e-12, structure = null, qa = 9, qf = 15 } = opts;
   checkOpts(opts, FORWARD_OPTS, "raceProbabilities", OPT_HINTS);
+  // the exported callable is the named law: same exact dispatch (#858)
+  const base = base0 === BASES.normal ? "normal" : base0;
   // one of two names: every value but "bulk" -- a typo, null, a number --
   // silently meant span and moved a share by 39 points (#582). undefined
   // is omission, as for every option.
@@ -1021,6 +1095,92 @@ function splitRaceSlopes(mu, { V, D, F, W, base, points }) {
   return slope.map(v => v / total);
 }
 
+/* The race AND its Jacobian on the kink-split lattice, one pass: python's
+   race_probabilities(..., kink_split=True) and
+   race_jacobian(..., kink_split=True) (polish._raw_and_derivative's
+   split branch). Raw masses a, A = da/dmu with the own coordinate
+   integrated, dT = column sums of A; p = a / T and J = (A - p dT') / T.
+   For polishRace on a kinked base only (#1011): the uniform lattice's
+   window slides across every runner's kink, so its derivative carries an
+   O(dx) artifact no fixed-grid Jacobian matches and the solver stalled;
+   on this lattice the pair is smooth and consistent. Not a public door:
+   the forward maps keep the uniform lattice by default. wantJ: false
+   returns p alone, O(n T) rather than O(n^2 T), bitwise the same p. */
+export function splitRaceJacobian(mu, { V, D, F, W, base, points }, wantJ = true) {
+  const st = setup(mu, V, D, F, W, base);
+  const n = st.mu.length;
+  const sd = st.D.map(Math.sqrt);
+  const Mall = condMeans(st.mu, st.V, st.F);
+  const { x } = forwardGrid(Mall, sd, st, points, "bulk", 1e-12);
+  const kinks = baseKinks(st.fn);
+  const a = new Array(n).fill(0), dT = new Array(n).fill(0);
+  const A = Array.from({ length: n }, () => new Array(n).fill(0));
+  const clip = v => Math.exp(Math.min(Math.max(v, -745), 40));
+  for (let q = 0; q < st.F.length; q++) {
+    const Mq = Mall[q], wq = st.W[q];
+    const { xs, ws } = kinkLattice(x, Mq, sd, kinks);
+    const T = xs.length;
+    const L = new Array(T).fill(0);
+    const logS = new Array(n), logf = new Array(n), fpA = new Array(n);
+    for (let i = 0; i < n; i++) {
+      const li = new Array(T), fi = new Array(T), fpi = new Array(T);
+      for (let t = 0; t < T; t++) {
+        const [S, f, fp] = st.fn((xs[t] - Mq[i]) / sd[i]);
+        li[t] = Math.log(Math.max(S, 1e-300));
+        fi[t] = Math.log(Math.max(f / sd[i], 1e-300));
+        fpi[t] = fp;
+        L[t] += li[t];
+      }
+      logS[i] = li; logf[i] = fi; fpA[i] = fpi;
+    }
+    if (!wantJ) {
+      // the same a[i] sum as below, without the hazards and A
+      for (let i = 0; i < n; i++) {
+        let ai = 0;
+        for (let t = 0; t < T; t++) ai += clip(logf[i][t] + L[t] - logS[i][t]) * ws[t];
+        a[i] += wq * ai;
+      }
+      continue;
+    }
+    const g = new Array(n), haz = new Array(n), own = new Array(n);
+    const G = new Array(T).fill(0);
+    for (let i = 0; i < n; i++) {
+      const gi = new Array(T), hi = new Array(T), oi = new Array(T);
+      const sd2 = sd[i] * sd[i];
+      for (let t = 0; t < T; t++) {
+        gi[t] = clip(logf[i][t] + L[t] - logS[i][t]);
+        hi[t] = clip(logf[i][t] - logS[i][t]);
+        oi[t] = -fpA[i][t] / sd2 * clip(L[t] - logS[i][t]);
+        G[t] += gi[t];
+      }
+      g[i] = gi; haz[i] = hi; own[i] = oi;
+    }
+    for (let i = 0; i < n; i++) {
+      let ai = 0, oi = 0, gh = 0, d = 0;
+      for (let t = 0; t < T; t++) {
+        ai += g[i][t] * ws[t];
+        oi += own[i][t] * ws[t];
+        gh += g[i][t] * haz[i][t] * ws[t];
+        d += ((G[t] - g[i][t]) * haz[i][t] + own[i][t]) * ws[t];
+      }
+      a[i] += wq * ai;
+      dT[i] += wq * d;
+      for (let j = 0; j < n; j++) {
+        let s = 0;
+        for (let t = 0; t < T; t++) s += g[i][t] * ws[t] * haz[j][t];
+        A[i][j] += wq * s;
+      }
+      // own coordinate, differentiated rather than imposed
+      A[i][i] += wq * (oi - gh);
+    }
+  }
+  const total = a.reduce((u, v) => u + v, 0);
+  const p = a.map(v => v / total);
+  if (!wantJ) return { p };
+  const J = A.map((row, i) => row.map((v, j) => (v - p[i] * dT[j]) / total));
+  return { p, J };
+}
+
 /* One exit for every inversion path, as python's _inverse_return: warn
    on non-convergence unless the caller asked for the diagnostics, and
    report the iteration actually reached. Without it a starved solve came
@@ -1078,9 +1238,11 @@ function validatedRaceTarget(pTarget, targetFloor) {
 
 export function abilitiesFromRace(pTarget, opts = {}) {
   const { nIter = 60, tol = 1e-8, structure = null, V = null, D = null,
-          F = null, W = null, base = "normal", points = 257,
+          F = null, W = null, base: base0 = "normal", points = 257,
           targetFloor = null, returnInfo = false, qa = 9, qf = 15 } = opts;
   checkOpts(opts, INVERSE_OPTS, "abilitiesFromRace", OPT_HINTS);
+  // the exported callable is the named law: same exact dispatch (#858)
+  const base = base0 === BASES.normal ? "normal" : base0;
   asIterations(nIter, "abilitiesFromRace");
   asTolerance(tol, "abilitiesFromRace");
   const { target, floored } = validatedRaceTarget(pTarget, targetFloor);
@@ -1090,7 +1252,7 @@ export function abilitiesFromRace(pTarget, opts = {}) {
     // the caller's base, window and delta travel too, so the hierarchical
     // kernels can refuse what they would otherwise ignore (#89)
     const r = dispatchAbilities(target, c.structure,
-      { ...opts, points, qa, qf, tol });
+      { ...opts, base, points, qa, qf, tol });
     return inverseReturn(r.mu, r.converged, r.maxLogResidual, r.iterations,
                          floored, tol, returnInfo);
   }
@@ -1118,8 +1280,10 @@ function solveRace(target, floored, { V, D, F, W, base, points, nIter, tol,
     // every moment below came out NaN -- surfacing, once mu was checked
     // for finiteness, as "mu[0] = NaN" rather than as the bad weights
     // the caller actually passed.
-    const Fv = asFactorNodes(F, r, "F");
-    const Wq = asWeights(W, Fv.length, "W");
+    // ... and, as factorRule does for the forward, with negligible nodes
+    // dropped: kept, they were solved and certified here while the
+    // forward never priced them (#941)
+    const { F: Fv, W: Wq } = asFactorLaw(F, W, r, "F", "W");
     Fm = Array.from({ length: r }, (_, c) => Fv.reduce((acc, f, q) => acc + Wq[q] * f[c], 0));
     CovF = Array.from({ length: r }, (_, a) => Array.from({ length: r }, (_, b) =>
       Fv.reduce((acc, f, q) => acc + Wq[q] * (f[a] - Fm[a]) * (f[b] - Fm[b]), 0)));
@@ -1151,8 +1315,7 @@ function solveRace(target, floored, { V, D, F, W, base, points, nIter, tol,
     // the forward prices the exact mixture over the caller's nodes
     // (#742): invert THAT map by a monotone 1-D solve from this start
     if (V != null && F != null) {
-      const Fv = asFactorNodes(F, r, "F");
-      const Wq = asWeights(W, Fv.length, "W");
+      const { F: Fv, W: Wq } = asFactorLaw(F, W, r, "F", "W");   // (#941)
       const proj = Fv.map(fq => fq.reduce((acc, x, c) => acc + x * (Vc[0][c] - Vc[1][c]), 0));
       const gs = pairMixtureGap(target, proj, Wq, Dn[0], Dn[1], gap, sdD);
       if (gs !== null && Number.isFinite(gs)) {
@@ -1195,7 +1358,7 @@ function solveRace(target, floored, { V, D, F, W, base, points, nIter, tol,
   let iters = 0;
   let cached = null;  // forward of an accepted Aitken trial (#583)
   const fnBase = typeof base === "function" ? base : BASES[base];
-  const kinked = !!(fnBase && Array.isArray(fnBase.kinks) && fnBase.kinks.length);
+  const kinked = !!baseKinks(fnBase);                             // plain or typed (#907)
   const sweepForward = m => {
     let { p: praw, slopes: sl } = raceProbabilities(m, { V, D, F, W, base, points, returnSlopes: true });
     // a kinked base: the slope from the split lattice, the value from the
@@ -1223,6 +1386,8 @@ function solveRace(target, floored, { V, D, F, W, base, points, nIter, tol,
     } else if (prev && penalty < 1) {
       penalty = Math.min(1, penalty / 0.75);
     }
+    // the last sweep's own contraction, for the Aitken gate below (#956)
+    const prevMax = prev ? prev.rmax : Infinity;
     prev = { mu, resid, dlogp, rmax, rrms };
     alpha = alphaBase * penalty;
     // residual-proportional step cap in the field's scale
@@ -1244,7 +1409,8 @@ function solveRace(target, floored, { V, D, F, W, base, points, nIter, tol,
         if (rho < 0) {
           const lam = 1 - (1 - rho) / alpha;
           alphaBase = Math.min(Math.max(2 / (2 - lam), 0.1), 1);
-        } else if (cosn > 0.999 && ratio > 0.5 && ratio < 0.999 && rmax > 1e3 * tol) {
+        } else if (cosn > 0.999 && ratio > 0.5 && ratio < 0.999 && rmax > 1e3 * tol &&
+                   Math.abs(rmax / prevMax - ratio) <= AITKEN_AGREE) {
           // collinear steps decaying geometrically: sum the tail (Aitken),
           // as a repriced, capped trial
           const trial = aitkenTrial(mu, step, ratio, scale, sweepForward,

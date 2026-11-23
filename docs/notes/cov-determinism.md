@@ -118,5 +118,28 @@ on main and 5.7e-4 now. Every moved default moved by about main's own
 error against that reference (at most 2x it). Rank one and rank three or
 more are bitwise unchanged, except a browser loading with three or more
 columns whose clusters all have rank two: it already went to the
-principal axes and now gets the 45-degree grid too. Python's rank-three-plus Sobol rule is still not
-canonical; that case is not addressed here.
+principal axes and now gets the 45-degree grid too. Python's rank-three-plus Sobol rule was left in the caller's axes; see
+the next section.
+
+## Rank-3+ nested coupling (#911, 2026-10)
+
+The last gap. `nested_race_probabilities` and `nested_race_jacobian`
+fed the caller's coupling straight to the scrambled-Sobol cloud, so
+flipping one column of a rank-three coupling moved a winner share by
+12 bp, while the browser's `canonicalCoupling` was bit-identical. Python
+now does what the browser does: gauge-centre the coupling (#698: a
+common shock cancels from every contrast but rotated the raw Gram
+matrix's eigenbasis), rotate into the eigenbasis of g'g with the sign
+rule above, drop null directions, and lay the cloud in that basis. A
+coupling that centres to rank one or two takes the Gauss-Hermite rules,
+so a three-runner race with a rank-three coupling prices identically in
+Python and the browser. Rank one and two stay in the caller's axes in
+both ports (#859 is the open rank-two rotation question). R refuses a
+rank-3+ coupling and is unchanged.
+
+Against a 2e7-draw Monte Carlo reference (standard error about 1e-4)
+the moved defaults are within main's own error: on four fixtures at
+qf 15 and 25 the max-abs error was 7e-5 to 3.3e-4 on main and 9e-5 to
+5.5e-4 after, worst case 1.7x on the six-runner rank-12 fixture, whose
+coupling centres to rank five. The repeated-singular-value caveat
+stands: a rotation inside a tied spectrum is still seen by the cloud.

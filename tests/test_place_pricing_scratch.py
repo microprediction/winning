@@ -30,9 +30,11 @@ def test_scratched_runner_never_places():
     np.random.seed(0)
     prices = skew_normal_place_pricing([2, 4, 8, 16, math.inf], n_samples=2000)
     for bet in ("win", "place2", "place3"):
-        assert math.isnan(prices[bet][4]), (bet, prices[bet])  # zero counts
+        # zero counts: a zero price is worth nothing, dividend +inf -- NaN
+        # would read as a missing quote downstream (#1009)
+        assert prices[bet][4] == math.inf, (bet, prices[bet])
     # with five runners a top-4 slot is everyone else's: never the scratch
-    assert math.isnan(prices["place4"][4])
+    assert prices["place4"][4] == math.inf
 
 
 @pytest.mark.parametrize("n_live", [1, 2, 3, 4])
@@ -44,10 +46,10 @@ def test_scratches_never_fill_places_in_a_short_field(n_live):
     prices = skew_normal_place_pricing(book, n_samples=200)
     for k, bet in enumerate(("win", "place2", "place3", "place4"), start=1):
         p = prices[bet]
-        assert all(math.isnan(x) for x in p[n_live:]), (bet, p)  # scratches never place
         if k > n_live:
             assert all(math.isnan(x) for x in p), (bet, p)        # market unavailable
         else:
+            assert all(x == math.inf for x in p[n_live:]), (bet, p)  # scratches never place (#1009)
             assert all(x >= 1.0 for x in p[:n_live]), (bet, p)
 
 

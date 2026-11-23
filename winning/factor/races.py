@@ -296,6 +296,13 @@ def _log_survival(fn, z, S):
 _NAMED_BASES = (_normal, _gumbel_min, _logistic, _laplace)
 BASES = {"normal": _normal, "gumbel": _gumbel_min,
          "logistic": _logistic, "laplace": _laplace}
+
+
+def _canonical_base(base):
+    """The exported normal callable is the named law: map it to "normal" so
+    it takes the same exact dispatch (pair closed form, Rust, GHK rescue)
+    as the string. A wrapper or any other callable is left alone (#858)."""
+    return "normal" if base is _normal else base
 _SPANS = {"normal": (8.0, 8.0), "gumbel": (22.0, 8.0),   # (left, right) tails
           "logistic": (16.0, 16.0), "laplace": (18.0, 18.0)}
 _RUST_BASE_IDS = {"gumbel": 1, "logistic": 2, "laplace": 3}
@@ -604,15 +611,27 @@ GH_RULE_DEFAULT = (15, 3.0)
 _R1_BLEND_LO, _R1_BLEND_HI = 9.0, 10.0
 
 
-def _rank1_blend_rule(sharp):
-    """The rank-one rule on (_R1_BLEND_LO, _R1_BLEND_HI] (#783)."""
+def _smoothstep(t):
+    """The C1 smoothstep S(t) = t^2 (3 - 2t) and its slope 6 t (1 - t)."""
+    return t * t * (3.0 - 2.0 * t), 6.0 * t * (1.0 - t)
+
+
+def _rank1_blend_rule(sharp, slope=False):
+    """The rank-one rule on (_R1_BLEND_LO, _R1_BLEND_HI] (#783).
+
+    slope=True also returns dW/dsharp, node for node: the weights move
+    with the sharpness, and so with every sigma that sets it (#783)."""
     t = (sharp - _R1_BLEND_LO) / (_R1_BLEND_HI - _R1_BLEND_LO)
-    w = t * t * (3.0 - 2.0 * t)
+    w, dw = _smoothstep(t)
     Fg, Wg = hermite_nodes(1, Q=int(8 * _R1_BLEND_LO))
     Q = int(8 * _R1_BLEND_HI) + 1
     Fm = ndtri((np.arange(Q) + 0.5) / Q)[:, None]
-    return (np.concatenate([Fg, Fm]),
-            np.concatenate([(1.0 - w) * Wg, np.full(Q, w / Q)]))
+    F = np.concatenate([Fg, Fm])
+    W = np.concatenate([(1.0 - w) * Wg, np.full(Q, w / Q)])
+    if not slope:
+        return F, W
+    dw = dw / (_R1_BLEND_HI - _R1_BLEND_LO)
+    return F, W, np.concatenate([-dw * Wg, np.full(Q, dw / Q)])
 
 
 # Below the band the rank-one rule was Gauss-Hermite of order
@@ -643,32 +662,92 @@ def _rank1_blend_rule(sharp):
 _R1_PAIR_FROM, _R1_PAIR_PER_SHARP, _R1_PAIR_CAP = 24, 5.0, 34
 
 
-def _rank1_hermite_rule(sharp):
-    """The rank-one rule on 15/8 < sharp <= _R1_BLEND_LO (#850)."""
-    def S(t):
-        return t * t * (3.0 - 2.0 * t)
+def _rank1_hermite_rule(sharp, slope=False):
+    """The rank-one rule on 15/8 < sharp <= _R1_BLEND_LO (#850).
+
+    slope=True also returns dW/dsharp, node for node (#783). Each part
+    carries (order, coefficient, d coefficient / d sharp); the
+    coefficients are computed exactly as before, so the rule is
+    unchanged. The pair order y is clamped to [24, 34], and where it is
+    held there (or exactly on a clamp) its slope is taken as zero."""
     x = 8.0 * sharp
     lo = _R1_PAIR_FROM
     if x <= lo:
         m = int(np.floor(x))
-        w = S(x - m)
-        parts = [(m, 1.0 - w), (m + 1, w)]
+        w, dw = _smoothstep(x - m)
+        dw = 8.0 * dw
+        parts = [(m, 1.0 - w, -dw), (m + 1, w, dw)]
     elif x <= lo + 1:
-        w = S(x - lo)
-        parts = [(lo - 1, 0.5 * w), (lo, 1.0 - 0.5 * w)]
+        w, dw = _smoothstep(x - lo)
+        dw = 8.0 * dw
+        parts = [(lo - 1, 0.5 * w, 0.5 * dw), (lo, 1.0 - 0.5 * w, -0.5 * dw)]
     else:
-        y = min(max(_R1_PAIR_PER_SHARP * sharp, float(lo)),
-                float(_R1_PAIR_CAP))
+        y_raw = _R1_PAIR_PER_SHARP * sharp
+        y = min(max(y_raw, float(lo)), float(_R1_PAIR_CAP))
+        dy = _R1_PAIR_PER_SHARP if lo < y_raw < _R1_PAIR_CAP else 0.0
         m = int(np.floor(y))
-        w = S(y - m)
-        parts = [(m - 1, 0.5 * (1.0 - w)), (m, 0.5), (m + 1, 0.5 * w)]
+        w, dw = _smoothstep(y - m)
+        dw = dy * dw
+        parts = [(m - 1, 0.5 * (1.0 - w), -0.5 * dw), (m, 0.5, 0.0),
+                 (m + 1, 0.5 * w, 0.5 * dw)]
         top = int(8 * _R1_BLEND_LO)
         if x > top - 1:
-            v = S(x - (top - 1))
-            parts = [(q, c * (1.0 - v)) for q, c in parts] + [(top, v)]
-    rules = [(hermite_nodes(1, Q=q), c) for q, c in parts if c > 0.0]
-    return (np.concatenate([F for (F, _), _ in rules]),
-            np.concatenate([c * W for (_, W), c in rules]))
+            v, dv = _smoothstep(x - (top - 1))
+            dv = 8.0 * dv
+            parts = ([(q, c * (1.0 - v), dc * (1.0 - v) - c * dv)
+                      for q, c, dc in parts] + [(top, v, dv)])
+    # a part of zero coefficient also has zero slope (S is C1, flat at
+    # both ends), so dropping it loses nothing from dW either
+    rules = [(hermite_nodes(1, Q=q), c, dc) for q, c, dc in parts if c > 0.0]
+    F = np.concatenate([F for (F, _), _, _ in rules])
+    W = np.concatenate([c * W for (_, W), c, _ in rules])
+    if not slope:
+        return F, W
+    return F, W, np.concatenate([dc * W for (_, W), _, dc in rules])
+
+
+def _rule_ratios(V, D):
+    """|(PV)_i| / sqrt(D_i), whose max times sqrt(2) is the sharpness
+    the automatic factor rule dispatches on (see _setup)."""
+    with np.errstate(over="ignore"):     # inf is sharp (#86)
+        return (np.sqrt((V ** 2).sum(axis=1))
+                / np.sqrt(np.maximum(D, 1e-300)))
+
+
+def _rank1_rule_sigma_slope(V, D):
+    """How the AUTOMATIC rank-one rule moves with the sds (#783).
+
+    V, D as _setup sees them (gauge-centred loadings, validated
+    variances). The rule's nodes are fixed but, inside the smooth
+    intervals of _rank1_hermite_rule and _rank1_blend_rule, its weights
+    W(sharp) move with sharp = sqrt(2) max_i |V_i| / sigma_i, and so
+    with the sd of the runner attaining the max:
+    dsharp/dsigma_j = -sharp / sigma_j for that runner, zero for the
+    rest. Returns (j, -sharp / sigma_j, F, dW) with F, dW the nodes
+    whose weight moves and dW/dsharp there, or None where the rule is
+    piecewise constant in sharp (rank above one, sharp <= 15/8, the
+    clamped stretches of the pair order, the midpoint grid past the
+    band). A tie for the max is a kink of the sharpness: the term goes
+    to the FIRST runner attaining it and none to the rest, so that
+    runner's column is its one-sided derivative as its sd falls and
+    each other tied runner's is its one-sided derivative as its sd
+    rises (in both cases the first runner sets the sharpness)."""
+    if V.shape[1] != 1:
+        return None
+    ratio = _rule_ratios(V, D)
+    with np.errstate(over="ignore"):
+        sharp = float(np.sqrt(2.0) * np.max(ratio))
+    if _R1_BLEND_LO < sharp <= _R1_BLEND_HI:
+        F, _, dW = _rank1_blend_rule(sharp, slope=True)
+    elif np.ceil(8.0 * sharp) > 80 or not 8.0 * sharp > 15:
+        return None
+    else:
+        F, _, dW = _rank1_hermite_rule(sharp, slope=True)
+    keep = dW != 0.0
+    if not keep.any():
+        return None
+    j = int(np.argmax(ratio))
+    return j, -sharp / float(np.sqrt(D[j])), F[keep], dW[keep]
 
 
 def _translated_home(mu, D):
@@ -688,16 +767,27 @@ def _translated_home(mu, D):
     return mu
 
 
-def _setup(mu, V, D, F, W, base):
-    caller_rule = F is not None
-    mu = np.asarray(mu, dtype=float)
+def _as_abilities(mu):
+    """mu as a float array, refused if empty or non-finite. mu was the one
+    argument nobody checked: D goes through as_idio, V through
+    as_loadings, W through as_weights, and the abilities themselves went
+    straight to the lattice. A NaN or inf there came back as NaN
+    probabilities that sum to nothing, silently. R and julia already
+    refused it, which is how the cross-port divergence scan found it. The
+    closed-form Luce helpers share this door (#799).
+
+    Checked BEFORE the float conversion, which strips what it cannot hold:
+    a masked entry kept its payload and a complex ability lost its
+    imaginary part, so both priced as some other finite field (#914)."""
+    if np.ma.isMaskedArray(mu) and np.ma.getmaskarray(mu).any():
+        raise ValueError("mu has a masked (missing) ability; an ability is a "
+                         "finite location on the performance scale")
+    if np.iscomplexobj(mu):
+        raise ValueError("mu is complex; an ability is a real location on "
+                         "the performance scale")
+    mu = np.asarray(np.ma.getdata(mu) if np.ma.isMaskedArray(mu) else mu,
+                    dtype=float)
     n = len(mu)
-    # mu was the one argument nobody checked: D goes through as_idio, V
-    # through as_loadings, W through as_weights, and the abilities
-    # themselves went straight to the lattice. A NaN or inf there came
-    # back as NaN probabilities that sum to nothing, silently. R and
-    # julia already refused it, which is how the cross-port divergence
-    # scan found it.
     if n == 0:
         raise ValueError("mu is empty; a race needs at least one contestant")
     bad = np.flatnonzero(~np.isfinite(mu))
@@ -706,6 +796,39 @@ def _setup(mu, V, D, F, W, base):
             f"mu[{int(bad[0])}] = {float(mu[bad[0]])!r} is not finite "
             f"({bad.size} of {n} are); an ability is a finite location on "
             "the performance scale")
+    return mu
+
+
+def _check_caller_rule(F, W, V):
+    """A caller's factor rule against the loadings it integrates, before
+    any backend dispatch: a short W or a wrong-rank F used to reach the
+    compiled kernel and come back as an index PanicException, or as a late
+    matmul ValueError on the pure path (#75). Shared with the inverse, which
+    read a flat F through as_factor_law and certified a rule the forward
+    then refused (#970). Returns F as a float array."""
+    F = np.asarray(F, dtype=float)
+    if F.ndim != 2:
+        raise ValueError(
+            f"F must be a 2-D (nodes, rank) array; got shape {F.shape}")
+    W_arr = np.asarray(W, dtype=float)
+    if W_arr.ndim != 1:
+        raise ValueError(
+            f"W must be a 1-D weight vector; got shape {W_arr.shape}")
+    if F.shape[1] != V.shape[1]:
+        raise ValueError(
+            f"F has {F.shape[1]} factor columns but V has rank "
+            f"{V.shape[1]}; F is (nodes, rank)")
+    if F.shape[0] != W_arr.shape[0]:
+        raise ValueError(
+            f"F has {F.shape[0]} nodes but W has {W_arr.shape[0]} "
+            "weights; they must match one-to-one")
+    return F
+
+
+def _setup(mu, V, D, F, W, base):
+    caller_rule = F is not None
+    mu = _as_abilities(mu)
+    n = len(mu)
     D = np.ones(n) if D is None else as_idio(D, n, positive=True)
     mu = _translated_home(mu, D)                     # (#477)
     if (F is None) != (W is None):
@@ -740,26 +863,7 @@ def _setup(mu, V, D, F, W, base):
                 "supply both F (factor nodes) and W (their weights), or "
                 f"neither; got only {'F' if W is None else 'W'}")
         if F is not None:
-            # A supplied rule is checked before any backend dispatch: a
-            # short W or a wrong-rank F used to reach the compiled kernel
-            # and come back as an index PanicException, or as a late
-            # matmul ValueError on the pure path (#75).
-            F = np.asarray(F, dtype=float)
-            if F.ndim != 2:
-                raise ValueError(
-                    f"F must be a 2-D (nodes, rank) array; got shape {F.shape}")
-            W_arr = np.asarray(W, dtype=float)
-            if W_arr.ndim != 1:
-                raise ValueError(
-                    f"W must be a 1-D weight vector; got shape {W_arr.shape}")
-            if F.shape[1] != V.shape[1]:
-                raise ValueError(
-                    f"F has {F.shape[1]} factor columns but V has rank "
-                    f"{V.shape[1]}; F is (nodes, rank)")
-            if F.shape[0] != W_arr.shape[0]:
-                raise ValueError(
-                    f"F has {F.shape[0]} nodes but W has {W_arr.shape[0]} "
-                    "weights; they must match one-to-one")
+            F = _check_caller_rule(F, W, V)
         if F is None or W is None:
             # adaptive order: when idiosyncratic noise is small relative
             # to the loadings, the conditional race is nearly
@@ -776,9 +880,7 @@ def _setup(mu, V, D, F, W, base):
             # (triangle inequality on centered rows), which cannot miss
             # a sharp pair; its false positives cost nodes, not error.
             with np.errstate(over="ignore"):     # inf is sharp (#86)
-                sharp = float(np.sqrt(2.0)
-                              * np.max(np.sqrt((V ** 2).sum(axis=1))
-                                       / np.sqrt(np.maximum(D, 1e-300))))
+                sharp = float(np.sqrt(2.0) * np.max(_rule_ratios(V, D)))
             r = V.shape[1]
             cap, sharp_max = GH_RULE.get(r, GH_RULE_DEFAULT)
             if r >= 2 and sharp > sharp_max:
@@ -1114,6 +1216,22 @@ def _resolution(fn):
 _LARGE_DISPATCH_ENTRIES = 2e7
 
 
+def _base_kinks(fn):
+    """A base's declared kink locations as a tuple of floats, or ().
+
+    The lookups tested bool(getattr(base, "kinks", ())): a one-element
+    numpy array holding the Laplace kink at 0.0 is False, so the split
+    lattice never ran for it, and a longer array raised on its ambiguous
+    truth value (#907). The browser's baseKinks is the same door."""
+    k = getattr(fn, "kinks", None)
+    if k is None:
+        return ()
+    k = np.asarray(k, dtype=float).ravel()
+    if not np.all(np.isfinite(k)):
+        raise ValueError(f"base.kinks must be finite kink locations; got {k!r}")
+    return tuple(float(v) for v in k)
+
+
 def kink_lattice(x, M, sd, kinks):
     """Nodes and weights over the window of the uniform lattice x, split
     at every runner's kink and Gauss-Legendre on each piece. Used only
@@ -1156,6 +1274,21 @@ def kink_lattice(x, M, sd, kinks):
     eff[0] *= 0.25
     eff[-1] *= 0.25
     count = np.maximum(4, np.round(L * eff / eff.sum()).astype(int))
+    # One Gauss rule per piece is built in O(m^2) (leggauss in O(m^3)), and
+    # a large points= gave one piece a large share of the budget: 4,000
+    # nodes took 2.7 s to construct and a 32,769-point Laplace inverse
+    # blocked for seconds before its first sweep (#835). A piece above
+    # KINK_MAX_ORDER is split into k equal panels of ceil(m / k) nodes, the
+    # same budget as a composite rule; at or below it nothing changes.
+    if (count > KINK_MAX_ORDER).any():
+        los, his, cnts = [], [], []
+        for a, b, m in zip(lo, hi, count):
+            k = -(-int(m) // KINK_MAX_ORDER)            # panels, ceil(m / max)
+            edges = a + (b - a) * np.arange(k + 1) / k
+            edges[0], edges[-1] = a, b                  # an unsplit piece keeps its bits
+            los.extend(edges[:-1]); his.extend(edges[1:])
+            cnts.extend([-(-int(m) // k)] * k)
+        lo, hi, count = np.array(los), np.array(his), np.array(cnts)
     mid, half = 0.5 * (hi + lo), 0.5 * (hi - lo)
     xs, ws = [], []
     for m in np.unique(count):
@@ -1167,6 +1300,7 @@ def kink_lattice(x, M, sd, kinks):
 
 
 _LEGENDRE = {}
+KINK_MAX_ORDER = 512        # see kink_lattice (#835); the browser and R use it too
 
 
 def _legendre(m):
@@ -1281,6 +1415,12 @@ def _refine_grid(x, sd, V, points, stacklevel=2, fn=None):
     return x, points
 
 
+_GHK_BUDGET = 4096         # _race_dense's default budget
+_COV_DENSE_N = 15          # #1051: see _fit_cov
+_COV_DENSE_LOG2 = 14       # #1051: GHK budget (log2) for a polished fit
+_COV_POLISHED_NODES = 12   # #1051: log2 factor nodes, other polished fits
+
+
 def _fit_cov(cov, structure, V, D, stacklevel=2, will_route=False):
     """Fit a dense cov= to the factor grammar, with the accuracy warnings.
 
@@ -1291,11 +1431,14 @@ def _fit_cov(cov, structure, V, D, stacklevel=2, will_route=False):
     reproduces cov badly (residual warnings), or it reproduces cov by
     degenerating to full rank with D on its floor (quadrature cannot
     resolve it). A caller that can route around a degraded fit passes
-    will_route=True and gets no warnings, because it will not use the fit.
+    will_route=True and gets no warnings, because it will not use the fit;
+    with will_route=True a truthy `degraded` is the GHK node budget to
+    route with (4096, or 2^14 for a polished fit of up to 15 runners,
+    #1051).
     """
     if structure is not None or V is not None or D is not None:
         raise ValueError("cov= replaces structure=/V=/D=; pass one only")
-    from .core import fit_covariance
+    from .core import fit_covariance, qmc_nodes
     import warnings
     with warnings.catch_warnings():
         # this function words the contrast warning itself, and says
@@ -1312,8 +1455,27 @@ def _fit_cov(cov, structure, V, D, stacklevel=2, will_route=False):
     misfit = (report.get("contrast_residual_max", 0.0) > 0.05
               or report["projected_residual_max"] > 0.05)
     degraded = degenerate or misfit
+    # #1051: a fit whose stage-one start ran out of sweeps and was
+    # finished by Gauss-Newton ("polished") replaces one that had
+    # stalled, and the stalled fit had often degenerated and been routed
+    # to GHK. Priced on the 2^11 factor nodes, the finished fits moved
+    # up to 5.7e-4 off a 2^21-node GHK reference where the stalled ones
+    # had been within 4.5e-5. So a polished fit's routable race goes to
+    # GHK at 2^_COV_DENSE_LOG2 nodes up to _COV_DENSE_N runners, and
+    # otherwise the fit is priced on 2^_COV_POLISHED_NODES factor nodes.
+    # Measured on two 360-covariance sweeps (221 polished fits) against
+    # alternatives from more factor nodes for every fit to GHK at 2^16:
+    # 4 of the 221 came out worse than the stalled fit, by at most 1.5e-5,
+    # at about 1.1x main's cov= time in total (worst call 0.36 s -> 1.5 s
+    # at n = 10; GHK at 2^16 for every fit cost up to 11x). Every other fit is
+    # priced exactly as before. The returned route is the GHK budget,
+    # so the inverse inverts the same map (#164).
+    if report.get("polished", False) and not degraded:
+        if will_route and n <= _COV_DENSE_N:
+            return V, D, F, W, 2 ** _COV_DENSE_LOG2
+        F, W = qmc_nodes(V.shape[1], m=_COV_POLISHED_NODES, seed=0)
     if will_route and degraded:
-        return V, D, F, W, True
+        return V, D, F, W, _GHK_BUDGET
     if degenerate:
         # The residual checks below judge how well V V' + D reproduces
         # cov, and they do fire on a dense cov the grammar fits badly. The
@@ -1371,7 +1533,7 @@ def _fit_cov(cov, structure, V, D, stacklevel=2, will_route=False):
     return V, D, F, W, degraded
 
 
-def _race_dense(mu, cov, budget=4096, seed=0, return_slopes=False,
+def _race_dense(mu, cov, budget=_GHK_BUDGET, seed=0, return_slopes=False,
                 log=False):
     """The dense-covariance race by scrambled-Sobol GHK: exact structure not
     required, deterministic at a fixed seed, smooth in its inputs.
@@ -1584,6 +1746,7 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
     than that against a compiled default. Smooth bases ignore it, as
     does a tempered race (the softmin kernel smooths the kink); with
     structure= it raises."""
+    base = _canonical_base(base)                             # (#858)
     # the lattice mode is one of two names: every value but "bulk" used
     # to mean span, so window="bulkk" moved a share by 39 points (#582)
     if not (isinstance(window, str) and window in ("bulk", "span")):
@@ -1606,7 +1769,11 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
         V, D, F, W, degraded = _fit_cov(cov, structure, V, D, stacklevel=3,
                                         will_route=routable)
         if degraded and routable:
-            return _race_dense(mu, cov)
+            # _race_dense floats mu as given: check it first, as the
+            # factor path does, so a masked or complex ability is refused
+            # on this route too (#914)
+            return _race_dense(_as_abilities(mu), cov,
+                               budget=int(degraded))
     if structure is not None:
         # structure= DESCRIBES the covariance; V/D/F/W describe it too,
         # and passing both asked two questions and answered one of them
@@ -1772,7 +1939,7 @@ def race_probabilities(mu, V=None, D=None, F=None, W=None, base="normal",
     # (kink_lattice). The compiled kernel integrates on the uniform
     # lattice only, so the opt-in path stays in numpy; the default keeps
     # main's dispatch and arithmetic exactly.
-    kinks = getattr(fn, "kinks", ()) if kink_split else ()
+    kinks = _base_kinks(fn) if kink_split else ()
     if _HAVE_RUST and spec is not None and not kinks \
             and hasattr(_fastrace, "forward_and_slopes_base"):
         bid, prm = (spec, []) if isinstance(spec, int) else spec
@@ -1860,6 +2027,7 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
     spacings had an own-slope 6x too large and exact self-generated
     targets failed to converge, missing by 0.099 (#267). The residual is
     always the map being inverted, so the answer is that map's."""
+    base = _canonical_base(base)                             # (#858)
     # finite and >= 0; negative and NaN used to select the hard race
     # silently, and +inf failed in grid sizing (#366)
     temperature = as_soft_temperature(temperature)
@@ -1903,6 +2071,7 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
                                         will_route=routable)
         if degraded and routable:
             dense = np.asarray(cov, dtype=float)
+            dense_budget = int(degraded)
     if structure is not None:
         from .structures import Factor, Independent
         if isinstance(structure, Independent):
@@ -1993,9 +2162,15 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
     _Vn = np.zeros((n_t, 1)) if V is None else as_loadings(V, n_t)
     _Vc = _gauge_center(_Vn)                       # scale-safe (#471)
     if V is not None and nodes_given:
-        _Fq = np.asarray(F, dtype=float).reshape(len(F), -1)
-        _Wq = (np.ones(len(_Fq)) / len(_Fq) if W is None
-               else as_weights(W))   # via max(W): sum(W) can overflow (#415)
+        # the forward's shape and rank contract first: a flat F was read by
+        # as_factor_law, solved and certified at residual 0, and the
+        # public forward then refused the same rule (#970)
+        _check_caller_rule(F, W, _Vn)
+        # the law the forward prices: _setup's as_factor_law, which also
+        # drops negligible caller nodes. Kept, a 1e-15 node the forward
+        # never sees was solved and certified at residual 0 while the
+        # public reprice missed a 1e-12 share by 1e-3 in log (#941).
+        _Fq, _Wq = as_factor_law(F, W, negligible=True)
         _Fm = _Wq @ _Fq
         _CovF = (_Fq - _Fm).T @ ((_Fq - _Fm) * _Wq[:, None])
     else:
@@ -2098,18 +2273,34 @@ def abilities_from_race(p, V=None, D=None, F=None, W=None, base="normal",
         scale = float(np.sqrt(np.mean(np.diag(dense))))
         mu = -(logt - logt.mean()) / 2.0 * scale
 
-        def _dense_fwd(m):
-            lp, dl = _race_dense(m, dense, return_slopes=True, log=True)
-            return lp - logt, np.minimum(dl, -1e-6 / scale)
+        def _dense_fwd_at(budget):
+            def _dense_fwd(m):
+                lp, dl = _race_dense(m, dense, budget=budget,
+                                     return_slopes=True, log=True)
+                return lp - logt, np.minimum(dl, -1e-6 / scale)
+            return _dense_fwd
 
+        iters0 = 0
+        if dense_budget > _GHK_BUDGET:
+            # a polished fit routed at a larger budget (#1051): the
+            # sweeps first converge on the cheap 4096-node map, whose
+            # root is within its quadrature error of the target map's,
+            # and only then on the map the forward prices with -- the
+            # answer is that map's root either way, at a few of its
+            # sweeps rather than all of them
+            mu, _, _, iters0 = _jacobi_sweeps(
+                mu, _dense_fwd_at(_GHK_BUDGET), scale, alpha,
+                max(n_iter, 120), tol)
         mu, converged, resid_max, iters = _jacobi_sweeps(
-            mu, _dense_fwd, scale, alpha, max(n_iter, 120), tol)
+            mu, _dense_fwd_at(dense_budget), scale, alpha, max(n_iter, 120),
+            tol)
+        iters += iters0
         return _inverse_return(mu, converged, resid_max, iters, floored,
                                tol, return_info)
 
     _fn = BASES.get(base) if isinstance(base, str) else base
     split_slopes = (not temperature and not kink_split
-                    and bool(getattr(_fn, "kinks", ())))
+                    and bool(_base_kinks(_fn)))
 
     def _lattice(m):
         phat, sl = race_probabilities(m, V=V, D=D, F=F, W=W, base=base,
@@ -2191,9 +2382,18 @@ def _pair_mixture_gap(target, dV, d0, d1, F, W, g0, h):
     g, lo, hi = float(g0), -np.inf, np.inf
     for _ in range(200):
         u = sign * (g - s) / sd
-        p = float(Wn @ ndtr(u))
-        if p > 1e-250:
-            # the direct sums, half the cost of the log domain
+        a = float(Wn @ ndtr(u))
+        if a > 1e-250:
+            # The direct sums, half the cost of the log domain. The share
+            # is the NORMALIZED one, a / (a + b) with both tails summed as
+            # _pair_mixture sums them, so this objective is bitwise the map
+            # the caller certifies against: the raw sum a differs from it
+            # in the last bit, and on a sharp mixture plateau, where the
+            # derivative is ~0, one ulp was a root the solver chased to a
+            # gap of 2e48, failed certification, and the generic sweeps
+            # returned a share of 0.067 for a target of 0.246 (#902).
+            b = float(Wn @ ndtr(-u))
+            p = a / (a + b)
             logp = float(np.log(p))
             ratio = float(Wn @ np.exp(-0.5 * u * u)) / np.sqrt(2.0 * np.pi) / p
         else:
@@ -2211,12 +2411,14 @@ def _pair_mixture_gap(target, dV, d0, d1, F, W, g0, h):
             lo = g
         # d f / d g = sum_w phi(u) / (sd p_small) = ratio / sd > 0
         gn = g - f * sd / ratio if ratio > 0.0 else np.nan
-        if abs(f) < 1e-8 and lo < gn < hi:
-            # quadratic convergence: from a relative error of 1e-8 the
-            # step lands at rounding, and the caller certifies it
-            return float(gn)
-        if not (lo < gn < hi):
-            if np.isfinite(lo) and np.isfinite(hi):
+        # Evaluate the next proposal in the loop even when f is tiny: a
+        # near-zero plateau derivative can make it worse, not quadratic (#954).
+        # While one side is open a Newton step is capped at h too: on a
+        # mixture plateau the ratio is ~1e-66 and the uncapped step
+        # (-6.7e64) set a bracket end bisection never came back from (#830).
+        is_open = not (np.isfinite(lo) and np.isfinite(hi))
+        if not (lo < gn < hi) or (is_open and abs(gn - g) > h):
+            if not is_open:
                 gn = 0.5 * (lo + hi)
             else:
                 gn = g - h if f > 0.0 else g + h
@@ -2369,6 +2571,8 @@ def _jacobi_sweeps(mu, forward, scale, alpha, n_iter, tol):
                 prev_step = None
         elif prev is not None and penalty < 1.0:
             penalty = min(1.0, penalty / 0.75)
+        # the last sweep's own contraction, for the Aitken gate below
+        prev_max = prev[3] if prev is not None else np.inf
         prev = (mu, resid, dlogp, resid_max, resid_rms)
         alpha = alpha_base * penalty
         lim = np.minimum(2.0, 10.0 * np.abs(resid)) * scale
@@ -2385,7 +2589,8 @@ def _jacobi_sweeps(mu, forward, scale, alpha, n_iter, tol):
                     lam = 1.0 - (1.0 - rho) / alpha
                     alpha_base = float(np.clip(2.0 / (2.0 - lam), 0.1, 1.0))
                 elif (cos > 0.999 and 0.5 < ratio < 0.999
-                      and resid_max > 1e3 * tol):
+                      and resid_max > 1e3 * tol
+                      and abs(resid_max / prev_max - ratio) <= AITKEN_AGREE):
                     trial = _aitken_trial(mu, step, ratio, scale, forward,
                                           resid_max)
                     if trial is not None:   # sum the geometric tail
@@ -2401,13 +2606,35 @@ def _jacobi_sweeps(mu, forward, scale, alpha, n_iter, tol):
         # finite initializer (#497). Price the returned iterate -- one
         # forward, only on exhaustion -- and keep the better of the two.
         last = (mu, resid_max) if prev is None else (prev[0], prev[3])
-        fwd = cached if cached is not None else forward(mu)
+        if cached is not None:
+            fwd = cached
+        else:
+            try:
+                fwd = forward(mu)
+            except RuntimeError:
+                # The last step crossed the forward's refusal guard: return
+                # the last priced iterate as not converged, as the in-loop
+                # backoff does. With nothing priced it still raises (#823).
+                if prev is None:
+                    raise
+                return prev[0], False, prev[3], iters
         r_end = np.abs(np.asarray(fwd[0], dtype=float)).max()
         if prev is not None and not r_end < last[1]:
             mu = last[0]
         else:
             resid_max = float(r_end)
     return mu, resid_max < tol, resid_max, iters
+
+
+# Aitken sums a geometric tail, which exists only while the residual shrinks
+# by the same factor as the step. When the plain sweeps are converging
+# FASTER than the step ratio says -- the superlinear finish after a
+# plateau -- the extrapolation overshoots: on #956's exact target trials
+# fired at residual/step ratios 0.60/0.86 and 0.63/0.88, each raised the
+# residual 2-9x, and the inverse ended 13.6 off where the plain sweeps
+# converge in 60. The dense near-unidentified fields of #178, which need
+# the trial, agree to within 0.11.
+AITKEN_AGREE = 0.15
 
 
 def _aitken_trial(mu, step, ratio, scale, forward, resid_max):
@@ -2609,7 +2836,11 @@ def _tempered_curves(sd_i, tau, fn, left, right, m=4001):
             f"limit; use winning.factor.races.softmax_probabilities, which "
             f"is the closed form, rather than this quadrature.")
     f_eta /= total
-    cdf = np.cumsum(f_eta) * du
+    # trapezoid, not left-Riemann: the plain cumulative sum put the cdf
+    # half a cell ahead of the density, a first-order bias (2.7e-4 on
+    # mu = [0, .5, 1], up to 9e-4 across fields) that points= cannot reach
+    # because the curve grid is fixed. The trapezoid is 1.5e-8 off.
+    cdf = (np.cumsum(f_eta) - 0.5 * f_eta) * du
     S = np.maximum(1.0 - cdf, 1e-300)
     fp = np.gradient(f_eta, du)
     return u, S, f_eta, fp
@@ -2843,7 +3074,7 @@ def softmax_probabilities(mu, temperature=1.0, V=None, F=None, W=None):
     reason to simulate. Heterogeneous Gumbel scales have no closed
     form; use race_probabilities(..., base="gumbel") there.
     """
-    mu = np.asarray(mu, dtype=float)
+    mu = _as_abilities(mu)                                   # (#799)
     # finite and positive: NaN passed the old `tau <= 0` test, and +inf
     # collapsed every field to uniform (#366)
     tau = as_luce_temperature(temperature)
@@ -2888,7 +3119,7 @@ def plackett_luce_order_logprob(mu, order, temperature=1.0, V=None, F=None,
     are exactly the non-Gumbel ordering problem, i.e. the still-open
     shared-noise ranked-moments item.
     """
-    mu = np.asarray(mu, dtype=float)
+    mu = _as_abilities(mu)                                   # (#799)
     tau = as_luce_temperature(temperature)                     # #366
     # a complete order of distinct labels: [0, 0] scored p = 0.5 (#129)
     order = as_order(order, len(mu), full=True)
@@ -3001,7 +3232,9 @@ def plackett_luce_topk_probabilities(p, k=3):
 def abilities_from_softmax(p, temperature=1.0):
     """Exact inverse of the independent softmax race: mean-zero mu with
     softmax_probabilities(mu, temperature) = p. Closed form."""
-    p = np.asarray(p, dtype=float)
+    # nonempty and finite first: NaN passed `p <= 0` and came back as NaN
+    # abilities, and [] came back as [] (#799)
+    p = as_target(p, "p")
     if np.any(p <= 0):
         raise ValueError("all target probabilities must be positive")
     # tau = 0 mapped EVERY target to equal abilities, which the forward
@@ -3116,6 +3349,7 @@ def failure_base(q, width=0.35, offset=6.0, base="normal",
     the lump is a separate event on top. Pass standardize=True only if
     you specifically want the mixture itself normalized.
     """
+    base = _canonical_base(base)                             # (#858)
     q = float(q)
     if not 0.0 <= q < 1.0:
         raise ValueError("failure probability q must lie in [0, 1)")

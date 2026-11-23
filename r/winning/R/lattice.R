@@ -17,6 +17,7 @@
 MIN_CLASSIC_L <- 3L
 
 as_classic_density <- function(density, where = "density") {
+  .refuse_matrix(density, where)                                 # (#903)
   d <- as.numeric(density)
   n <- length(d)
   if (n == 0) stop(where, " must be a nonempty vector of lattice atoms")
@@ -43,6 +44,7 @@ as_classic_density <- function(density, where = "density") {
 # Target prices carry only relative mass (#377): finite, nonnegative,
 # positive total; normalised.
 as_classic_prices <- function(prices, where = "prices") {
+  .refuse_matrix(prices, where)                                  # (#903)
   p <- as.numeric(prices)
   if (length(p) == 0) stop(where, " must be a nonempty vector")
   if (!all(is.finite(p))) stop(where, " has a non-finite entry")
@@ -116,6 +118,16 @@ shifted_cdf <- function(cdf, offset, L) {
 #' @return list with elements `density`, `multiplicity`
 #' @export
 winner_of_many <- function(densities) {
+  # every density must share the first one's lattice length: base R
+  # recycled a shorter CDF through the fold, so lengths 7 and 21 returned
+  # a "density" with a -0.53 atom and no warning (#813)
+  if (!length(densities)) stop("winner_of_many needs at least one density")
+  lens <- lengths(densities)
+  bad <- which(lens != lens[1])
+  if (length(bad))
+    stop("winner_of_many needs densities of one lattice length; density ",
+         bad[1], " has length ", lens[bad[1]], " but density 1 has length ",
+         lens[1])
   cdfs <- lapply(densities, pdf_to_cdf)
   m <- length(cdfs[[1]])
   cdf_min <- cdfs[[1]]
@@ -229,7 +241,9 @@ exact_implicit_prices <- function(padded_cdf, field_cdfs, offsets, L) {
 # np.interp semantics: ascending xp, end-clamped, largest j with xp[j] <= x
 np_interp <- function(x, xp, fp) {
   vapply(x, function(v) {
-    if (v <= xp[1]) return(fp[1])
+    # only v BELOW xp[1] clamps: at a duplicated lower knot findInterval
+    # takes the last of the plateau as numpy does (#842)
+    if (v < xp[1]) return(fp[1])
     n <- length(xp)
     if (v >= xp[n]) return(fp[n])
     j <- findInterval(v, xp)

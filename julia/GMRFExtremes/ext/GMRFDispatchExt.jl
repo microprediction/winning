@@ -5,9 +5,31 @@
 module GMRFDispatchExt
 
 using GMRFExtremes
-using GaussianMarkovRandomFields: AbstractGMRF, mean, precision_matrix
+using GaussianMarkovRandomFields: AbstractGMRF, mean, precision_matrix,
+    ConstrainedGMRF, WorkspaceGMRF, ConstraintInfo, MetaGMRF
 
 GMRFExtremes.GaussMarkovChain(g::AbstractGMRF) =    chain_from_precision(mean(g), precision_matrix(g))
+
+# A hard constraint Ax = e is not in precision_matrix(g): for these types
+# it returns the unconstrained base precision while mean(g) is the
+# constrained mean, so the generic conversion above would price a
+# different law (#804). Refuse rather than drop the constraint.
+const _HardConstrained = Union{ConstrainedGMRF,
+    WorkspaceGMRF{<:Any, <:Any, <:Any, <:ConstraintInfo}}
+GMRFExtremes.GaussMarkovChain(g::_HardConstrained) = throw(ArgumentError(
+    "GMRFExtremes does not support hard linear constraints (got a " *
+    "$(nameof(typeof(g))) with Ax = e): its precision_matrix is the " *
+    "unconstrained base precision, so the extrema would be those of a " *
+    "different law. Use the unconstrained GMRF, or condition on the " *
+    "constraint first and pass the resulting chain or precision."))
+
+# Metadata decorates a GMRF without changing its law, and MetaGMRF
+# forwards mean and precision_matrix to the one it wraps, so the generic
+# conversion above read a wrapped ConstrainedGMRF as its unconstrained
+# base and priced it (#885). Convert the wrapped GMRF instead: a hard
+# constraint is refused at any depth of wrapping, and an unconstrained
+# one prices exactly as it does unwrapped.
+GMRFExtremes.GaussMarkovChain(g::MetaGMRF) = GaussMarkovChain(g.gmrf)
 
 for f in (:max_cdf, :excursion_probability, :first_passage)
     @eval GMRFExtremes.$f(g::AbstractGMRF, u; kw...) =

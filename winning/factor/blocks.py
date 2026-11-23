@@ -47,7 +47,7 @@ def _native_raw(fn, *args):
         return fn(*args)
 
 
-def _warn_if_sharp(v, sd, qa, threshold=3.0):
+def _warn_if_sharp(v, sd, qa, threshold=3.0, stacklevel=4):
     """The factor grammar escalates its quadrature past sharpness 3 and
     refines its lattice; these hierarchical kernels do not yet, and at a
     fixed 9-node rule a cluster with loading 4 and idiosyncratic sd 0.22
@@ -72,7 +72,7 @@ def _warn_if_sharp(v, sd, qa, threshold=3.0):
             "tails. Restructure sharp shared effects into the factor "
             "grammar, which escalates its node family automatically; "
             "raising qa= does not fix this.",
-            RuntimeWarning, stacklevel=4)
+            RuntimeWarning, stacklevel=stacklevel)
 
 
 def _window_nodes(mu, sd, amp, delta=1e-12, pad_sds=2.0):
@@ -443,6 +443,17 @@ def _one_cluster_gauge(cluster, loading, n):
     return _gauge_center(as_loadings(loading, n))
 
 
+def _check_cluster(cluster, n):
+    """One label per contestant. The kernels sort runners by label, so a
+    short cluster vector priced only the labelled runners and returned
+    [0.5, 0.5, 0, 0] for four exchangeable runners (or a misleading mass
+    error); an overlong one indexed past mu (#792)."""
+    size = np.size(cluster)
+    if size != n:
+        raise ValueError(f"cluster must have one label per contestant; got "
+                         f"{size} for {n}")
+
+
 def block_race_probabilities(mu, cluster, loading, D, points=257, qa=9):
     """P(i wins | min-wins) under one private factor per cluster.
 
@@ -451,6 +462,7 @@ def block_race_probabilities(mu, cluster, loading, D, points=257, qa=9):
     The unnormalized lattice mass is checked before normalization and a
     material defect raises rather than being normalized away."""
     mu = _home(mu, D)
+    _check_cluster(cluster, len(mu))                    # (#792)
     loading = _one_cluster_gauge(cluster, loading, len(mu))
     # one door for D: a scalar is the same variance for everyone (#84)
     raw = _block_max(-mu, np.sqrt(as_idio(D, len(mu), positive=True)),
@@ -466,9 +478,11 @@ def nested_race_probabilities(mu, cluster, loading, D, coupling=None,
         return block_race_probabilities(mu, cluster, loading, D,
                                         points=points, qa=qa)
     mu = np.asarray(mu, float)
+    _check_cluster(cluster, len(mu))                    # (#792)
     g = np.atleast_2d(np.asarray(coupling, float))
     if g.shape[0] != len(mu):
         g = g.T
+    g = _canonical_coupling(g)                          # (#911)
     if g.shape[1] == 1:
         fn, fw = roots_hermitenorm(qf)
         fn = fn.reshape(-1, 1); fw = fw / fw.sum()
@@ -487,12 +501,44 @@ def nested_race_probabilities(mu, cluster, loading, D, coupling=None,
     return _checked_mass(p, "nested race")
 
 
+def _canonical_coupling(g):
+    """A rank-3+ nested coupling in a basis fixed by its covariance alone.
+
+    The global factor is one N(0, I) draw, so g -> g Q (Q orthogonal) and
+    a column sign flip are the same race, and g -> g + 1 c' adds the same
+    shock c'f to everyone, which cancels from every contrast. The rank-3+
+    scrambled-Sobol rule is a fixed cloud and is invariant under none of
+    those maps: flipping one column of a rank-three coupling moved a
+    winner share by 12 bp while the browser, which canonicalizes, was
+    bit-identical (#911). Centre first (#698: canonicalizing the raw
+    Gram matrix let the common shock rotate the cloud), then rotate into
+    the eigenbasis of g'g with factor.core's sign rule (#745), and drop
+    null directions (norm <= 1e-12 of the largest), so a centred
+    coupling of rank below three takes the Gauss-Hermite rules. Rank one
+    and two stay in the caller's axes, as the browser's canonicalCoupling
+    leaves them. What this cannot fix, as with every canonical basis
+    here: a rotation inside a repeated singular value of g, which the
+    fixed cloud still sees (docs/notes/cov-determinism.md)."""
+    if g.shape[1] < 3:
+        return g
+    from .core import _canonical_factor_basis, _gauge_center
+    C = _canonical_factor_basis(_gauge_center(g))
+    norm = np.linalg.norm(C, axis=0)
+    C = C[:, (norm > 1e-12 * norm.max()) & (norm > 0)]
+    return C if C.shape[1] else np.zeros((g.shape[0], 1))
+
+
 def _coupled_shift(g, gamma, node):
     """gamma (g @ node), the global factor's shift. Only gamma g is
     identified: coupling c g with gamma / c is the same race, but at
     c = 1e308 the raw g @ node overflowed before gamma was applied and
     the lattice mass came back NaN (#722). That spelling is kept
-    wherever it is finite; otherwise gamma is absorbed into g first."""
+    wherever it is finite; otherwise gamma is absorbed into g first.
+    The sign of gamma is not identified either (gamma f and -gamma f are
+    the same Gaussian law), but the rank-3+ scrambled-Sobol rule is not
+    symmetric under f -> -f, so gamma = -1 priced differently from
+    gamma = 1 (#871): |gamma| is used."""
+    gamma = abs(gamma)
     with np.errstate(over="ignore", invalid="ignore"):
         s = g @ node
     if np.all(np.isfinite(s)):
@@ -514,6 +560,7 @@ def block_race_jacobian(mu, cluster, loading, D, points=257, qa=9):
     """
     mu = _home(mu, D)
     n = len(mu)
+    _check_cluster(cluster, n)           # (#792)
     V = as_loadings(loading, n)          # (n, rank), one ROW per entity
     V = _one_cluster_gauge(cluster, V, n)
     if V.shape[1] == 0:                  # rank zero: no shared effect (#508)
@@ -578,7 +625,13 @@ def abilities_from_block_race(p, cluster, loading, D, points=257, qa=9,
     max(1e-14, min-positive/1000) and the returned abilities for those
     entries are upper bounds on quality (lower bounds on mu)."""
     from ..shapes import rescaled_target
-    p_t = rescaled_target(np.asarray(p, float))  # scale-safe (#463)
+    p_in = np.asarray(p, float)
+    # a zero share is a sub-resolution bound (above); a negative or NaN one
+    # is not a probability: -0.2 was floored and inverted to a race with
+    # residual 1.8e-15, and NaN failed inside a reduction
+    if p_in.ndim != 1 or not np.all(np.isfinite(p_in)) or np.any(p_in < 0) or not np.any(p_in > 0):
+        raise ValueError("target probabilities must be finite and nonnegative, with some positive")
+    p_t = rescaled_target(p_in)  # scale-safe (#463)
     n = len(p_t)
     floor = max(1e-14, p_t[p_t > 0].min() * 1e-3)
     p_t = np.maximum(p_t, floor); p_t = p_t / p_t.sum()
@@ -777,6 +830,23 @@ def _tree_leaf_index(cluster, leaves=None):
     return out
 
 
+def _warn_if_tree_sharp(v, c, path_var, sd, qa):
+    """_warn_if_sharp for a tree: a runner's shared effect is its leaf
+    loading plus every ancestor strength on its path (the common root
+    already removed), each integrated by the same fixed Gauss-Hermite
+    rule, so its row is the block row [v_i, ancestor strengths] and the
+    sharpness is sqrt(v_i^2 + path_var) / sd_i. With one leaf cluster
+    its common part cancels, so the loading is gauge-centred first, as
+    the block path and the browser port measure it. A one-leaf tree is
+    the one-block race: at sharpness 21.3 it priced a share 0.218 off the
+    factor reference with no warning (#11). Called from the public tree
+    functions, so stacklevel 4 names their caller."""
+    v = np.asarray(_one_cluster_gauge(c, v, len(v)), float).reshape(-1)
+    _warn_if_sharp(np.c_[v,
+                         np.sqrt(np.asarray(path_var, float))],
+                   sd, qa, stacklevel=4)
+
+
 def tree_race_probabilities(mu, cluster, loading, D, parent, strength,
                             points=257, qa=9, leaves=None):
     """P(i wins | min-wins) under a hierarchy of uniform shared effects.
@@ -797,6 +867,11 @@ def tree_race_probabilities(mu, cluster, loading, D, parent, strength,
     sd = np.sqrt(as_idio(D, len(mu), positive=True))
     v = _scalar_loading(loading, "tree races", len(mu))
     cluster = np.asarray(cluster)
+    _check_cluster(cluster, len(mu))                 # (#792)
+    # one leaf cluster: its common loading cancels, as in the block path;
+    # a +40 on every loading raised a mass defect (#1056)
+    v = np.asarray(_one_cluster_gauge(cluster, v, len(mu)),
+                   float).reshape(-1)
     parent = _as_parent(parent); lam = np.asarray(strength, float)
     n = len(m); nT = len(parent)
     _, inv = np.unique(cluster, return_inverse=True)
@@ -821,6 +896,7 @@ def tree_race_probabilities(mu, cluster, loading, D, parent, strength,
         while parent[u] >= 0:
             s_ += lam[parent[u]] ** 2; u = parent[u]
         path_var[c] = s_
+    _warn_if_tree_sharp(v_o, c_o, path_var[c_o], sd_o, qa)
     amp = (np.abs(v_o) + depth_shift[c_o]) * float(np.max(np.abs(an)))
     lo, hi = _window_nodes(mu_o, sd_o, amp)
     if _HAVE_RUST and hasattr(_fastrace, "tree_race"):
@@ -905,6 +981,11 @@ def tree_race_jacobian(mu, cluster, loading, D, parent, strength,
     sd = np.sqrt(as_idio(D, len(mu), positive=True))
     v = _scalar_loading(loading, "tree races", len(mu))
     cluster = np.asarray(cluster)
+    _check_cluster(cluster, len(mu))                 # (#792)
+    # one leaf cluster: its common loading cancels, as in the block path;
+    # a +40 on every loading raised a mass defect (#1056)
+    v = np.asarray(_one_cluster_gauge(cluster, v, len(mu)),
+                   float).reshape(-1)
     parent = _as_parent(parent); lam = np.asarray(strength, float)
     n = len(m); nT = len(parent)
     _, inv = np.unique(cluster, return_inverse=True)
@@ -946,6 +1027,7 @@ def tree_race_jacobian(mu, cluster, loading, D, parent, strength,
         while parent[u] >= 0:
             s_ += lam[parent[u]] ** 2; u = parent[u]
         path_var[c] = s_
+    _warn_if_tree_sharp(v_o, c_o, path_var[c_o], sd_o, qa)
     amp = (np.abs(v_o) + depth_shift[c_o]) * float(np.max(np.abs(an)))
     lo, hi = _window_nodes(mu_o, sd_o, amp)
     x = np.linspace(lo, hi, points); dx = x[1] - x[0]
@@ -1024,6 +1106,7 @@ def nested_race_jacobian(mu, cluster, loading, D, coupling=None, gamma=1.0,
     g = np.atleast_2d(np.asarray(coupling, float))
     if g.shape[0] != len(mu):
         g = g.T
+    g = _canonical_coupling(g)                          # (#911)
     if g.shape[1] == 1:
         nodes = fn.reshape(-1, 1); w = fw
     else:

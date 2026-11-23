@@ -126,6 +126,48 @@ end
     @test_throws ArgumentError hermite_nodes(-1, 5)
     @test_throws ArgumentError hermite_nodes(1, 0)
     @test_throws ArgumentError hermite_nodes(1, -3)
+    # pruned weights are renormalized, as in python and R (#802): a 0.5
+    # threshold keeps only the central product node, which summed to 0.284
+    hp = hermite_nodes(2, 5, 0.5)
+    @test size(hp.F) == (1, 2)
+    @test hp.W == [1.0]
+    # the default rule loses ~1.2e-6 of mass to pruning at rank 4, order 15
+    @test abs(sum(hermite_nodes(4, 15).W) - 1.0) < 1e-14
+    # nearby ordinary rules: same nodes, weights only rescaled
+    for (k, q) in ((2, 15), (3, 9))
+        h = hermite_nodes(k, q)
+        h1 = winning.hermite1(q)
+        full = [prod(h1.weights[findfirst(==(x), h1.nodes)] for x in r)
+                for r in eachrow(h.F)]
+        @test h.W ≈ full ./ sum(full) rtol = 1e-14
+    end
+end
+
+@testset "top-k normalizes loadings before centering" begin
+    mu = [0.0, 1.0]
+    V = reshape([-1.0, 1.0], 2, 1)
+    # X₂ - X₁ has mean 1 and variance 1 + 1 + (1 - (-1))².
+    expected = winning.ndtr(1 / sqrt(6.0))
+    for qa in (nothing, 41)
+        p = top_k_probabilities(mu, 1; V = V, D = 1.0, qa = qa, points = 2049)
+        @test abs(p[1] - expected) < 2e-5
+        @test top_k_probabilities(mu, 1; V = transpose(V), D = 1.0,
+                                  qa = qa, points = 2049) == p
+        @test top_k_probabilities(mu, 1; V = 0.5, qa = qa) ==
+              top_k_probabilities(mu, 1; V = fill(0.5, 2), qa = qa)
+    end
+
+    mu4 = [-0.4, 0.0, 0.1, 0.3]
+    V4 = reshape([-1.0, 0.3, 0.2, 0.5], 4, 1)
+    @test top_k_probabilities(mu4, 2; V = transpose(V4)) ==
+          top_k_probabilities(mu4, 2; V = V4)
+    @test_throws ArgumentError top_k_probabilities(mu, 1; V = [0.5], qa = 15)
+    # a 3-D array is refused, not flattened; non-finite loadings are refused
+    @test_throws ArgumentError top_k_probabilities(
+        mu4, 2; V = reshape([-1.0, 0.3, 0.2, 0.5], 2, 1, 2))
+    for bad in (Inf, -Inf, NaN)
+        @test_throws ArgumentError top_k_probabilities(mu, 1; V = bad)
+    end
 end
 
 @testset "zero-rank loadings reach top-k" begin
@@ -614,6 +656,20 @@ end
     @test !z.converged
 end
 
+@testset "a retry that raises keeps the completed attempts (#855)" begin
+    first = (mu = [0.0], converged = false, iterations = 7,
+             max_logit_residual = 0.2)
+    boom(s) = error("lattice")
+    out = winning._retry_on_failure(first, boom, f -> [1], :max_logit_residual)
+    @test out == first
+    good = (mu = [1.0], converged = true, iterations = 3, max_logit_residual = 0.0)
+    out = winning._retry_on_failure(first, s -> s == "bad" ? error("x") : good,
+                                    f -> ["bad", "good"], :max_logit_residual)
+    @test out.converged && out.iterations == 10
+    conv = merge(first, (converged = true,))
+    @test winning._retry_on_failure(conv, boom, f -> [1], :max_logit_residual) === conv
+end
+
 @testset "the rank-one Hermite/midpoint handover is a band (#783)" begin
     # sd0 = 1 sits at the old ceil(8 sharp) > 80 switch, where a 1e-7
     # change in sd moved a top-2 membership by 31bp; outside the band the
@@ -649,4 +705,104 @@ end
     @test nw(5.0) == 24 + 25           # the parity pair
     @test nw(8.0) == 33 + 34           # held at the cap
     @test winning._rank1_hermite_rule(9.0)[2] == winning.hermite_nodes(1, 72).W
+end
+
+@testset "a refused final reprice returns the last priced iterate (#823)" begin
+    # one permitted step lands on an unpriceable iterate: the exhaustion
+    # reprice threw instead of returning the priced start
+    fw(m) = maximum(abs.(m)) > 0.5 ? error("unpriceable iterate") :
+            ([1.0, -1.0], [-1.0, -1.0])
+    mu, conv, rmax, iters = winning._jacobi_sweeps([0.0, 0.0], fw, 1.0, 1.0,
+                                                   1, 1e-8)
+    @test mu == [0.0, 0.0] && conv === false && rmax == 1.0 && iters == 1
+    @test_throws ErrorException winning._jacobi_sweeps([1.0, 1.0], fw, 1.0,
+                                                       1.0, 1, 1e-8)
+    # a forward that never refuses takes the unguarded path unchanged:
+    # the step to [-0.25, 0.25] is repriced and kept
+    ok(m) = ([-0.25, 0.25] .- m, [-1.0, -1.0])
+    mu, conv, rmax, _ = winning._jacobi_sweeps([0.0, 0.0], ok, 1.0, 1.0, 1,
+                                               1e-8)
+    @test mu == [-0.25, 0.25] && conv && rmax == 0.0
+    # only a refusal is absorbed: a bug at the final reprice propagates
+    bug(m) = maximum(abs.(m)) > 0.5 ? [1.0][3] : ([1.0, -1.0], [-1.0, -1.0])
+    @test_throws BoundsError winning._jacobi_sweeps([0.0, 0.0], bug, 1.0, 1.0,
+                                                    1, 1e-8)
+end
+
+
+@testset "a matrix D is refused, not read column-major (#903)" begin
+    mu = [-2.0, -0.2, 0.4, 1.4]
+    Dmat = [1.0 9.0; 4.0 16.0]            # linear indexing reads 1 4 9 16
+    @test_throws ArgumentError race_probabilities(mu; D = Dmat)
+    a = race_probabilities(mu; D = [1.0, 9.0, 4.0, 16.0], points = 1025)
+    b = race_probabilities(mu; D = [1.0, 4.0, 9.0, 16.0], points = 1025)
+    @test maximum(abs.(a .- b)) > 0.05  # the two readings differ by nine points
+end
+
+@testset "every per-contestant door refuses a matrix (#903)" begin
+    # a 2 x 2 has four cells, so a length check passes it and linear
+    # indexing prices c(m[1,1], m[2,1], m[1,2], m[2,2]): a different field
+    M = [-2.0 3.0; -1.0 2.0]
+    P = [0.4 0.3; 0.2 0.1]
+    v = [0.3, 0.3, 0.2, 0.2]
+    doors = [
+        "race_probabilities" => () -> race_probabilities(M),
+        "abilities_from_race" => () -> abilities_from_race(P),
+        "top_k_probabilities" => () -> top_k_probabilities(M, 2),
+        "bottom_k_probabilities" => () -> bottom_k_probabilities(M, 2),
+        "top_k_jacobians" => () -> top_k_jacobians(M, 2),
+        "rank_probabilities" => () -> rank_probabilities(M),
+        "abilities_from_topk" => () -> abilities_from_topk(2 .* P, 2),
+        "abilities_from_rank_marginal" => () -> abilities_from_rank_marginal(P, 2),
+        "loc_scale_from_topk_pair" => () -> loc_scale_from_topk_pair(P, 1, 2 .* v, 2),
+        "loc_scale_from_win_and_second" => () -> loc_scale_from_win_and_second(P, v),
+    ]
+    # discovery: every exported function but hermite_nodes must be swept
+    swept = Set(first.(doors))
+    for s in names(winning)
+        s in (:winning, :hermite_nodes) && continue
+        @test string(s) in swept
+    end
+    for (name, call) in doors
+        @test_throws ArgumentError call()
+    end
+    # and the vector form still prices
+    @test sum(race_probabilities(vec(permutedims(M)))) ≈ 1.0 atol = 1e-9
+end
+
+@testset "the top-k inverse refines a failing lattice (#943)" begin
+    mu = [-0.10455761128105223, 0.10455761128105223]
+    D = [0.8967612229487083, 0.021331877150829952]
+    q = top_k_probabilities(mu, 1; D = D, base = "laplace", points = 513)
+    r = abilities_from_topk(q, 1; D = D, base = "laplace", points = 513)
+    m = r isa Tuple || r isa NamedTuple ? r[1] : r
+    @test maximum(abs.(top_k_probabilities(m, 1; D = D, base = "laplace", points = 513) .- q)) < 1e-8
+end
+
+@testset "top-k Jsigma carries the moving rule weights (#783)" begin
+    # inside the smooth intervals of the automatic rank-one rule its
+    # weights move with sharp = sqrt(2) max |V_i| / sigma_i, so Jsigma must
+    # match a central difference of the forward: 5.5 the sliding pair, 8.95
+    # the hand-back to GH(72), 9.5 the Gauss-Hermite/midpoint blend
+    mu = [-0.7, -0.1, 0.2, 0.8]
+    h = 1e-6
+    for s in (5.5, 8.95, 9.5)
+        a = s / sqrt(2); V = reshape([-a, a / 3, a / 3, a / 3], :, 1)
+        Js = winning.top_k_jacobians(mu, 2; D = ones(4), V = V).Jsigma
+        for j in 1:4
+            P(e) = winning.top_k_probabilities(mu, 2; V = V,
+                       D = [i == j ? (1 + e)^2 : 1.0 for i in 1:4])
+            @test maximum(abs.(Js[:, j] .- (P(h) .- P(-h)) ./ (2h))) < 1e-7
+        end
+    end
+    # an explicit qa is a fixed rule: the node mixture alone, already exact
+    a = 9.5 / sqrt(2); V = reshape([-a, a / 3, a / 3, a / 3], :, 1)
+    Js = winning.top_k_jacobians(mu, 2; D = ones(4), V = V, qa = 15).Jsigma
+    Pq(e) = winning.top_k_probabilities(mu, 2; V = V, D = [(1 + e)^2, 1, 1, 1],
+                                        qa = 15)
+    @test maximum(abs.(Js[:, 1] .- (Pq(h) .- Pq(-h)) ./ (2h))) < 1e-7
+    # a tie for the max goes to the first runner attaining it
+    Vt = reshape([-a, a, 0.0, 0.0], :, 1)
+    @test winning._rank1_rule_sigma_slope(Vt, ones(4)).j == 1
+    @test winning._rank1_rule_sigma_slope(Vt ./ 2.5, ones(4)) === nothing
 end

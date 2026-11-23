@@ -568,3 +568,39 @@ test_that("an ordinary binary row keeps its closed form (#720)", {
     -0.061993707824538072, -0.013377277258228982, -0.035424975899736047,
     0.013377277258228982, 0.035424975899736047), tolerance = 1e-14)
 })
+
+test_that("a non-finite covariate is refused by name, not misread as unidentified (#901)", {
+  set.seed(901)
+  J <- 3; Tn <- 6
+  alt <- rep(1:J, Tn)
+  df <- data.frame(id = rep(1:Tn, each = J), alt = alt,
+                   chosen = as.integer(sequence(rep(J, Tn)) == rep(c(1, 2, 3, 1, 2, 3), each = J)),
+                   price = rnorm(Tn * J))
+  for (x in c(NA_real_, NaN, Inf, -Inf)) {
+    d <- df; d$price[5] <- x
+    expect_error(rprobit_fast(d, "price", r = 0L, Qf = 3L, Qz = 3L, maxit = 1L),
+                 "covariate price is not finite at row 5")
+  }
+  expect_silent(fit <- rprobit_fast(df, "price", r = 0L, Qf = 3L, Qz = 3L, maxit = 2L))
+  expect_true(is.finite(fit$coefficients["price"]))
+})
+
+test_that("the factor tensor order rises with sharpness (#1060)", {
+  # the exchangeable three-way race in the triangular gauge; the fixed
+  # 7x7 tensor priced it 0.3296 / 0.3353 / 0.3353 against an exact 1/3
+  X <- matrix(0, 3, 1)
+  nd <- .fit_nodes(7L, 7L, 2L)
+  ns <- .lazy_sharp_nodes(2L, 10L)
+  th <- c(0, -2 * sqrt(3), -sqrt(3), 3)
+  for (k in 1:3) {
+    p <- exp(-.nll_core(th, list(X), k, 3L, 2L, nd, ns)$value)
+    expect_lt(abs(p - 1 / 3), 1.5e-3)
+  }
+  # inside the band the score is the gradient of the returned value
+  f <- function(s) .nll_core(c(0.2, th[-1] * s), list(X), 1L, 3L, 2L, nd, ns)
+  s0 <- 0.9 / .mnp_smooth_sharpness(rbind(0, c(th[2], 0), th[3:4]))$value
+  g <- f(s0)$grad
+  num <- (f(s0 * (1 + 1e-6))$value - f(s0 * (1 - 1e-6))$value) /
+    (2e-6 * s0)
+  expect_lt(abs(sum(g[-1] * th[-1]) - num), 1e-6)
+})

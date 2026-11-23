@@ -381,7 +381,8 @@ def test_a_declared_option_gap_is_a_loud_gap():
     assert "warning(" in r_races
     for fn in ("race_probabilities <- function", "abilities_from_race <- function"):
         i = r_races.index(fn)
-        assert ".warn_degraded_cov(fit," in r_races[i:i + 1400], fn
+        # (window widened for #1051's routing budget line)
+        assert ".warn_degraded_cov(fit," in r_races[i:i + 1600], fn
 
 
 def test_python_and_r_reject_unknown_keywords_by_language():
@@ -413,7 +414,11 @@ PORT_ONLY = {
     "js": {"fitGrammar", "haltonNormalNodes", "asFactorNodes",
            # boundary helpers and the demo's Monte Carlo factor (#334, #357,
            # #394): plumbing with race-like names, no python verb
-           "asAbilities", "validateCovariance", "raceFactor"},
+           "asAbilities", "validateCovariance", "raceFactor",
+           # polishRace's kink-split pair (#1011): python's
+           # race_probabilities / race_jacobian(..., kink_split=True) in
+           # one pass, exported across modules for the polish only
+           "splitRaceJacobian"},
 }
 
 

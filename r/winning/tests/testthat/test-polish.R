@@ -120,3 +120,81 @@ test_that("race_jacobian without window/delta is unchanged (#821)", {
                    race_jacobian(mu, D = D, points = 101, window = NULL,
                                  delta = NULL))
 })
+
+test_that("a floor above 1/n from a saturated start reaches the binding point (#840)", {
+  # the browser crossed to the opposite deterministic winner and python
+  # returned the violating start; the R projection reaches the boundary,
+  # and this pins it
+  x_star <- 0.9061938024368232                  # -qnorm(0.9) / sqrt(2)
+  for (a in c(8 / sqrt(2), 4.9)) {
+    r <- polish_race(mu0 = c(a, -a), D = c(1, 1), A = matrix(c(-1, 0), 1), b = -0.9)
+    expect_true(r$info$feasible)
+    expect_equal(r$p, c(0.9, 0.1), tolerance = 1e-8)
+    expect_equal(r$mu, c(-x_star, x_star), tolerance = 1e-7)
+    expect_equal(r$info$mu_distance, sqrt(2) * (a + x_star), tolerance = 1e-6)
+  }
+})
+
+test_that("the race Jacobian scales as 1/c at any unit (#870)", {
+  ex <- 1 / (4 * sqrt(pi))
+  for (s in c(1, 1e-18, 1e-20, 1e-100, 1e100)) {
+    J <- race_jacobian(c(0, 0, 0), D = rep(s * s, 3), points = 501)
+    expect_equal(s * J[1, 2], ex, tolerance = 1e-12)
+  }
+  V <- matrix(c(0.3, -0.2, 0.5)); mu <- c(0.1, -0.3, 0.2); D <- c(1, 1.5, 0.7)
+  J1 <- race_jacobian(mu, V = V, D = D, points = 501)
+  for (cc in c(1e-19, 1e40)) {
+    Jc <- race_jacobian(mu * cc, V = V * cc, D = D * cc^2, points = 501)
+    expect_lt(max(abs(J1 - cc * Jc)) / max(abs(J1)), 1e-12)
+  }
+})
+
+test_that("a kinked base polishes on the kink-split lattice (#1011)", {
+  # python's race_jacobian(..., kink_split = TRUE) at the issue's race
+  sp <- .split_race_jacobian(c(0, 0.4, -0.3), NULL, c(1, 0.7, 1.3), NULL,
+                             NULL, "laplace", 501)
+  expect_lt(max(abs(rowSums(sp$J))), 1e-12)
+  expect_equal(sp$J[1, 3], 0.229670997488052, tolerance = 1e-10)
+  mu0 <- c(0.101, -0.106, 0.512, 0.084, -0.429, 0.289, 1.043, 0.758, -0.563, -1.012)
+  D <- c(1.316, 0.503, 1.357, 0.534, 1.23, 0.676, 1.363, 1.041, 0.8, 0.923)
+  r <- polish_race(mu0 = mu0, D = D, base = "laplace", name_caps = 0.2)
+  expect_true(r$info$feasible)
+  expect_lte(max(r$p), 0.2 + 1e-6)
+  # the returned p is the split race at mu
+  expect_equal(r$p, .split_race_jacobian(r$mu, NULL, D, NULL, NULL,
+                                         "laplace", 257)$p, tolerance = 1e-14)
+  # a smooth base ignores kink_split
+  a <- polish_race(mu0 = mu0, D = D, base = "normal", name_caps = 0.2)
+  b <- polish_race(mu0 = mu0, D = D, base = "normal", name_caps = 0.2,
+                   kink_split = FALSE)
+  expect_identical(a$p, b$p)
+  expect_identical(a$mu, b$mu)
+  # p0 round-trips through the split inverse under a slack cap
+  rt <- polish_race(p0 = sp$p, D = c(1, 0.7, 1.3), base = "laplace",
+                    A = matrix(c(1, 0, 0), 1), b = 0.99)
+  expect_lt(max(abs(rt$p - sp$p)), 1e-8)
+  expect_error(polish_race(mu0 = c(0, 0, 0), D = c(1, 1, 1), base = "laplace",
+                           name_caps = 0.5, kink_split = "yes"), "kink_split")
+})
+
+test_that("the split polish keeps scale-extreme inputs (#1011 review)", {
+  # D omitted: D / cc^2 turned NULL into numeric(0), which .as_idio refused
+  r <- polish_race(mu0 = c(0, 0.4, -0.3), base = "laplace", name_caps = 0.4)
+  expect_true(r$info$feasible)
+  # D at 1.5e308: cc^2 = 2^1024 overflowed and zeroed every variance
+  r <- polish_race(mu0 = c(0, 0.4, -0.3), D = rep(1.5e308, 3),
+                   base = "laplace", name_caps = 0.4)
+  expect_equal(r$p, rep(1 / 3, 3), tolerance = 1e-12)
+  # a p0 whose sum overflows: the target was zeroed, the residual Inf
+  expect_no_warning(r <- polish_race(p0 = c(1e308, 8e307, 2e307),
+                                     D = c(1, 0.7, 1.3), base = "laplace",
+                                     A = matrix(c(1, 0, 0), 1), b = 0.99))
+  expect_lt(max(abs(r$p - c(0.5, 0.4, 0.1))), 1e-8)
+  # D ~ 1e80: J ~ 1e-40, and J + 1/n was exactly singular in solve()
+  D <- c(1, 0.7, 1.3) * 1e80
+  q <- .split_race_jacobian(c(0, 0.4, -0.3), NULL, D, NULL, NULL,
+                            "laplace", 501)$p
+  r <- polish_race(p0 = q, D = D, base = "laplace",
+                   A = matrix(c(1, 0, 0), 1), b = 0.99)
+  expect_lt(max(abs(r$p - q)), 1e-8)
+})

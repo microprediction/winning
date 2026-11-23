@@ -120,8 +120,14 @@ class AbilityCalibrator:
             "offsets": fp_unique,
         }
 
-    def rebuild_curves_from_field_2d(self, locs: Sequence[float], scales: Sequence[float]) -> None:
-        """Rebuild 2D lookup curves (per-scale loc -> price and price -> loc) given current field (locs, scales)."""
+    def rebuild_curves_from_field_2d(self, locs: Sequence[float], scales: Sequence[float],
+                                     extra_scales: Sequence[float] = ()) -> None:
+        """Rebuild 2D lookup curves (per-scale loc -> price and price -> loc) given current field (locs, scales).
+
+        ``extra_scales`` are further curve scales to rebuild against the same
+        field: other races sharing this calibrator read their own scales from
+        the one cache, and clearing it down to this race's left them an
+        IndexError or a 1-scale extrapolation (#880)."""
         locs_arr = np.asarray(locs, dtype=float)
         scales_arr = np.asarray(scales, dtype=float)
         n = len(locs_arr)
@@ -136,7 +142,8 @@ class AbilityCalibrator:
             -self.loc_span, self.loc_span + self.loc_step, self.loc_step, dtype=float
         )
         # Use unique scales present
-        unique_s_values = sorted(set(float(s) for s in scales_arr.tolist()))
+        unique_s_values = sorted(set(float(s) for s in scales_arr.tolist())
+                                 | set(float(s) for s in extra_scales))
         self.lookup_curves_2d_prices.clear()
         self.lookup_curves_2d_inverse.clear()
         for s in unique_s_values:
@@ -175,7 +182,9 @@ class AbilityCalibrator:
         """
         prices_arr = np.asarray(prices, dtype=float)
         n = len(prices_arr)
-        active_scales = self.scales if scales is None else np.asarray(scales, dtype=float)
+        # an explicit override is the caller's contract: a wrong length used
+        # to fall back to the 1-D model in silence, a zero to divide by it (#880)
+        active_scales = self.scales if scales is None else _validated_scales(scales, n)
         # 2D path if scales provided and length matches; else 1D fallback
         if active_scales is None or len(active_scales) != n:
             # ---- 1D global-curve inversion against current field (winning-style) ----

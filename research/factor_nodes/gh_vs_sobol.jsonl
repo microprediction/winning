@@ -1,0 +1,108 @@
+{"n": 50, "method": "gh", "Q": 3, "nodes": 9, "tv": 0.006962434737511747}
+{"n": 50, "method": "sobol", "m": 3, "nodes": 8, "scramble": 0, "tv": 0.0282541940296025}
+{"n": 50, "method": "sobol", "m": 3, "nodes": 8, "scramble": 1, "tv": 0.031173122793940956}
+{"n": 50, "method": "sobol", "m": 3, "nodes": 8, "scramble": 2, "tv": 0.01718198765366195}
+{"n": 50, "method": "sobol", "m": 3, "nodes": 8, "scramble": 3, "tv": 0.06568179334426065}
+{"n": 50, "method": "sobol", "m": 3, "nodes": 8, "scramble": 4, "tv": 0.025009613431149155}
+{"n": 50, "method": "sobol", "m": 3, "nodes": 8, "scramble": 5, "tv": 0.019346711394727295}
+{"n": 50, "method": "sobol", "m": 3, "nodes": 8, "scramble": 6, "tv": 0.02538503601152204}
+{"n": 50, "method": "sobol", "m": 3, "nodes": 8, "scramble": 7, "tv": 0.04834385975371281}
+{"n": 50, "method": "gh", "Q": 4, "nodes": 16, "tv": 0.0021544097487732517}
+{"n": 50, "method": "sobol", "m": 4, "nodes": 16, "scramble": 0, "tv": 0.011949123874861266}
+{"n": 50, "method": "sobol", "m": 4, "nodes": 16, "scramble": 1, "tv": 0.009186819288120594}
+{"n": 50, "method": "sobol", "m": 4, "nodes": 16, "scramble": 2, "tv": 0.013040034520632725}
+{"n": 50, "method": "sobol", "m": 4, "nodes": 16, "scramble": 3, "tv": 0.015848726711505456}
+{"n": 50, "method": "sobol", "m": 4, "nodes": 16, "scramble": 4, "tv": 0.008913625608919016}
+{"n": 50, "method": "sobol", "m": 4, "nodes": 16, "scramble": 5, "tv": 0.016652235066026595}
+{"n": 50, "method": "sobol", "m": 4, "nodes": 16, "scramble": 6, "tv": 0.009150434828045765}
+{"n": 50, "method": "sobol", "m": 4, "nodes": 16, "scramble": 7, "tv": 0.021015772559551883}
+{"n": 50, "method": "gh", "Q": 6, "nodes": 36, "tv": 0.00023930771594386674}
+{"n": 50, "method": "sobol", "m": 5, "nodes": 32, "scramble": 0, "tv": 0.006102690981693005}
+{"n": 50, "method": "sobol", "m": 5, "nodes": 32, "scramble": 1, "tv": 0.004150412688116884}
+{"n": 50, "method": "sobol", "m": 5, "nodes": 32, "scramble": 2, "tv": 0.004815520714031905}
+{"n": 50, "method": "sobol", "m": 5, "nodes": 32, "scramble": 3, "tv": 0.007012404108876899}
+{"n": 50, "method": "sobol", "m": 5, "nodes": 32, "scramble": 4, "tv": 0.00398092432961434}
+{"n": 50, "method": "sobol", "m": 5, "nodes": 32, "scramble": 5, "tv": 0.004628784760769392}
+{"n": 50, "method": "sobol", "m": 5, "nodes": 32, "scramble": 6, "tv": 0.006720038071402875}
+{"n": 50, "method": "sobol", "m": 5, "nodes": 32, "scramble": 7, "tv": 0.010404428885088421}
+{"n": 50, "method": "gh", "Q": 8, "nodes": 60, "tv": 3.145226572999208e-05}
+{"n": 50, "method": "sobol", "m": 6, "nodes": 64, "scramble": 0, "tv": 0.004660925987914537}
+{"n": 50, "method": "sobol", "m": 6, "nodes": 64, "scramble": 1, "tv": 0.0025338000187723896}
+{"n": 50, "method": "sobol", "m": 6, "nodes": 64, "scramble": 2, "tv": 0.0014397179953321215}
+{"n": 50, "method": "sobol", "m": 6, "nodes": 64, "scramble": 3, "tv": 0.0031323051552498054}
+{"n": 50, "method": "sobol", "m": 6, "nodes": 64, "scramble": 4, "tv": 0.004063039547400132}
+{"n": 50, "method": "sobol", "m": 6, "nodes": 64, "scramble": 5, "tv": 0.0023096441452426894}
+{"n": 50, "method": "sobol", "m": 6, "nodes": 64, "scramble": 6, "tv": 0.0031833058628344076}
+{"n": 50, "method": "sobol", "m": 6, "nodes": 64, "scramble": 7, "tv": 0.002893036811580145}
+{"n": 50, "method": "gh", "Q": 11, "nodes": 101, "tv": 2.2453859072228204e-06}
+{"n": 50, "method": "sobol", "m": 7, "nodes": 128, "scramble": 0, "tv": 0.0011135836034760363}
+{"n": 50, "method": "sobol", "m": 7, "nodes": 128, "scramble": 1, "tv": 0.0019670040710838264}
+{"n": 50, "method": "sobol", "m": 7, "nodes": 128, "scramble": 2, "tv": 0.0015462366478754812}
+{"n": 50, "method": "sobol", "m": 7, "nodes": 128, "scramble": 3, "tv": 0.0023693869071437623}
+{"n": 50, "method": "sobol", "m": 7, "nodes": 128, "scramble": 4, "tv": 0.0014220888434154954}
+{"n": 50, "method": "sobol", "m": 7, "nodes": 128, "scramble": 5, "tv": 0.0009626904714155765}
+{"n": 50, "method": "sobol", "m": 7, "nodes": 128, "scramble": 6, "tv": 0.0017183601166425471}
+{"n": 50, "method": "sobol", "m": 7, "nodes": 128, "scramble": 7, "tv": 0.0012856982165207747}
+{"n": 50, "method": "gh", "Q": 16, "nodes": 148, "tv": 8.434488645908909e-08}
+{"n": 50, "method": "sobol", "m": 8, "nodes": 256, "scramble": 0, "tv": 0.0004005328489568279}
+{"n": 50, "method": "sobol", "m": 8, "nodes": 256, "scramble": 1, "tv": 0.0007750415853394979}
+{"n": 50, "method": "sobol", "m": 8, "nodes": 256, "scramble": 2, "tv": 0.000976388349098439}
+{"n": 50, "method": "sobol", "m": 8, "nodes": 256, "scramble": 3, "tv": 0.000462093551419441}
+{"n": 50, "method": "sobol", "m": 8, "nodes": 256, "scramble": 4, "tv": 0.0006710540141546314}
+{"n": 50, "method": "sobol", "m": 8, "nodes": 256, "scramble": 5, "tv": 0.00035143893571604055}
+{"n": 50, "method": "sobol", "m": 8, "nodes": 256, "scramble": 6, "tv": 0.0019845825565901697}
+{"n": 50, "method": "sobol", "m": 8, "nodes": 256, "scramble": 7, "tv": 0.0004210587612144215}
+{"n": 200, "method": "gh", "Q": 3, "nodes": 9, "tv": 0.002073920262528145}
+{"n": 200, "method": "sobol", "m": 3, "nodes": 8, "scramble": 0, "tv": 0.021385126818815863}
+{"n": 200, "method": "sobol", "m": 3, "nodes": 8, "scramble": 1, "tv": 0.033224669871587835}
+{"n": 200, "method": "sobol", "m": 3, "nodes": 8, "scramble": 2, "tv": 0.02306217888998492}
+{"n": 200, "method": "sobol", "m": 3, "nodes": 8, "scramble": 3, "tv": 0.04480533293541923}
+{"n": 200, "method": "sobol", "m": 3, "nodes": 8, "scramble": 4, "tv": 0.026396168643142995}
+{"n": 200, "method": "sobol", "m": 3, "nodes": 8, "scramble": 5, "tv": 0.02328043786825722}
+{"n": 200, "method": "sobol", "m": 3, "nodes": 8, "scramble": 6, "tv": 0.02196942556160383}
+{"n": 200, "method": "sobol", "m": 3, "nodes": 8, "scramble": 7, "tv": 0.0472395173124214}
+{"n": 200, "method": "gh", "Q": 4, "nodes": 16, "tv": 0.00033529029887174986}
+{"n": 200, "method": "sobol", "m": 4, "nodes": 16, "scramble": 0, "tv": 0.012536985942731633}
+{"n": 200, "method": "sobol", "m": 4, "nodes": 16, "scramble": 1, "tv": 0.009030661605577552}
+{"n": 200, "method": "sobol", "m": 4, "nodes": 16, "scramble": 2, "tv": 0.013488654555759653}
+{"n": 200, "method": "sobol", "m": 4, "nodes": 16, "scramble": 3, "tv": 0.013633217692519935}
+{"n": 200, "method": "sobol", "m": 4, "nodes": 16, "scramble": 4, "tv": 0.012645321939727266}
+{"n": 200, "method": "sobol", "m": 4, "nodes": 16, "scramble": 5, "tv": 0.01655003683444619}
+{"n": 200, "method": "sobol", "m": 4, "nodes": 16, "scramble": 6, "tv": 0.008463940482594322}
+{"n": 200, "method": "sobol", "m": 4, "nodes": 16, "scramble": 7, "tv": 0.025143408107128885}
+{"n": 200, "method": "gh", "Q": 6, "nodes": 36, "tv": 2.346484693471264e-05}
+{"n": 200, "method": "sobol", "m": 5, "nodes": 32, "scramble": 0, "tv": 0.005500272538318502}
+{"n": 200, "method": "sobol", "m": 5, "nodes": 32, "scramble": 1, "tv": 0.004758906875974567}
+{"n": 200, "method": "sobol", "m": 5, "nodes": 32, "scramble": 2, "tv": 0.010798380954811507}
+{"n": 200, "method": "sobol", "m": 5, "nodes": 32, "scramble": 3, "tv": 0.006148076176992636}
+{"n": 200, "method": "sobol", "m": 5, "nodes": 32, "scramble": 4, "tv": 0.00653745242975238}
+{"n": 200, "method": "sobol", "m": 5, "nodes": 32, "scramble": 5, "tv": 0.005685761787792042}
+{"n": 200, "method": "sobol", "m": 5, "nodes": 32, "scramble": 6, "tv": 0.008305621191242441}
+{"n": 200, "method": "sobol", "m": 5, "nodes": 32, "scramble": 7, "tv": 0.012185854361331783}
+{"n": 200, "method": "gh", "Q": 8, "nodes": 60, "tv": 3.058948775286836e-06}
+{"n": 200, "method": "sobol", "m": 6, "nodes": 64, "scramble": 0, "tv": 0.0035763361256240574}
+{"n": 200, "method": "sobol", "m": 6, "nodes": 64, "scramble": 1, "tv": 0.002594342010335315}
+{"n": 200, "method": "sobol", "m": 6, "nodes": 64, "scramble": 2, "tv": 0.003476043409586363}
+{"n": 200, "method": "sobol", "m": 6, "nodes": 64, "scramble": 3, "tv": 0.0024546876709225763}
+{"n": 200, "method": "sobol", "m": 6, "nodes": 64, "scramble": 4, "tv": 0.003392342288866787}
+{"n": 200, "method": "sobol", "m": 6, "nodes": 64, "scramble": 5, "tv": 0.0035695027307827976}
+{"n": 200, "method": "sobol", "m": 6, "nodes": 64, "scramble": 6, "tv": 0.0030110499100145303}
+{"n": 200, "method": "sobol", "m": 6, "nodes": 64, "scramble": 7, "tv": 0.0035394391697582453}
+{"n": 200, "method": "gh", "Q": 11, "nodes": 101, "tv": 1.9747162820724446e-07}
+{"n": 200, "method": "sobol", "m": 7, "nodes": 128, "scramble": 0, "tv": 0.0017906840695321672}
+{"n": 200, "method": "sobol", "m": 7, "nodes": 128, "scramble": 1, "tv": 0.002437788876514988}
+{"n": 200, "method": "sobol", "m": 7, "nodes": 128, "scramble": 2, "tv": 0.0018713378542333514}
+{"n": 200, "method": "sobol", "m": 7, "nodes": 128, "scramble": 3, "tv": 0.002211043668984615}
+{"n": 200, "method": "sobol", "m": 7, "nodes": 128, "scramble": 4, "tv": 0.001161644205771079}
+{"n": 200, "method": "sobol", "m": 7, "nodes": 128, "scramble": 5, "tv": 0.0011673781511785434}
+{"n": 200, "method": "sobol", "m": 7, "nodes": 128, "scramble": 6, "tv": 0.0017096016644485286}
+{"n": 200, "method": "sobol", "m": 7, "nodes": 128, "scramble": 7, "tv": 0.001974141784844023}
+{"n": 200, "method": "gh", "Q": 16, "nodes": 148, "tv": 3.84855196136128e-08}
+{"n": 200, "method": "sobol", "m": 8, "nodes": 256, "scramble": 0, "tv": 0.0006137038363196801}
+{"n": 200, "method": "sobol", "m": 8, "nodes": 256, "scramble": 1, "tv": 0.0007639857105084479}
+{"n": 200, "method": "sobol", "m": 8, "nodes": 256, "scramble": 2, "tv": 0.0008561794917726689}
+{"n": 200, "method": "sobol", "m": 8, "nodes": 256, "scramble": 3, "tv": 0.0006386224501377495}
+{"n": 200, "method": "sobol", "m": 8, "nodes": 256, "scramble": 4, "tv": 0.0006627590024211943}
+{"n": 200, "method": "sobol", "m": 8, "nodes": 256, "scramble": 5, "tv": 0.0007323059543907003}
+{"n": 200, "method": "sobol", "m": 8, "nodes": 256, "scramble": 6, "tv": 0.0015221566135893998}
+{"n": 200, "method": "sobol", "m": 8, "nodes": 256, "scramble": 7, "tv": 0.0005188964517637923}

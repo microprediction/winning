@@ -14,6 +14,7 @@ normalize <- function(p) p / sum(p)
 #' @return numeric probabilities summing to one
 #' @export
 prices_from_dividends <- function(dividends, nan_value = 2000) {
+  .refuse_matrix(dividends, "dividends")                          # (#903)
   # Only a MISSING quote -- NA or NaN -- becomes nan_value. A
   # non-positive dividend, and -Inf with it, is worth nothing and prices
   # at 0; +Inf prices at 1/Inf = 0 on its own. This divided by the
@@ -24,6 +25,15 @@ prices_from_dividends <- function(dividends, nan_value = 2000) {
   d <- ifelse(is.na(dividends), nan_value, dividends)
   p <- ifelse(d <= 0, 0, 1 / d)
   s <- sum(p)
+  if (!is.finite(s)) {
+    # finite dividends whose reciprocals overflow -- c(1e-320, 2e-320) --
+    # are the same book read against the smallest, every ratio at most
+    # one; 1/d first gave Inf / Inf = NaN (#881). Ordinary books never
+    # reach here.
+    dmin <- min(d[d > 0])
+    p <- ifelse(d <= 0, 0, dmin / d)
+    s <- sum(p)
+  }
   if (s > 0) p / s else p
 }
 
@@ -33,8 +43,15 @@ prices_from_dividends <- function(dividends, nan_value = 2000) {
 #' @return numeric dividends
 #' @export
 dividends_from_prices <- function(prices, multiplicity = 1.0) {
-  p <- normalize(prices)
-  ifelse(!is.na(p) & p > 0, 1 / (multiplicity * p), NA_real_)
+  .refuse_matrix(prices, "prices")                                # (#903)
+  # A zero price -- a scratched runner -- is worth nothing: Inf, which
+  # prices_from_dividends maps back to 0, as ability_implied_dividends
+  # does. NA_real_ was read there as a MISSING quote and priced at
+  # nan_value, reviving the scratch; an all-zero book was all NA (#1009).
+  # NA and a negative price stay NA; positive prices are unchanged.
+  p <- if (isTRUE(all(prices == 0))) prices else normalize(prices)
+  ifelse(!is.na(p) & p > 0, 1 / (multiplicity * p),
+         ifelse(!is.na(p) & p == 0, Inf, NA_real_))
 }
 
 #' Solve the horse race problem: offsets matching given state prices
@@ -48,22 +65,22 @@ dividends_from_prices <- function(prices, multiplicity = 1.0) {
 #' @param offset_samples descending offsets for the interpolation table
 #'   (default: every representable offset, L-2 down to -(L-2))
 #' @param implied_offsets_guess starting offsets, one per price (default zeros)
-#' @param n_iter fixed-point iterations (default 3)
+#' @param n_iter iteration budget (default 100); the iteration stops early
+#'   once the exact reprice of the current field is within `tol` of every
+#'   target or a step leaves the centred offsets unchanged; it returns
+#'   the best iterate it assessed
+#' @param tol stopping tolerance on the maximum price error (default 1e-9),
+#'   finite and positive
 #' @return numeric offsets in lattice units (lower is better)
 #' @export
 solve_for_implied_offsets <- function(prices, density,
                                       offset_samples = NULL,
                                       implied_offsets_guess = NULL,
-                                      n_iter = 3) {
+                                      n_iter = CALIBRATION_MAX_ITER,
+                                      tol = CALIBRATION_TOL) {
   density <- as_classic_density(density)
   prices <- as_classic_prices(prices)
-  # a loop bound: zero or negative skipped every step and returned the
-  # warm start as a calibration (#543); the browser refuses these too
-  if (length(n_iter) != 1L || !is.numeric(n_iter) || !is.finite(n_iter) ||
-      n_iter < 1 || n_iter != round(n_iter))
-    stop("n_iter must be a positive integer number of iterations; got ",
-         deparse(n_iter), ". A zero or negative budget skips the solve and ",
-         "returns the warm start.", call. = FALSE)
+  tol <- .check_budget(n_iter, tol)
   L <- implied_L(density)
   core <- NULL
   if (is.null(offset_samples)) {
@@ -94,14 +111,36 @@ solve_for_implied_offsets <- function(prices, density,
   # mean (an exact lattice translation): the table is absolute, so a
   # drifting field wasted half of it and a 97/3 book stalled at 88/12
   # however many iterations ran (#498)
+  # Only an unchanged state repeats the deterministic update (#968).
+  best <- NULL; best_miss <- Inf; previous <- NULL
+  assess <- function(field, current) {
+    miss <- max(abs(current - prices))
+    fixed <- identical(field, previous)
+    previous <<- field
+    if (miss < best_miss) {
+      best <<- field; best_miss <<- miss
+    }
+    best_miss <= tol || fixed
+  }
+  exhausted <- TRUE
   for (i in seq_len(n_iter)) {
     current <- exact_state_prices_from_cdfs(cdfs)
+    if (assess(implied, current)) { exhausted <- FALSE; break }
     st <- .step_table(base, cdfs, offset_samples, core, L, prices, current)
     implied <- implied + np_interp(prices, st$tab, st$samples) -
       np_interp(current, st$tab, st$samples)
     implied <- implied - trunc(mean(implied))
     cdfs <- lapply(implied, function(o) shifted_cdf(base, o, L))
   }
+  if (exhausted) assess(implied, exact_state_prices_from_cdfs(cdfs))
+  # The iteration prices each offset on its own and low_high pins anything
+  # past +/-(L-2), so an iterate can drift beyond the edge unseen; the
+  # public forward translates such a book back first (edge_centred) and
+  # priced a 3.8e-4 calibration 9.4e-2 off (#1046). Return the offsets
+  # the iteration priced, pinned to [-(L-2), L-2]: bitwise the same CDFs,
+  # and an in-range result is unchanged.
+  implied <- pmin(pmax(best, -(L - 2)), L - 2)
+  cdfs <- lapply(implied, function(o) shifted_cdf(base, o, L))
   .warn_if_unconverged(exact_state_prices_from_cdfs(cdfs), prices)
   implied
 }
@@ -131,6 +170,17 @@ solve_for_implied_offsets <- function(prices, density,
   list(samples = offset_samples, tab = c(ext(top), t, ext(bottom)))
 }
 
+# The inverse iterates until its own exact reprice is within
+# CALIBRATION_TOL of every target, the centred offsets stop changing, or
+# CALIBRATION_MAX_ITER steps have run. It returns the best iterate it
+# assessed. The budget was a fixed three sweeps: ordinary books
+# reach 1e-4 to 1e-7 in three, but an atomic law converges slowly and a
+# three-runner two-atom market generated by the forward itself came back
+# 1.27 points off (#904). As in Python, a rising (#923) or flat (#968)
+# miss can precede convergence while offsets are still moving.
+CALIBRATION_MAX_ITER <- 100L
+CALIBRATION_TOL <- 1e-9
+
 # a calibration whose own reprice misses its target by more than this is
 # reported: the target is outside what the lattice represents or n_iter
 # is too small (#498); python's CALIBRATION_WARN_TOL
@@ -145,6 +195,19 @@ CALIBRATION_WARN_TOL <- 1e-3
       "(an exact zero, or a longshot past the lattice edge: use a wider L or finer ",
       "unit), or n_iter is too small."), miss), call. = FALSE)
   invisible(miss)
+}
+
+# the inverse's iteration budget and stopping tolerance; returns tol. A
+# zero or negative n_iter skipped every step and returned the warm start
+# as a calibration (#543); the browser refuses these too
+.check_budget <- function(n_iter, tol) {
+  tol <- .as_tolerance(tol)
+  if (length(n_iter) != 1L || !is.numeric(n_iter) || !is.finite(n_iter) ||
+      n_iter < 1 || n_iter != round(n_iter))
+    stop("n_iter must be a positive integer number of iterations; got ",
+         deparse(n_iter), ". A zero or negative budget skips the solve and ",
+         "returns the warm start.", call. = FALSE)
+  tol
 }
 
 .check_unit <- function(unit, where) {
@@ -172,10 +235,17 @@ CALIBRATION_WARN_TOL <- 1e-3
 #'   returns ability Inf)
 #' @param density performance density on the symmetric lattice
 #' @param unit lattice spacing used when the density was constructed
+#' @param n_iter,tol iteration budget and stopping tolerance of
+#'   [solve_for_implied_offsets()]
 #' @return numeric abilities (lower is better), in units of `unit`
 #' @export
-state_price_implied_ability <- function(prices, density, unit = 1.0) {
+state_price_implied_ability <- function(prices, density, unit = 1.0,
+                                        n_iter = CALIBRATION_MAX_ITER,
+                                        tol = CALIBRATION_TOL) {
   .check_unit(unit, "state_price_implied_ability")
+  # validated here too: a book with one live runner returns before the
+  # inverse runs, and accepted n_iter = 0 or tol = 0 there (#924)
+  .check_budget(n_iter, tol)
   # A zero price -- a scratched runner, or the zero, negative or infinite
   # dividend prices_from_dividends maps to 0 -- is not calibrated: its
   # ability is Inf (lower is better, so it never wins;
@@ -188,7 +258,8 @@ state_price_implied_ability <- function(prices, density, unit = 1.0) {
   if (length(live) == 1L) {
     ability[live] <- 0
   } else {
-    ability[live] <- solve_for_implied_offsets(p[live], density) * unit
+    ability[live] <- solve_for_implied_offsets(p[live], density,
+                                               n_iter = n_iter, tol = tol) * unit
   }
   ability
 }
@@ -198,12 +269,16 @@ state_price_implied_ability <- function(prices, density, unit = 1.0) {
 #' @param density performance density on the symmetric lattice
 #' @param nan_value dividend assigned to NA entries
 #' @param unit lattice spacing used when the density was constructed
+#' @param n_iter,tol iteration budget and stopping tolerance of
+#'   [solve_for_implied_offsets()]
 #' @return numeric abilities (lower is better)
 #' @export
 dividend_implied_ability <- function(dividends, density,
-                                     nan_value = 2000, unit = 1.0) {
+                                     nan_value = 2000, unit = 1.0,
+                                     n_iter = CALIBRATION_MAX_ITER,
+                                     tol = CALIBRATION_TOL) {
   p <- prices_from_dividends(dividends, nan_value = nan_value)
-  state_price_implied_ability(p, density, unit = unit)
+  state_price_implied_ability(p, density, unit = unit, n_iter = n_iter, tol = tol)
 }
 
 #' State prices implied by ability (the forward direction)
@@ -214,6 +289,7 @@ dividend_implied_ability <- function(dividends, density,
 #' @export
 ability_implied_state_prices <- function(ability, density, unit = 1.0,
                                          max_depth = 3L) {
+  .refuse_matrix(ability, "ability")                              # (#903)
   .check_unit(unit, "ability_implied_state_prices")
   .check_max_depth(max_depth, "ability_implied_state_prices")
   # the reference's full extended handling, not just centring: a runner
@@ -263,16 +339,17 @@ ability_implied_state_prices <- function(ability, density, unit = 1.0,
                                     max_depth) {
   dd <- .dilate_density(density, unit_ratio)
   doff <- offsets / unit_ratio
-  dsp <- .state_prices_from_extended_offsets(dd, doff, max_depth - 1L)
+  # unit_ratio rides every recursion, as the browser's does (#899)
+  dsp <- .state_prices_from_extended_offsets(dd, doff, max_depth - 1L, unit_ratio)
   n <- length(offsets)
   if (length(fast) == n || length(fast) == 0L || max_depth <= 0L)
     return(dsp)
   slow <- setdiff(seq_len(n), fast)
   slow_rel <- if (length(slow) == 1L) 1 else
     .state_prices_from_extended_offsets(dd, .int_centered(doff[slow]),
-                                       max_depth - 2L)
+                                       max_depth - 2L, unit_ratio)
   fast_rel <- .state_prices_from_extended_offsets(
-    density, .int_centered(offsets[fast]), max_depth - 1L)
+    density, .int_centered(offsets[fast]), max_depth - 1L, unit_ratio)
   slow_share <- sum(dsp[slow])
   sp <- numeric(n)
   sp[slow] <- slow_rel * slow_share
@@ -295,6 +372,11 @@ ability_implied_state_prices <- function(ability, density, unit = 1.0,
 .state_prices_from_extended_offsets <- function(density, offsets,
                                                max_depth = 3L,
                                                unit_ratio = 3) {
+  # a dilation must coarsen: at or below 1 it contracts, and once the ratio
+  # reaches every recursion (#899) the clustered prices degenerate
+  if (!is.numeric(unit_ratio) || length(unit_ratio) != 1L || !is.finite(unit_ratio) ||
+      !(unit_ratio > 1))
+    stop("unit_ratio must be a finite number above 1", call. = FALSE)
   offsets <- as.numeric(offsets)
   n <- length(offsets)
   if (anyNA(offsets)) stop("offsets must not be NA", call. = FALSE)
@@ -304,7 +386,7 @@ ability_implied_state_prices <- function(ability, density, unit = 1.0,
     if (all(pinf)) return(rep(1 / n, n))
     sp <- numeric(n)
     sp[!pinf] <- .state_prices_from_extended_offsets(
-      density, .int_centered(offsets[!pinf]), max_depth)
+      density, .int_centered(offsets[!pinf]), max_depth, unit_ratio)
     return(sp)
   }
   ninf <- offsets == -Inf
@@ -316,12 +398,13 @@ ability_implied_state_prices <- function(ability, density, unit = 1.0,
   L <- implied_L(density)
   W <- as.integer(.approximate_support_width(density))
   bad <- offsets > min(offsets) + W          # no chance of winning
-  if (any(bad)) {
-    aug <- offsets
-    aug[bad] <- Inf
-    return(.state_prices_from_extended_offsets(density, .int_centered(aug),
-                                              max_depth))
-  }
+  # ... except that low_high mixes a fractional offset's floor and ceil
+  # shifts, so a runner just past W can still dead-heat the best at the
+  # support endpoint: [0, 1.0001] at W = 1 was [1, 0] against the exact
+  # 0.125 claim (#794). Only a runner whose lowest cell lies past the
+  # best's highest is certainly out. A near miss is priced exactly when
+  # the field fits the lattice, and dropped as before when it would hang.
+  kept <- which(!(floor(offsets) > ceiling(min(offsets)) + W))
   # python's walkover test compares min(diff_to_best), which is always 0,
   # so it never fires; kept for fidelity
   diff_best <- offsets - min(offsets)
@@ -330,7 +413,20 @@ ability_implied_state_prices <- function(ability, density, unit = 1.0,
     sp[which.min(offsets)] <- 1
     return(sp)
   }
-  co <- .int_centered(offsets)
+  co <- .int_centered(offsets[kept])
+  # Centring on the mean can push a field off the lattice that an integer
+  # shift would fit: [6.25, 2, 3.75, 2, 0.75, 0] on support [0, 7] at
+  # L = 10 was 7.9 points off the exact price (#1006). Shift by the
+  # feasible integer nearest zero (a field that already fits is
+  # untouched); an integer shift leaves the exact prices unchanged.
+  s_rel <- which(density > 1e-12) - 1L - L
+  s_lo <- if (W >= L) 0 else min(s_rel)
+  s_hi <- if (W >= L) 0 else max(s_rel)
+  if (length(co) && all(is.finite(co))) {
+    sh_lo <- max(-L - s_lo - floor(min(co)), ceiling(-(L - 2) - min(co)))
+    sh_hi <- min(L - s_hi - ceiling(max(co)), floor((L - 2) - max(co)))
+    if (sh_lo <= sh_hi) co <- co + min(max(0, sh_lo), sh_hi)
+  }
   # Hanging = the shifted density would lose mass off the lattice (or the
   # offset is past the exact range of low_high). Python tests the cruder
   # |o| <= L - W, which misfires whenever the support width W exceeds L:
@@ -357,12 +453,22 @@ ability_implied_state_prices <- function(ability, density, unit = 1.0,
     left <- which(floor(co) + min(supp) < -L | co < -L + 2)
     right <- which(ceiling(co) + max(supp) > L | co > L - 2)
   }
-  if (!length(left) && !length(right))
-    return(state_prices_from_offsets(density, co))
+  if (!length(left) && !length(right)) {
+    if (length(kept) == n) return(state_prices_from_offsets(density, co))
+    sp <- numeric(n)
+    sp[kept] <- if (length(kept) == 1L) 1 else state_prices_from_offsets(density, co)
+    return(sp)
+  }
+  if (any(bad)) {
+    aug <- offsets
+    aug[bad] <- Inf
+    return(.state_prices_from_extended_offsets(density, .int_centered(aug),
+                                              max_depth, unit_ratio))
+  }
   if (max_depth == 0L) {
     co[right] <- Inf
     co[left] <- -Inf
-    return(.state_prices_from_extended_offsets(density, co, 0L))
+    return(.state_prices_from_extended_offsets(density, co, 0L, unit_ratio))
   }
   divider <- .divide_offsets(co)
   fast <- which(co < divider)
@@ -376,5 +482,6 @@ ability_implied_state_prices <- function(ability, density, unit = 1.0,
 #' @return numeric dividends (inverse state prices)
 #' @export
 ability_implied_dividends <- function(ability, density, unit = 1.0) {
+  .refuse_matrix(ability, "ability")                              # (#903)
   1 / ability_implied_state_prices(ability, density, unit = unit)
 }

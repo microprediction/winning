@@ -525,3 +525,98 @@ test_that("an ordinary binary row keeps its closed form (#720)", {
     -0.061993707824538072, -0.013377277258228982, -0.035424975899736047,
     0.013377277258228982, 0.035424975899736047), tolerance = 1e-14)
 })
+
+test_that("a non-finite covariate is refused by name, not misread as unidentified (#901)", {
+  set.seed(901)
+  J <- 3; Tn <- 6
+  alt <- rep(1:J, Tn)
+  df <- data.frame(id = rep(1:Tn, each = J), alt = alt,
+                   chosen = as.integer(sequence(rep(J, Tn)) == rep(c(1, 2, 3, 1, 2, 3), each = J)),
+                   price = rnorm(Tn * J))
+  for (x in c(NA_real_, NaN, Inf, -Inf)) {
+    d <- df; d$price[5] <- x
+    expect_error(mlogit_fast(chosen ~ price, .fake_dfidx(d), r = 0L, Qf = 3L, Qz = 3L, maxit = 1L),
+                 "covariate price is not finite at row 5")
+  }
+})
+
+.no_mean_data <- function(counts) {
+  J <- length(counts)
+  winner <- rep(seq_len(J), counts)
+  idx <- data.frame(id = rep(seq_along(winner), each = J),
+                    alt = rep(seq_len(J), length(winner)))
+  d <- data.frame(chosen = idx$alt == rep(winner, each = J))
+  attr(d, "idx") <- idx
+  d
+}
+
+test_that("a covariance-only model fits its loadings (#949)", {
+  # J = 3, r = 1, no mean design: two free loadings, and the shares
+  # depend on them. Python's MNProbit(intercepts=False, r=1) gives
+  # [0.400250, 0.349869, 0.249880] on these counts.
+  d <- .no_mean_data(c(40, 35, 25))
+  m <- mlogit_fast(chosen ~ 0, d, r = 1L, Qf = 7L, Qz = 7L, maxit = 200L)
+  expect_equal(m$convergence, 0L)
+  expect_length(m$coefficients, 0L)
+  expect_length(m$covariance_par, 2L)
+  # the python reference's theta at the same counts (r = 1, no intercepts).
+  # It was (2.261958, 1.639635) on the fixed 7-node factor rule; the
+  # exact-MVN MLE is (2.220413, 1.592450), at smooth sharpness 1.80 (#1060)
+  expect_equal(unname(m$covariance_par), c(2.226086, 1.599310), tolerance = 1e-4)
+  expect_true(m$logLik > -100 * log(3))           # better than equal shares
+})
+
+test_that("the parameter-free null is evaluated, not optimized (#949)", {
+  d <- .no_mean_data(c(60, 40))
+  m <- mlogit_fast(chosen ~ 0, d, r = 0L)
+  expect_length(m$coefficients, 0L)
+  expect_length(m$covariance_par, 0L)
+  expect_equal(m$convergence, 0L)
+  expect_equal(m$logLik, -100 * log(2), tolerance = 1e-10)
+})
+
+test_that("the factor tensor order rises with sharpness (#1060)", {
+  # the exchangeable three-way race in the triangular gauge; the fixed
+  # 7x7 tensor priced it 0.3296 / 0.3353 / 0.3353 against an exact 1/3
+  X <- matrix(0, 3, 1)
+  nd <- .fit_nodes(7L, 7L, 2L)
+  ns <- .lazy_sharp_nodes(2L, 10L)
+  th <- c(0, -2 * sqrt(3), -sqrt(3), 3)
+  for (k in 1:3) {
+    p <- exp(-.nll_core(th, list(X), k, 3L, 2L, nd, ns)$value)
+    expect_lt(abs(p - 1 / 3), 1.5e-3)
+  }
+  # continuity across the band's edges, and the score is the gradient of
+  # the returned value inside and past the band
+  set.seed(1060)
+  J <- 4L; Tn <- 8L
+  X <- matrix(rnorm(Tn * J), Tn * J, 1)
+  ch <- sample.int(J, Tn, replace = TRUE)
+  for (r in 1:2) {
+    nd <- .fit_nodes(7L, 7L, r)
+    ns <- .lazy_sharp_nodes(r, 10L)
+    nw <- sum(vapply(seq_len(r), function(cl) J - cl, 0L))
+    w0 <- rnorm(nw)
+    V <- matrix(0, J, r); k <- 1L
+    for (cl in seq_len(r)) for (row in cl + seq_len(J - cl)) {
+      V[row, cl] <- w0[k]; k <- k + 1L
+    }
+    w0 <- w0 / .mnp_smooth_sharpness(V)$value
+    f <- function(s) .nll_core(c(0.3, w0 * s), list(X), ch, J, r, nd, ns)
+    for (edge in c(0.8, 0.9, 1.0)) {
+      lo <- f(edge - 1e-7); hi <- f(edge + 1e-7)
+      expect_lt(abs(hi$value - lo$value), 1e-4)
+      expect_lt(max(abs(hi$grad - lo$grad)), 1e-4)
+    }
+    for (s in c(0.85, 0.95, 1.5)) {
+      th <- c(0.3, w0 * s)
+      g <- .nll_core(th, list(X), ch, J, r, nd, ns)$grad
+      num <- vapply(seq_along(th), function(i) {
+        e <- replace(numeric(length(th)), i, 1e-6)
+        (.nll_core(th + e, list(X), ch, J, r, nd, ns)$value -
+           .nll_core(th - e, list(X), ch, J, r, nd, ns)$value) / 2e-6
+      }, 0)
+      expect_lt(max(abs(num - g)), 1e-6)
+    }
+  }
+})

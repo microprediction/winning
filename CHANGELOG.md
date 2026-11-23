@@ -2,6 +2,208 @@
 
 ## Unreleased
 
+- `factor_model_projected` and `probit.fit_factor_model` (python and R)
+  fit a scaled covariance as well as an unscaled one. The alternation
+  stopped when D moved by an absolute 1e-12, so a Sigma scaled by 1e-12
+  stopped after one sweep, with relative projected residual 0.12 against
+  6e-5 at n = 5, k = 4. Both ports now fit at the power-of-four unit
+  scale `fit_covariance` already uses and scale back, which also covers
+  the absolute NNLS thresholds, so the fit of 4^j C is exactly the fit
+  of C scaled. R's `fit_covariance` now does the
+  same, as python's has since #101: its clustering clip and multistart
+  floor were absolute too, and at 4^-25 every one of 60 random rank-3
+  fields came back at a different rank, with D off by up to 54%.
+  The working power of four now comes from the binary exponent of the
+  mean variance in both ports, applied as exact exponent shifts. A
+  rounded log2 put means just below 2 * 4^j on the next power, and
+  half-to-even rounding put exact ties on alternate sides. The diagonal's
+  sum could overflow near the top of the double range, and R's 4^512 was
+  Inf. `probit.fit_factor_model` also fits at unit scale, so its polish
+  works at any scale: at 1e-200 its squared residuals underflowed to
+  zero. R also now removes the common shift once, before choosing the
+  scale. Covariances with mean variance in [0.5, 2), including
+  every correlation matrix, are bitwise unchanged. Away from unit scale R now fits as python does: on
+  diag(1e-6, 1e-6, 1, 100, 100) its contrast residual is python's 2.1e-5,
+  where the old absolute stop happened to give 9e-8 at that scale and
+  the same 2.1e-5 at unit scale (#1052).
+- `choice_loglik_and_score` (python, julia `MultinomialProbit`, R
+  `mlogitfast` and `rprobitfast`): the factor Gauss-Hermite tensor's
+  order now rises with the loading sharpness. The fixed 7^r tensor
+  under-resolved the conditional choice probability below the
+  sharpness-3 Sobol switch: against scipy's exact MVN on random J = 3-8
+  fields its worst error was 2.6e-3 nats at smooth sharpness 1-1.5 and
+  0.16 at 2.5-2.9 (rank 1; 0.061 at rank 2), and the exchangeable
+  three-way race priced 0.3296 / 0.3353 / 0.3353 against 1/3. Past
+  smooth sharpness 1 the tensor has 31 nodes per factor at rank 1 and 11
+  at rank 2, blended in with a C1 weight over (0.8, 1.0) whose derivative
+  the score carries. Worst error by band falls to 1.0e-4, 6.5e-5, 3.6e-4
+  and 6.0e-4 at rank 1 (sharpness 1-1.5, 1.5-2, 2-2.5, 2.5-2.9) and to
+  6.6e-5, 1.1e-3, 6.2e-3 and 1.1e-2 at rank 2; the exchangeable race
+  prices 0.3326 / 0.3338 / 0.3338, and its 15-degree rotation moves the
+  probabilities by 3.5e-3 instead of 1.4e-2. Calls at smooth sharpness
+  at most 0.8 or past 3.1, at rank 3 and above, or with Qf at or above
+  the new order are bitwise unchanged. Cost past the band is 1.7-2.0x at
+  rank 1 and 1.9-2.2x at rank 2, at most 2.8x inside it (#1060).
+- `ranking_loglik_and_score` no longer jumps at its two node-rule
+  switches. A loading moved by 1e-9 across the fixed-to-adaptive gate
+  (sharpness * sqrt(k) = 2) or the Gauss-Hermite-to-Sobol gate
+  (sharpness = 2) moved the log-likelihood by up to 6e-4 and 4e-4 nats
+  per observation, which the score could not see. The rules are now
+  blended in probability with a C1 weight, over sharpness * sqrt(k) in
+  (1.8, 2] and sharpness in (2, 2.2), and the score carries the weight's
+  derivative (it matches finite differences to 2e-9 where the nodes do
+  not move). Each band sits where the rule it blends in is the more
+  accurate: median error against a high-order reference falls from
+  2.5e-5 to 6.9e-6 in the first band and from 6.1e-4 to 3.0e-4 in the
+  second. Observations outside both bands are bitwise unchanged. Inside
+  them an observation costs what it costs just past the gate, plus the
+  cheaper rule (#1063).
+- `fit_covariance` (python and R): a polished fit's rank no longer
+  depends on rounding. When the default k = 3 exceeds the rank an exact
+  fit needs, the #1051 polish is singular at the solution and stopped
+  wherever rounding left it, with a spurious column straddling the 1e-10
+  column cut. A 1e-15 perturbation of an exact rank-1 field gave rank 2
+  or 3 in 11 of 40 refits, which changes the node dimension `cov=`
+  prices on. The polish now finishes at the fit's numerical rank, where
+  it converges quadratically: 200 of 200 perturbed refits give the true
+  rank with D exact to 2e-14. Only polished fits whose kept eigenvalues
+  fall below a relative 1e-6 change; all other fits are bitwise
+  unchanged (#1066).
+- `ranking_loglik_and_score`: rankings of length k >= 2 at rank 1 or 2
+  with loading sharpness s <= 2 and s*sqrt(k) > 2 now use adaptive
+  Gauss-Hermite, the same Qf tensor moved to each ranking's factor
+  posterior mode and scaled by its curvature. The fixed tensor's
+  threshold had been measured on a single choice; a k-stage ranking's
+  posterior is about sqrt(k) times narrower, so full rankings were
+  up to 0.09 nats off at J = 5 and 0.32 at J = 10, with loading scores
+  about half their true value. Worst error over 210 gated fields: 0.077
+  to 3.0e-4 nats, at 2-4x the cost of those observations. Length-1
+  orders, s*sqrt(k) <= 2, the Sobol branch and rank 0 are bitwise
+  unchanged (#1017).
+- `top_k_jacobians(V=...)` (python, browser `topKJacobians`, R, Julia)
+  differentiates the automatic rank-one factor rule's weights. Those
+  weights move with the sharpness sqrt(2) max_i |V_i| / sigma_i on
+  15/8 < sharp <= 10 (#850 interpolation and pair, #783 blend), so
+  `Jsigma` was missing a term there and disagreed with finite differences
+  of the forward (sharpness 8.9: -0.0024 against +0.187). It now matches
+  them to about 1e-9 in the column of the runner that sets the sharpness
+  (the first such runner at a tie). Forward prices, `Jmu`, inverses,
+  calls with an explicit `qa`, and `Jsigma` outside those intervals are
+  bitwise unchanged; inside them the Jacobian costs up to about two-thirds
+  more.
+  The browser rank-one blend also drops a component whose weight is
+  exactly zero, as python does: at sharpness exactly 10 its 72
+  zero-weight Gauss-Hermite nodes widened the race window, and a 1e-8
+  rescale of the loadings moved a race share by 2.9 points (#783).
+
+- `tree_race_probabilities` and `tree_race_jacobian` (python and R) now
+  centre a single leaf cluster's loading, as the block path and the
+  browser tree already did. With one cluster its shock reaches every
+  runner and cancels, but uncentred it widened the lattice: +40 on every
+  loading raised a mass defect, and the Jacobian moved by 0.019. Trees
+  with more than one cluster are bitwise unchanged (#1056).
+- `mvn_cdf_fast(sigma=)` (python, vendored `fastmvn`, R `mvtnormfast`,
+  Julia `FactorMvNormalCDF`): `factorize_covariance` no longer accepts a
+  Heywood fit, one whose residual variance sits at the 1e-12 floor. It
+  tries the next rank and otherwise falls back to the dense path. On
+  random 3-5 dimensional Wishart covariances about 20% hit the floor,
+  and their orthants were off by a median of 1.2e-4 and up to 8.5e-4.
+  Covariances that do not hit the floor give bitwise identical results
+  (#1015).
+- Browser `blockRaceProbabilities` with caller-supplied factor nodes
+  (`nodes`) adds `loading * f` to each runner, as the grammar
+  `Y = mu + loading * f + eps` states; it priced the reflected factor
+  law, which moves asymmetric rules by up to 0.92 of a share. Callers who
+  reflected their nodes to compensate must remove that reflection.
+  Automatic node rules are unchanged (#909).
+- `polish_race` (python, browser `polishRace`, R) on a kinked base
+  (laplace, `exponential_power_base` with beta < 2, a callable declaring
+  `kinks`) runs its forward, Jacobian and inversion of `p0` on the
+  kink-split lattice. On the uniform lattice the Jacobian was first-order
+  wrong, and SLSQP hit its iteration limit with `converged=False` on 4 of 6
+  capped laplace fields. The returned `p` is now
+  `race_probabilities(mu, ..., kink_split=True)`; `kink_split=False`
+  (browser `kinkSplit: false`) keeps the old lattice. Smooth bases and
+  the default `race_probabilities` / `race_jacobian` are bitwise
+  unchanged (#1011).
+- `dividends_from_prices` (python `winning.classic`, `StatePricer`, R)
+  maps a zero price -- a scratched runner -- to dividend `inf`, which
+  `prices_from_dividends` maps back to 0; it returned NaN/`NA`, which the
+  round trip read as a missing quote and revived at `nan_value`, so
+  `normalize_dividends` was not idempotent. An all-zero book is all
+  `inf` (python raised `ZeroDivisionError`). Simulated place prices from
+  `skew_normal_place_pricing` are `inf`, not NaN, for runners with zero
+  counts. NaN and negative prices, and all positive prices, are
+  unchanged (#1009).
+- `winning.probit.fit_factor_model` (and so `shares(..., Sigma=, k=)`)
+  finishes fits whose alternation ran out of sweeps with Gauss-Newton on
+  the same projected objective. An exact rank-1-plus-diagonal Sigma at
+  n = 5 was left at projected residuals up to 2e-3 and now fits to
+  rounding. Fits that converged on their own are bitwise unchanged
+  (#1018).
+- `fit_covariance` (python and R; behind `race_probabilities(cov=)`,
+  the posterior refit and `top_k` intake) applies the same polish to a
+  stage-one start that ran out of sweeps. The polished start replaces
+  the fit only if the final projected residual is strictly lower in its
+  largest entry and no higher in Frobenius norm; otherwise, and for
+  every start that stopped on its own, the fit is bitwise unchanged. An
+  exact rank-1-plus-diagonal C at n = 5 was left at projected residuals
+  up to 1.5e-3 and now fits to rounding, with python and R agreeing to
+  1e-14. The report gains `polished`. A polished fit replaces a stalled
+  one that had often degenerated and been routed to GHK, and priced on
+  the 2^11 factor nodes it could be less accurate than the stall had
+  been (up to 5.7e-4 off a 2^21-node GHK reference against 4.5e-5). So
+  `race_probabilities(cov=)` and `abilities_from_race(cov=)` route a
+  polished fit of up to 15 runners to GHK at 2^14 nodes, and price a
+  larger one (or a call that needs the factor form) on 2^12 factor
+  nodes (4096 Halton nodes in R). Every other fit is priced bitwise as
+  before. On two 360-covariance sweeps the changed prices (python 95
+  and 100, R 103 and 102) cut the median error by 3x or more in every
+  family; 4 python and 1 R price came out worse than before, by at most
+  1.5e-5. cov= pricing over the sweep takes 1.1x as long in python
+  (worst call 0.015 s -> 0.05 s) and 1.2x in R; the inverse 1.1x in
+  python (worst call 0.36 s -> 1.5 s) and up to 2.6x per call in R
+  (#1051).
+
+## 1.7.0 (2026-10-31)
+
+Everything since 1.2.0: the v1.3.0 to v1.6.0 tags were cut without a
+changelog heading, so their entries are listed here.
+
+- `winning.classic`: the longshot adjustment acts on normalized
+  probabilities; it was treating them as decimal odds and adding one,
+  so two price lists for the same book priced differently (#918).
+- `winning.classic`: the Gaussian copula's `rho` is a correlation in
+  [0, 1), so the conditional CDF is `sqrt(rho) z` on `sqrt(1 - rho)`;
+  it was being used as a loading. Non-finite or out-of-range values are
+  refused (#910).
+- `winning.classic`: `solve_for_implied_offsets` iterates to
+  `CALIBRATION_TOL = 1e-9` (budget `CALIBRATION_MAX_ITER = 100`) and
+  returns the best iterate when it stalls, instead of three fixed
+  sweeps that left an atomic law 1.27 points off its target; the browser
+  and R ports do the same and the parity vectors and R goldens were
+  regenerated (#904).
+- Nested coupling of rank three and above is priced in a canonical
+  factor basis, so a column sign flip, a rotation or a common shock of
+  the coupling is the same race in Python as it already was in the
+  browser (#911).
+- The pandas adapters write results back by row position, so a frame
+  with a duplicated index no longer gets rows cross-assigned (#908).
+- The fast MVN CDF of a zero-dimensional problem is the empty product,
+  one, in `winning.fastmvn` and the vendored `fastmvn` (#905).
+- Ratings labels (`order`, `subset`) are validated before the integer
+  cast: bools, strings, NaN, inf and fractional floats are refused
+  rather than silently truncated (#915).
+- The multinomial probit refuses non-finite designs and means in Python,
+  Julia and R rather than reporting a flat ridge for them (#901).
+- `GMRFExtremes.argmax_marginals` validates `resolution_tol` (#906).
+- The R and Julia ports refuse a matrix where a per-coordinate vector is
+  expected instead of flattening it (#903).
+- The browser's span and kink metadata accept typed arrays, and Python
+  reads kink metadata off numpy arrays (#907).
+- The pair-mixture inverse solves the normalized two-runner map; its
+  direct branch was minimising an unnormalized gap (#902).
+
 - `winning.certified`: win probabilities of the independent race as
   Arb balls that provably contain the answer, for the normal, Gumbel,
   logistic and Laplace bases. `certified_race_probabilities` integrates

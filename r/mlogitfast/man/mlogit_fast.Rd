@@ -39,8 +39,10 @@ mlogit_fast(formula, data, r = NULL, Qf = 7L, Qz = NULL, maxit = 400L)
     identified.}
   \item{Qf, Qz}{Gauss-Hermite orders for the factor and winning-margin
     integrals; a sharpness rule escalates to scrambled Sobol nodes when the
-    conditional races become nearly deterministic. \code{Qz = NULL} takes
-    7 below \code{J = 6} and 11 from \code{J = 6}.}
+    conditional races become nearly deterministic. At \code{r = 1} and
+    \code{2} a \code{Qf} below 31 (rank 1) or 11 (rank 2) is raised to
+    that order past smooth loading sharpness 1, blended in over 0.8 to 1.0.
+    \code{Qz = NULL} takes 7 below \code{J = 6} and 11 from \code{J = 6}.}
   \item{maxit}{BFGS iteration cap, a non-negative whole number.}
 }
 \value{

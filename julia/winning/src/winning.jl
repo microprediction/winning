@@ -229,7 +229,9 @@ end
     hermite_nodes(k, order = 15, prune = 1e-7)
 
 Pruned Gauss-Hermite product rule over N(0, I_k), first coordinate
-slowest, pruned WITHOUT renormalizing (matching the reference exactly).
+slowest, pruned THEN renormalized so the weights sum to one, matching the
+Python reference and the R port (#802: this used to say the reference did
+not renormalize, and `hermite_nodes(2, 5, 0.5).W` summed to 0.284).
 
 `k = 0` is the EMPTY PRODUCT: one node of weight 1 with no columns, so a
 zero-rank loading matrix integrates over the zero-dimensional factor
@@ -255,7 +257,8 @@ function hermite_nodes(k::Int, order::Int = 15, prune::Float64 = 1e-7)
         W = [prod(h.weights[r]) for r in rows]
     end
     keep = W .> prune * maximum(W)
-    return (F = F[keep, :], W = W[keep])
+    Wk = W[keep]
+    return (F = F[keep, :], W = Wk ./ sum(Wk))
 end
 
 """The first `n` primes, generated. `halton_normal_nodes` used a fixed
@@ -305,8 +308,28 @@ end
 # and the browser all refuse. Found by the cross-port divergence
 # scan. Shared by the winner race and every top-k/rank entry point,
 # which used to collect(D) themselves and failed on a scalar (#485).
+# A per-coordinate argument is a vector (or a tuple or range): a matrix
+# with the right number of cells passed the length check and was consumed
+# by linear, column-major indexing, so a visually row-ordered 2 x 2 of
+# bounds was priced as a different four-coordinate rectangle (#903).
+# Python refuses any shape but (n,); the browser accepts one-dimensional
+# arrays only.
+# A per-coordinate argument (abilities, a target law) is a vector, tuple or
+# range: a matrix with the right number of cells is consumed by linear,
+# column-major indexing, so a visually row-ordered 2 x 2 of abilities was
+# priced as a different field (#903). Python refuses any shape but (n,).
+function _refuse_matrix(x, name)
+    (x isa AbstractArray && ndims(x) != 1) && throw(ArgumentError(
+        name * " must be a vector, not a " * join(string.(size(x)), " x ") *
+        " array: linear indexing would read it column-major as a different vector"))
+    return x
+end
+
 function _as_idio(D, n::Integer; name = "D")
     D === nothing && return ones(n)
+    (D isa AbstractArray && ndims(D) != 1) && throw(ArgumentError(
+        name * " must be a vector, not a " * join(string.(size(D)), " x ") *
+        " array: linear indexing would read it column-major as a different vector"))
     Dv = D isa Number ? [Float64(D)] : Float64.(vec(collect(D)))
     length(Dv) == 1 && (Dv = fill(Dv[1], n))
     length(Dv) == n || throw(ArgumentError(
@@ -346,13 +369,21 @@ end
 # unchanged rule outside it continuously at both ends.
 const R1_BLEND_LO = 9.0
 const R1_BLEND_HI = 10.0
-function _rank1_blend_rule(sharp)
+# The C1 smoothstep S(t) = t^2 (3 - 2t) and its slope 6 t (1 - t).
+_smoothstep(t) = (t * t * (3.0 - 2.0 * t), 6.0 * t * (1.0 - t))
+
+# slope = true also returns dW/dsharp node for node: the weights move with
+# the sharpness and so with the sd that sets it (#783).
+function _rank1_blend_rule(sharp; slope = false)
     t = (sharp - R1_BLEND_LO) / (R1_BLEND_HI - R1_BLEND_LO)
-    w = t * t * (3.0 - 2.0 * t)
+    w, dS = _smoothstep(t)
     g = hermite_nodes(1, Int(8 * R1_BLEND_LO))
     Q = Int(8 * R1_BLEND_HI) + 1
     Fm = reshape(qnorm.(((1:Q) .- 0.5) ./ Q), :, 1)
-    return vcat(g.F, Fm), vcat((1.0 - w) .* g.W, fill(w / Q, Q))
+    F, W = vcat(g.F, Fm), vcat((1.0 - w) .* g.W, fill(w / Q, Q))
+    slope || return F, W
+    dw = dS / (R1_BLEND_HI - R1_BLEND_LO)
+    return F, W, vcat(-dw .* g.W, fill(dw / Q, Q))
 end
 
 # Below the band the rank-one rule was Gauss-Hermite of order
@@ -367,32 +398,91 @@ end
 const R1_PAIR_FROM = 24
 const R1_PAIR_PER_SHARP = 5.0
 const R1_PAIR_CAP = 34
-function _rank1_hermite_rule(sharp)
-    S(t) = t * t * (3.0 - 2.0 * t)
+function _rank1_hermite_rule(sharp; slope = false)
+    # each part: (order, coefficient, d coefficient / d sharp) (#783); the
+    # pair order y is clamped to [24, 34], and held there its slope is zero
     x = 8.0 * sharp
     lo = R1_PAIR_FROM
     if x <= lo
-        m = floor(x); w = S(x - m)
-        parts = [(Int(m), 1.0 - w), (Int(m) + 1, w)]
+        m = floor(x); w, dS = _smoothstep(x - m); dw = 8.0 * dS
+        parts = [(Int(m), 1.0 - w, -dw), (Int(m) + 1, w, dw)]
     elseif x <= lo + 1
-        w = S(x - lo)
-        parts = [(lo - 1, 0.5 * w), (lo, 1.0 - 0.5 * w)]
+        w, dS = _smoothstep(x - lo); dw = 8.0 * dS
+        parts = [(lo - 1, 0.5 * w, 0.5 * dw), (lo, 1.0 - 0.5 * w, -0.5 * dw)]
     else
-        y = min(max(R1_PAIR_PER_SHARP * sharp, Float64(lo)), Float64(R1_PAIR_CAP))
-        m = floor(y); w = S(y - m)
-        parts = [(Int(m) - 1, 0.5 * (1.0 - w)), (Int(m), 0.5), (Int(m) + 1, 0.5 * w)]
+        y_raw = R1_PAIR_PER_SHARP * sharp
+        y = min(max(y_raw, Float64(lo)), Float64(R1_PAIR_CAP))
+        dy = lo < y_raw < R1_PAIR_CAP ? R1_PAIR_PER_SHARP : 0.0
+        m = floor(y); w, dS = _smoothstep(y - m); dw = dy * dS
+        parts = [(Int(m) - 1, 0.5 * (1.0 - w), -0.5 * dw), (Int(m), 0.5, 0.0),
+                 (Int(m) + 1, 0.5 * w, 0.5 * dw)]
         top = Int(8 * R1_BLEND_LO)
         if x > top - 1
-            v = S(x - (top - 1))
-            parts = vcat([(q, c * (1.0 - v)) for (q, c) in parts], [(top, v)])
+            v, dS2 = _smoothstep(x - (top - 1)); dv = 8.0 * dS2
+            parts = vcat([(q, c * (1.0 - v), dc * (1.0 - v) - c * dv)
+                          for (q, c, dc) in parts], [(top, v, dv)])
         end
     end
-    parts = [(q, c) for (q, c) in parts if c > 0.0]
-    g = [hermite_nodes(1, q) for (q, _) in parts]
-    return vcat([h.F for h in g]...), vcat([c .* h.W for (h, (_, c)) in zip(g, parts)]...)
+    # a part of zero coefficient has zero slope too (S is flat at both ends)
+    parts = [(q, c, dc) for (q, c, dc) in parts if c > 0.0]
+    g = [hermite_nodes(1, q) for (q, _, _) in parts]
+    F = vcat([h.F for h in g]...)
+    W = vcat([c .* h.W for (h, (_, c, _)) in zip(g, parts)]...)
+    slope || return F, W
+    return F, W, vcat([dc .* h.W for (h, (_, _, dc)) in zip(g, parts)]...)
+end
+
+# How the AUTOMATIC rank-one rule moves with the sds (#783), as python's
+# races._rank1_rule_sigma_slope. V gauge-centred and D validated, as
+# _race_setup sees them. The nodes are fixed, but inside the smooth
+# intervals of the two rules above the weights W(sharp) move with
+# sharp = sqrt(2) max_i |V_i| / sigma_i, so with the sd of the runner j
+# attaining the max: dsharp/dsigma_j = -sharp / sigma_j, zero for the rest.
+# Returns (j, dsharp, F, dW) over the nodes whose weight moves, or nothing
+# where the rule is piecewise constant in sharp. A tie for the max is a
+# kink: the term goes to the FIRST runner attaining it (its one-sided
+# derivative as its sd falls; each other tied runner's column is its
+# one-sided derivative as its sd rises).
+function _rank1_rule_sigma_slope(V, D)
+    size(V, 2) == 1 || return nothing
+    ratio = sqrt.(vec(sum(V .^ 2, dims = 2))) ./ sqrt.(max.(D, TINY))
+    sharp = sqrt(2) * maximum(ratio)
+    if R1_BLEND_LO < sharp <= R1_BLEND_HI
+        F, _, dW = _rank1_blend_rule(sharp; slope = true)
+    elseif ceil(8 * sharp) > 80 || !(8 * sharp > 15)
+        return nothing
+    else
+        F, _, dW = _rank1_hermite_rule(sharp; slope = true)
+    end
+    keep = dW .!= 0.0
+    any(keep) || return nothing
+    j = argmax(ratio)
+    return (j = j, dsharp = -sharp / sqrt(D[j]), F = F[keep, :], dW = dW[keep])
+end
+
+function _as_loadings(V, n)
+    # Scalars are common loadings. For a matrix, rows take precedence
+    # when both orientations fit (rank == n).
+    # Higher-dimensional arrays are refused, not flattened, and loadings
+    # must be finite before any centering (as in Python's shapes).
+    (V isa AbstractArray && ndims(V) > 2) && throw(ArgumentError(
+        "V must be a scalar, vector or matrix; got " * string(ndims(V)) *
+        " dimensions"))
+    Vm = V isa AbstractMatrix ? Float64.(Matrix(V)) :
+         V isa Number ? fill(Float64(V), n, 1) :
+         reshape(Float64.(collect(V)), :, 1)
+    if size(Vm, 1) != n && size(Vm, 2) == n
+        Vm = permutedims(Vm)
+    end
+    size(Vm, 1) == n || throw(ArgumentError(
+        "V must have one row per contestant; got " *
+        string(size(Vm, 1)) * " for " * string(n)))
+    all(isfinite, Vm) || throw(ArgumentError("V has a non-finite entry"))
+    return Vm
 end
 
 function _race_setup(mu, V, D, F, W, base)
+    _refuse_matrix(mu, "mu")                                # (#903)
     mu = Float64.(collect(mu))
     n = length(mu)
     D = _as_idio(D, n)
@@ -402,22 +492,7 @@ function _race_setup(mu, V, D, F, W, base)
         Fm = zeros(1, 1)
         Wv = [1.0]
     else
-        # a SCALAR V is the same loading for everyone -- the spelling
-        # as_loadings documents, which python and the browser accept
-        # and julia refused (cross-port divergence scan)
-        Vm = V isa AbstractMatrix ? Float64.(Matrix(V)) :
-             (V isa Number ? fill(Float64(V), n, 1) :
-              reshape(Float64.(collect(V)), :, 1))
-        # (rank, n) is the SAME race as (n, rank), which as_loadings
-        # documents. The ambiguity is real only at rank == n, where the
-        # contract wins: n rows is n contestants.
-        if size(Vm, 1) != n && size(Vm, 2) == n
-            Vm = permutedims(Vm)
-        end
-        size(Vm, 1) == n || throw(ArgumentError(
-            "V must have one row per contestant; got " *
-            string(size(Vm, 1)) * " for " * string(n)))
-        Vm = _gauge_center(Vm)                 # common column is gauge (#471)
+        Vm = _gauge_center(_as_loadings(V, n))  # common column is gauge (#471)
         if F === nothing || W === nothing
             sharp = sqrt(2) * maximum(sqrt.(vec(sum(Vm .^ 2, dims = 2))) ./
                                       sqrt.(max.(D, TINY)))
@@ -523,6 +598,7 @@ function race_probabilities(mu; V = nothing, D = nothing, F = nothing,
                             W = nothing, base = "normal", points = 257,
                             return_slopes = false, window = "bulk",
                             delta = 1e-12)
+    _refuse_matrix(mu, "mu")                                # (#903)
     _check_points(points)
     # the bulk window's tail mass: a number in (0, 0.5); delta = -1 hung
     # python's and the browser's relaxation loop and 1 or 2 priced a
@@ -643,6 +719,7 @@ in the field's own units (#100)."""
 function abilities_from_race(p; V = nothing, D = nothing, F = nothing,
                              W = nothing, base = "normal", points = 257,
                              n_iter = 60, tol = 1e-8)
+    _refuse_matrix(p, "p")                                  # (#903)
     target = Float64.(collect(p))
     all(isfinite, target) || error("target probabilities must be finite")
     any(target .<= 0) && error("all target probabilities must be positive")
@@ -730,6 +807,8 @@ function _jacobi_sweeps(mu, forward, scale, alpha, n_iter, tol)
         elseif prev !== nothing && penalty < 1.0
             penalty = min(1.0, penalty / 0.75)
         end
+        # the last sweep's own contraction, for the Aitken gate below (#956)
+        prev_max = prev === nothing ? Inf : prev[4]
         prev = (mu, resid, dres, resid_max, resid_rms)
         a = alpha_base * penalty
         lim = min.(2.0, 10.0 .* abs.(resid)) .* scale
@@ -747,7 +826,8 @@ function _jacobi_sweeps(mu, forward, scale, alpha, n_iter, tol)
                     lam = 1.0 - (1.0 - rho) / a
                     alpha_base = clamp(2.0 / (2.0 - lam), 0.1, 1.0)
                 elseif cosn > 0.999 && 0.5 < ratio < 0.999 &&
-                       resid_max > 1e3 * tol
+                       resid_max > 1e3 * tol &&
+                       abs(resid_max / prev_max - ratio) <= AITKEN_AGREE
                     trial = _aitken_trial(mu, step, ratio, scale, forward,
                                           resid_max)
                     if trial !== nothing      # sum the geometric tail
@@ -765,7 +845,22 @@ function _jacobi_sweeps(mu, forward, scale, alpha, n_iter, tol)
         # exhausted after a step no sweep priced: price the returned
         # iterate (one forward, only here) and keep the better (#497)
         last = prev === nothing ? (mu, resid_max) : (prev[1], prev[4])
-        fwd = cached !== nothing ? cached : forward(mu)
+        fwd = cached
+        if fwd === nothing
+            # the last step crossed the forward's refusal guard: return the
+            # last priced iterate as not converged; with nothing priced it
+            # still throws (#823)
+            fwd = try
+                forward(mu)
+            catch e
+                # only the forward's refusal (error(...), an ErrorException,
+                # as python catches only RuntimeError): a MethodError or
+                # BoundsError is a bug and must propagate, not be reported
+                # as converged = false
+                (prev === nothing || !(e isa ErrorException)) && rethrow()
+                return prev[1], false, prev[4], iters
+            end
+        end
         r_end = maximum(abs.(fwd[1]))
         if prev !== nothing && !(r_end < last[2])
             mu = last[1]
@@ -775,6 +870,13 @@ function _jacobi_sweeps(mu, forward, scale, alpha, n_iter, tol)
     end
     return mu, resid_max < tol, resid_max, iters
 end
+
+# Aitken sums a geometric tail, which exists only while the residual
+# shrinks by the same factor as the step; when the plain sweeps converge
+# faster than the step ratio says (the superlinear finish after a plateau)
+# the extrapolation overshoots, and #956's exact target ended 13.6 off.
+# python's races.AITKEN_AGREE.
+const AITKEN_AGREE = 0.15
 
 """The Aitken-extrapolated iterate as a bounded, checked trial (#583),
 python's `races._aitken_trial`: the summed tail capped in the max norm at

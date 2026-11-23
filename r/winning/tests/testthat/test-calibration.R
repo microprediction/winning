@@ -304,11 +304,12 @@ test_that("an offset of exactly +-(L - 2) is priced exactly, not clustered (#773
   off <- c(-1, 0, 1, 1, -1, 0, -3, 0)
   expect_lt(max(abs(ability_implied_state_prices(off, d5) - state_prices_from_offsets(d5, off))), 1e-15)
   # neighbours, pinned from origin/main 7af3ed1c: just inside was already
-  # exact and just past the endpoint still hangs and clusters
+  # exact. Just past the endpoint hung and clustered to 0.634; an integer
+  # shift of -1 fits it, so it is now the exact price (#1006)
   expect_lt(max(abs(ability_implied_state_prices(c(0, 1 - 1e-9), d) -
                     c(0.7777777775000001, 0.22222222250000007))), 1e-15)
   expect_lt(max(abs(ability_implied_state_prices(c(0, 1 + 1e-9), d) -
-                    c(0.633744856100823, 0.36625514389917707))), 1e-15)
+                    c(0.7777777779444446, 0.22222222205555558))), 1e-15)
 })
 
 test_that("max_depth is a whole number >= 0 (#775)", {
@@ -326,4 +327,187 @@ test_that("max_depth is a whole number >= 0 (#775)", {
                       c(0.73784245296, 0.193474399289, 0.059003267863, 0.009679879888))), 1e-11)
   expect_identical(ability_implied_state_prices(ab, dens),
                    ability_implied_state_prices(ab, dens, max_depth = 3L))
+})
+
+test_that("classic densities and prices must be plain vectors (#903)", {
+  atoms <- c(0.40, 0.00, 0.00, 0.10, 0.05, 0.05, 0.10, 0.10, 0.20)
+  dmat <- matrix(atoms, nrow = 3, byrow = TRUE)
+  expect_error(state_prices_from_offsets(dmat, c(-2, 0, 2)), "plain vector, not a 3 x 3")
+  expect_error(solve_for_implied_offsets(matrix(c(0.6, 0.3, 0.1), 1), atoms), "plain vector")
+  ref <- state_prices_from_offsets(atoms, c(-2, 0, 2))
+  expect_equal(state_prices_from_offsets(array(atoms), c(-2, 0, 2)), ref)
+})
+
+test_that("an atomic market round-trips at the default budget (#904)", {
+  # a two-atom law at L=3: three sweeps left the forward's own target
+  # 1.27 points off; the iteration now runs to CALIBRATION_TOL
+  density <- c(0, 0, 0.2, 0, 0.8, 0, 0)
+  target <- state_prices_from_offsets(density, c(-1, 0, 1))
+  expect_silent(a <- solve_for_implied_offsets(target, density))
+  expect_lt(max(abs(state_prices_from_offsets(density, a) - target)), 1e-6)
+  expect_equal(a, c(-1, 0, 1), tolerance = 1e-4)
+  expect_silent(w <- dividend_implied_ability(1 / target, density))
+  expect_equal(w, a)
+  # the budget is honoured when asked for: three sweeps is the old answer
+  expect_warning(short <- dividend_implied_ability(1 / target, density, n_iter = 3),
+                 "did not reach the target")
+  expect_equal(max(abs(state_prices_from_offsets(density, short) - target)),
+               0.012728827747, tolerance = 1e-8)
+  expect_error(solve_for_implied_offsets(target, density, tol = 0), "tol")
+  expect_error(dividend_implied_ability(1 / target, density, tol = NA_real_), "tol")
+})
+
+test_that("a one-live book validates n_iter and tol before returning (#924)", {
+  # the singleton return ran before the inverse, so n_iter = 0 and tol = 0
+  # were accepted there
+  d <- skew_normal_density(20, 0.1)
+  expect_error(dividend_implied_ability(2, d, n_iter = 0), "n_iter")
+  expect_error(dividend_implied_ability(2, d, tol = 0), "tol")
+  expect_error(state_price_implied_ability(c(1, 0), d, n_iter = 0), "n_iter")
+  expect_equal(dividend_implied_ability(2, d), 0)
+  expect_equal(state_price_implied_ability(c(1, 0), d, n_iter = 5L, tol = 1e-6), c(0, Inf))
+})
+
+test_that("a two-step rise in the miss is not a plateau (#923)", {
+  # the #904 rule stopped after two iterates failed to beat the best miss;
+  # this atomic market rises at iterations 21-22 and then converges
+  atoms <- numeric(31)
+  atoms[c(2, 18, 23, 26, 28, 30) + 1] <- c(0.10, 0.05, 0.30, 0.05, 0.45, 0.05)
+  target <- state_prices_from_offsets(atoms, c(5.5, 1.0, -7.0, 6.0))
+  expect_silent(a <- solve_for_implied_offsets(target, atoms, n_iter = 100))
+  expect_lte(max(abs(state_prices_from_offsets(atoms, a) - target)), 1e-6)   # was 2.17e-4
+  expect_silent(w <- dividend_implied_ability(1 / target, atoms))
+  expect_lte(max(abs(state_prices_from_offsets(atoms, w) - target)), 1e-6)
+})
+
+test_that("calibration runs through a temporary zero price (#968)", {
+  atoms <- numeric(49)
+  atoms[c(15, 26, 35) + 1] <- c(0.1, 0.6, 0.3)
+  target <- state_prices_from_offsets(atoms, c(2.5, 15.8, -4.8))
+  expect_silent(a <- solve_for_implied_offsets(target, atoms))
+  expect_lte(max(abs(state_prices_from_offsets(atoms, a) - target)), 1e-8)
+})
+
+test_that("offsets stay on the lattice, where the public forward agrees (#1046)", {
+  # an iterate past +(L-2) priced 3.8e-4 inside the inverse but 9.4e-2 by
+  # the edge-centring public forward
+  atoms <- numeric(15)
+  atoms[c(0, 1, 9) + 1] <- c(0.5292435891016793, 0.3029411994181423, 0.16781521148017847)
+  target <- state_prices_from_offsets(atoms, c(-3.067361030359437, -2.884203651711936,
+                                               4.646685322840478, -2.6360814331198537))
+  expect_silent(a <- solve_for_implied_offsets(target, atoms))
+  expect_lte(max(abs(a)), implied_L(atoms) - 2)                # was 8.26 at L = 7
+  expect_lt(max(abs(state_prices_from_offsets(atoms, a) - target)), 1e-3)   # was 9.4e-2
+})
+
+test_that("finite dividends whose reciprocals overflow price the relative book (#881)", {
+  expect_equal(prices_from_dividends(c(1e-320, 2e-320)), c(2, 1) / 3, tolerance = 1e-12)
+  expect_equal(prices_from_dividends(c(1e-320, 0, -1, Inf)), c(1, 0, 0, 0))
+  # ordinary books keep their arithmetic
+  d <- c(2.5, 3.3, 5, 10)
+  expect_identical(prices_from_dividends(d), (1 / d) / sum(1 / d))
+})
+
+test_that("a field that fits the lattice is priced exactly (#1006)", {
+  # mean-centring pushed this off a [0, 7] support that an integer shift
+  # fits; it was priced on the cluster path, 7.9 points off
+  d <- numeric(21); d[11] <- 0.5; d[18] <- 0.5
+  off <- c(6.25, 2, 3.75, 2, 0.75, 0)
+  expect_equal(winning:::.state_prices_from_extended_offsets(d, off, 3L, 3),
+               state_prices_from_offsets(d, off - 4), tolerance = 1e-14)
+  expect_equal(winning:::.state_prices_from_extended_offsets(d, off, 3L, 3),
+               c(0.013509, 0.09375, 0.03125, 0.09375, 0.283529, 0.484212), tolerance = 1e-6)
+  # a fitting field never reaches the ratio; python took another branch at 2
+  s <- skew_normal_density(L = 15, unit = 0.2, scale = 1, a = 1.5)
+  for (ratio in c(2, 3, 4))
+    expect_equal(winning:::.state_prices_from_extended_offsets(s, c(-20, -2, 2), 3L, ratio),
+                 c(0.99975086, 0.00024442, 4.72e-06), tolerance = 1e-8)
+})
+
+test_that("the classic recursion keeps a non-default unit_ratio (#899)", {
+  d <- skew_normal_density(L = 15, unit = 0.2, scale = 1, a = 1.5)
+  for (ratio in c(2, 4)) for (live in list(c(-20, -2, 6.5), c(-40, -3, 3, 40))) {
+    p <- winning:::.state_prices_from_extended_offsets(d, live, 3L, ratio)
+    q <- winning:::.state_prices_from_extended_offsets(d, c(live, Inf), 3L, ratio)
+    expect_equal(q[length(q)], 0)
+    expect_equal(q[-length(q)], p, tolerance = 1e-15)
+  }
+})
+
+test_that("every recursive classic call receives the requested unit_ratio (#899)", {
+  # the scratch comparison passes if both sides drop the ratio downstream;
+  # record the ratio each recursion actually receives (review of #983)
+  d <- skew_normal_density(L = 15, unit = 0.2, scale = 1, a = 1.5)
+  orig_e <- winning:::.state_prices_from_extended_offsets
+  orig_c <- winning:::.clustered_state_prices
+  for (ratio in c(2, 4)) {
+    seen <- numeric(0)
+    testthat::local_mocked_bindings(
+      .state_prices_from_extended_offsets = function(density, offsets, max_depth = 3L, unit_ratio = 3) {
+        seen <<- c(seen, unit_ratio); orig_e(density, offsets, max_depth, unit_ratio)
+      },
+      .clustered_state_prices = function(density, offsets, fast, unit_ratio, max_depth) {
+        seen <<- c(seen, unit_ratio); orig_c(density, offsets, fast, unit_ratio, max_depth)
+      })
+    winning:::.state_prices_from_extended_offsets(d, c(-20, -2, 6.5, Inf), 3L, ratio)
+    expect_gt(length(seen), 3)
+    expect_true(all(seen == ratio))
+  }
+})
+
+test_that("both cluster recursions and bad-runner removal keep the ratio (#899)", {
+  # review of #983: assert the branches are reached, not just the ratio
+  d <- skew_normal_density(L = 15, unit = 0.2, scale = 1, a = 1.5)
+  orig_e <- winning:::.state_prices_from_extended_offsets
+  orig_c <- winning:::.clustered_state_prices
+  for (ratio in c(2, 4)) {
+    ext <- list(); clu <- list()
+    testthat::local_mocked_bindings(
+      .state_prices_from_extended_offsets = function(density, offsets, max_depth = 3L, unit_ratio = 3) {
+        ext[[length(ext) + 1L]] <<- list(base = isTRUE(all.equal(density, d, tolerance = 0)), off = offsets, r = unit_ratio)
+        orig_e(density, offsets, max_depth, unit_ratio)
+      },
+      .clustered_state_prices = function(density, offsets, fast, unit_ratio, max_depth) {
+        clu[[length(clu) + 1L]] <<- list(n = length(offsets), f = length(fast), depth = max_depth, r = unit_ratio)
+        orig_c(density, offsets, fast, unit_ratio, max_depth)
+      })
+    p <- winning:::.state_prices_from_extended_offsets(d, c(-20, -2, 6.5), 3L, ratio)
+    split <- vapply(clu, function(c) c$f > 0 && c$f < c$n && c$depth > 0, logical(1))
+    expect_true(any(split))
+    base <- vapply(ext, function(e) e$base, logical(1))
+    expect_true(any(base) && any(!base))   # base and dilated densities both priced
+    ext <- list()
+    q <- winning:::.state_prices_from_extended_offsets(d, c(-20, -2, 6.5, 200), 3L, ratio)
+    expect_true(any(vapply(ext, function(e) is.infinite(e$off[4]) && e$off[4] > 0, logical(1))))
+    expect_true(all(vapply(c(ext, clu), function(e) e$r == ratio, logical(1))))
+    expect_equal(q[4], 0)
+    expect_equal(q[1:3], p, tolerance = 1e-15)
+  }
+  # every ratio agrees with the Python port since #1006, which also moved
+  # this test off [-20, -2, 2]: that field fits and never clusters
+  want <- list(`2` = c(0.9994313990, 0.0005320731, 0.0000365279),
+               `3` = c(0.9993836116, 0.0005729348, 0.0000434535),
+               `4` = c(0.9971923608, 0.0025548886, 0.0002527506))
+  for (ratio in c(2, 3, 4)) for (field in list(c(-20, -2, 6.5), c(-20, -2, 6.5, Inf), c(-20, -2, 6.5, 200)))
+    expect_equal(winning:::.state_prices_from_extended_offsets(d, field, 3L, ratio)[1:3],
+                 want[[as.character(ratio)]], tolerance = 1e-6)
+})
+
+test_that("a unit_ratio that does not coarsen is refused (#899)", {
+  d <- skew_normal_density(L = 15, unit = 0.2, scale = 1, a = 1.5)
+  for (bad in list(1, 0.6, -2, NaN, Inf, c(2, 3)))
+    expect_error(winning:::.state_prices_from_extended_offsets(d, c(-20, -2, 6.5), 3L, bad), "unit_ratio")
+})
+
+test_that("a zero price is an infinite dividend and round-trips to zero (#1009)", {
+  # NA was read by prices_from_dividends as a MISSING quote and priced at
+  # nan_value, reviving the scratch
+  expect_identical(dividends_from_prices(c(0.5, 0.5, 0)), c(2, 2, Inf))
+  p <- c(0.75, 0.25, 0)
+  expect_identical(prices_from_dividends(dividends_from_prices(p)), p)
+  expect_identical(dividends_from_prices(c(0, 0)), c(Inf, Inf))
+  expect_identical(prices_from_dividends(dividends_from_prices(c(0, 0))), c(0, 0))
+  # missing and negative prices keep their meaning
+  expect_true(all(is.na(dividends_from_prices(c(0.5, NA, 0.5)))))
+  expect_true(is.na(dividends_from_prices(c(0.5, -0.1, 0.6))[2]))
 })

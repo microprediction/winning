@@ -40,6 +40,7 @@ from __future__ import annotations
 import numpy as np
 
 from ..shapes import as_loadings
+from ._checks import as_noise_variances
 
 
 from .nway import _recentre_nodes
@@ -424,14 +425,22 @@ def update_market_full(m, S, p_market, tau2=0.25, invert=None,
     m = np.asarray(m, dtype=float)
     S = np.asarray(S, dtype=float)
     n = len(m)
+    default_invert = invert is None
     if invert is None:
         from ..factor.races import abilities_from_race
 
         def invert(p):
             return -abilities_from_race(p, **market_model)
-    y = np.asarray(invert(np.asarray(p_market, dtype=float)), dtype=float)
+    from ._checks import as_observation
+    # the market's prices are checked on the default inversion; a caller's
+    # invert= may take anything, but what it returns must be one finite
+    # ability per runner
+    if default_invert:
+        p_market = as_observation(p_market, n, "p_market")
+    y = as_observation(invert(p_market if not default_invert
+                              else np.asarray(p_market, dtype=float)), n, "invert(p_market)")
     y = y - y.mean()
-    tau2 = np.broadcast_to(np.asarray(tau2, dtype=float), (n,)).astype(float)
+    tau2 = as_noise_variances(tau2, n, "tau2")                   # #809
     P = np.eye(n) - np.ones((n, n)) / n
     S = _psd_repair(S)
     # posterior (S^-1 + P T^-1 P)^-1 in Woodbury form with L = P T^-1/2,

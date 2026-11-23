@@ -206,6 +206,32 @@ test_that("ordinary nested races are unchanged (#477, #722)", {
                                          gamma = .8), ref, tolerance = 1e-12)
 })
 
+# gamma f and -gamma f are the same Gaussian law; python's and the
+# browser's rank-3+ rules are not symmetric under f -> -f and priced the
+# sign (#871). Here the Hermite grids differed by a few ulps.
+test_that("nested gamma and -gamma are the same race (#871)", {
+  n <- 6; ph <- 8
+  mu <- 0.7 * sin((1:n) * (ph + 1) * 0.37) + 0.2 * (0:(n - 1))
+  G <- outer(1:n, 1:2, function(i, j) 0.7 * sin(i * (j + 1) + ph * 0.31))
+  D <- 0.03 + 0.015 * ((0:(n - 1)) %% 4)
+  cl <- 0:(n - 1); ld <- rep(0, n)
+  for (k in 1:2) for (a in c(1, 0.5)) {
+    g <- G[, 1:k, drop = FALSE]
+    expect_identical(
+      nested_race_probabilities(mu, cl, ld, D, coupling = g, gamma = a, points = 65),
+      nested_race_probabilities(mu, cl, ld, D, coupling = g, gamma = -a, points = 65))
+    expect_identical(
+      nested_race_jacobian(mu, cl, ld, D, coupling = g, gamma = a, points = 65),
+      nested_race_jacobian(mu, cl, ld, D, coupling = g, gamma = -a, points = 65))
+  }
+  # ordinary inputs nearby: gamma > 0 keeps main's values (e2525dda)
+  expect_equal(
+    nested_race_probabilities(mu, cl, ld, D, coupling = G, gamma = 1, points = 65),
+    c(0.41819240433039889, 0.17662632413362278, 0.33162209023760175,
+      0.043814897183277496, 0.021290157617092267, 0.008454126498006637),
+    tolerance = 1e-14)
+})
+
 test_that("tree scalar loading equals its expansion (#780)", {
   # .scalar_loading(.3) kept length one and v[ord] filled NA for the rest
   mu <- c(-.5, -.1, .2, .4); cl <- c(1L, 1L, 2L, 2L)
@@ -258,4 +284,46 @@ test_that("rank-two block loadings are canonical per cluster (#787)", {
   expect_lt(max(abs(block_race_probabilities(mu, cl, sqrt(5) * v, D) -
                     block_race_probabilities(mu, cl, cbind(v, 2 * v), D))),
             1e-14)
+})
+
+test_that("block, nested and tree races need one cluster label per contestant (#792)", {
+  mu <- c(0, 0.1, 0.2, 0.3); o <- rep(1, 4); z <- rep(0, 4)
+  for (cl in list(c(0, 1), c(0, 0, 1, 1, 1))) {
+    msg <- "one label per contestant"
+    expect_error(block_race_probabilities(mu, cl, z, o), msg)
+    expect_error(nested_race_probabilities(mu, cl, z, o, coupling = 0.3 * o), msg)
+    expect_error(nested_race_probabilities(mu, cl, z, o, coupling = z, gamma = 0), msg)
+    expect_error(block_race_jacobian(mu, cl, z, o), msg)
+    expect_error(nested_race_jacobian(mu, cl, z, o, coupling = 0.3 * o), msg)
+    expect_error(tree_race_probabilities(mu, cl, z, o, c(3, 3, 0), c(0, 0, 1)), msg)
+    expect_error(tree_race_jacobian(mu, cl, z, o, c(3, 3, 0), c(0, 0, 1)), msg)
+    expect_error(race_probabilities(mu, structure = Blocks(cl, z, o)), msg)
+    expect_error(race_probabilities(mu, structure =
+      Nested(cl, z, o, coupling = z, gamma = 0)), msg)
+  }
+  # the valid four-label spelling of that exchangeable race, and labels of
+  # any kind, one per contestant, are unchanged
+  expect_equal(block_race_probabilities(rep(0, 4), c(0, 0, 1, 1), z, o),
+               rep(0.25, 4), tolerance = 1e-12)
+  m <- c(-0.3, 0, 0.2, 0.5); L <- c(0.4, 0.2, 0.3, 0.5)
+  expect_identical(block_race_probabilities(m, c(0, 0, 1, 1), L, o),
+                   block_race_probabilities(m, c("x", "x", "y", "y"), L, o))
+})
+
+test_that("a one-leaf tree centres its common loading, as python does (#1056)", {
+  mu <- c(-0.8, -0.3, 0, 0.2, 0.9); L <- c(0.4, 0.2, 0.3, 0.5, 0.1)
+  D <- rep(1, 5); cl <- rep(0, 5)
+  p0 <- tree_race_probabilities(mu, cl, L, D, 0, 0)
+  J0 <- tree_race_jacobian(mu, cl, L, D, 0, 0)
+  for (c in c(40, 50)) {   # uncentred, +40 raised a mass defect
+    expect_lt(max(abs(tree_race_probabilities(mu, cl, L + c, D, 0, 0) - p0)), 1e-12)
+    expect_lt(max(abs(tree_race_jacobian(mu, cl, L + c, D, 0, 0) - J0)), 1e-12)
+  }
+  # python's value on the same field
+  expect_equal(tree_race_probabilities(mu, cl, L + 40, D, 0, 0),
+               c(0.45329174164121638, 0.24112560163758431, 0.15429038412868296,
+                 0.11608246129945646, 0.035209811293059903), tolerance = 1e-13)
+  # several clusters: a common loading part is a real effect, untouched
+  v <- c(40.4, 40.2, 40.3, 40.5)
+  expect_identical(.one_cluster_gauge(c(0, 0, 1, 1), v, 4L), v)
 })

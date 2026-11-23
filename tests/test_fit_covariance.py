@@ -365,6 +365,18 @@ def test_relative_floor_preserves_near_singular_contrasts():
     assert global_norm < 0.05   # the old diagnostic would not have
 
 
+def test_contrast_residual_includes_high_variance_pair_across_blocks():
+    from winning.factor.core import _worst_contrast_ratio
+
+    C = np.diag([1.0, 4.0, 1.0, 4.0])
+    R = np.zeros_like(C)
+    C[1, 3] = C[3, 1] = 4.0 - 2**-20
+    R[1, 3] = R[3, 1] = 2**-20
+    # The 1–3 contrast has target variance 2**-19 and residual -2**-19.
+    # It spans two row blocks, and every other pair has zero residual.
+    assert _worst_contrast_ratio(C, R, 2) == 1.0
+
+
 def test_in_grammar_small_n_spread_variances_fits_exactly():
     """The default alternation start can stall on an exactly in-grammar
     matrix at small n with variances spread across decades (projected
@@ -441,3 +453,110 @@ def test_ordinary_fits_do_not_warn_505():
                             if "nearly singular contrast" in str(x.message)]
                 worst = max(worst, rep["contrast_residual_max"])
     assert worst > 0.05     # the battery does reach the cov= threshold
+
+
+def test_exact_rank_one_plus_diagonal_is_fitted_exactly_1051():
+    # issue #1051: the stage-one alternation converges linearly and on an
+    # exact rank-1-plus-diagonal C at n = 5 every seed ran out of sweeps;
+    # the final fit kept projected residuals up to 6.6e-4 of the mean
+    # variance (default m, blocks) and, at m=0, blocks=1, seed 6 fitted
+    # D[2] = 1.20 where the truth is 0.42. A start that hits the sweep cap
+    # is now finished by Gauss-Newton on the same objective (#1018).
+    n = 5
+    worst = 0.0
+    for seed in range(40):
+        rng = np.random.default_rng(seed)
+        V = rng.standard_normal((n, 1))
+        D = rng.uniform(0.2, 2.0, n)
+        C = V @ V.T + np.diag(D)
+        rep = fit_covariance(C, k=1, return_report=True)[-1]
+        worst = max(worst, rep["projected_residual_max"])
+        if seed == 6:
+            _, Df, _, _, rep6 = fit_covariance(C, k=1, m=0, blocks=1,
+                                               return_report=True)
+            assert np.abs(Df - D).max() < 1e-10       # was 0.78
+            assert rep6["projected_residual_max"] < 1e-12
+    assert worst < 1e-12
+
+
+def test_fit_that_stops_on_its_own_is_not_polished_1051(monkeypatch):
+    # the polish runs only on a start that ran out of sweeps, so a fit
+    # whose alternation stopped on its own rule never reaches it and is
+    # bitwise what it was before #1051
+    from winning.factor import core
+
+    def boom(*a, **k):
+        raise AssertionError("polish ran on a converged fit")
+    monkeypatch.setattr(core, "_polish_projected", boom)
+    # (seed 4: both exact rank-3 fields stop on their own; at most other
+    # seeds the n = 20 one runs out of sweeps, which is what #1051 fixes)
+    rng = np.random.default_rng(4)
+    cases = [np.diag([1.0, 2, 3, 4, 5, 6])]
+    for n in (20, 40):
+        V = rng.standard_normal((n, 3))
+        cases.append(V @ V.T + np.diag(rng.uniform(0.5, 2, n)))
+    for C in cases:
+        fit_covariance(C)
+
+
+def test_polish_never_worsens_the_final_fit_1051(monkeypatch):
+    # the polished start replaces the fit only if the FINAL projected
+    # residual is strictly lower in its largest entry and no higher in
+    # Frobenius norm. Blocks and promotion are greedy, and from a better
+    # start they occasionally end worse (a 12-runner Wishart: relative
+    # residual 0.0757 -> 0.0763); such fits must come back exactly as
+    # they would without the polish.
+    from winning.factor import core
+    real = core._polish_projected
+    rng = np.random.default_rng(1051)
+    cases = []
+    for i in range(24):
+        n = (6, 10, 12)[i % 3]
+        X = rng.standard_normal((n + 2, n))
+        S = X.T @ X / (n + 2)
+        if i % 2:
+            S = np.diag(rng.uniform(0.5, 2.0, n)) + 0.01 * S
+        cases.append((S, {} if i % 4 < 2 else {"k": 1}))
+    changed = 0
+    for S, kw in cases:
+        monkeypatch.setattr(core, "_polish_projected", real)
+        a = fit_covariance(S, return_report=True, **kw)
+        # a polish that never improves: the candidate is always rejected
+        monkeypatch.setattr(core, "_polish_projected",
+                            lambda C, k, D, max_eval=60:
+                            (np.zeros((len(C), k)), D, np.inf))
+        b = fit_covariance(S, return_report=True, **kw)
+        if np.array_equal(a[0], b[0]) and np.array_equal(a[1], b[1]):
+            continue
+        changed += 1
+        assert a[-1]["projected_residual_max"] < b[-1]["projected_residual_max"]
+        assert a[-1]["projected_residual_rel"] <= b[-1]["projected_residual_rel"]
+    assert changed > 0
+
+
+def test_polished_fit_is_priced_at_least_as_well_as_the_stall_1051():
+    # A polished fit replaces a stalled one that had often degenerated
+    # and been routed to GHK; on the 2^11 factor nodes the exact fit
+    # then priced worse than the stalled one had (5.7e-4 off a 2^21-node
+    # GHK reference against 4.5e-5). Up to 15 runners its race is routed
+    # to GHK at 2^14 nodes, and the inverse inverts that same map.
+    from winning.factor import races
+    rng = np.random.default_rng(6)
+    n = 8
+    V = rng.standard_normal((n, 3))
+    C = V @ V.T + np.diag(rng.uniform(0.2, 2.0, n))
+    rep = fit_covariance(C, return_report=True)[-1]
+    assert rep["polished"]
+    mu = np.linspace(-0.5, 0.5, n)
+    p = np.asarray(race_probabilities(mu, cov=C))
+    assert np.array_equal(p, races._race_dense(mu, C, budget=2 ** 14))
+    ref = races._race_dense(mu, C, budget=2 ** 20)
+    assert np.abs(p - ref).max() < 5e-5
+    from winning.factor import abilities_from_race
+    m = abilities_from_race(p, cov=C)
+    assert np.abs(m - (mu - mu.mean())).max() < 1e-7
+    # an unpolished fit is untouched: the report says so and the route
+    # (or the lattice) is what it was
+    rep0 = fit_covariance(np.diag([1.0, 2, 3, 4, 5, 6]),
+                          return_report=True)[-1]
+    assert not rep0["polished"]

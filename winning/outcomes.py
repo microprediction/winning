@@ -22,11 +22,16 @@ def as_order(order, n, name="order", full=False, min_len=1):
     ValueError naming the first bad entry; never truncates, wraps or
     drops one.
     """
+    # a masked entry is a missing label: np.asarray keeps its payload and
+    # it became a finisher (the #928 rule as_labels applies)
+    if np.ma.isMaskedArray(order) and np.ma.getmaskarray(order).any():
+        raise ValueError(f"{name} has a masked (missing) label; a finishing "
+                         "order cannot have a hole")
     a = np.asarray(order)
     if a.ndim != 1:
         raise ValueError(f"{name} must be one-dimensional; got shape {a.shape}")
     if a.size and not np.issubdtype(a.dtype, np.integer):
-        if a.dtype == bool or not np.issubdtype(a.dtype, np.number):
+        if a.dtype == bool or not np.issubdtype(a.dtype, np.number) or a.dtype.kind == "c":
             raise ValueError(f"{name} must hold integer labels; got {a.dtype}")
         bad = np.flatnonzero(~np.isfinite(a) | (a != np.floor(a)))
         if bad.size:

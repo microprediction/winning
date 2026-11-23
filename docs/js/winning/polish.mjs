@@ -2,18 +2,21 @@
 // (augmented Lagrangian with a compact BFGS inner solver standing in for
 // SLSQP; agrees with the reference optimum to optimizer tolerance).
 import { mean, checkOpts, OPT_HINTS, asLoadings, gaugeCenter, asAbilities,
-         asIdio, isVector } from "./core.mjs";
+         asIdio, isVector, baseSpan, baseKinks, solve } from "./core.mjs";
 import { raceProbabilities, abilitiesFromRace, BASES, SPANS,
          forwardGrid, factorRule, requireWholeRule, asWindow, asDelta,
-         collapseStructure, translatedHome } from "./races.mjs";
+         collapseStructure, translatedHome,
+         splitRaceJacobian } from "./races.mjs";
 import { blockRaceJacobian, nestedRaceJacobian, treeRaceJacobian, treeCluster,
          pairFactor } from "./blocks.mjs";
 
 export function raceJacobian(mu, opts = {}) {
   checkOpts(opts, RACE_JACOBIAN_OPTS, "raceJacobian", OPT_HINTS);
-  const { V = null, D = null, F = null, W = null, base = "normal",
+  const { V = null, D = null, F = null, W = null, base: base0 = "normal",
           points = 501, structure = null, qa = 9, qf = 15,
           window: win = "bulk", delta = 1e-12 } = opts;
+  // Same exported-callable identity rule as the forward and inverse (#912).
+  const base = base0 === BASES.normal ? "normal" : base0;
   // the forward's lattice controls, validated as the forward validates
   // them: they were refused as unknown options, so the browser could
   // price a race on a chosen window or tail budget and only
@@ -73,7 +76,22 @@ export function raceJacobian(mu, opts = {}) {
 /* Each exported call declares its own option keys; see checkOpts in
    core.mjs for why an options object needs this at all. */
 const RACE_JACOBIAN_OPTS = new Set(["V", "D", "F", "W", "base", "points", "qa", "qf", "structure", "window", "delta"]);
-const POLISH_RACE_OPTS = new Set(["V", "D", "F", "W", "base", "points", "structure", "A", "b", "groups", "nameCaps", "p0", "mu0", "fdFallback"]);
+const POLISH_RACE_OPTS = new Set(["V", "D", "F", "W", "base", "points", "structure", "A", "b", "groups", "nameCaps", "p0", "mu0", "fdFallback", "kinkSplit"]);
+
+/* The kink-split race and its Jacobian at m (races.splitRaceJacobian),
+   moved to unit scale by an exact power of two far from it, as
+   raceJacobianExplicit does (#870). */
+function splitPair(m, V, D, F, W, base, points, wantJ = true) {
+  const Dv = asIdio(D, m.length);
+  const sdMax = Math.sqrt(Math.max(...Dv));
+  if (!(sdMax > 0) || !Number.isFinite(sdMax) || (sdMax >= 2 ** -30 && sdMax <= 2 ** 30))
+    return splitRaceJacobian(m, { V, D: Dv, F, W, base, points }, wantJ);
+  const c = 2 ** Math.round(Math.log2(sdMax));
+  const Vs = V == null ? V : asLoadings(V, m.length).map(row => row.map(v => v / c));
+  const r = splitRaceJacobian(m.map(v => v / c),
+    { V: Vs, D: Dv.map(v => v / c / c), F, W, base, points }, wantJ);
+  return wantJ ? { p: r.p, J: r.J.map(row => row.map(v => v / c)) } : { p: r.p };
+}
 
 /* F0/W0: a caller-supplied factor law. raceProbabilities has always
    accepted one, and this always built its own standard-normal Hermite
@@ -81,8 +99,28 @@ const POLISH_RACE_OPTS = new Set(["V", "D", "F", "W", "base", "points", "structu
    non-Gaussian factor and could not differentiate or polish it -- the
    returned Jacobian was the derivative of a different model (#209).
    Used verbatim, exactly as the forward's setup() uses them. */
+/* The race is unchanged when abilities, loadings and sds are scaled by a
+   common c, and its Jacobian scales by 1/c. The kernel below caps each
+   log-domain factor at 40, so at a unit of 1e-18 the factor log(1/sd) = 41
+   hit the cap and a tied race's off-diagonal came back 53% small (1e-20:
+   5339x small) while the forward stayed exact (#870). Far from unit scale
+   the field is moved to it by an exact power of two and the derivative
+   moved back; ordinary fields take the kernel as before, bit for bit. */
 function raceJacobianExplicit(mu, V, D, base, points, F0 = null, W0 = null,
                               win = "bulk", delta = 1e-12) {
+  const sdMax = Math.sqrt(Math.max(...D));
+  if (!(sdMax > 0) || !Number.isFinite(sdMax) || (sdMax >= 2 ** -30 && sdMax <= 2 ** 30))
+    return raceJacobianUnit(mu, V, D, base, points, F0, W0, win, delta);
+  const c = 2 ** Math.round(Math.log2(sdMax));
+  const n = mu.length;
+  const Vs = V == null ? V : asLoadings(V, n).map(row => row.map(v => v / c));
+  const J = raceJacobianUnit(mu.map(v => v / c), Vs, D.map(v => v / c / c), base,
+                             points, F0, W0, win, delta);
+  return J.map(row => row.map(v => v / c));
+}
+
+function raceJacobianUnit(mu, V, D, base, points, F0 = null, W0 = null,
+                          win = "bulk", delta = 1e-12) {
   const n = mu.length;
   const sd = D.map(Math.sqrt);
   // The independent default is the EMPTY node (no coordinates), not the
@@ -109,7 +147,7 @@ function raceJacobianExplicit(mu, V, D, base, points, F0 = null, W0 = null,
   const fn = typeof base === "function" ? base : BASES[base];
   if (typeof fn !== "function")
     throw new Error(`unknown base ${JSON.stringify(base)}`);
-  const [left, right] = typeof base === "function" ? [12, 12] : (SPANS[base] || [12, 12]);
+  const [left, right] = (typeof base === "function" ? baseSpan(fn) : SPANS[base]) || [12, 12];
   const Mall = F.map(fq => mu.map((m, i) => {
     let s = m;
     for (let r = 0; r < fq.length; r++) s += V[i][r] * fq[r];
@@ -130,13 +168,26 @@ function raceJacobianExplicit(mu, V, D, base, points, F0 = null, W0 = null,
     const Mq = Mall[q], wq = W[q];
     const L = new Array(P).fill(0);
     const logS = [], logf = [];
+    const callable = typeof base === "function";
+    // a lattice point where some survival sits at the -1e300 sentinel: there
+    // L - logS[i] cancels the sentinel and every other runner's term with it
+    const sentinel = new Array(P).fill(false);
     for (let i = 0; i < n; i++) {
       const li = new Array(P), fi = new Array(P);
       for (let t = 0; t < P; t++) {
         const z = (x[t] - Mq[i]) / sd[i];
         const [S, f] = fn(z);
-        li[t] = Math.log(S);
-        fi[t] = Math.log(Math.max(f / sd[i], 1e-300));
+        // Match the forward's log-tail metadata when direct survival
+        // underflows: -Infinity - -Infinity poisoned ordinary rows (#952).
+        // Keep named-base arithmetic unchanged in this callable-only fix.
+        li[t] = callable && S <= 1e-300 && fn.logSf
+          ? Math.max(fn.logSf(z), -1e300) || -1e300 : Math.log(S);
+        if (callable && li[t] <= -1e299) sentinel[t] = true;
+        // a callable with compact support has exactly zero density off it;
+        // flooring that at 1e-300 and dividing by a sentinel survival gave a
+        // fixed-winner race a 4.5e7 Jacobian entry. Zero stays zero.
+        fi[t] = callable && f === 0 ? -Infinity
+          : Math.log(Math.max(f / sd[i], 1e-300));
         L[t] += li[t];
       }
       logS.push(li); logf.push(fi);
@@ -145,7 +196,14 @@ function raceJacobianExplicit(mu, V, D, base, points, F0 = null, W0 = null,
     for (let i = 0; i < n; i++) {
       const p1 = new Array(P), p2 = new Array(P);
       for (let t = 0; t < P; t++) {
-        p1[t] = Math.exp(Math.min(Math.max(logf[i][t] + L[t] - logS[i][t], -745), 40));
+        if (logf[i][t] === -Infinity) { p1[t] = 0; p2[t] = 0; continue; }
+        // leave-one-out by summation where subtraction would cancel (#952)
+        let others = L[t] - logS[i][t];
+        if (sentinel[t]) {
+          others = 0;
+          for (let j = 0; j < n; j++) if (j !== i) others += logS[j][t];
+        }
+        p1[t] = Math.exp(Math.min(Math.max(logf[i][t] + others, -745), 40));
         p2[t] = Math.exp(Math.min(Math.max(logf[i][t] - logS[i][t], -745), 40));
       }
       P1.push(p1); P2.push(p2);
@@ -279,15 +337,51 @@ function bfgsMin(x0, obj, grad, maxit = 80) {
 export function polishRace(opts = {}) {
   checkOpts(opts, POLISH_RACE_OPTS, "polishRace", OPT_HINTS);
   const { p0 = null, mu0: mu0In = null, V = null, D = null, F = null,
-          W = null, base = "normal",
+          W = null, base: base0 = "normal",
           points = 257, nameCaps = null, groups = null,
-          structure = null, fdFallback = true } = opts;
+          structure = null, fdFallback = true, kinkSplit = null } = opts;
+  // Keep the forward, inverse and derivative closures on the same law (#912).
+  const base = base0 === BASES.normal ? "normal" : base0;
+  // A kinked base (laplace, a callable declaring kinks) polishes on the
+  // kink-split lattice: the forward, its Jacobian and the inversion of p0
+  // all on one smooth map. On the uniform lattice the window slides with
+  // mu across every runner's kink, so the map's derivative carries an
+  // O(dx) artifact no fixed-grid Jacobian matches, and the solve came back
+  // converged: false (python's polish_race, #1011). kinkSplit: null
+  // chooses by the base; false keeps the uniform lattice; a smooth base is
+  // unchanged either way. structure= races are Gaussian and take neither.
+  if (kinkSplit !== null && typeof kinkSplit !== "boolean")
+    throw new Error(`polishRace: kinkSplit must be null, true or false; got ${String(kinkSplit)}`);
+  if (structure != null && kinkSplit)
+    throw new Error("polishRace: kinkSplit applies to the factor lattice (V/D), not to structure");
+  const fnB = typeof base === "function" ? base : BASES[base];
+  const split = structure == null && typeof fnB === "function"
+    && kinkSplit !== false && !!baseKinks(fnB);
+  // p and J at the last Jacobian point; p alone at the last forward-only
+  // point (line searches and feasibility restoration need no J)
+  let pairAt = null, pairVal = null, pAt = null, pVal = null;
+  const same = (u, m) => u && u.length === m.length && u.every((v, i) => v === m[i]);
+  const pairM = m => {
+    if (same(pairAt, m)) return pairVal;
+    pairVal = splitPair(m, V, D, F, W, base, points);
+    pairAt = m.slice();
+    return pairVal;
+  };
+  const probM = m => {
+    if (same(pairAt, m)) return pairVal.p;
+    if (same(pAt, m)) return pVal;
+    pVal = splitPair(m, V, D, F, W, base, points, false).p;
+    pAt = m.slice();
+    return pVal;
+  };
   let { A = null, b = null } = opts;
   // F/W must reach the forward, the jacobian AND the inverse that makes
   // mu0. Polishing under a different factor law than the one the caller
   // priced with silently optimises the wrong model (#209).
-  const fwdM = m => raceProbabilities(m, { V, D, F, W, base, points, structure });
-  const jacM = m => raceJacobian(m, { V, D, F, W, base, points, structure });
+  const fwdM = split ? probM
+    : m => raceProbabilities(m, { V, D, F, W, base, points, structure });
+  const jacM = split ? m => pairM(m).J
+    : m => raceJacobian(m, { V, D, F, W, base, points, structure });
   let mu0 = mu0In != null ? asAbilities(mu0In, "mu0") : null;
   // A p0 call is only as good as its inversion: a failed one is not the
   // caller's race, and certifying the polish of it converged was a false
@@ -299,6 +393,54 @@ export function polishRace(opts = {}) {
                                         returnInfo: true });
     mu0 = inv.mu;
     invConverged = inv.converged;
+    if (split) {
+      // the inverse of the SPLIT map: abilitiesFromRace inverts the
+      // uniform one (its slopes are already split, #267), which is a
+      // ~1e-4 start; Newton on the split pair finishes it. J has the
+      // gauge 1 as null vector on both sides, so J + 11'/n is regular.
+      // scale-safe as rescaledTarget, and v / s0 as before when the sum is
+      // finite: an all-finite p0 near MAX_VALUE summed to Infinity and
+      // zeroed the target
+      let q = Array.from(p0), s0 = q.reduce((u, v) => u + v, 0);
+      if (!Number.isFinite(s0)) {
+        let mx = 0;
+        for (const v of q) mx = Math.max(mx, v);
+        q = q.map(v => v / mx);
+        s0 = q.reduce((u, v) => u + v, 0);
+      }
+      const t = q.map(v => v / s0);
+      const lt = t.map(Math.log);
+      const resid = m => Math.max(...fwdM(m).map((v, i) =>
+        Math.abs(Math.log(Math.max(v, 1e-300)) - lt[i])));
+      let m = mu0.slice(), r = resid(m), it = 0;
+      for (; it < 30 && r >= 1e-8; it++) {
+        const { p: pm, J } = pairM(m);
+        const k = m.length;
+        // the gauge term on J's own scale, as polish_race in R: J is
+        // O(1 / sd), and at D ~ 1e80 J + 1/k rounded to a constant
+        // matrix. Any positive weight gives the same step; 1 on ordinary
+        // races.
+        let sj = 0;
+        for (const row of J) for (const v of row) sj = Math.max(sj, Math.abs(v));
+        const g = sj > 0 && Number.isFinite(sj) && (sj < 2 ** -30 || sj > 2 ** 30)
+          ? 2 ** Math.round(Math.log2(sj)) : 1;
+        const d = solve(J.map(row => row.map(v => v + g / k)),
+                        t.map((v, i) => v - pm[i]));
+        let step = 1, moved = false;
+        for (let h = 0; h < 12; h++, step *= 0.5) {
+          const mN = m.map((v, i) => v + step * d[i]);
+          const mm = mean(mN);
+          const mC = mN.map(v => v - mm);
+          const rN = resid(mC);
+          if (rN < r) { m = mC; r = rN; moved = true; break; }
+        }
+        if (!moved) break;
+      }
+      mu0 = m;
+      invConverged = r < 1e-8;
+      inv.maxLogResidual = r;
+      inv.iterations += it;
+    }
     if (!invConverged && typeof console !== "undefined")
       console.warn(
         "polishRace: abilitiesFromRace did not converge on p0: max |log " +
@@ -380,6 +522,38 @@ export function polishRace(opts = {}) {
       if (feasibleAt(mu0.map(v => mid * v))) lo = mid; else hi = mid;
     }
     startM = mu0.map(v => lo * v);
+  } else if (!feasibleAt(mu0)) {
+    // A floor above 1/n makes the uniform race infeasible too, so the ray
+    // above never ran and the solve started saturated: it crossed to the
+    // opposite deterministic winner, 2.4e7 ability units away, and
+    // certified it (#840). Walk instead from the uniform race along the
+    // direction the violated rows ask for -- near uniform dp/dmu is -c
+    // times the centring projection, so lowering A_k p means moving mu
+    // along the centred A_k -- to the first feasible point. For a floored
+    // pair that point is the answer.
+    const p0r = fwdM(mu0.map(() => 0));
+    const d = new Array(n).fill(0);
+    A0.forEach((row, k) => {
+      if (row.reduce((a, v, j) => a + v * p0r[j], 0) <= b0[k]) return;
+      const rm = row.reduce((a, v) => a + v, 0) / n;
+      const nr = Math.sqrt(row.reduce((a, v) => a + (v - rm) ** 2, 0)) || 1;
+      for (let j = 0; j < n; j++) d[j] += (row[j] - rm) / nr;
+    });
+    if (d.some(v => v !== 0)) {
+      // doubling from 1 brackets the first feasible step at any scale
+      let hi = 1, found = false;
+      for (let it = 0; it < 60 && !found; it++) {
+        if (feasibleAt(d.map(v => hi * v))) found = true; else hi *= 2;
+      }
+      if (found) {
+        let lo = 0;
+        for (let it = 0; it < 60; it++) {
+          const mid = 0.5 * (lo + hi);
+          if (feasibleAt(d.map(v => mid * v))) hi = mid; else lo = mid;
+        }
+        startM = d.map(v => hi * v);
+      }
+    }
   }
   const unit = (() => {
     // read at the START: at a saturated mu0 the informative longshot rows
@@ -483,9 +657,15 @@ export function polishRace(opts = {}) {
       // feasible one, with an empty active set (#379). The multiplier
       // update lam <- max(0, lam - rho c) is a fixed point exactly when
       // complementarity holds (lam = 0 on a slack row, c = 0 on a
-      // binding one), so feasibility plus a settled multiplier is the
-      // test. rho grows only while the iterate is still infeasible.
-      if (outer > 0 && viol < 1e-8 && dLam <= 1e-7 * lamMax) { converged = true; break; }
+      // binding one), so feasibility plus a settled multiplier was taken
+      // as the test. rho grows only while the iterate is still infeasible.
+      // A settled multiplier at a feasible point is the fixed point of
+      // the update, but not by itself a KKT point: once an overshot
+      // constraint goes slack its multiplier returns to zero and dLam = 0
+      // at a race nowhere near the nearest feasible one, which this branch
+      // certified (#840). It now stops the loop -- nothing more will move
+      // -- and leaves the verdict to the stationarity check below.
+      const settled = outer > 0 && viol < 1e-8 && dLam <= 1e-7 * lamMax;
       // ...or certify the point DIRECTLY. Once infeasible iterates have
       // driven rho to 1e6, a harmless 3e-9 slack on a binding row moves
       // the multiplier by 3e-3 per outer step, so the fixed-point test
@@ -509,6 +689,7 @@ export function polishRace(opts = {}) {
           converged = true; break;
         }
       }
+      if (settled) break;
       if (viol >= 1e-8) rho = Math.min(rho * 3, 1e6);
     }
     return m;

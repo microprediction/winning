@@ -43,6 +43,21 @@ the marginal-only rule in both directions:
               and its realized PCS falls below nominal).
 Both distortions vanish at c = 0 (no shared factor), which is the
 control row.
+
+Three further rules separate the effect of correlation from the
+threshold bias of the marginal surrogates (added 2026-11-19):
+  marg   -- the EXACT independent-marginal probabilities: the race on
+            the marginal sds with no factor (Menet et al. 2025, Prop. 1
+            without the threshold step). Ignores correlation only.
+  bonf   -- a correlation-aware lower bound from the exact pairwise
+            contrast variances: max_i 1 - sum_j Phi(-(m_i-m_j)/s_ij),
+            s_ij^2 = d_i + d_j + |w_i - w_j|^2. Stops when >= 1 - delta.
+  mc     -- counting the argmax of MC_DRAWS draws from the correlated
+            posterior (its own random stream).
+The original three rules see exactly the random numbers they saw
+before: data are drawn from the experiment stream for as long as the
+original loop would have drawn them, and from a separate stream after
+that, so the original rows reproduce bit for bit.
 """
 import json
 import os
@@ -65,7 +80,12 @@ N_MAX = 400         # replicate budget
 REPS = 200          # experiment replications per configuration
 CERT_EVERY = 50     # Monte Carlo certification cadence (per config)
 MC_CERT = 200_000
-RNG = np.random.default_rng(20260901)
+MC_DRAWS = 2_000    # draws per step for the counting rule
+OLD_RULES = ("exact", "indep", "vbos")
+RULES = OLD_RULES + ("marg", "bonf", "mc")
+# One fixed seed per regime (was hash((kind, c)), which is randomized per
+# process by PYTHONHASHSEED and so not reproducible).
+SEEDS = {"independent": 20261101, "aligned": 20261102, "opposed": 20261103}
 
 
 def make_config(kind, c):
@@ -157,9 +177,41 @@ def vbos_policy(m, s):
     return p / p.sum()
 
 
-def run_config(kind, c, rng):
+def marg_pom(m, s):
+    """Exact probabilities if the systems were independent with these
+    marginal sds: the race with no factor."""
+    return race_probabilities(-m, D=s ** 2)
+
+
+def bonferroni_lcb(m, W, d):
+    """Per-system lower bound on P(i best) from exact pairwise contrasts."""
+    var = (d[:, None] + d[None, :]
+           + ((W[:, None, :] - W[None, :, :]) ** 2).sum(-1))
+    np.fill_diagonal(var, 1.0)
+    z = (m[:, None] - m[None, :]) / np.sqrt(var)
+    tail = norm.cdf(-z)
+    np.fill_diagonal(tail, 0.0)
+    return 1.0 - tail.sum(1)
+
+
+def mc_pom(m, W, d, rng_mc):
+    draws = (m[None, :] + rng_mc.normal(size=(MC_DRAWS, W.shape[1])) @ W.T
+             + rng_mc.normal(size=(MC_DRAWS, len(m))) * np.sqrt(d))
+    return np.bincount(draws.argmax(1), minlength=len(m)) / MC_DRAWS
+
+
+def run_config(kind, c, rng, log=None, run_id=None, rng_extra=None,
+               rng_mc=None):
+    """One regime. If `log` is an open file, every replication appends one
+    JSON line (regime, seed, run id, the raw stopped_n / correct / TV
+    values) as it finishes, so an interrupted run keeps what it measured.
+    The logging consumes no random numbers and changes no statistic."""
+    if rng_extra is None:
+        rng_extra = np.random.default_rng(SEEDS[kind] + 1000)
+    if rng_mc is None:
+        rng_mc = np.random.default_rng(SEEDS[kind] + 2000)
     V, sigma = make_config(kind, c)
-    rules = ("exact", "indep", "vbos")
+    rules = RULES
     out = {r: {"stopped_n": [], "correct": [], "tv_vs_exact": []}
            for r in rules}
     cert_worst = 0.0
@@ -169,29 +221,46 @@ def run_config(kind, c, rng):
         ysum = np.zeros(K)
         live = {r: True for r in rules}
         certify = (rep % CERT_EVERY == 0)
+        rep_tv = {r: [] for r in rules}
+        rep_cert = None
+        old_drawing = True       # would the original loop still draw here?
         for n in range(1, N_MAX + 1):
-            F = rng.normal(size=RHO)
-            eps = rng.normal(0.0, sigma)
+            src = rng if old_drawing else rng_extra
+            F = src.normal(size=RHO)
+            eps = src.normal(0.0, sigma)
             ysum += mu_true + V @ F + eps
+            old_live = any(live[r] for r in OLD_RULES)
+            if not old_live:
+                old_drawing = False   # the original loop broke at this step
             if not any(live.values()):
                 break
             mu_n, W, d, sd = posterior_factor_form(n, ysum / n, V, sigma)
-            p_exact = exact_pom(mu_n, W, d)
-            p_indep = flite_pom(mu_n, sd)
-            p_vbos = vbos_policy(mu_n, sd)
-            if certify and n == 20:
+            # the original three are evaluated exactly while the original
+            # loop would have run; the new rules need none of them
+            if old_live:
+                p_exact = exact_pom(mu_n, W, d)
+                p_indep = flite_pom(mu_n, sd)
+                p_vbos = vbos_policy(mu_n, sd)
+            else:
+                p_exact = p_indep = p_vbos = None
+            p_marg = marg_pom(mu_n, sd) if live["marg"] else None
+            p_bonf = bonferroni_lcb(mu_n, W, d) if live["bonf"] else None
+            p_mc = mc_pom(mu_n, W, d, rng_mc) if live["mc"] else None
+            if certify and n == 20 and old_live:
                 draws = (mu_n[None, :]
                          + rng.normal(size=(MC_CERT, RHO)) @ W.T
                          + rng.normal(size=(MC_CERT, K)) * np.sqrt(d))
                 counts = np.bincount(draws.argmax(1), minlength=K) / MC_CERT
-                cert_worst = max(cert_worst,
-                                 0.5 * np.abs(counts - p_exact).sum())
+                rep_cert = float(0.5 * np.abs(counts - p_exact).sum())
+                cert_worst = max(cert_worst, rep_cert)
             for r, p in (("exact", p_exact), ("indep", p_indep),
-                         ("vbos", p_vbos)):
+                         ("vbos", p_vbos), ("marg", p_marg),
+                         ("bonf", p_bonf), ("mc", p_mc)):
                 if live[r]:
-                    if r != "exact":
-                        out[r]["tv_vs_exact"].append(
-                            0.5 * np.abs(p - p_exact).sum())
+                    if r in ("indep", "vbos"):
+                        tv_n = 0.5 * np.abs(p - p_exact).sum()
+                        out[r]["tv_vs_exact"].append(tv_n)
+                        rep_tv[r].append(float(tv_n))
                     if p.max() >= 1.0 - DELTA:
                         live[r] = False
                         out[r]["stopped_n"].append(n)
@@ -201,6 +270,15 @@ def run_config(kind, c, rng):
             if live[r]:
                 out[r]["stopped_n"].append(N_MAX)
                 out[r]["correct"].append(-1)      # censored, never stopped
+        if log is not None:
+            row = dict(run_id=run_id, regime=kind, c=c, seed=SEEDS[kind],
+                       rep=rep, best=best, mc_certificate_tv=rep_cert)
+            for r in rules:
+                row[r] = dict(stopped_n=int(out[r]["stopped_n"][-1]),
+                              correct=int(out[r]["correct"][-1]),
+                              tv_vs_exact=rep_tv[r])
+            log.write(json.dumps(row) + "\n")
+            log.flush()
     summary = {}
     for r in rules:
         stopped = np.array(out[r]["stopped_n"], float)
@@ -209,14 +287,54 @@ def run_config(kind, c, rng):
         summary[r] = dict(
             mean_n=float(stopped.mean()),
             censored=int((~dec).sum()),
+            stopped=int(dec.sum()),
+            mean_n_stopped=(float(stopped[dec].mean()) if dec.any()
+                            else None),
             pcs=float(corr[dec].mean()) if dec.any() else None,
+            # TV against the exact rule is measured only for indep and
+            # vbos; it is zero for exact itself and unmeasured (None) for
+            # the rules added later.
             tv_median=(float(np.median(out[r]["tv_vs_exact"]))
-                       if out[r]["tv_vs_exact"] else 0.0),
+                       if out[r]["tv_vs_exact"]
+                       else (0.0 if r == "exact" else None)),
             tv_p90=(float(np.quantile(out[r]["tv_vs_exact"], 0.9))
-                    if out[r]["tv_vs_exact"] else 0.0),
+                    if out[r]["tv_vs_exact"]
+                    else (0.0 if r == "exact" else None)),
         )
     summary["mc_certificate_worst_tv"] = float(cert_worst)
     return summary
+
+
+def provenance(seeds):
+    """Commit, package source/version, numpy/scipy versions and seeds."""
+    import subprocess
+    import platform
+    import scipy
+    import winning
+    root = os.path.abspath(os.path.join(os.path.dirname(__file__),
+                                        "..", "..", ".."))
+    try:
+        commit = subprocess.check_output(
+            ["git", "-C", root, "rev-parse", "HEAD"], text=True).strip()
+        dirty = subprocess.check_output(
+            ["git", "-C", root, "status", "--porcelain", "--",
+             os.path.dirname(os.path.abspath(__file__)), "winning"],
+            text=True).strip()
+    except Exception as e:                       # pragma: no cover
+        commit, dirty = f"unavailable: {e}", ""
+    return dict(
+        git_commit=commit,
+        uncommitted_changes_in_script_dir_or_package=dirty.splitlines(),
+        winning_source=os.path.dirname(os.path.abspath(winning.__file__)),
+        winning_version=getattr(winning, "__version__", None),
+        winning_imported_from_worktree=os.path.abspath(
+            winning.__file__).startswith(root + os.sep),
+        numpy=np.__version__,
+        scipy=scipy.__version__,
+        python=platform.python_version(),
+        seeds=seeds,
+        script=os.path.basename(__file__),
+    )
 
 
 def sanity():
@@ -229,22 +347,66 @@ def sanity():
     assert abs(p[0] - p_true) < 1e-3, (p, p_true)
 
 
+def write_json_atomic(path, obj):
+    """Write to a sibling temp file and rename, so a crash mid-write never
+    leaves a truncated file at `path`."""
+    tmp = f"{path}.tmp.{os.getpid()}"
+    with open(tmp, "w") as f:
+        json.dump(obj, f, indent=2)
+    os.replace(tmp, path)
+
+
 if __name__ == "__main__":
+    import argparse
+    import time
+    here = os.path.dirname(os.path.abspath(__file__))
+    canonical = os.path.join(here, "results.json")
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--only", default=None, choices=tuple(SEEDS),
+                    help="run a single regime (reproducibility checks); "
+                         "the output then goes to a stamped file, never "
+                         "to results.json")
+    ap.add_argument("--out", default=None,
+                    help="aggregate JSON (default results.json, or "
+                         "results_<regime>_<stamp>.json under --only)")
+    args = ap.parse_args()
+    t0 = time.time()
+    run_id = time.strftime("%Y%m%dT%H%M%S", time.gmtime(t0))
+    if args.out is None:
+        args.out = (canonical if args.only is None else
+                    os.path.join(here, f"results_{args.only}_{run_id}.json"))
+    elif args.only and os.path.abspath(args.out) == canonical:
+        raise SystemExit("--only runs a single regime; refusing to overwrite "
+                         "the full results.json (pass another --out)")
     sanity()
-    results = {}
+    results = {"provenance": provenance(SEEDS)}
+    results["provenance"]["run_id"] = run_id
+    # raw per-replication rows, appended and flushed as they are produced
+    log_path = os.path.join(here, f"replications_{run_id}_{os.getpid()}.jsonl")
+    results["provenance"]["raw_log"] = os.path.basename(log_path)
+    log = open(log_path, "a")
     for kind, c in [("independent", 0.0), ("aligned", 0.6),
                     ("opposed", 0.6)]:
-        rng = np.random.default_rng(hash((kind, int(c * 100))) % 2 ** 31)
-        results[f"{kind}_c{c}"] = run_config(kind, c, rng)
+        if args.only and kind != args.only:
+            continue
+        rng = np.random.default_rng(SEEDS[kind])
+        rng_extra = np.random.default_rng(SEEDS[kind] + 1000)
+        rng_mc = np.random.default_rng(SEEDS[kind] + 2000)
+        results[f"{kind}_c{c}"] = run_config(kind, c, rng, log=log,
+                                             run_id=run_id,
+                                             rng_extra=rng_extra,
+                                             rng_mc=rng_mc)
         s = results[f"{kind}_c{c}"]
         print(f"[{kind} c={c}] cert TV {s['mc_certificate_worst_tv']:.4f}")
-        for r in ("exact", "indep", "vbos"):
+        for r in RULES:
             row = s[r]
             print(f"  {r:6s} mean n {row['mean_n']:6.1f}  "
                   f"PCS {row['pcs'] if row['pcs'] is not None else 'NA'}  "
                   f"censored {row['censored']:3d}  "
-                  f"TV med/p90 {row['tv_median']:.3f}/{row['tv_p90']:.3f}")
-    with open(os.path.join(os.path.dirname(__file__), "results.json"),
-              "w") as f:
-        json.dump(results, f, indent=2)
-    print("wrote results.json")
+                  + ("TV med/p90 n/a" if row['tv_median'] is None else
+                     f"TV med/p90 {row['tv_median']:.3f}/{row['tv_p90']:.3f}"))
+    log.close()
+    results["provenance"]["wall_seconds"] = round(time.time() - t0, 1)
+    write_json_atomic(args.out, results)
+    print(f"total {time.time() - t0:.0f}s; wrote {args.out} "
+          f"(raw rows in {log_path})")

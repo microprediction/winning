@@ -63,43 +63,46 @@
       <h2>Why does the diagonal iteration beat Newton&ndash;Krylov, when
       the diagonal it preconditions with is exact, and diagonally
       preconditioned CG normally beats damped Jacobi on an SPD system?</h2>
-      <p class="faq-q">Section 4 puts Newton&ndash;Krylov two orders of
-      magnitude behind the damped coordinate iteration. But the slopes
-      preconditioning that iteration are the Laplacian's own diagonal.
-      Diagonally preconditioned CG beats damped Jacobi on an SPD system,
-      so the ordering should flip &mdash; unless one Jacobian&ndash;vector
-      product costs a lot more than one sweep. And separately: the page
-      hedges that the per-iteration slope isn't quite the exact
-      derivative &mdash; does that show up as bounded oscillation, or as
-      growing error?</p>
+      <p class="faq-q">The methodology page's inversion section puts
+      Newton&ndash;Krylov two orders of magnitude behind the damped
+      coordinate iteration. But the slopes preconditioning that iteration
+      are the Laplacian's own diagonal. Diagonally preconditioned CG beats
+      damped Jacobi on an SPD system, so the ordering should flip, unless
+      one Jacobian&ndash;vector product costs a lot more than one sweep.
+      Separately, the methodology hedges that the per-iteration slope
+      isn't quite the exact derivative. Does that show up as bounded
+      oscillation, or as growing error?</p>
 
       <h3>Wall clock vs. iteration count</h3>
       <p>PCG does win on iteration count. It loses on wall clock because
-      of what each iteration costs. Measured in three rounds
-      (<code>research/experiments/exp23_newton_cg</code>). Round 1:
-      unpreconditioned CG on raw share residuals, where tiny-share
-      coordinates are invisible to both the residual and the Jacobian, so
-      the step goes into weakly determined tail directions &mdash; 387s,
-      not converged, vs. <span class="num">3.7</span>s for the production
-      sweep at \(n=200\). Round 2: adds a diagonal preconditioner but
-      keeps an only-approximately-symmetric Jacobian&ndash;vector product
-      and no null-space projection &mdash; diverges outright. Round 3:
-      symmetrized log-residual Newton system, the exact
-      integration-by-parts Jacobian&ndash;vector product (genuinely
-      symmetric), the null vector projected out, PCG preconditioned by
-      the same own-log-slope diagonal the production sweep uses. First
-      version to converge at all, and on the easy case it reaches a
-      residual an order of magnitude tighter than the diagonal iteration
-      &mdash; at roughly sixty times the wall clock:</p>
+      of what each iteration costs. The measurements are in
+      <code>research/experiments/exp23_newton_cg</code>, and Newton&ndash;Krylov
+      converges there only once several ingredients are in place.</p>
+      <p>Unpreconditioned CG on raw share residuals does not converge.
+      Tiny-share coordinates are invisible to both the residual and the
+      Jacobian, so the step goes into weakly determined tail directions:
+      387s without converging, vs. <span class="num">3.7</span>s for the
+      production sweep at \(n=200\). Adding a diagonal preconditioner
+      while keeping an only-approximately-symmetric Jacobian&ndash;vector
+      product and no null-space projection diverges outright.</p>
+      <p>The version that converges solves a symmetrized log-residual
+      Newton system. It uses the exact integration-by-parts
+      Jacobian&ndash;vector product (genuinely symmetric), projects out the
+      null vector, and preconditions PCG with the same own-log-slope
+      diagonal the production sweep uses. On the easy case it reaches a
+      residual an order of magnitude tighter than the diagonal iteration,
+      at roughly sixty times the wall clock in the run below.</p>
+      <p>That run mixed a 257-point forward lattice with a 3,001-point JVP
+      lattice, so it is not an equal-budget solver comparison:</p>
       <table class="cmp">
         <tr><th>\(n=200\), easy case</th><th>time</th><th>residual</th><th>result</th></tr>
         <tr><td>damped diagonal iteration</td><td class="num">0.5s</td><td class="num">9.2e-9</td><td>converged</td></tr>
-        <tr><td>Newton&ndash;Krylov (round 3)</td><td class="num">29.7s</td><td class="num">9.6e-10</td><td>converged</td></tr>
+        <tr><td>Newton&ndash;Krylov (symmetrized, preconditioned)</td><td class="num">29.7s</td><td class="num">9.6e-10</td><td>converged</td></tr>
       </table>
       <p>The diagonal iteration's own-slope preconditioner is a byproduct
-      of the forward pass it already has to run to get the shares &mdash;
-      free. Each PCG iteration needs an exact Jacobian&ndash;vector
-      product instead.</p>
+      of the forward pass it already has to run to get the shares, so it
+      costs nothing extra. Each PCG iteration needs an exact
+      Jacobian&ndash;vector product instead.</p>
 
       <p class="faq-q">Since a CG iteration and a sweep both cost one
       pass over the tie edges, the comparison collapses to inner CG count
@@ -111,10 +114,11 @@
       with field size across the exp23 variants?</p>
 
       <h3>Does the ratio move with field size?</h3>
-      <p>A CG iteration and a sweep don't cost the same one pass.
-      Measured directly at \(n=200\), one IBP-form JVP takes
-      <span class="num">11.5</span>&times; as long as one forward pass
-      with slopes. Measured across \(n=200\) to \(n=12{,}800\):</p>
+      <p>The timings below compare a 257-point forward pass with a
+      3,001-point IBP JVP. The lattice-size ratio alone is 11.68, so these
+      numbers do not establish an intrinsic 11.5&ndash;11.9&times; JVP
+      overhead at fixed resolution. Timings depend on the machine and
+      backend.</p>
       <table class="cmp">
         <tr><th>\(n\)</th><th>forward pass</th><th>JVP (ibp)</th><th>ratio</th></tr>
         <tr><td class="num">200</td><td class="num">128.7 ms</td><td class="num">1479.7 ms</td><td class="num">11.5&times;</td></tr>
@@ -122,9 +126,15 @@
         <tr><td class="num">3,200</td><td class="num">2038.4 ms</td><td class="num">23684.3 ms</td><td class="num">11.6&times;</td></tr>
         <tr><td class="num">12,800</td><td class="num">8122.5 ms</td><td class="num">96357.1 ms</td><td class="num">11.9&times;</td></tr>
       </table>
-      <p>Both operations are \(O(n)\) at fixed \(L\), and the ratio
-      between them is flat across a 64&times; range in \(n\). The per-call
-      cost gap doesn't close with field size.</p>
+      <p>The benchmark script gives both operations an <em>equal point
+      budget</em> (the same requested <code>points</code>). The lattices
+      they realize still differ, so it logs each one's node count, grid
+      length and spacing.</p>
+      <p>Both operations are \(O(n)\) at fixed \(L\), but this table did
+      not hold \(L\) equal between them. An equal-budget field-size
+      and end-to-end solver rerun is needed before drawing a new wall-clock
+      verdict. Equal resolution also does not establish equal numerical
+      accuracy.</p>
       <p>The sweep count doesn't move either, at least on the easy
       problem. Production Jacobi's iteration count, same problem family,
       same tolerance:</p>
@@ -136,75 +146,84 @@
       correlation structure comes from a rank-2 factor model, so the
       tie-density graph's effective diameter doesn't grow with \(n\), and
       neither does the sweep count needed to converge.</p>
-      <p>What isn't flat is the hybrid solver itself. At \(n=200\) it
-      converges in <span class="num">8</span> Newton steps and
+      <p>In the same mixed-resolution experiment, the hybrid solver itself
+      was not flat. At \(n=200\) it converges in
+      <span class="num">8</span> Newton steps and
       <span class="num">15</span> total JVPs. Run unmodified on the same
-      easy problem at \(n=3{,}200\) &mdash; same 10-Newton-step,
-      5-inner-CG-iteration budget &mdash; it does not converge: 10 Newton
+      easy problem at \(n=3{,}200\), with the same 10-Newton-step,
+      5-inner-CG-iteration budget, it does not converge: 10 Newton
       steps, 20 JVPs, residual stuck at
       <span class="num">2.4e-1</span> against a
-      <span class="num">1e-8</span> tolerance. Wall clock at that size:
-      production Jacobi <span class="num">46.8</span>s, the hybrid
-      <span class="num">515.6</span>s and still short of tolerance. The
-      gap doesn't narrow going from \(n=200\) to \(n=3{,}200\); it widens.</p>
-      <p>Whether that is the outer Newton step count genuinely growing
-      with \(n\), or the trust-region and step-acceptance constants in
-      <code>run_newton_cg3.py</code> being tuned for \(n=200\) and not
-      rescaled, isn't separated by this run. Exp23 only ever ran round 3
-      at \(n=200\) before this; at \(n=3{,}200\) the unmodified hybrid
-      fails to converge, so the flat-inner-count mechanism doesn't get a
-      chance to produce a flip here.</p>
+      <span class="num">1e-8</span> tolerance.</p>
+      <p>Wall clock at that size is
+      <span class="num">46.8</span>s for production Jacobi and
+      <span class="num">515.6</span>s for the hybrid, which is still short
+      of tolerance. The timing gap alone does not isolate solver cost
+      from resolution.</p>
+      <p>This run does not separate two explanations: the outer Newton
+      step count genuinely growing with \(n\), or the trust-region and
+      step-acceptance constants in <code>run_newton_cg3.py</code> being
+      tuned for \(n=200\) and not rescaled. The exp23 solver comparison
+      covers \(n=200\) only. At \(n=3{,}200\) the unmodified hybrid fails
+      to converge, so the flat-inner-count mechanism doesn't get a chance
+      to produce a flip here.</p>
 
-      <h3>Bounded chatter, or growing error?</h3>
+      <h3>Bounded chatter or growing error</h3>
       <p>Because the diagonal iteration re-evaluates the field (and
       therefore the slope) every step, it is a fixed-point iteration, not
-      a linearize-once-and-solve method: an inexact slope changes the
-      <em>rate</em> of convergence, not <em>where</em> it converges to
-      &mdash; the same reason Sinkhorn scaling converges under an
+      a linearize-once-and-solve method. An inexact slope changes the
+      <em>rate</em> of convergence, not <em>where</em> it converges to.
+      The same reason makes Sinkhorn scaling converge under an
       approximate row/column normalization (the diagonal iteration is
       the hard-max analogue of that construction).</p>
-      <p>Write the tie-density Laplacian as \(L = D - W\) (Section 3's
-      \(J = -B^\top W_e B\), diagonal and off-diagonal parts). Jacobi
-      splitting for \(Lv = r\) has sweep matrix \(M = D^{-1}W\). Because
-      \(L\)'s rows sum to zero, \(D^{-1}W\) is row-stochastic, so with the
-      exact diagonal its spectrum sits in \([-1, 1]\) &mdash; the top
-      eigenvalue is exactly 1, on the all-ones (gauge) direction that
-      inversion projects out anyway, matching Section 4's remark that
-      only ability contrasts are identified. On the contrast subspace, an
-      eigenvalue reaches \(-1\) only in the degenerate limit of a
-      bipartite tie-density graph &mdash; two clusters of contestants
-      whose photo-finishes are almost all cross-cluster and almost never
-      within-cluster. That is a 2-dimensional race: two contestants, one
-      edge, sweep matrix \([[0,1],[1,0]]\), spectrum exactly
-      \(\{+1,-1\}\). With the exact diagonal an undamped sweep can only
-      chatter (period-2, bounded), never grow: an eigenvalue at &minus;1
-      is a geometry fact about how bipartite the tie structure is, not a
+      <p>Write the tie-density Laplacian as \(L = D - W\), the diagonal
+      and off-diagonal parts of the boundary-flux section's
+      \(J = -B^\top W_e B\). Jacobi splitting for \(Lv = r\) has sweep
+      matrix \(M = D^{-1}W\). Because \(L\)'s rows sum to zero,
+      \(D^{-1}W\) is row-stochastic, so with the exact diagonal its
+      spectrum sits in \([-1, 1]\). The top eigenvalue is exactly 1, on
+      the all-ones (gauge) direction that inversion projects out anyway,
+      matching the inversion section's remark that only ability contrasts
+      are identified.</p>
+      <p>On the contrast subspace, an eigenvalue reaches \(-1\) only in
+      the degenerate limit of a bipartite tie-density graph: two clusters
+      of contestants whose photo-finishes are almost all cross-cluster and
+      almost never within-cluster. That is a 2-dimensional race: two
+      contestants, one edge, sweep matrix \([[0,1],[1,0]]\), spectrum
+      exactly \(\{+1,-1\}\).</p>
+      <p>With the exact diagonal an undamped sweep can only chatter
+      (period-2, bounded), never grow. An eigenvalue at &minus;1 is a
+      geometry fact about how bipartite the tie structure is, not a
       symptom of an inexact derivative. Growth needs the diagonal to be
       <em>underestimated</em>, which pushes a contrast eigenvalue past
       &minus;1.</p>
       <p>On exp23's hard case (strong correlation, a small-cluster
       structure close to the bipartite limit above), the production
-      diagonal iteration run alone <strong>stalls</strong> at a fixed
-      residual (<span class="num">1.1e-4</span>) against its iteration
-      cap rather than diverging &mdash; bounded, consistent with the
-      geometry story above. But the same hard instance, run as the
-      fallback sweep inside round 3's hybrid solver, does diverge
-      (residual <span class="num">6e+2</span>) despite an accept-test
-      meant to reject a step that makes things worse. That divergence
-      isn't attributed to either story yet; the experiment's own README
-      flags it as the next engineering item (Levenberg regularization
-      and a fallback that's stable on the hard set).</p>
+      diagonal iteration run alone <em>stalls</em> at a fixed residual
+      (<span class="num">1.1e-4</span>) against its iteration cap rather
+      than diverging. That is bounded behaviour, consistent with the
+      geometry story above.</p>
+      <p>The same hard instance, run as the fallback sweep inside the
+      symmetrized hybrid solver, does diverge (residual
+      <span class="num">6e+2</span>) despite an accept-test meant to
+      reject a step that makes things worse. That divergence isn't
+      attributed to either story yet. The experiment's own README flags it
+      as the next engineering item (Levenberg regularization and a
+      fallback that's stable on the hard set).</p>
       <div class="callout">
         Bounded chatter: the production sweep, including on the
         strongly correlated case closest to the bipartite limit. Growing
         error: the Newton&ndash;Krylov hybrid's own fallback, on that
-        same hard case &mdash; measured, not yet explained.
+        same hard case, measured but not yet explained.
       </div>
       <p>Sources: <a href="https://github.com/microprediction/winning/blob/main/research/experiments/exp23_newton_cg/README.md">the
-      exp23 README</a> for the three-round, \(n=200\) comparison; the
+      exp23 README</a> for the \(n=200\) comparison; the
       field-size numbers above are
       <a href="https://github.com/microprediction/winning/blob/main/research/experiments/exp23_newton_cg/run_field_size_scaling.py">run_field_size_scaling.py</a>
-      in the same directory. <a href="https://github.com/microprediction/winning/blob/main/research/equilibrium/NOTES.md">The
+      in the same directory, and
+      <a href="https://github.com/microprediction/winning/issues/960">issue #960</a>
+      records the lattice-resolution difference between the two
+      operations. <a href="https://github.com/microprediction/winning/blob/main/research/equilibrium/NOTES.md">The
       equilibrium notes</a> give the Sinkhorn framing of the diagonal
       iteration as a fixed point.</p>
     </div>

@@ -111,6 +111,7 @@ from scipy.special import log_ndtr
 
 from .nway import _base_rows, _order_pass_batch
 from .tuning import select
+from ._checks import require_distinct, as_labels
 
 _LOG_SQRT_2PI = 0.5 * np.log(2.0 * np.pi)
 _WORK_BUDGET = 4_000_000        # floats per (K, chunk, L) lattice work array
@@ -131,7 +132,7 @@ _LATTICE_L = 4001
 def _finish_perm(order, K):
     """Row permutation putting the ordered rows first, best first, then
     the unranked rows (a partial order marginalises them exactly)."""
-    order = np.asarray(order, dtype=int).ravel()
+    order = as_labels(order, "order")                            # #915
     if order.size < 1 or order.size > K:
         raise ValueError("order must list between 1 and K distinct rows")
     if order.min() < 0 or order.max() >= K or len(set(order.tolist())) != order.size:
@@ -194,18 +195,24 @@ def _design_triplets(events, n_feat):
         K, nf = Zc.shape
         if nf != n_feat:
             raise ValueError(f"Z has {nf} columns, expected n_feat={n_feat}")
+        # Stored entries only, so a sparse Z is never densified. A NaN
+        # or inf feature made the objective NaN at the first step and
+        # the fit returned its all-zero start as the model (#808).
+        if not np.all(np.isfinite(Zc.data)):
+            raise ValueError("design Z has a non-finite entry")
         perm, n = _finish_perm(order, K)
         Zp = Zc[perm].tocoo()
         yield Zp.row, Zp.col, Zp.data, K, n
 
 
 def _factor_rows(subset, x, n_entities, n_cov):
-    subset = np.asarray(subset, dtype=int).ravel()
+    subset = as_labels(subset, "subset")                        # #915
     K = subset.size
     if K == 0:
         raise ValueError("empty subset")
     if subset.min() < 0 or subset.max() >= n_entities:
         raise ValueError("entity index out of range for n_entities")
+    require_distinct(subset.tolist(), "subset")                 # #811
     x = np.asarray(x, dtype=float)
     if x.ndim == 1:
         if x.shape != (n_cov,):
@@ -216,6 +223,8 @@ def _factor_rows(subset, x, n_entities, n_cov):
     else:
         raise ValueError("x must be (n_cov,) shared by the field or "
                          "(K, n_cov) per entrant")
+    if not np.all(np.isfinite(x)):
+        raise ValueError("covariates x have a non-finite entry")   # #808
     return subset, X
 
 
@@ -287,6 +296,20 @@ def _winner_batch(Ms, base="normal"):
     return np.log(p), grad
 
 
+def _lattice_terms(Ms, order, base):
+    # Each contest has its own arbitrary ability origin. Remove it before
+    # sizing the shared grid, so offsets between contests cost no resolution.
+    Ms = Ms - Ms[:, :1]
+    if len(order) >= 2:
+        lp, grad = _order_pass_batch(Ms, np.ones(Ms.shape[1]), order,
+                                     L=_LATTICE_L, base=base)
+    else:
+        lp, grad = _winner_batch(Ms, base=base)
+    # Pull the score back through the subtraction of the first mean.
+    grad[:, 0] = -grad[:, 1:].sum(axis=1)
+    return lp, grad
+
+
 def _loglik_terms(theta, st, base="normal"):
     """Per-event log-likelihood (n_events,) and d loglik / d mu per row
     (n_rows,), for the stacked design at coefficients theta."""
@@ -309,11 +332,7 @@ def _loglik_terms(theta, st, base="normal"):
         order = np.arange(n_ord)
         for c0 in range(0, len(idx), chunk):
             sl = slice(c0, c0 + chunk)
-            if n_ord >= 2:
-                lpv, gr = _order_pass_batch(Ms[sl], np.ones(K), order, L=_LATTICE_L,
-                                            base=base)
-            else:
-                lpv, gr = _winner_batch(Ms[sl], base=base)
+            lpv, gr = _lattice_terms(Ms[sl], order, base)
             # A probability is at most one, and the lattice sum need not
             # be: for a kinked base (laplace) the rectangle rule over the
             # winner's density is second order across its kink, so a
@@ -362,16 +381,14 @@ def _hessian_blocks(theta, st, base="normal"):
         chunk = max(1, _WORK_BUDGET // (2 * K * _LATTICE_L))
         for c0 in range(0, E, chunk):
             sl = slice(c0, c0 + chunk)
-            Mc = Ms[sl]
+            # Perturb at the local origin as well: a small finite difference
+            # can round away at the absolute means.
+            Mc = Ms[sl] - Ms[sl, :1]
             Ec = Mc.shape[0]
             for j in range(K):
                 ej = np.zeros(K); ej[j] = hstep
                 both = np.vstack([Mc + ej, Mc - ej])
-                if n_ord >= 2:
-                    _, g = _order_pass_batch(both, np.ones(K), order, L=_LATTICE_L,
-                                             base=base)
-                else:
-                    _, g = _winner_batch(both, base=base)
+                _, g = _lattice_terms(both, order, base)
                 H[sl, :, j] = (g[:Ec] - g[Ec:]) / (2.0 * hstep)
         H = 0.5 * (H + np.transpose(H, (0, 2, 1)))
         for e_local, e in enumerate(idx):
@@ -435,6 +452,8 @@ def _as_ridge(ridge, n_feat):
     if lam.shape != (n_feat,):
         raise ValueError(f"ridge must be a scalar or one value per feature "
                          f"({n_feat})")
+    if not np.all(np.isfinite(lam)):
+        raise ValueError("ridge penalties must be finite")         # #808
     if np.any(lam < 0.0):
         raise ValueError("ridge penalties must be non-negative")
     return lam
@@ -693,12 +712,16 @@ def sweep_offset_ridge(train_events, val_events, n_entities, n_cov,
         losses.append(-float(np.mean(factor_loglik(B, val_events, base))))
         fits.append(B)
     best = int(np.argmin(losses))
+    axis = list(dict.fromkeys(grid))
     _, report = select({g: L for g, L in zip(grid, losses)},
-                       "offset_ridge", order=list(grid))
+                       "offset_ridge", order=axis)
+    # the flags are read on the unique axis select judged: with a repeated
+    # endpoint, (1, 3, 3), argmin is index 1, not the last index, and the
+    # public flags said interior while report.at_edge said edge (#883)
     return {"offset_grid": grid, "val_loss": np.asarray(losses),
             "offset_ridge": grid[best], "B": fits[best],
-            "at_scalar_limit": best == len(grid) - 1,
-            "at_edge": best in (0, len(grid) - 1),
+            "at_scalar_limit": grid[best] == axis[-1],
+            "at_edge": grid[best] in (axis[0], axis[-1]),
             "inert": report.inert, "report": report}
 
 

@@ -87,6 +87,7 @@ hermite_nodes <- function(k, order = 15, prune = 1e-7) {
 }
 
 win_probabilities_factor <- function(mu, V, D, nodes = NULL, points = 501) {
+  .refuse_matrix(mu, "mu")                                        # (#903)
   points <- .as_points(points)
   V <- as.matrix(V)
   N <- length(mu)
@@ -142,6 +143,7 @@ win_probabilities_factor <- function(mu, V, D, nodes = NULL, points = 501) {
 abilities_from_probabilities_factor <- function(p, V, D, nodes = NULL,
                                                 n_iter = 50, tol = 1e-6,
                                                 points = 501) {
+  .refuse_matrix(p, "p")                                          # (#903)
   points <- .as_points(points)
   n_iter <- .as_iter_budget(n_iter)
   tol <- .as_tolerance(tol)

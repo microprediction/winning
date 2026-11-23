@@ -510,14 +510,20 @@ export function asWeights(W, nNodes, where = "W") {
 export function asFactorLaw(F, W, where = "W") {
   const Wn = asWeights(W, F.length, where);
   // ... and the lightest nodes whose COMBINED relative mass is at most
-  // 1e-15: they change no share at double precision but size the
+  // 1e-15: their absolute mass is tiny, but they can still size the
   // window (#416; python shapes.as_factor_law, the browser's asFactorLaw)
   const order = Wn.map((_, q) => q).sort((a, b) => Wn[a] - Wn[b] || a - b);
   const drop = new Array(Wn.length).fill(false);
   let cum = 0;
-  for (const q of order) {
+  for (let i = 0; i < order.length; i++) {
+    const q = order[i];
     cum += Wn[q];
-    if (cum > 1e-15) break;
+    if (cum > 1e-15) {
+      // Keep the entire equal-weight group if it straddles the cutoff.
+      for (let j = i - 1; j >= 0 && Wn[order[j]] === Wn[q]; j--)
+        drop[order[j]] = false;
+      break;
+    }
     drop[q] = true;
   }
   const keepF = [], keepW = [];
@@ -776,6 +782,19 @@ export function winProbabilitiesFactor(mu, V, D, F, W, opts = {}) {
  * Returns mu; with opts.returnInfo, {mu, converged, residual,
  * iterations}. Without it a non-converged solve WARNS rather than
  * returning an uncertified calibration silently (#358, #428). */
+/* The gauge offset of a field: its mean. Summing first overflowed for
+   finite entries near 1e308, so an exact warm start [1e308, 1e308, 1e308]
+   came back non-finite instead of centred (#882); the scaled sum is used
+   only then, so ordinary fields keep their bits. */
+function gaugeMean(x) {
+  let s = 0;
+  for (const v of x) s += v;
+  if (Number.isFinite(s)) return s / x.length;
+  s = 0;
+  for (const v of x) s += v / x.length;
+  return s;
+}
+
 export function abilitiesFromProbabilitiesFactor(pTarget, V, D, F, W, opts = {}) {
   const where = "abilitiesFromProbabilitiesFactor";
   checkOpts(opts, ABILITIES_FROM_PROBABILITIES_FACTOR_OPTS, where);
@@ -958,7 +977,7 @@ export function abilitiesFromProbabilitiesFactor(pTarget, V, D, F, W, opts = {})
       // an exact mu0 stops before any update, and the update is what
       // centres: it came back with the caller's shift (#849)
       if (mu0 && it === 0) {
-        const m0 = mu.reduce((a, b) => a + b, 0) / N;
+        const m0 = gaugeMean(mu);
         for (let i = 0; i < N; i++) mu[i] -= m0;
       }
       break;
@@ -986,9 +1005,8 @@ export function abilitiesFromProbabilitiesFactor(pTarget, V, D, F, W, opts = {})
       if (nn > 0 && dot / nn < -0.5) damp = Math.max(0.25, damp * 0.7);
     }
     prevDelta = delta;
-    let mean = 0;
-    for (let i = 0; i < N; i++) { mu[i] -= delta[i]; mean += mu[i]; }
-    mean /= N;
+    for (let i = 0; i < N; i++) mu[i] -= delta[i];
+    const mean = gaugeMean(mu);
     for (let i = 0; i < N; i++) mu[i] -= mean;
   }
   if (iters === nIter && Number.isFinite(res) && !(res < tol) &&

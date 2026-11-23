@@ -12,6 +12,7 @@
 # (zero mass at 1e15) and their Jacobians came back zero (#477). Ordinary
 # inputs are returned unchanged; D is validated downstream, as before.
 .home <- function(mu, D) {
+  .refuse_matrix(mu, "mu")                                       # (#903)
   mu <- as.numeric(mu)
   Dn <- suppressWarnings(as.numeric(D))
   if (!length(mu) || !length(Dn)) return(mu)
@@ -91,6 +92,28 @@
       kind, t_, abs(t_ - 1), mass_tol))
   }
   raw / t_
+}
+
+# One label per contestant. The kernels sort runners by label, so a short
+# cluster priced only the labelled runners (c(0.5, 0.5, 0, 0) for four
+# exchangeable ones) or died in rowsum with "incorrect length" (#792).
+.check_cluster <- function(cluster, n) {
+  if (length(cluster) != n) {
+    stop(sprintf("cluster must have one label per contestant; got %d for %d",
+                 length(cluster), n), call. = FALSE)
+  }
+  invisible(cluster)
+}
+
+# With ONE cluster holding every runner its shock reaches everyone and
+# cancels, so only loading differences are identified: the loading is
+# gauge-centred as python's _one_cluster_gauge does (#471). The tree
+# race skipped it and a +40 on every loading raised a mass defect
+# (#1056). Any other loading is returned as given.
+.one_cluster_gauge <- function(cluster, v, n) {
+  if (length(cluster) != n || n < 2L || !all(cluster == cluster[1L]))
+    return(v)
+  as.numeric(.gauge_center(v))
 }
 
 .cluster_index <- function(cluster) {
@@ -279,6 +302,7 @@
 block_race_probabilities <- function(mu, cluster, loading, D,
                                      points = 257, qa = 9) {
   mu <- .home(mu, D)                                         # (#477)
+  .check_cluster(cluster, length(mu))                        # (#792)
   # a scalar D is one variance per contestant, as at every boundary (#510)
   sd <- sqrt(.as_idio(D, length(mu), positive = TRUE))
   p <- .block_max(-mu, sd, cluster, loading, points, qa)
@@ -303,6 +327,7 @@ nested_race_probabilities <- function(mu, cluster, loading, D,
                                     points = points, qa = qa))
   }
   mu <- .home(mu, D)                                         # (#477)
+  .check_cluster(cluster, length(mu))                        # (#792)
   # the shared loading contract: (n, k), (k, n) or a length-n vector.
   # Transposing once and trusting the result let a 2x2 coupling at n = 4
   # recycle g %*% f across the field as a different loading (#469)
@@ -332,6 +357,11 @@ nested_race_probabilities <- function(mu, cluster, loading, D,
 # race and its Jacobian failed on a NaN mass (#722). That spelling is kept
 # wherever it is finite; otherwise gamma is absorbed into g first.
 .coupled_shift <- function(g, gamma, node) {
+  # the sign of gamma is not identified (gamma f and -gamma f are the same
+  # Gaussian law); python's rank-3+ Sobol rule is not symmetric under
+  # f -> -f and priced gamma = -1 differently (#871), so |gamma| is used
+  # here too and the ports agree to the bit on a sign flip
+  gamma <- abs(gamma)
   s <- as.numeric(g %*% node)
   if (all(is.finite(s))) return(gamma * s)
   as.numeric((gamma * g) %*% node)
@@ -437,6 +467,8 @@ tree_race_probabilities <- function(mu, cluster, loading, D, parent,
   if (length(v) == 1L) v <- rep(v, length(mu))   # scalar = common (#780)
   lam <- as.numeric(strength)
   n <- length(m)
+  .check_cluster(cluster, n)                                 # (#792)
+  v <- .one_cluster_gauge(cluster, v, n)                     # (#1056)
   inv <- .tree_leaf_index(cluster, leaves)            # (#372)
   nC <- max(inv)
   parent <- .validate_tree(parent, lam, nC)        # 0 = root (#517)
@@ -536,6 +568,7 @@ block_race_jacobian <- function(mu, cluster, loading, D,
                 "loadings only; rank-r tie densities are tracked work."))
   }
   mu <- .home(mu, D)                                         # (#477)
+  .check_cluster(cluster, length(mu))                        # (#792)
   m <- -mu
   sd <- sqrt(.as_idio(D, length(mu), positive = TRUE))
   # rank zero: no shared effect (#508)
@@ -613,6 +646,7 @@ nested_race_jacobian <- function(mu, cluster, loading, D, coupling = NULL,
                                points = points, qa = qa))
   }
   mu <- .home(mu, D)                                         # (#477)
+  .check_cluster(cluster, length(mu))                        # (#792)
   # the shared loading contract: (n, k), (k, n) or a length-n vector.
   # Transposing once and trusting the result let a 2x2 coupling at n = 4
   # recycle g %*% f across the field as a different loading (#469)
@@ -648,6 +682,7 @@ nested_race_jacobian <- function(mu, cluster, loading, D, coupling = NULL,
 abilities_from_block_race <- function(p, cluster, loading, D,
                                       points = 257, qa = 9,
                                       tol = 1e-10, max_iter = 25) {
+  .refuse_matrix(p, "p")                                         # (#903)
   p_t <- .rescaled_target(as.numeric(p))       # scale-safe (#463)
   n <- length(p_t)
   floor_ <- max(1e-14, min(p_t[p_t > 0]) * 1e-3)
@@ -726,6 +761,8 @@ tree_race_jacobian <- function(mu, cluster, loading, D, parent, strength,
   if (length(v) == 1L) v <- rep(v, length(mu))   # scalar = common (#780)
   lam <- as.numeric(strength)
   n <- length(m)
+  .check_cluster(cluster, n)                                 # (#792)
+  v <- .one_cluster_gauge(cluster, v, n)                     # (#1056)
   inv <- .tree_leaf_index(cluster, leaves)            # (#372)
   nC <- max(inv)
   parent <- .validate_tree(parent, lam, nC)        # 0 = root (#517)

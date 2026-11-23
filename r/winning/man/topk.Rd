@@ -6,16 +6,16 @@
 \title{Top-k memberships, rank marginals, and their Jacobians}
 \usage{
 top_k_probabilities(mu, k, V = NULL, D = NULL, base = "normal",
-  points = 513, qa = 15)
+  points = 513, qa = NULL)
 
 bottom_k_probabilities(mu, k, V = NULL, D = NULL, base = "normal",
-  points = 513, qa = 15)
+  points = 513, qa = NULL)
 
 rank_probabilities(mu, D = NULL, base = "normal", points = 513,
-                   V = NULL, qa = 15)
+                   V = NULL, qa = NULL)
 
 top_k_jacobians(mu, k, D = NULL, base = "normal", points = 513,
-  V = NULL, qa = 15)
+  V = NULL, qa = NULL)
 }
 \arguments{
 \item{mu}{numeric abilities; performances are times, so lower is better
@@ -28,7 +28,8 @@ independent races}
 \item{base}{"normal", "gumbel", "logistic", "laplace", or a function
 z -> list(S, f, fp) of a mean-zero unit-variance law}
 \item{points}{lattice size for the count-program quadrature}
-\item{qa}{Gauss-Hermite order for the factor mixture}
+\item{qa}{Gauss-Hermite order for the factor mixture; \code{NULL} (the default)
+  takes the general race's sharpness rule}
 }
 \value{
 \code{top_k_probabilities}: q with q[i] = P(runner i among the k
@@ -40,6 +41,10 @@ one. \code{top_k_jacobians}: list(Jmu, Jsigma) of n x n matrices
 dq/dmu (minus a graph Laplacian on the rank-k boundary: symmetric
 nonnegative off-diagonals, zero row sums) and dq/dsigma (satisfying
 the scale-gauge Euler identity mu . row_mu + sigma . row_sigma = 0).
+With \code{V} and \code{qa = NULL} the rank-one rule's weights move with
+the sharpness sqrt(2) max_i |V_i| / sigma_i on 15/8 < sharp <= 10, and
+\code{Jsigma} includes that term, in the column of the runner attaining
+the max (the first such runner at a tie).
 }
 \description{
 Exact membership probabilities at any depth by one shared

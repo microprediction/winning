@@ -406,6 +406,18 @@ function _check_choice(choice::AbstractVector, T::Integer, J::Integer)
     return out
 end
 
+"""Refuse NaN and +-Inf by name and index; shared by the exact
+multinomial-probit boundaries (#901)."""
+function _require_finite(A::AbstractArray, name::AbstractString, what::AbstractString)
+    for I in CartesianIndices(A)
+        isfinite(A[I]) || throw(ArgumentError(
+            name * string(Tuple(I)) * " = " * string(A[I]) * " is not finite; " *
+            what * " must be a finite number. A non-finite entry poisons the " *
+            "quadrature and the rank checks instead of meaning a deterministic limit"))
+    end
+    return A
+end
+
 """Idiosyncratic variances as a `Vector{Float64}` of length exactly J.
 An overlong `D` used to be accepted: the integrand reads only `D[1:J]`,
 but the sharpness dispatcher took `minimum` over ALL entries, so an
@@ -417,6 +429,11 @@ finite entries are refused here; the sign contract belongs to each
 engine (the likelihood needs D > 0, GHK admits a zero)."""
 function _check_D(D, J::Integer)
     D === nothing && return ones(J)
+    # a matrix with J cells was read column-major as a different vector of
+    # variances, moving a share by 9 points (#903); python refuses it
+    (D isa AbstractArray && ndims(D) != 1) && throw(ArgumentError(
+        "D must be a vector, not a " * join(string.(size(D)), " x ") *
+        " array: linear indexing would read it column-major as a different vector"))
     Dv = D isa Number ? fill(Float64(D), J) : Float64.(vec(collect(D)))
     length(Dv) == J || throw(DimensionMismatch(
         "D must have one idiosyncratic variance per alternative: got " *
@@ -482,6 +499,26 @@ function _blend_weight(sharp::Real)
     t <= 0 && return 0.0, 0.0
     t >= 1 && return 1.0, 0.0
     return t * t * (3 - 2t), 6t * (1 - t) / (_BLEND_HI - _BLEND_LO)
+end
+
+# The factor tensor's order rises with the loading sharpness (#1060,
+# python: winning.likelihood._FACTOR_LADDER_BAND). The fixed 7^r tensor
+# under-resolves the conditional choice probability, whose transitions in
+# f narrow like 1/sharpness: up to 0.16 nats off at smooth sharpness
+# 2.5-2.9 at rank 1 (0.061 at rank 2), and the exchangeable three-way
+# race priced 0.3296 against 1/3. Past the band the tensor has 31 nodes
+# per factor at rank 1 and 11 at rank 2; across it the probability is
+# the C1 blend of the two tensors and the score carries the weight's
+# derivative. Below the band, past the Sobol switch, at rank 0 and 3+,
+# and for a caller's Qf at or above the high order, nothing changes.
+const _LADDER_LO, _LADDER_HI = 0.8, 1.0
+_factor_qf_high(r::Integer) = r == 1 ? 31 : r == 2 ? 11 : 0
+
+function _ladder_weight(sharp::Real)
+    sharp > _LADDER_LO || return 0.0, 0.0
+    sharp >= _LADDER_HI && return 1.0, 0.0
+    t = (sharp - _LADDER_LO) / (_LADDER_HI - _LADDER_LO)
+    return t * t * (3 - 2t), 6t * (1 - t) / (_LADDER_HI - _LADDER_LO)
 end
 
 # The blend's statistic must be differentiable and symmetric in the
@@ -584,7 +621,8 @@ set; V gauge-centred; `tilt` moves each observation's own-noise nodes
 (Gauss-Hermite branch only). Port of winning/likelihood.py::_choice_terms."""
 function _choice_terms(mu::AbstractMatrix, V::AbstractMatrix,
                        choice::AbstractVector{Int}, s::AbstractVector,
-                       F::AbstractMatrix, W::AbstractVector; tilt = true)
+                       F::AbstractMatrix, W::AbstractVector; tilt = true,
+                       split::Int = 0)
     T, J = size(mu)
     r = size(V, 2)
     ET = promote_type(eltype(mu), eltype(V), Float64)
@@ -606,6 +644,9 @@ function _choice_terms(mu::AbstractMatrix, V::AbstractMatrix,
     rv = zeros(Int, R)
     dcs = zeros(ET, R)
     Hj = zeros(ET, R, r)
+    # with split > 0, each observation's posterior mass on nodes 1:split
+    # and on split+1:Q, each summed directly (#1060)
+    mass = zeros(ET, T, 2)
     for t in 1:T
         k = choice[t]
         i = 0
@@ -653,6 +694,7 @@ function _choice_terms(mu::AbstractMatrix, V::AbstractMatrix,
         # on every node cost more than the likelihood itself
         @inbounds for q in 1:Q
             om = acc[q] / rs
+            split > 0 && (mass[t, q <= split ? 1 : 2] += om)
             gp = -z[q]
             for (i, j) in enumerate(rv)
                 wl = om * lam[i, q] / s[j]
@@ -687,6 +729,7 @@ function _choice_terms(mu::AbstractMatrix, V::AbstractMatrix,
             dmu[t, j] -= dci
         end
     end
+    split > 0 && return lp, dmu, GV, mass
     return lp, dmu, GV
 end
 
@@ -793,11 +836,35 @@ function _choice_logprob_terms(mu::AbstractMatrix, V::AbstractMatrix,
     Qz = ratio > 1 ? Int(min(4 * Qz, ceil(Qz * ratio))) : Qz
     sharp, sgrad = _smooth_sharpness(V, Dv)
     w, dw = _blend_weight(sharp)
+    # the Hermite tensor's order: the caller's Qf, or past the ladder band
+    # the higher one (#1060)
+    qh = _factor_qf_high(r)
+    wh, dwh = (w < 1.0 && qh > 0 && Qf < qh) ? _ladder_weight(sharp) :
+              (0.0, 0.0)
+    if 0.0 < wh < 1.0
+        # inside the ladder band: both tensors carry the same own-noise
+        # tilt, so the blend is ONE rule on the union of their nodes with
+        # weights (1 - u) W_lo and u W_hi; the weight's own derivative
+        # adds (P_hi / P - P_lo / P) du/dsharp dsharp/dV, from the
+        # posterior masses on the two node sets
+        Fl, Wl = nodes_for_likelihood(r; Qf = Qf, Qz = Qz, sharp = 0.0)
+        Fh, Wh = nodes_for_likelihood(r; Qf = qh, Qz = Qz, sharp = 0.0)
+        F = vcat(Fl, Fh)
+        W = vcat((1 - wh) .* Wl, wh .* Wh)
+        lp, dmu, GV, ab = _choice_terms(mu, Vc, choice, s, F, W;
+                                        tilt = true, split = length(Wl))
+        for t in eachindex(lp)
+            gw = (ab[t, 2] / wh - ab[t, 1] / (1 - wh)) * dwh
+            GV[t, :, :] .+= gw .* sgrad
+        end
+        return lp, dmu, GV
+    end
+    Qg = wh == 1.0 ? qh : Qf
     if w == 0.0 || w == 1.0
-        F, W = nodes_for_likelihood(r; Qf = Qf, Qz = Qz, sharp = sharp)
+        F, W = nodes_for_likelihood(r; Qf = Qg, Qz = Qz, sharp = sharp)
         return _choice_terms(mu, Vc, choice, s, F, W; tilt = (w == 0.0))
     end
-    Fg, Wg = nodes_for_likelihood(r; Qf = Qf, Qz = Qz, sharp = 0.0)
+    Fg, Wg = nodes_for_likelihood(r; Qf = Qg, Qz = Qz, sharp = 0.0)
     Fs, Ws = nodes_for_likelihood(r; Qf = Qf, Qz = Qz, sharp = Inf)
     lg, dmg, GVg = _choice_terms(mu, Vc, choice, s, Fg, Wg; tilt = true)
     ls, dms, GVs = _choice_terms(mu, Vc, choice, s, Fs, Ws; tilt = false)
@@ -866,7 +933,9 @@ Returns (loglik, dmu, dV), plus the per-observation loading scores
 in closed form; J >= 3 integrates the factors and the chosen
 alternative's own noise on a Gauss-Hermite tensor with tilted own-noise
 nodes, or past sharpness 3 a symmetrised Halton cloud, blended
-continuously across the switch. `Qz = nothing` takes 7 own-noise nodes
+continuously across the switch. At rank 1 and 2 a `Qf` below 31 (rank
+1) or 11 (rank 2) is raised to that order past smooth sharpness 1,
+blended in over 0.8-1.0 (#1060). `Qz = nothing` takes 7 own-noise nodes
 below J = 6 and 11 from J = 6 (#173). `nodes = (F, W)` integrates the
 caller's rule as given."""
 function choice_loglik_and_score(mu::AbstractMatrix, V::AbstractMatrix,
@@ -883,6 +952,10 @@ function choice_loglik_and_score(mu::AbstractMatrix, V::AbstractMatrix,
     size(V, 1) == J || throw(DimensionMismatch(
         "V must have one loading row per alternative: got " *
         string(size(V, 1)) * " rows for J = " * string(J)))
+    # the GHK engine refused a non-finite mu or V and the exact one
+    # returned NaN with zero loading scores (#901); the same contract
+    _require_finite(mu, "mu", "a utility")
+    _require_finite(V, "V", "a loading")
     Dv = _check_D(D, J)
     nodes === nothing || _check_nodes(nodes, size(V, 2))
     lp, dmu, GV = _choice_logprob_terms(mu, V, choice, Dv;
@@ -1101,6 +1174,9 @@ function MNProbit(X::AbstractArray{<:Real,3}, choice::AbstractVector;
         "the utility scale is fixed only for r <= J - 2 = " *
         string(rmax) * " (#201)"))
     Xf = Float64.(X)
+    # validate the raw design before the intercept columns and the rank
+    # check see it (#901)
+    _require_finite(Xf, "X", "a covariate")
     if intercepts
         Z = zeros(T, J, J - 1)
         for j in 2:J
@@ -1626,6 +1702,7 @@ design is already assembled. Anything else raises."""
 function predict_proba(m::MNProbit; X = nothing, normalize = true)
     Xf = X === nothing ? m.X : begin
         Xr = Float64.(X)
+        _require_finite(Xr, "X", "a covariate")                      # #901
         size(Xr, 2) == m.J || throw(DimensionMismatch(
             "X has " * string(size(Xr, 2)) * " alternatives; the model " *
             "was fitted on " * string(m.J)))

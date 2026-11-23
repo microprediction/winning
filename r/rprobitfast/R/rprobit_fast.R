@@ -64,6 +64,9 @@ rprobit_fast <- function(df, covariates, r = NULL, Qf = 7L, Qz = NULL,
   choice <- .choices_by_id(ids, alt, df$chosen, levels(id_f))
   r <- .check_rank(r, J)
   Xcov <- as.matrix(df[, covariates, drop = FALSE])
+  # a non-finite covariate poisoned the contrast Gram matrix and
+  # .check_identified reported a finite flat ridge for it (#901)
+  .check_finite_design(Xcov, covariates)
   Xint <- matrix(0, nrow(Xcov), J - 1L)
   for (j in 2:J) Xint[alt == j, j - 1L] <- 1
   X <- cbind(Xint, Xcov)
@@ -77,7 +80,7 @@ rprobit_fast <- function(df, covariates, r = NULL, Qf = 7L, Qz = NULL,
   nb <- ncol(X)
   nw <- sum(vapply(seq_len(r), function(cl) J - cl, 0L))
   if (is.null(Qz)) Qz <- .default_qz(J)
-  nodes <- .nodes3(Qf, Qz, r)
+  nodes <- .fit_nodes(Qf, Qz, r)
   # built only if the sharpness rule ever selects it (#388)
   nodes_sharp <- .lazy_sharp_nodes(r, 10L)
   memo <- new.env()
@@ -115,7 +118,8 @@ rprobit_fast <- function(df, covariates, r = NULL, Qf = 7L, Qz = NULL,
   for (col in seq_len(r)) for (row in col + seq_len(J - col)) {
     V[row, col] <- fit$par[nb + ki]; ki <- ki + 1L
   }
-  lab <- .loading_labels(fit$par[-seq_len(nb)], J, r, levels(alt_f))
+  lab <- .loading_labels(fit$par[nb + seq_len(length(fit$par) - nb)], J, r,
+                        levels(alt_f))       # a tail slice (#949)
   structure(list(coefficients = beta,
                  covariance_par = lab$par,
                  loadings = lab$V,

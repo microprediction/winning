@@ -37,7 +37,8 @@ BUDGET2 = {"lattice": None, "direct_mc": 400_000, "sobol_direct": 2**17,
 
 # deterministic APPROXIMATIONS are anchored to their documented accuracy
 # class, not to exactness; everything else is anchored tight
-APPROX_TOL5 = {"mendell_elston": 5e-2, "ep_orthant": 2e-2}
+# stern is Monte Carlo at 8,000 samples: its sd is up to ~5.6e-3 per price
+APPROX_TOL5 = {"mendell_elston": 5e-2, "ep_orthant": 2e-2, "stern": 1e-2}
 
 
 @pytest.mark.parametrize("name", sorted(METHODS))

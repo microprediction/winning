@@ -510,3 +510,31 @@ end
         @test abs(p - ex) < 2e-3
     end
 end
+
+
+@testset "a same-length matrix is refused, not read column-major (#903)" begin
+    mu = [0.0, 0.5, -0.5, 1.0]; D = [1.0, 0.25, 4.0, 1.0]; V = zeros(4, 1)
+    u_vec = [0.0, 1.0, 2.0, 3.0]
+    u_mat = [0.0 1.0; 2.0 3.0]            # linear indexing reads 0 2 1 3
+    exact = prod(FactorMvNormalCDF.ndtr.([0.0, 1.0, 1.25, 2.0]))
+    @test abs(mvn_cdf_fast(upper = u_vec, mean = mu, V = V, D = D) - exact) < 1e-10
+    @test_throws ArgumentError mvn_cdf_fast(upper = u_mat, mean = mu, V = V, D = D)
+    @test_throws ArgumentError mvn_cdf_fast(lower = u_mat, mean = mu, V = V, D = D)
+    @test_throws ArgumentError mvn_cdf_fast(upper = u_vec, mean = reshape(mu, 2, 2), V = V, D = D)
+    @test_throws ArgumentError mvn_cdf_fast(upper = u_vec, mean = mu, V = V, D = reshape(D, 2, 2))
+    # scalars, tuples and ranges are still per-coordinate vectors
+    @test isfinite(mvn_cdf_fast(upper = 0.0, mean = mu, V = V, D = D))
+    @test mvn_cdf_fast(upper = (0.0, 1.0, 2.0, 3.0), mean = mu, V = V, D = D) ==
+          mvn_cdf_fast(upper = u_vec, mean = mu, V = V, D = D)
+end
+
+@testset "a Heywood factorization is not accepted as exact (#1015)" begin
+    # well-conditioned (min eigenvalue 0.044), but the rank-3 fit pinned
+    # two residual variances at the 1e-12 floor and was accepted
+    C = [0.63 0.29 0.11 0.52; 0.29 0.86 0.95 0.16;
+         0.11 0.95 2.15 1.28; 0.52 0.16 1.28 2.45]
+    fd = factorize_covariance(C)
+    # tolerance above the floor: main's round trip D .* d[pos] ./ C[i,i]
+    # can land a floored entry an ulp above 1e-12
+    @test fd === nothing || minimum(fd[2] ./ [C[i, i] for i in 1:4]) > 1e-11
+end

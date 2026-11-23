@@ -51,11 +51,12 @@
   </header>
   <main>
     <h1>Polish your portfolio</h1>
-    <p class="lead">Your weights are race probabilities. Clipping them to meet a
+    <p class="lead">Portfolio weights can be read as race probabilities. Clipping them to meet a
     concentration cap and renormalizing breaks the model they came from; the
     right object is the <em>nearest race</em> that satisfies the caps. Drag the
-    caps and watch the polish — computed live in your browser by the same
-    parity-locked engine the Python, R and Rust packages share.</p>
+    caps and watch the polish. It is computed live in your browser by the same
+    parity-locked engine the Python and R packages share (Rust supplies only
+    the lower-level race kernels, not the constrained polish).</p>
 
     <div class="panel">
       <div class="controls">
@@ -71,7 +72,7 @@
       <p class="legend">Bars: portfolio weights before (hollow) and after
       (filled) polishing; colors are the dendrogram's sectors; red line = name
       cap. Where a capped name gives up weight, its <em>cluster siblings</em>
-      absorb most of it — the race redistributes along the correlation
+      absorb most of it: the race redistributes along the correlation
       structure, not pro&nbsp;rata.</p>
       <p class="stat" id="stats"></p>
     </div>
@@ -79,8 +80,8 @@
     <p>The engine: invert the weights to abilities under the clustered race
     (<code>structure=Blocks</code> from the dendrogram), then solve for the
     nearest abilities whose race probabilities satisfy the caps, using the
-    analytic fixed-grid race Jacobian. Everything here — the field pass, the Newton
-    inversion, the constrained polish — is
+    analytic fixed-grid race Jacobian. The field pass, the Newton
+    inversion and the constrained polish all run in
     <a href="https://github.com/microprediction/winning/tree/main/docs/js/winning">the
     JavaScript port</a>, pinned to the reference implementation by the shared
     parity vectors.</p>

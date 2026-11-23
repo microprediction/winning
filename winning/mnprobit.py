@@ -28,7 +28,7 @@ import numpy as np
 from scipy.optimize import minimize
 
 from .likelihood import (check_choice, choice_loglik_and_score,
-                         _choice_logprob_terms)
+                         _choice_logprob_terms, _require_finite)
 
 
 def max_identified_rank(J):
@@ -183,6 +183,12 @@ class MNProbit:
                 f"X must be (observations, alternatives, covariates); "
                 f"got {X.ndim} dimensions")
         self.T, self.J, p = X.shape
+        # Validate the raw design before the intercept columns, the rank
+        # check and the optimiser see it: an inf covariate poisoned the
+        # contrast Gram matrix and _check_contrast_rank reported a FINITE
+        # flat ridge, the #581 message, for a column that was simply
+        # unusable (#901).
+        _require_finite(X, "X", "a covariate")
         # One alternative is no choice at all: every probability is one
         # and the objective is flat in every coefficient, so the fit
         # returned its initializer as a converged estimate with loglik 0
@@ -360,6 +366,8 @@ class MNProbit:
     def _raw_proba(self, X=None):
         X = self.X if X is None else np.asarray(X, dtype=float)
         if X is not self.X:
+            if X.ndim == 3:
+                _require_finite(X, "X", "a covariate")              # #901
             # New data must carry the design the model was FITTED on.
             # This guessed whether to prepend generated intercept columns
             # from the COLUMN COUNT alone, so new data with the wrong

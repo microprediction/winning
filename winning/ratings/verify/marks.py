@@ -247,6 +247,12 @@ MARKS = {
                      "date": "2026-09-04", "basis": "max |dm| <= 0.005 + 4 SE"},
     "referee.var": {"tolerance": 0.006, "set_by": "predictive_referee",
                     "date": "2026-09-04", "basis": "max |dv| / v <= 0.006 + 4 SE (relative)"},
+    # the same mark on cells whose update integrates on the 2^10 Sobol
+    # cloud (belief rank >= 3), where EXPECTED_APPROX below documents
+    # the integration error the mark cannot see
+    "referee.var.sobol": {"tolerance": 0.006, "set_by": "predictive_referee",
+                          "date": "2026-11-10",
+                          "basis": "as referee.var; envelope in EXPECTED_APPROX"},
     "referee.cross": {"tolerance": 0.02, "set_by": "tests/test_full_covariance_updates.py",
                       "date": "2026-09-04", "basis": "cross terms within 0.02 + 4 SE"},
 
@@ -327,4 +333,23 @@ EXPECTED_APPROX = {
         "cite": "winning/ratings/nway.py update_ranking docstring; "
                 "research/adjudications/laplace_convolution_shortcut.md",
         "why": "stagewise decomposition: documented approximation cost"},
+    # update_winner_full / update_order_full at K = 4 split the belief at
+    # rank 3, so with the factor the posterior is a 4-D integral on a
+    # fixed 2^10 scrambled-Sobol cloud. The variance comes out as
+    # S + S H S, which multiplies the integration error by the prior to
+    # posterior variance ratio (1.3-4.4 in referee.full_covariance).
+    # Rotating the cloud's orientation over 12 loadings bases at prior
+    # sd 3 (2026-11-09, against an 8M-draw rejection reference):
+    #   relative variance error   median   max
+    #   winner                    0.051    0.075
+    #   order                     0.089    0.17
+    # The canonical basis (#130) reads 0.028 / 0.0285, where the old
+    # orientation read 0.0077 by luck. 2^12 nodes halve it at 4x the
+    # time; adaptive doubling to agreement costs 15-20x and was not
+    # adopted. The envelope covers the measured orientation spread.
+    "referee.var.sobol": {
+        "envelope": 0.17,
+        "cite": "winning/ratings/full.py _mixture_nodes; the comment above",
+        "why": "fixed 2^10 Sobol integration at belief rank >= 3: "
+               "documented approximation cost"},
 }

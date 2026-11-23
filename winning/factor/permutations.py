@@ -27,8 +27,8 @@ from .core import as_loadings
 from ..outcomes import as_luce_temperature, as_order
 from ..shapes import as_weights
 from ..rustconfig import load_fastrace
-from .races import (_as_temperature, _fit_cov, _factor_of_structure, _setup,
-                    _tempered_curves)
+from .races import (_as_abilities, _as_temperature, _fit_cov,
+                    _factor_of_structure, _setup, _tempered_curves)
 from .topk import _cdf_rows
 from ..shapes import as_points, as_tolerance
 
@@ -274,7 +274,7 @@ def plackett_luce_prefix_logprob(mu, prefix, temperature=1.0, V=None, F=None,
     runners still standing. plackett_luce_order_logprob takes its order as the
     complete field; this is the prefix (exacta, trifecta) version.
     Exact for the Gumbel base and only there."""
-    mu = np.asarray(mu, dtype=float)
+    mu = _as_abilities(mu)                                   # (#799)
     tau = as_luce_temperature(temperature)                     # #366
     n = len(mu)
     # distinct labels: a repeat stayed in the numerator after leaving

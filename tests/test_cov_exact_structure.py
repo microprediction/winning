@@ -25,6 +25,15 @@ Resolved by routing, not by fixing the fit: cov= sends the forward
 normal race to scrambled-Sobol GHK when the fit degenerates, so the
 first test now passes to GHK's accuracy. The second pins that the fit
 itself is unchanged, so the routing stays necessary.
+
+#1051 (2026-11-16): for r = 1 and 3 the degeneration was not the
+staging but the stage-one alternation stalling at its sweep cap with a
+residual the promoted eigendirections then chased to full rank. With
+capped fits finished by Gauss-Newton the fit recovers the true rank and
+D exactly and is not degraded. As a polished fit of at most 15 runners
+its forward normal race is routed to GHK at 2^14 nodes, within the first
+test's 2e-3 of the exact V/D lattice. r = 5 exceeds the default k = 3
+and still degenerates; it stays pinned and routed (GHK at 4096 nodes).
 """
 import warnings
 
@@ -51,10 +60,11 @@ def exact_correlation(r, seed):
 
 @pytest.mark.parametrize("r", [1, 3, 5])
 def test_cov_reproduces_an_exactly_structured_correlation(r):
-    """The fit still degenerates (pinned below); cov= now routes the
+    """r = 5: the fit still degenerates (pinned below); cov= routes the
     forward normal race to scrambled-Sobol GHK instead of using it, so
-    the answer is within GHK's 1024-node accuracy (~5e-4) of the exact
-    V/D lattice rather than 5-8e-3 off it."""
+    the answer is within GHK's 4096-node accuracy of the exact V/D
+    lattice rather than 5-8e-3 off it. r = 1, 3: the fit is exact since
+    #1051 and, being polished, is routed to GHK at 2^14 nodes."""
     V, D, C = exact_correlation(r, seed=5 + r)
     with warnings.catch_warnings():
         warnings.simplefilter("error")                 # routed: no warning
@@ -72,7 +82,46 @@ def test_the_defect_is_the_fit_not_the_race(r):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         Vf, Df, F, W, rep = fit_covariance(C, return_report=True)
+    if r <= 3:
+        # #1051: within the default k = 3 the fit is now exact -- the
+        # true rank, the true D -- and the mechanism below is gone
+        assert rep["rank"] == r
+        assert np.abs(Df - D).max() < 1e-10
+        assert rep["projected_residual_max"] < 1e-12
+        return
     assert rep["rank"] == N, "no longer full rank: the xfail above may lift"
     assert Df.min() < 1e-5, "D no longer on the floor: the xfail above may lift"
     assert rep["projected_residual_max"] < 1e-4, \
         "the residual report would now catch this; recheck the warnings"
+
+
+@pytest.mark.parametrize("r", [1, 5])
+def test_routed_cov_refuses_masked_and_complex_abilities(r):
+    """The GHK route (polished r = 1, degraded r = 5) returns before the
+    factor path's ability checks; it must refuse what they refuse (#914)."""
+    _, _, C = exact_correlation(r, seed=5 + r)
+    masked = np.ma.masked_array(MU, mask=[False] * (N - 1) + [True])
+    with pytest.raises(ValueError, match="masked"):
+        wf.race_probabilities(masked, cov=C)
+    with pytest.raises(ValueError, match="complex"):
+        wf.race_probabilities(MU + 0j, cov=C)
+
+
+@pytest.mark.parametrize("r", [1, 3])
+def test_polished_rank_does_not_depend_on_rounding_1066(r):
+    """At k = 3 above the true rank the polish's Gauss-Newton system is
+    singular at the solution, so it stopped wherever rounding left it and
+    a spurious column straddled the 1e-10 cut: a 1e-15 perturbation of C
+    gave rank 2 or 3 instead of 1 in 11 of 40 refits, and CI on Linux
+    failed the rank pin above while macOS passed it. The polish now
+    finishes at the fit's numerical rank."""
+    V, D, C = exact_correlation(r, seed=5 + r)
+    rng = np.random.default_rng(0)
+    for _ in range(30):
+        E = rng.normal(size=C.shape) * 1e-15
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            _, Df, _, _, rep = fit_covariance(C + (E + E.T) / 2,
+                                              return_report=True)
+        assert rep["rank"] == r
+        assert np.abs(Df - D).max() < 1e-12

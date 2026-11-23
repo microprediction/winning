@@ -18,6 +18,7 @@ from __future__ import annotations
 import numpy as np
 
 from ..shapes import as_loadings
+from ._checks import as_noise_variances
 
 
 from .full import (_check_full_inputs, _mixture_update_full, _order_kernel,
@@ -50,7 +51,7 @@ def update_team_order_full(m, S, A, order, V=None, beta2=1.0,
 
 
 def _cardinal_observation(margins=None, scores=None, lengths_scale=1.0,
-                          transform=None):
+                          transform=None, k=None):
     """The contrast observation y (centred) and the log-Jacobian of an
     optional sub-linear margin transform, shared by the individual and
     team cardinal nodes. margins= (lengths behind the reference, LOWER
@@ -63,6 +64,12 @@ def _cardinal_observation(margins=None, scores=None, lengths_scale=1.0,
     winner's zero) is pinned and contributes no g' term."""
     if (margins is None) == (scores is None):
         raise ValueError("pass exactly one of margins= or scores=")
+    if k is not None:
+        from ._checks import as_observation
+        if scores is not None:
+            scores = as_observation(scores, k, "scores")
+        else:
+            margins = as_observation(margins, k, "margins")
     # The observation is a DENSITY on the (n-1)-dimensional contrast
     # space, so rescaling it by lengths_scale costs (n-1)*log(scale) --
     # and that term was missing entirely on the identity path, which
@@ -146,8 +153,8 @@ def _lift_contrast_update(m, S, A, y, Cn, log_jac=0.0):
 
 
 def _noise_cov(k, beta2, meas_var=0.0, V=None):
-    B = np.broadcast_to(np.asarray(beta2, dtype=float), (k,)).astype(float)
-    Cn = np.diag(B + float(meas_var))
+    B = as_noise_variances(beta2, k, "beta2")                    # #809
+    Cn = np.diag(B + as_noise_variances(float(meas_var), k, "meas_var"))
     if V is not None:
         Vm = as_loadings(V, k)
         Cn = Cn + Vm @ Vm.T
@@ -166,7 +173,8 @@ def update_team_margins_full(m, S, A, margins=None, V=None, beta2=1.0,
     margins/scores subsume the finishing order -- use one or the other
     per match, never both."""
     A = np.atleast_2d(np.asarray(A, dtype=float))
-    y, log_jac = _cardinal_observation(margins, scores, lengths_scale, transform)
+    y, log_jac = _cardinal_observation(margins, scores, lengths_scale, transform,
+                                       k=A.shape[0])
     Cn = _noise_cov(A.shape[0], beta2, meas_var, V)
     return _lift_contrast_update(m, S, A, y, Cn, log_jac)
 
@@ -181,12 +189,20 @@ def update_team_market_full(m, S, A, p_market, tau2=0.25, invert=None,
     logZ)."""
     A = np.atleast_2d(np.asarray(A, dtype=float))
     k = A.shape[0]
+    default_invert = invert is None
     if invert is None:
         from ..factor.races import abilities_from_race
 
         def invert(p):
             return -abilities_from_race(p, **market_model)
-    y = np.asarray(invert(np.asarray(p_market, dtype=float)), dtype=float)
+    from ._checks import as_observation
+    # the market's prices are checked on the default inversion; a caller's
+    # invert= may take anything, but what it returns must be one finite
+    # ability per runner
+    if default_invert:
+        p_market = as_observation(p_market, k, "p_market")
+    y = as_observation(invert(p_market if not default_invert
+                              else np.asarray(p_market, dtype=float)), k, "invert(p_market)")
     y = y - y.mean()
-    tau = np.broadcast_to(np.asarray(tau2, dtype=float), (k,)).astype(float)
+    tau = as_noise_variances(tau2, k, "tau2")                    # #809
     return _lift_contrast_update(m, S, A, y, np.diag(tau))

@@ -160,6 +160,66 @@ end
     @test abs(am[1] - am[end]) < 0.01
 end
 
+# --- hard-constrained GMRFs are refused, not repriced (#804) -----------
+#
+# precision_matrix of a ConstrainedGMRF (and of a constrained
+# WorkspaceGMRF) is the unconstrained base precision while mean() is the
+# constrained mean, so the generic conversion priced X1, X2 iid N(0,1)
+# for the law X1 == X2: max_cdf(0) came back 0.25 (exact 0.5) and
+# expected_max 0.564 (exact 0). The extension now refuses these types.
+@testset "hard-constrained GMRFs are refused (#804)" begin
+    using GaussianMarkovRandomFields
+    GMF = GaussianMarkovRandomFields
+    Q2 = sparse([1.0 0.0; 0.0 1.0])
+    base = GMF.GMRF(zeros(2), Q2)
+    A, e = [1.0 -1.0], [0.0]
+    cg = GMF.ConstrainedGMRF(base, A, e)
+    wg = GMF.WorkspaceGMRF(zeros(2), Q2, GMF.GMRFWorkspace(Q2), A, e)
+    for g in (cg, wg)
+        @test_throws ArgumentError GaussMarkovChain(g)
+        @test_throws ArgumentError max_cdf(g, 0.0)
+        @test_throws ArgumentError excursion_probability(g, 0.0)
+        @test_throws ArgumentError first_passage(g, 0.0)
+        @test_throws ArgumentError argmax_marginals(g)
+        @test_throws ArgumentError expected_max(g)
+    end
+    msg = sprint(showerror, try max_cdf(cg, 0.0) catch err; err end)
+    @test occursin("hard linear constraints", msg)
+
+    # the unconstrained base, plain or workspace-backed, still prices
+    # identically to the chain built from its precision
+    ref = chain_from_precision(zeros(2), Q2)
+    wg0 = GMF.WorkspaceGMRF(zeros(2), Q2)
+    for g in (base, wg0)
+        @test max_cdf(g, 0.0) === max_cdf(ref, 0.0)
+        @test first_passage(g, 0.0) == first_passage(ref, 0.0)
+        @test expected_max(g) === expected_max(ref)
+    end
+    @test abs(max_cdf(base, 0.0) - 0.25) < 1e-8
+
+    # a MetaGMRF wrapper forwards mean and precision_matrix, so it reached
+    # the generic conversion and priced the dropped constraint (#885)
+    struct _TestMeta885 <: GMF.GMRFMetadata end
+    for inner in (cg, wg)
+        for g in (GMF.MetaGMRF(inner, _TestMeta885()),
+                  GMF.MetaGMRF(GMF.MetaGMRF(inner, _TestMeta885()), _TestMeta885()))
+            @test_throws ArgumentError GaussMarkovChain(g)
+            @test_throws ArgumentError max_cdf(g, 0.0)
+            @test_throws ArgumentError excursion_probability(g, 0.0)
+            @test_throws ArgumentError first_passage(g, 0.0)
+            @test_throws ArgumentError argmax_marginals(g)
+            @test_throws ArgumentError expected_max(g)
+        end
+    end
+    # and an unconstrained one prices exactly as its inner model
+    for inner in (base, wg0)
+        g = GMF.MetaGMRF(inner, _TestMeta885())
+        @test max_cdf(g, 0.0) === max_cdf(inner, 0.0)
+        @test first_passage(g, 0.0) == first_passage(inner, 0.0)
+        @test expected_max(g) === expected_max(inner)
+    end
+end
+
 # --- a transition narrower than the lattice spacing (#244) -------------
 #
 # The kernel was discretised as density x spacing, which is a probability
@@ -412,7 +472,18 @@ end
         c = GaussMarkovChain([0.0, d], 1.0, [1.0], [s])
         @test_throws ErrorException argmax_marginals(c)
         @test_throws ErrorException argmax_marginals(c; points = 1600)
+        # an invalid tolerance is refused, not taken as "no refusal":
+        # Inf passed every err and `true` was the tolerance 1.0, both
+        # returning [0.5, 0.5] for a pair whose order is certain (#906)
+        for bad in (Inf, NaN, -1e-3, true, false)
+            @test_throws ArgumentError argmax_marginals(c; resolution_tol = bad)
+        end
     end
+    # a legal override still works: zero refuses the drifted pair, and a
+    # tolerance above the measured misassignment lets the pass run
+    c0 = GaussMarkovChain([0.0, 0.05], 1.0, [1.0], [0.05])
+    @test_throws ErrorException argmax_marginals(c0; resolution_tol = 0.0)
+    @test sum(argmax_marginals(c0; resolution_tol = 1.0, points = 1600)) ≈ 1 atol = 1e-6
     # refused at the default lattice, answered (correctly) once raised
     c = GaussMarkovChain([0.0, 0.05], 1.0, [1.0], [0.05])
     @test_throws ErrorException argmax_marginals(c)
@@ -467,6 +538,19 @@ end
     Qr = [2.0 -0.5 1e-14; -0.5 2.0 -0.5; 1e-14 -0.5 2.0]
     c = chain_from_precision(zeros(3), Qr; tol = 1e-12)
     @test length(c) == 3
+    # Bool <: Real and true == 1.0: tol = true dropped the 0.5 coupling
+    # and priced 0.125 for 0.1049 (#562 residual)
+    for tol in (true, false)
+        @test_throws ArgumentError chain_from_precision(zeros(3), Q; tol = tol)
+        @test_throws ArgumentError chain_from_precision(zeros(3), Qr; tol = tol)
+    end
+    # numeric tolerances are unchanged, of any Real type
+    for tol in (1e-12, 1e-10, big"1e-12", 1 // 10^12, 1f-6)
+        ct = chain_from_precision(zeros(3), Qr; tol = tol)
+        @test ct.phi == c.phi && ct.s == c.s && ct.sd0 == c.sd0
+    end
+    @test length(chain_from_precision(zeros(3), [2.0 -0.5 0.0; -0.5 2.0 -0.5;
+                                                 0.0 -0.5 2.0]; tol = 0)) == 3
 end
 
 @testset "memory is O(L^2), not O(n L^2) (#533)" begin
@@ -500,6 +584,18 @@ end
                                        points = 10_000)
     @test_throws ArgumentError argmax_marginals(stationary_ar1(0.5, 3);
                                                 points = 10_000)
+    # L * L wrapped: 2^32 squared to 0 and typemax(Int) to 1, so the
+    # guard passed; it is checked without the overflow now (#533)
+    for L in (1 << 32, typemax(Int), (1 << 31) + 1, 3037000500)
+        @test_throws ArgumentError GE._check_lattice(L, 2)
+    end
+    @test GE._check_lattice(typemax(Int), 1) === nothing
+    # the budget boundary itself is where it was
+    @test GE._check_lattice(4472, 2) === nothing
+    @test GE._check_lattice(isqrt(GE._LATTICE_DOUBLES), 1000) === nothing
+    @test_throws ArgumentError GE._check_lattice(4473, 2)
+    msg = sprint(showerror, try GE._check_lattice(4473, 2) catch err; err end)
+    @test occursin("160.1 MB each", msg)
     # a single node has no transition, so no matrix to budget
     @test isfinite(max_cdf(GaussMarkovChain([0.0], 1.0, Float64[], Float64[]),
                            0.0; points = 10_000))
@@ -589,6 +685,54 @@ end
     @test_logs max_cdf(stationary_ar1(0.5, 20), 0.5; points = 2000)
     # a threshold that does force a much coarser lattice still warns
     @test_logs (:warn, r"far outside") max_cdf(c, 30.0)
+end
+
+# --- opposite-sign finite means: scale, then subtract (#657, #363) -----
+#
+# The means and thresholds were subtracted before the power-of-two
+# rescaling, so 1e308 - (-1e308) overflowed to Inf although the contrast
+# is finite in the chain's own units: max_cdf priced the second node as
+# unbounded (0.5 for Phi(0) Phi(2) = 0.48862), and expected_max and
+# argmax_marginals threw on internally generated infinities.
+@testset "opposite-sign finite means (#657, #363)" begin
+    Phi = GE.ndtr
+    c = GaussMarkovChain([1e308, -1e308], 1e308, [0.0], [1e308])
+    exact = Phi(0.0) * Phi(2.0)                     # 0.4886249340259104
+    @test abs(max_cdf(c, 1e308) - exact) < 1e-12
+    @test abs(excursion_probability(c, 1e308) - (1 - exact)) < 1e-12
+    @test abs(sum(first_passage(c, 1e308)) - 1) < 1e-12
+    @test abs(max_cdf(c, [1e308])[1] - exact) < 1e-5   # unaligned lattice
+    # sd 1e307: the second node wins with probability Phi(-14.14) ~ 1e-45
+    for (mu, top) in (([1e308, -1e308], 1), ([-1e308, 1e308], 2))
+        c = GaussMarkovChain(mu, 1e307, [0.0], [1e307])
+        x = expected_max(c)
+        @test isfinite(x) && abs(x / 1e308 - 1) < 1e-6
+        P = argmax_marginals(c)
+        @test abs(P[top] - 1) < 1e-12 && 0 <= P[3 - top] < 1e-40
+    end
+    # sd 1: the contrast is past Float64 in the chain's units, so the
+    # lower node is saturated; it can never be the maximum
+    for (mu, top) in (([1e308, -1e308], 1), ([-1e308, 1e308], 2))
+        c = GaussMarkovChain(mu, 1.0, [0.0], [1.0])
+        @test argmax_marginals(c)[top] == 1.0
+        @test argmax_marginals(c)[3 - top] == 0.0
+        x = expected_max(c)
+        @test isfinite(x) && abs(x / 1e308 - 1) < 1e-2   # threshold grid
+        @test abs(max_cdf(c, 1e308) - 0.5) < 1e-12
+    end
+    # ordinary inputs: the scaled-first contrasts are the same bits as
+    # the old subtract-then-scale ones, for e > 0 and e <= 0 alike
+    for (mu, sd) in (([0.0, 0.3, -0.2], 1.0), ([3.0, -3.0, 1.7], 2.5),
+                     ([-1e5, 2e5, 7.0], 1e4), ([0.1, -0.1, 0.05], 1e-3),
+                     ([1e12, 1e12 + 0.25, 1e12 - 0.5], 3.0))
+        ch = GaussMarkovChain(mu, sd, [0.6, -0.4], [0.8sd, 0.9sd])
+        _, e = GE._unit_scaled(ch)
+        us = [mu[1] + sd, mu[2] - 2sd, Inf, -Inf]
+        @test GE._offsets(ch, us, e) == ldexp.(GE._offsets(ch, us), -e)
+        a, d = GE._mean_contrasts(ch, e)
+        @test a === mu[1]
+        @test d == ldexp.(ch.mu .- mu[1], -e)
+    end
 end
 
 println("all GMRFExtremes tests passed")

@@ -1902,6 +1902,28 @@ accepts("the inverse takes a scalar D, matching python",
   holds("average linkages are never refused as inverted (#667)", refused === 0, String(refused));
 }
 
+// --- cutLinkage takes treeFromLinkage's row contract, not coerced rows (#801)
+{
+  for (const [Z, why, says] of [
+    [[[0.4, 1, 1, 2]], "a fractional id", "whole numbers"],
+    [[["0", 1, 1, 2]], "a string id", "whole numbers"],
+    [[[0, 1, "1", 2]], "a string height", "non-negative"],
+    [[[0, 1, -1, 2], [2, 3, 0, 3]], "a negative first height", "non-negative"]]) {
+    rejects(structures.cutLinkage, [Z, Z.length + 1, Math.max(1, Z.length)],
+            `cutLinkage refuses ${why} (#801)`, says);
+    rejects(structures.treeFromLinkage, [Z], `...as treeFromLinkage does (#801)`, says);
+  }
+  // valid linkages nearby: same partitions as before, integer-valued floats included
+  const Zv = [[0, 1, 0, 2], [2, 3, 0.25, 2], [4, 5, 1, 4]];
+  const want = { 1: [0, 0, 0, 0], 2: [0, 0, 1, 1], 3: [0, 0, 1, 2], 4: [0, 1, 2, 3] };
+  for (const k of [1, 2, 3, 4])
+    holds(`a valid linkage still cuts as before at k=${k} (#801)`,
+          JSON.stringify(structures.cutLinkage(Zv, 4, k)) === JSON.stringify(want[k]),
+          JSON.stringify(structures.cutLinkage(Zv, 4, k)));
+  holds("a one-leaf linkage is still one cluster (#801)",
+        JSON.stringify(structures.cutLinkage([], 1, 1)) === "[0]");
+}
+
 // --- demo helpers: structureCov for every grammar (#337); fitGrammar
 // validates its input (#357), keeps a pair's contrast and is scale
 // equivariant (#341), and does not cut a tied eigenspace (#383); the
@@ -2171,6 +2193,62 @@ for (const c of [1e-8, 100]) {
       }
 }
 
+// --- exported normal callable is the named law at derivative/polish doors (#912)
+{
+  const mu = [-0.8, -0.2, 0.3, 0.9];
+  const cl = [0, 0, 1, 1], ld = [0.5, 0.2, 0.4, 0.1], D = [0.8, 0.9, 0.7, 1.0];
+  const grammars = [
+    structures.Blocks(cl, ld, D),
+    structures.Nested(cl, ld, D, [0.3, 0.1, 0.4, -0.2], 0.5),
+    structures.Tree(cl, ld, D, [2, 2, -1], [0, 0, 0.3]),
+    structures.Independent(D),
+    structures.Factor(ld.map(v => [v]), D),
+  ];
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  for (const structure of grammars) {
+    const o = { structure, points: 257 };
+    const J = polish.raceJacobian(mu, { ...o, base: "normal" });
+    accepts(`${structure.kind} callable normal Jacobian equals named law (#912)`,
+      () => polish.raceJacobian(mu, { ...o, base: races.BASES.normal }),
+      actual => same(actual, J));
+    const po = { ...o, mu0: mu, nameCaps: structure.kind === "Nested" || structure.kind === "Tree" ? 0.8 : 0.35, fdFallback: false };
+    const named = polish.polishRace({ ...po, base: "normal" });
+    accepts(`${structure.kind} callable normal polish equals converged named law (#912)`,
+      () => polish.polishRace({ ...po, base: races.BASES.normal }),
+      actual => named.info.converged && actual.info.converged && same(actual, named));
+    if (["Blocks", "Nested", "Tree"].includes(structure.kind)) {
+      // Identity only: neither another law nor a user-defined normal wrapper
+      // is silently reclassified as the supported named Gaussian grammar.
+      for (const base of ["logistic", races.BASES.logistic, x => races.BASES.normal(x)]) {
+        rejects(polish.raceJacobian, [mu, { ...o, base }],
+          `${structure.kind} Jacobian still rejects unsupported base (#912)`, "support base");
+        rejects(polish.polishRace, [{ ...po, base }],
+          `${structure.kind} polish still rejects unsupported base (#912)`, "support base");
+      }
+    }
+  }
+  // Exercise the structured pair shortcut and polish's p0 inverse closure.
+  const pair = [-0.8, 0.8], d = [1, 1], l = [0.5, 0.5];
+  for (const structure of [
+    structures.Blocks([0, 1], l, d),
+    structures.Nested([0, 1], l, d, [0.3, 0.3], 0.5),
+    structures.Tree([0, 1], l, d, [2, 2, -1], [0, 0, 0.3]),
+    structures.Independent(d), structures.Factor(l.map(v => [v]), d),
+  ]) {
+    const o = { structure, points: 257 };
+    const namedJ = polish.raceJacobian(pair, { ...o, base: "normal" });
+    accepts(`${structure.kind} pair callable normal uses named Jacobian (#912)`,
+      () => polish.raceJacobian(pair, { ...o, base: races.BASES.normal }),
+      actual => same(actual, namedJ));
+    const p0 = [0.5, 0.5];
+    const po = { ...o, p0, nameCaps: [0.4, NaN], fdFallback: false };
+    const named = polish.polishRace({ ...po, base: "normal" });
+    accepts(`${structure.kind} p0 callable normal polish equals named law (#912)`,
+      () => polish.polishRace({ ...po, base: races.BASES.normal }),
+      actual => named.info.converged && actual.info.converged && same(actual, named));
+  }
+}
+
 // --- a structured Jacobian refuses a base its forward refuses (#89)
 for (const s of [structures.Blocks([0, 0, 1], 0.8, 0.2),
                  structures.Tree([0, 0, 1], 0.8, 0.2, [2, 2, -1], [0, 0, 0.5])])
@@ -2273,9 +2351,9 @@ for (const r of [NaN, -1, 2.5, Infinity])
   rejects(demo.haltonNormalNodes, [r, 3], `haltonNormalNodes refuses rank ${r} (#557)`, "rank");
 rejects(core.firstPrimes, [Infinity], "firstPrimes refuses Infinity rather than hanging (#557)");
 rejects(structures.cutLinkage, [[[0, 0, 0.1, 2], [1, 3, 0.2, 3]], 3, 1],
-        "cutLinkage refuses a self-merge (#603)", "same cluster");
+        "cutLinkage refuses a self-merge (#603)", "with itself");     // checkLinkage's words (#801)
 rejects(structures.cutLinkage, [[[0, 1, 0.1, 2], [0, 3, 0.2, 3]], 3, 1],
-        "cutLinkage refuses a reused cluster (#603)", "same cluster");
+        "cutLinkage refuses a reused cluster (#603)", "reuses cluster");
 
 // --- demo covariance helpers keep the shape and PSD contracts (#563, #564)
 {
@@ -2333,7 +2411,9 @@ rejects(structures.cutLinkage, [[[0, 1, 0.1, 2], [0, 3, 0.2, 3]], 3, 1],
 
 // --- classic: the ability forward takes the scratch sentinel (#662);
 // statePricesFromOffsets still refuses it (#438). Reference values are
-// python's ability_implied_state_prices on the same inputs.
+// python's ability_implied_state_prices on the same inputs, regenerated
+// when the inverse began iterating to 1e-9 instead of three sweeps (#904):
+// the round trip was [0.6666650774147869, 0.33333492258521313, 0] before.
 {
   const maxAbs = (a, b) => Math.max(...a.map((x, i) => Math.abs(x - b[i])));
   const d = classic.skewNormalDensity(15, 0.2, { a: 0 });
@@ -2341,7 +2421,7 @@ rejects(structures.cutLinkage, [[[0, 1, 0.1, 2], [0, 3, 0.2, 3]], 3, 1],
     const a = classic.dividendImpliedAbility([2, 4, scratch], d);
     accepts(`dividends [2, 4, ${scratch}] round-trip through abilityImpliedStatePrices (#662)`,
             () => classic.abilityImpliedStatePrices(a, d),
-            p => p[2] === 0 && maxAbs(p, [0.6666650774147869, 0.33333492258521313, 0]) < 1e-12,
+            p => p[2] === 0 && maxAbs(p, [0.6666666665428762, 0.3333333334571237, 0]) < 1e-12,
             p => String(p));
   }
   accepts("one live runner and a scratch price exactly [1, 0] (#662)",
@@ -2387,6 +2467,11 @@ rejects(structures.cutLinkage, [[[0, 1, 0.1, 2], [0, 3, 0.2, 3]], 3, 1],
   rejects(classic.abilityImpliedStatePrices, [[0, "1"], d], "abilityImpliedStatePrices refuses a string (#662)", "not a number");
   rejects(classic.abilityImpliedStatePrices, [[0, 1], d, { unti: 1 }], "abilityImpliedStatePrices refuses a misspelt option (#662)", "unknown option 'unti'");
   rejects(classic.abilityImpliedStatePrices, [[0, 1], d, { unit: 0 }], "abilityImpliedStatePrices refuses unit 0 (#662)", "finite positive");
+  // a one-live book returns before the inverse runs, and took nIter 0 and tol 0 (#924)
+  rejects(classic.dividendImpliedAbility, [[2.0], d, { nIter: 0 }], "dividendImpliedAbility refuses nIter 0 on one live runner (#924)", "nIter");
+  rejects(classic.dividendImpliedAbility, [[2.0], d, { tol: 0 }], "dividendImpliedAbility refuses tol 0 on one live runner (#924)", "tol");
+  accepts("one live runner with valid controls is still [0] (#924)",
+          () => classic.dividendImpliedAbility([2.0], d, { nIter: 5, tol: 1e-6 }), p => p.length === 1 && p[0] === 0);
 }
 
 // --- classic: skewNormalDensity's domain (#509) and option typos (#561)
@@ -2423,6 +2508,100 @@ accepts("raceProbabilities takes delta=1e-3 (#445)",
   accepts("zero-weight block node padding is a no-op (#416)",
           () => blocks.blockRaceProbabilities(m2, [0, 1, 2], V2, D2, { points: 501, qa: 7, nodes: { nodes: [[-100], [0], [100]], w: [0, 1, 0] } }),
           p => md(p, c) < 1e-12);
+}
+
+// --- a custom block node's coordinates in the loadings' null space do not
+// size the window: only v . f moves a runner (#807)
+{
+  const mu = [0, 0.2, 0.5, -0.1], cl = [0, 0, 1, 1], D = [1, 1, 1, 1];
+  const L = [[0.7, 0], [0.3, 0], [0.6, 0], [0.2, 0]];
+  const md = (a, b) => Math.max(...a.map((x, i) => Math.abs(x - b[i])));
+  const rule = M => ({ nodes: [[-1, -M], [-1, M], [1, -M], [1, M]], w: [0.25, 0.25, 0.25, 0.25] });
+  const base = blocks.blockRaceProbabilities(mu, cl, L, D, { nodes: rule(0) });
+  holds("the null-coordinate-free rule prices as before (#807)",
+        md(base, [0.3073128641534906, 0.20814267517446675, 0.16320134218035226, 0.32134311849169056]) < 1e-14);
+  for (const M of [1, 1000, 1e6])
+    accepts(`a null coordinate of ${M} leaves the 257-point block race unchanged (#807)`,
+            () => blocks.blockRaceProbabilities(mu, cl, L, D, { nodes: rule(M) }),
+            p => md(p, base) < 1e-14, p => md(p, base).toExponential(2));
+  // ordinary inputs nearby: the automatic rule and a full-rank custom rule
+  holds("the automatic rule is unchanged (#807)",
+        md(blocks.blockRaceProbabilities(mu, cl, L, D),
+           [0.3061703107471863, 0.2091839026995875, 0.16248513700275158, 0.3221606495504745]) < 1e-14);
+  holds("a full-rank custom rule is unchanged (#807)",
+        md(blocks.blockRaceProbabilities(mu, cl, L, D,
+             { nodes: { nodes: [[-1, 0], [1, 0], [0, -1], [0, 1]], w: [0.25, 0.25, 0.25, 0.25] } }),
+           [0.3010448211736288, 0.21615827747634736, 0.15439283696956393, 0.3284040643804598]) < 1e-14);
+}
+
+// --- custom block nodes describe Y = mu + loading.f + eps (#909).
+// Expand independent cluster rules into their Cartesian-product factor law;
+// this oracle exercises the ordinary factor grammar, not block internals.
+{
+  const md = (a, b) => Math.max(...a.map((x, i) => Math.abs(x - b[i])));
+  const mu = [0, 0, 0], cl = [0, 1, 2], L = [2, 0, -2], D = [1, 1, 1];
+  for (const f of [1, -1]) {
+    const rule = { nodes: [[f]], w: [1] };
+    const before = JSON.stringify(rule);
+    holds(`deterministic block node ${f} adds loading.f to mu (#909)`,
+          md(blocks.blockRaceProbabilities(mu, cl, L, D, { nodes: rule }),
+             races.raceProbabilities(mu.map((x, i) => x + L[i] * f), { D })) < 1e-13);
+    holds("custom node input is not mutated (#909)", JSON.stringify(rule) === before);
+  }
+  const m = [.2, -.1, .4, 0], c = [0, 0, 1, 1], d = [1, .8, 1.2, .9];
+  for (const loading of [[[.7], [-.2], [.4], [.9]],
+                         [[.7, -.1], [-.2, .3], [.4, .6], [.9, -.4]]]) {
+    const r = loading[0].length;
+    for (const sign of [1, -1]) {
+      const F0 = [[-1.3, .4], [.2, -.8], [1.8, .7]].map(row => row.slice(0, r).map(v => sign * v));
+      const w = [.2, .3, .5], F = [], W = [];
+      for (let a = 0; a < F0.length; a++) for (let b = 0; b < F0.length; b++) {
+        F.push([...F0[a], ...F0[b]]); W.push(w[a] * w[b]);
+      }
+      const V = loading.map((row, i) => c[i] === 0 ? [...row, ...new Array(r).fill(0)]
+                                                               : [...new Array(r).fill(0), ...row]);
+      holds(`asymmetric rank-${r} block rule sign ${sign} matches product factor law (#909)`,
+            md(blocks.blockRaceProbabilities(m, c, loading, d, { nodes: { nodes: F0, w } }),
+               races.raceProbabilities(m, { V, D: d, F, W })) < 1e-12);
+    }
+  }
+}
+
+// --- Nested gamma and -gamma are the same Gaussian law, at every coupling
+// rank: the rank-3+ Halton rule is not symmetric under f -> -f (#871)
+{
+  const n = 6, ph = 8, scale = 0.7;
+  const mu = Array.from({ length: n }, (_, i) => 0.7 * Math.sin((i + 1) * (ph + 1) * 0.37) + 0.2 * i);
+  const G = Array.from({ length: n }, (_, i) =>
+    Array.from({ length: 12 }, (_, j) => scale * Math.sin((i + 1) * (j + 2) + ph * 0.31)));
+  const cl = Array.from({ length: n }, (_, i) => i), L = new Array(n).fill(0);
+  const D = Array.from({ length: n }, (_, i) => 0.03 + 0.015 * (i % 4));
+  const md = (a, b) => Math.max(...a.map((x, i) => Math.abs(x - b[i])));
+  for (const k of [1, 2, 3, 12]) {
+    const g = G.map(row => row.slice(0, k));
+    for (const a of [1, 0.5]) {
+      const o = gm => ({ coupling: g, gamma: gm, points: 65 });
+      holds(`nested prices at rank ${k} agree for gamma = +-${a} (#871)`,
+            md(blocks.nestedRaceProbabilities(mu, cl, L, D, o(a)),
+               blocks.nestedRaceProbabilities(mu, cl, L, D, o(-a))) < 1e-15);
+      holds(`nested Jacobians at rank ${k} agree for gamma = +-${a} (#871)`,
+            md(blocks.nestedRaceJacobian(mu, cl, L, D, o(a)).flat(),
+               blocks.nestedRaceJacobian(mu, cl, L, D, o(-a)).flat()) < 1e-15);
+    }
+  }
+  const S = gm => structures.Nested(cl, L, D, G, gm);
+  holds("the structured Nested race agrees for gamma = +-1 (#871)",
+        md(races.raceProbabilities(mu, { structure: S(1), points: 65 }),
+           races.raceProbabilities(mu, { structure: S(-1), points: 65 })) < 1e-15);
+  // ordinary inputs nearby: positive gamma prices as before
+  holds("rank-12 gamma = 1 is unchanged (#871)",
+        md(blocks.nestedRaceProbabilities(mu, cl, L, D, { coupling: G, gamma: 1, points: 65 }),
+           [0.25786619827701934, 0.15482977250869812, 0.29190668241523776,
+            0.07515511139859908, 0.15360040729715324, 0.06664182810329264]) < 1e-14);
+  holds("rank-12 gamma = 0.5 is unchanged (#871)",
+        md(blocks.nestedRaceProbabilities(mu, cl, L, D, { coupling: G, gamma: 0.5, points: 65 }),
+           [0.33741142156854376, 0.1409954341891887, 0.33006376648414,
+            0.03262864561864453, 0.14214578479423912, 0.01675494734524407]) < 1e-14);
 }
 
 // --- treeFromLinkage checks topology and heights itself (#328, #459)
@@ -2859,6 +3038,58 @@ accepts("dividendImpliedAbility keeps the favourite first at unit 0.1 (#649)",
         `C-S ${maxDiff(ghkC, ghkS).toExponential(2)}, Ct-S ${maxDiff(ghkCt, ghkS).toExponential(2)}`);
 }
 
+
+{
+  // #726 overflow residual: the accepted covariance has a finite contrast,
+  // but adding equal 1e308 entries before halving made both dense arms NaN.
+  // In a pair both arms are exact, so this is an analytic check, not MC.
+  for (const H of [5e307, 1e308, 1.5e308]) {
+    const diagonal = H + 4e292;
+    const variance = 2 * (diagonal - H);
+    const C = [[diagonal, H], [H, diagonal]];
+    const mu = [0, Math.sqrt(variance)];
+    accepts(`large common-mode C is valid at ${H} (#726)`,
+            () => demo.validateCovariance(C), v => v.flat().every(Number.isFinite));
+    for (const i of [0, 1]) {
+      const expected = core.ndtr(i === 0 ? 1 : -1);
+      const prep = demo.ghkPrepareOne(mu, C, i);
+      holds(`GHK finite exact contrast at ${H}, runner ${i} (#726)`,
+            Number.isFinite(prep.L[0]) && Math.abs(prep.L[0] / Math.sqrt(variance) - 1) < 1e-14);
+      holds(`GHK analytic pair at ${H}, runner ${i} (#726)`,
+            Math.abs(demo.ghkSampleOne(prep, 1, demo.rng(7)) - expected) < 1e-14);
+      holds(`Mendell-Elston analytic pair at ${H}, runner ${i} (#726)`,
+            Math.abs(demo.mendellElstonOne(mu, C, i) - expected) < 1e-14);
+    }
+  }
+}
+
+{
+  // #726 contrast residual: C is the covariance of (A, 0.8A+B, 0.8A-B) with
+  // var A = 1.7e308, var B = 0.3e308. Its contrasts are representable
+  // (diagonal 3.68e307), but Cjk - Cji - Cik summed left to right reached
+  // -Infinity before Cii. A race is invariant to a common power-of-two
+  // rescaling of C (with mu = 0), so the scaled C is the oracle.
+  const C = [[1.7e308, 1.36e308, 1.36e308], [1.36e308, 1.388e308, 0.788e308],
+             [1.36e308, 0.788e308, 1.388e308]];
+  const s = 2 ** -1020;
+  const Cs = C.map(r => r.map(v => v * s));
+  const mu = [0, 0, 0];
+  for (const i of [0, 1, 2]) {
+    const me = demo.mendellElstonOne(mu, C, i), ref = demo.mendellElstonOne(mu, Cs, i);
+    holds(`Mendell-Elston prices a near-overflow contrast, runner ${i} (#726)`,
+          Number.isFinite(me) && Math.abs(me - ref) < 1e-14, `${me} vs ${ref}`);
+    const prep = demo.ghkPrepareOne(mu, C, i), prepS = demo.ghkPrepareOne(mu, Cs, i);
+    const g = demo.ghkSampleOne(prep, 2000, demo.rng(11));
+    const gS = demo.ghkSampleOne(prepS, 2000, demo.rng(11));
+    holds(`GHK prices a near-overflow contrast, runner ${i} (#726)`,
+          Number.isFinite(g) && Math.abs(g - gS) <= 1e-13 * Math.abs(gS), `${g} vs ${gS}`);
+  }
+  const L = demo.raceFactor(C), Ls = demo.raceFactor(Cs);
+  holds("raceFactor factors a near-overflow contrast (#726)",
+        L.flat().every((v, k) => Number.isFinite(v) &&
+          Math.abs(v * 2 ** -510 - Ls.flat()[k]) <= 1e-14 * Math.abs(Ls.flat()[k]) + 1e-300));
+}
+
 {
   // one global 1e-8 * max|dist| tolerance let an unrelated 1e12 distance
   // hide a -1 distance, a 1 vs 100 asymmetry and a diagonal of 1 (#721)
@@ -3095,9 +3326,11 @@ accepts("dividendImpliedAbility keeps the favourite first at unit 0.1 (#649)",
       accepts(`[${off}] at L = 3, maxDepth ${maxDepth}, is the exact primitive (#773)`,
               () => classic.abilityImpliedStatePrices(off, d, { maxDepth }),
               p => maxAbs(p, classic.statePricesFromOffsets(d, off)) < 1e-15, p => String(p));
-  accepts("just past the L - 2 endpoint still hangs and clusters (#773)",
+  // this hung and clustered to 0.634 (#773); an integer shift of -1 fits
+  // it, so it is now the exact price (#1006)
+  accepts("just past the L - 2 endpoint is shifted onto the lattice and priced exactly (#1006)",
           () => classic.abilityImpliedStatePrices([0, 1 + 1e-9], d),
-          p => maxAbs(p, [0.633744856100823, 0.36625514389917707]) < 1e-15, p => String(p));
+          p => maxAbs(p, classic.statePricesFromOffsets(d, [-1, 1e-9])) < 1e-15, p => String(p));
   for (const maxDepth of [-1, 1.5, true, NaN, Infinity])
     rejects(classic.abilityImpliedStatePrices, [[0, 1], d, { maxDepth }],
             `abilityImpliedStatePrices refuses maxDepth ${maxDepth} as python and R (#775)`, "whole number >= 0");
@@ -3140,9 +3373,20 @@ accepts("dividendImpliedAbility keeps the favourite first at unit 0.1 (#649)",
   accepts("ordinary Nested forward unchanged (#722)",
           () => blocks.nestedRaceProbabilities(mu5, cl, ld, D5, { coupling: g, gamma: 0.8 }),
           p => close(p, [0.38432227045253287, 0.2369657345443022, 0.1832837205047436, 0.12254165848578556, 0.07288661601263577]), p => String(p));
-  accepts("ordinary Nested inverse unchanged (#722)",
-          () => races.abilitiesFromRace([0.3, 0.25, 0.2, 0.15, 0.1], { structure: structures.Nested(cl, ld, D5, g, 0.8) }),
-          m => close(m, [-0.3591375700446748, -0.28170740253620297, -0.023065245258169144, 0.21186843954857346, 0.4520417782904735]), m => String(m));
+  // the inverse is pinned by what it solves, not by the bits of one
+  // iteration: #887 replaced the scalar-step solver, whose answer this
+  // matched to 1e-15, with the per-runner preconditioned one
+  {
+    const tgt = [0.3, 0.25, 0.2, 0.15, 0.1], st = structures.Nested(cl, ld, D5, g, 0.8);
+    accepts("ordinary Nested inverse unchanged (#722, #887)",
+            () => races.abilitiesFromRace(tgt, { structure: st, returnInfo: true }),
+            f => {
+              const back = races.raceProbabilities(f.mu, { structure: st });
+              const old = [-0.3591375700446748, -0.28170740253620297, -0.023065245258169144, 0.21186843954857346, 0.4520417782904735];
+              return f.converged && Math.max(...back.map((v, i) => Math.abs(Math.log(v) - Math.log(tgt[i])))) < 1e-8 &&
+                     f.mu.every((v, i) => Math.abs(v - old[i]) < 1e-7);
+            }, f => String(f.mu));
+  }
   // python's nested_race_probabilities (fixed in #733) at coupling 1e308,
   // gamma 0.8e-308, points 257, qa 9, qf 15
   accepts("Nested at coupling 1e308 matches python (#722)",
@@ -3454,6 +3698,180 @@ rejects(C => demo.fitGrammar(C, 1, 0, { method: "ipaf", tol: 0 }),
            blocks.blockRaceProbabilities(mu, cl, rot(V), D, { nodes })) > 1e-6);
 }
 
+// --- structureCov needs one cluster label per contestant (#792)
+{
+  const S = structures, sc = demo.structureCov;
+  const eq = (A, B) => JSON.stringify(A) === JSON.stringify(B);
+  const price = s => () => races.raceProbabilities([0, 0.1, 0.2, 0.3], { structure: s });
+  // #792: one cluster label per contestant, short or overlong
+  for (const [name, cl] of [["short", [0, 1]], ["overlong", [0, 0, 1, 1, 1]]]) {
+    const bad = [S.Blocks(cl, [10, 10, 10, 10], [1, 1, 1, 1]),
+                 S.Nested(cl, [10, 10, 10, 10], [1, 1, 1, 1], [0, 0, 0, 0], 1),
+                 S.Tree(cl, [1, 1, 1, 1], [1, 1, 1, 1], [2, 2, -1], [0, 0, 1])];
+    for (const s of bad) {
+      rejects(sc, [s], `structureCov refuses a ${name} ${s.kind} cluster (#792)`,
+              "one label per contestant");
+      rejects(price(s), [], `and so does the ${s.kind} pricer (#792)`, "one label per contestant");
+    }
+  }
+  holds("structureCov Blocks with one label per contestant unchanged (#792)",
+        eq(sc(S.Blocks([0, 0, 1], [1, 2, 3], [1, 1, 1])), [[2, 2, 0], [2, 5, 0], [0, 0, 10]]));
+  holds("structureCov rank-two Blocks unchanged (#792)",
+        eq(sc(S.Blocks([0, 0, 1], [[1, 1], [2, 0], [3, 1]], [1, 1, 1])),
+           [[3, 2, 0], [2, 5, 0], [0, 0, 11]]));
+  holds("structureCov scalar-loading Blocks unchanged (#792)",
+        eq(sc(S.Blocks([0, 0, 1], 2, [1, 1, 1])), [[5, 4, 0], [4, 5, 0], [0, 0, 5]]));
+}
+
+// --- structureCov reads Nested gamma through the pricers' door (#812)
+{
+  const S = structures, sc = demo.structureCov;
+  const eq = (A, B) => JSON.stringify(A) === JSON.stringify(B);
+  const price = s => () => races.raceProbabilities([0, 0.1, 0.2, 0.3], { structure: s });
+  // #812: gamma through the pricers' door
+  const nest = gamma => S.Nested([0, 0, 1, 1], [0.2, 0.4, 0.3, 0.5], [1, 1, 1, 1],
+                                 [1, -1, 0.5, -0.5], gamma);
+  for (const g of [null, false, true, "2", NaN, Infinity, -Infinity]) {
+    rejects(sc, [nest(g)], `structureCov refuses gamma ${String(g)} (#812)`, "gamma must be a finite number");
+    rejects(price(nest(g)), [], `and so does the Nested pricer for gamma ${String(g)} (#812)`,
+            "gamma must be a finite number");
+  }
+  rejects(sc, [S.Nested([0, 0, 1], [1, 1, 1], [1, 1, 1], null, "1")],
+          "structureCov refuses a malformed gamma without a coupling, as the pricer (#812)",
+          "gamma must be a finite number");
+  const nb = (cl, g) => S.Nested([0, 0, 1], [1, 2, 3], [1, 1, 1], [1, 0, 1], g);
+  const blocks3 = [[2, 2, 0], [2, 5, 0], [0, 0, 10]];
+  const withG = g2 => blocks3.map((r, i) => r.map((v, j) => v + g2 * [1, 0, 1][i] * [1, 0, 1][j]));
+  holds("structureCov Nested gamma 0, 1, 2, -0.5 unchanged (#812)",
+        eq(sc(nb(0, 0)), blocks3) && eq(sc(nb(0, 1)), withG(1)) && eq(sc(nb(0, 2)), withG(4))
+        && eq(sc(nb(0, -0.5)), withG(0.25)));
+  holds("structureCov Nested default and omitted gamma are gamma 1 (#812)",
+        eq(sc(S.Nested([0, 0, 1], [1, 2, 3], [1, 1, 1], [1, 0, 1])), withG(1))
+        && eq(sc({ kind: "Nested", cluster: [0, 0, 1], loading: [1, 2, 3], D: [1, 1, 1],
+                   coupling: [1, 0, 1] }), withG(1)));
+}
+
+// --- structureCov runs the pricers' Tree topology check (#822)
+{
+  const S = structures, sc = demo.structureCov;
+  const eq = (A, B) => JSON.stringify(A) === JSON.stringify(B);
+  // #822: the pricers' Tree topology door
+  const tree = (parent, strength, loading = [0, 0, 0]) =>
+    S.Tree([0, 1, 2], loading, [1, 1, 1], parent, strength);
+  for (const [name, t, msg] of [
+    ["a forest", tree([3, 3, 4, -1, -1], [0, 0, 0, 2, 0]), "exactly one root"],
+    ["a fractional parent", tree([3, 3, 3.5, -1], [0, 0, 0, 1]), "not -1 or a node index"],
+    ["an out-of-range parent", tree([3, 3, 9, -1], [0, 0, 0, 1]), "not -1 or a node index"],
+    ["a short strength", tree([3, 3, 3, -1], [0, 0, 0]), "one entry per tree node"],
+    ["a non-finite strength", tree([3, 3, 3, -1], [0, 0, 0, NaN]), "is not finite"],
+    ["a cycle", tree([3, 3, 4, 4, 3, -1], [0, 0, 0, 1, 1, 0]), "cycle"],
+  ]) {
+    rejects(sc, [t], `structureCov refuses ${name} (#822)`, msg);
+    rejects(() => races.raceProbabilities([0, 0.1, 0.2], { structure: t }), [],
+            `and so does the Tree pricer for ${name} (#822)`, msg);
+  }
+  holds("structureCov valid Tree unchanged (#822)",
+        eq(sc(S.Tree([0, 0, 1], [1, 1, 1], [1, 1, 1], [2, 2, -1], [0, 0, 2])),
+           [[6, 5, 4], [5, 6, 4], [4, 4, 6]]));
+  // unequal depths with explicit leaves: leaf "b" sits under node 3
+  const deep = S.Tree(["a", "b", "c"], [0, 0, 0], [1, 1, 1], [4, 3, 4, 4, -1], [0, 0, 0, 2, 1], ["a", "b", "c"]);
+  holds("structureCov valid unequal-depth Tree with leaves unchanged (#822)",
+        eq(sc(deep), [[2, 1, 1], [1, 6, 1], [1, 1, 2]]), JSON.stringify(sc(deep)));
+  accepts("and the pricer takes it too (#822)", () => races.raceProbabilities([0, 0.1, 0.2], { structure: deep }));
+}
+
+// --- structureCov takes rank-one Tree leaf loadings only, as the pricers (#827)
+{
+  const S = structures, sc = demo.structureCov;
+  const eq = (A, B) => JSON.stringify(A) === JSON.stringify(B);
+  // #827: rank-one leaf loadings only
+  const T = L => S.Tree([0, 0, 1, 1], L, [0.4, 0.5, 0.6, 0.7], [2, 2, -1], [0, 0, 0.55]);
+  const r2 = T([[0.9, 0.1], [-0.5, 0.7], [0.25, -0.8], [-0.6, -0.2]]);
+  rejects(sc, [r2], "structureCov refuses a rank-two Tree loading (#827)", "rank-one");
+  rejects(() => races.raceProbabilities([-0.6, -0.1, 0.35, 0.8], { structure: r2 }), [],
+          "and so does the Tree pricer (#827)", "rank-one");
+  const flat = [0.9, -0.5, 0.25, -0.6];
+  const Cflat = sc(T(flat));
+  holds("structureCov Tree flat, (n, 1) and (1, n) loadings agree and are unchanged (#827)",
+        eq(sc(T(flat.map(x => [x]))), Cflat) && eq(sc(T([flat])), Cflat)
+        && Math.abs(Cflat[0][1] - (0.9 * -0.5 + 0.3025)) < 1e-15 && Cflat[0][2] === 0.30250000000000005);
+  holds("structureCov scalar Tree loading is a common loading (#827)",
+        eq(sc(T(0.5)), sc(T([0.5, 0.5, 0.5, 0.5]))));
+  const rb = sc(S.Blocks([0, 0, 1, 1], [[0.9, 0.1], [-0.5, 0.7], [0.25, -0.8], [-0.6, -0.2]],
+                         [0.4, 0.5, 0.6, 0.7]))[0];
+  holds("structureCov rank-two Blocks stays general (#827)",
+        Math.max(...rb.map((x, j) => Math.abs(x - [1.22, -0.38, 0, 0][j]))) < 1e-15, String(rb));
+}
+
+// --- an ipaf fit spreads into raceProbabilities as { V, D } (#852)
+{
+  const v = [0.2, -0.4, 0.7], D = [0.8, 0.6, 0.9];
+  const C = v.map((x, i) => v.map((y, j) => x * y + (i === j ? D[i] : 0)));
+  for (const [name, scale] of [["unit", 1], ["rescaled", 1e300]]) {
+    const Cs = C.map(r => r.map(x => x * scale));
+    const fit = demo.fitGrammar(Cs, 1, 0, { method: "ipaf" });
+    holds(`${name} ipaf fit keys are exactly V, D and fit.ipaf still reads (#852)`,
+          JSON.stringify(Object.keys(fit)) === '["V","D"]' && fit.ipaf && fit.ipaf.converged === true
+          && typeof fit.ipaf.contrastResidualMax === "number", JSON.stringify(Object.keys(fit)));
+    if (scale === 1)
+      accepts("raceProbabilities(mu, { ...ipafFit }) prices as explicit V, D (#852)",
+              () => races.raceProbabilities([-0.3, 0, 0.2], { ...fit }),
+              p => JSON.stringify(p) === JSON.stringify(
+                races.raceProbabilities([-0.3, 0, 0.2], { V: fit.V, D: fit.D })));
+  }
+  const eig = demo.fitGrammar(C, 1, 0);
+  holds("the eig fit still spreads as V, D with no ipaf report (#852)",
+        JSON.stringify(Object.keys(eig)) === '["V","D"]' && eig.ipaf === undefined);
+}
+
+// --- Mendell-Elston is unit free at both ends of the range (#795)
+{
+  const shares = (mu, C, s) => {
+    const m = mu.map(x => s * x), S = C.map(r => r.map(x => s * s * x));
+    const raw = m.map((_, i) => demo.mendellElstonOne(m, S, i));
+    const t = raw.reduce((a, b) => a + b, 0);
+    return raw.map(x => x / t);
+  };
+  const mx = (a, b) => Math.max(...a.map((x, i) => Math.abs(x - b[i])));
+  const C1 = [[1, 0.5, 0.2], [0.5, 1, 0.3], [0.2, 0.3, 1]];
+  const py1 = [0.20755944, 0.01733613, 0.77510443];   // python mendell_elston
+  const v = [-50, 0, 50];
+  const C2 = v.map((x, i) => v.map((y, j) => x * y + (i === j ? 1e-4 : 0)));
+  const base1 = shares([0, 1, -1], C1, 1), base2 = shares([0, -4, 0], C2, 1);
+  holds("Mendell-Elston ordinary field is python's (#795)", mx(base1, py1) < 1e-8, String(base1));
+  for (const s of [1e-100, 1e78, 1e100]) {
+    const a = shares([0, 1, -1], C1, s), b = shares([0, -4, 0], C2, s);
+    holds(`Mendell-Elston is unchanged by units ${s} (#795)`,
+          mx(a, base1) < 1e-12 && mx(b, base2) < 1e-12,
+          `${mx(a, base1).toExponential(2)}, ${mx(b, base2).toExponential(2)}`);
+  }
+}
+
+// --- Mendell-Elston keeps positive contrast variances below its fallback (#375)
+{
+  for (const v of [1e-16, 1e-320]) {
+    const s = Math.sqrt(v);
+    const p = demo.mendellElstonOne([0, s, 0], [[0, 0, 0], [0, v, 0], [0, 0, 1]], 0);
+    // Runner 0 faces independent constraints with z scores 1 and 0.
+    holds(`Mendell-Elston keeps a positive contrast variance ${v} (#375)`,
+          Math.abs(p - core.ndtr(1) / 2) < 1e-14, String(p));
+  }
+  const tiny = 1e-320, large = 1e300, s = Math.sqrt(tiny);
+  const pair = demo.mendellElstonOne([0, s], [[tiny, 0], [0, tiny]], 0);
+  holds("Mendell-Elston prices a subnormal binary contrast (#375)",
+        Math.abs(pair - core.ndtr(s / Math.sqrt(2 * tiny))) < 1e-14, String(pair));
+
+  // Runner 0's orthant is unchanged by rescaling either difference by
+  // its own standard deviation. The tiny pivot is conditioned on first.
+  const cross = 0.5 * s * Math.sqrt(large);
+  const p = demo.mendellElstonOne([0, -s, 0], [[0, 0, 0], [0, tiny, cross], [0, cross, large]], 0);
+  const standard = demo.mendellElstonOne([0, -1, 0], [[0, 0, 0], [0, 1, 0.5], [0, 0.5, 1]], 0);
+  holds("Mendell-Elston conditions on a tiny correlated positive pivot (#375)",
+        Math.abs(p - standard) < 1e-14, String(p));
+  holds("Mendell-Elston returns zero when a positive pivot implies an underflowed tail (#375)",
+        demo.mendellElstonOne([0, -1, 0], [[0, 0, 0], [0, tiny, 0], [0, 0, 1]], 0) === 0);
+}
+
 // #805: a p0 call is only as good as its inversion. This seeded fixture
 // (four runners, rank one, a deliberately coarse 33-point lattice) is
 // priced by the forward itself, yet abilitiesFromRace stalls at a max
@@ -3540,6 +3958,32 @@ rejects(C => demo.fitGrammar(C, 1, 0, { method: "ipaf", tol: 0 }),
             }
             return d;
           }, d => d < 1e-9, d => d.toExponential(2));
+  // A heavy-tailed callable exposes a span mismatch even on a fine grid.
+  const cauchy = z => {
+    const q = 1 + z * z;
+    return [0.5 - Math.atan(z) / Math.PI, 1 / (Math.PI * q), -2 * z / (Math.PI * q * q)];
+  };
+  const m = [-1, -0.2, 0.4, 1.5];
+  const custom = { D: [1, 0.7, 1.8, 0.4], base: cauchy, points: 4001, window: "span" };
+  const sd = custom.D.map(Math.sqrt);
+  const smax = Math.max(...sd);
+  for (const span of [[200, 200], Float64Array.of(75, 200)]) {
+    cauchy.span = span;
+    accepts(`raceJacobian honors ${span.constructor.name} callable span (#821)`, () => {
+      // The raw off-diagonal integrates f0*f1*S2*S3 on the declared span.
+      const lo = m[0] - span[0] * smax, hi = m[3] + span[1] * smax;
+      const dx = (hi - lo) / (custom.points - 1);
+      let expected = 0;
+      for (let t = 0; t < custom.points; t++) {
+        const x = lo + t * dx;
+        const a = m.map((v, i) => cauchy((x - v) / sd[i]));
+        expected += (a[0][1] / sd[0]) * (a[1][1] / sd[1]) * a[2][0] * a[3][0] * dx;
+      }
+      return Math.abs(polish.raceJacobian(m, custom)[0][1] - expected);
+    }, d => d < 1e-12, d => d.toExponential(2));
+  }
+  cauchy.span = [Infinity, 200];
+  rejects(polish.raceJacobian, [m, custom], "raceJacobian refuses malformed callable span (#821)", "base.span");
   accepts("raceJacobian with the default window and delta spelled out is the default (#821)",
           () => mx(polish.raceJacobian(mu, { ...o, window: "bulk", delta: 1e-12 }),
                    polish.raceJacobian(mu, o)),
@@ -3560,6 +4004,419 @@ rejects(C => demo.fitGrammar(C, 1, 0, { method: "ipaf", tol: 0 }),
   rejects(polish.raceJacobian, [mu, { structure: blk, window: "span" }],
           "the block Jacobian refuses window as the block forward does (#821)",
           "do not support window");
+}
+
+// --- callable log tails must reach the Jacobian, as in the forward (#952)
+{
+  const rawNormal = z => [core.ndtr(-z), core.npdf(z), -z * core.npdf(z)];
+  rawNormal.logSf = z => core.logndtr(-z);
+  rawNormal.span = [8, 8];
+  const mu = [-1, 0, 1, 30];
+  const opts = { D: [1, 1, 1, 1], base: rawNormal,
+                 points: 2001, window: "span" };
+  const finite = a => a.flat().every(Number.isFinite);
+  const close = (a, b, tol) => a.length === b.length &&
+    a.flat().every((v, k) => Number.isFinite(v) &&
+      Number.isFinite(b.flat()[k]) && Math.abs(v - b.flat()[k]) <= tol);
+  const p = races.raceProbabilities(mu, opts);
+  const J = polish.raceJacobian(mu, opts);
+  const named = polish.raceJacobian(mu, { ...opts, base: "normal" });
+  holds("raw callable and named normal price the same span (#952)",
+        close(p, races.raceProbabilities(mu, { ...opts, base: "normal" }), 0));
+  holds("raw callable wide-span Jacobian is finite (#952)", finite(J));
+  holds("raw callable wide-span Jacobian matches named normal (#952)", close(J, named, 1e-12));
+  const h = 1e-5;
+  const fd = Array.from({ length: mu.length }, () => []);
+  for (let j = 0; j < mu.length; j++) {
+    const plus = mu.slice(), minus = mu.slice();
+    plus[j] += h; minus[j] -= h;
+    const pp = races.raceProbabilities(plus, opts);
+    const pm = races.raceProbabilities(minus, opts);
+    for (let i = 0; i < mu.length; i++) fd[i][j] = (pp[i] - pm[i]) / (2 * h);
+  }
+  holds("raw callable Jacobian differentiates public forward (#952)", close(J, fd, 1e-9));
+  holds("callable Jacobian ordinary block survives remote runner (#952)",
+        close(J.slice(0, 3).map(r => r.slice(0, 3)),
+          polish.raceJacobian(mu.slice(0, 3), { ...opts, D: [1, 1, 1] }), 1e-12));
+  holds("callable Jacobian row sums preserve translation (#952)",
+        J.every(r => Number.isFinite(r.reduce((a, b) => a + b, 0)) &&
+          Math.abs(r.reduce((a, b) => a + b, 0)) < 1e-14));
+  // A downstream linear-constraint gradient A*J must remain useful,
+  // rather than merely accepting a normalized, finite price vector.
+  const a = [1, -0.5, 0.25, 0];
+  const aj = matrix => mu.map((_, j) => a.reduce((s, v, i) => s + v * matrix[i][j], 0));
+  holds("callable constraint gradient agrees with forward differences (#952)", close(aj(J), aj(fd), 1e-9));
+  // More than one underflowing survival at the same lattice point and a
+  // small explicit factor rule exercise both independent and factor paths.
+  const factor = { ...opts, V: [[0.2], [-0.1], [0.3], [-0.4]],
+                   F: [[-1], [1]], W: [0.5, 0.5] };
+  const jf = polish.raceJacobian(mu, factor);
+  holds("callable factor-law Jacobian is finite (#952)", finite(jf));
+  holds("callable factor-law Jacobian matches named normal (#952)",
+        close(jf, polish.raceJacobian(mu, { ...factor, base: "normal" }), 1e-12));
+  // In ordinary windows the rule is inert, including callables which
+  // provide no log-tail metadata at all.
+  const plain = z => rawNormal(z);
+  plain.span = [8, 8];
+  const ordinary = { D: [1, 1, 1], points: 501, window: "bulk" };
+  holds("ordinary callable without logSf retains its Jacobian (#952)",
+        close(polish.raceJacobian([-1, 0, 1], { ...ordinary, base: plain }),
+              polish.raceJacobian([-1, 0, 1], { ...ordinary, base: rawNormal }), 0));
+}
+
+// --- a compact-support callable: zero density stays zero, and the
+// leave-one-out survival is summed, not subtracted, at the sentinel (#952)
+{
+  const c = 7, tail = core.ndtr(-c), mass = 1 - 2 * tail;
+  const sd = Math.sqrt(1 - 2 * c * core.npdf(c) / mass);
+  const base = z => {
+    const u = z * sd;
+    if (u <= -c) return [1, 0, 0];
+    if (u >= c) return [0, 0, 0];
+    const f = sd * core.npdf(u) / mass;
+    return [(core.ndtr(-u) - tail) / mass, f, -u * sd * f];
+  };
+  base.logSf = z => Math.log(base(z)[0]);
+  const opts = { base, points: 2001, window: "span" };
+  const mu = [-15, 0, 1];
+  // the first runner's support is disjoint from the others': it always wins
+  const p = races.raceProbabilities(mu, opts);
+  holds("compact callable: the disjoint runner always wins (#952)",
+        p[0] === 1 && p[1] === 0 && p[2] === 0);
+  const J = polish.raceJacobian(mu, opts);
+  holds("compact callable: a fixed winner has a zero Jacobian (#952)",
+        J.flat().every(v => Number.isFinite(v) && Math.abs(v) < 1e-12),
+        () => JSON.stringify(J));
+  // the overlapping pair keeps its derivative, against the forward
+  const h = 1e-5, mu2 = [0, 1];
+  const J2 = polish.raceJacobian(mu2, opts);
+  const fd = [0, 1].map(j => {
+    const a = mu2.slice(), b = mu2.slice(); a[j] += h; b[j] -= h;
+    const pa = races.raceProbabilities(a, opts), pb = races.raceProbabilities(b, opts);
+    return [0, 1].map(i => (pa[i] - pb[i]) / (2 * h));
+  });
+  holds("compact callable: an overlapping pair still differentiates its forward (#952)",
+        [0, 1].every(i => [0, 1].every(j => Math.abs(J2[i][j] - fd[j][i]) < 1e-7)),
+        () => JSON.stringify([J2, fd]));
+}
+
+// --- averageLinkage keeps the rescan's merge order, ties included, in
+// Theta(n^2) typical work rather than Theta(n^3) (#847)
+{
+  const brute = dist => {               // the pre-#847 global rescan, verbatim in effect
+    const n = dist.length, D = new Map(), key = (a, b) => (a < b ? a + "_" + b : b + "_" + a);
+    for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) D.set(key(i, j), dist[i][j]);
+    let active = [...Array(n).keys()].map(i => ({ id: i, size: 1 })), Z = [], next = n;
+    while (active.length > 1) {
+      let best = Infinity, bi = 0, bj = 1;
+      for (let i = 0; i < active.length; i++) for (let j = i + 1; j < active.length; j++) {
+        const d = D.get(key(active[i].id, active[j].id)); if (d < best) { best = d; bi = i; bj = j; }
+      }
+      const a = active[bi], b = active[bj], m = { id: next++, size: a.size + b.size };
+      Z.push([a.id, b.id, best, m.size]);
+      const rest = active.filter((_, k) => k !== bi && k !== bj);
+      for (const c of rest) D.set(key(m.id, c.id), (a.size / m.size) * D.get(key(a.id, c.id)) + (b.size / m.size) * D.get(key(b.id, c.id)));
+      active = rest.concat([m]);
+    }
+    return Z;
+  };
+  let seed = 11; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const sym = (n, f) => { const d = Array.from({ length: n }, () => new Array(n).fill(0));
+    for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) d[i][j] = d[j][i] = f(); return d; };
+  let mismatch = 0;
+  for (let t = 0; t < 120; t++) {
+    const n = 2 + Math.floor(rnd() * 24), kind = t % 3;
+    const d = sym(n, () => kind === 0 ? rnd() : kind === 1 ? Math.floor(rnd() * 3) + 1 : 1);
+    if (JSON.stringify(structures.averageLinkage(d)) !== JSON.stringify(brute(d))) mismatch++;
+  }
+  holds("averageLinkage merges as the global rescan, ties included (#847)", mismatch === 0, `${mismatch} of 120`);
+  const n = 800, x = Array.from({ length: n }, (_, i) => [Math.sin(i * 1.7), Math.cos(i * 0.37), ((i * 7919) % 104729) / 104729]);
+  const d = Array.from({ length: n }, (_, i) => x.map(y => Math.hypot(...x[i].map((v, k) => v - y[k]))));
+  const t0 = Date.now(), Z = structures.averageLinkage(d), ms = Date.now() - t0;
+  holds("averageLinkage at 800 leaves is not cubic (#847)", Z.length === n - 1 && ms < 5000, `${ms} ms`);
+}
+
+// --- the pair shortcut shares Nested's omitted gamma=1 default (#897)
+{
+  const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const s = { kind: "Nested", cluster: [0, 1], loading: [0.4, 0.4],
+              D: [1, 1], coupling: [0.6, -0.6] };
+  const mu = [0, 0.2], target = [0.54, 0.46];
+  for (const coupling of [s.coupling, null]) {
+    const omitted = { ...s, coupling }, explicit = { ...omitted, gamma: 1 };
+    accepts(`pair omitted gamma equals explicit 1, coupling=${coupling} (#897)`,
+            () => races.raceProbabilities(mu, { structure: omitted }),
+            p => eq(p, races.raceProbabilities(mu, { structure: explicit })));
+    accepts(`pair omitted gamma inverse reprices, coupling=${coupling} (#897)`, () => {
+      const fit = races.abilitiesFromRace(target, { structure: omitted, returnInfo: true });
+      const back = races.raceProbabilities(fit.mu, { structure: omitted });
+      return fit.converged && Math.max(...back.map((p, i) =>
+        Math.abs(Math.log(p) - Math.log(target[i])))) < 1e-8;
+    }, ok => ok);
+    holds(`pair covariance omitted gamma equals 1, coupling=${coupling} (#897)`,
+          eq(demo.structureCov(omitted), demo.structureCov(explicit)));
+    for (const gamma of [null, false, true, "1", NaN, Infinity, -Infinity])
+      rejects(races.raceProbabilities, [mu, { structure: { ...omitted, gamma } }],
+              `pair rejects explicit gamma ${String(gamma)}, coupling=${coupling} (#897)`,
+              "gamma must be a finite number");
+  }
+  const s3 = { kind: "Nested", cluster: [0, 1, 2], loading: [0.4, 0.4, 0.4],
+               D: [1, 1, 1], coupling: [0.6, -0.6, -0.6] };
+  accepts("three-runner omitted gamma remains explicit 1 (#897)",
+          () => races.raceProbabilities([0, 0.2, 0.4], { structure: s3 }),
+          p => eq(p, races.raceProbabilities([0, 0.2, 0.4], { structure: { ...s3, gamma: 1 } })));
+  // raceJacobian reaches the same pair helper: omitted gamma equals 1 and
+  // the derivative is the public forward's, for a split and a same-cluster
+  // pair (review of #965)
+  const same = { kind: "Nested", cluster: [0, 0], loading: [0.4, 0.7],
+                 D: [1, 1.3], coupling: [[0.6, 0.2], [-0.3, 0.5]] };
+  for (const pair of [s, same]) {
+    const explicit = { ...pair, gamma: 1 };
+    const J = polish.raceJacobian(mu, { structure: pair });
+    holds(`pair Jacobian omitted gamma equals explicit 1, cluster=${pair.cluster} (#897)`,
+          eq(J, polish.raceJacobian(mu, { structure: explicit })));
+    const h = 1e-5, fd = [[0, 0], [0, 0]];
+    for (let j = 0; j < 2; j++) {
+      const a = mu.slice(), b = mu.slice(); a[j] += h; b[j] -= h;
+      const pa = races.raceProbabilities(a, { structure: pair });
+      const pb = races.raceProbabilities(b, { structure: pair });
+      for (let i = 0; i < 2; i++) fd[i][j] = (pa[i] - pb[i]) / (2 * h);
+    }
+    holds(`pair Jacobian differentiates the public forward, cluster=${pair.cluster} (#897)`,
+          J.flat().every((v, k) => Number.isFinite(v) && Math.abs(v - fd.flat()[k]) < 1e-8),
+          JSON.stringify([J, fd]));
+  }
+  // The default really uses the coupling, not the independent/Blocks law.
+  holds("pair gamma=1 differs from gamma=0 (#897)",
+        Math.abs(races.raceProbabilities(mu, { structure: { ...s, gamma: 1 } })[0]
+               - races.raceProbabilities(mu, { structure: { ...s, gamma: 0 } })[0]) > 1e-3);
+}
+
+
+// --- a floor above 1/n from a saturated start (#840): the uniform race is
+// infeasible too, so restoration walks the violated rows' direction; and a
+// settled multiplier is never a certificate without stationarity
+{
+  const xStar = 0.9061938024368232;            // -Phi^-1(0.9) / sqrt(2)
+  for (const a of [8 / Math.sqrt(2), 4.9]) for (const points of [129, 1025]) for (const fdFallback of [false, true]) {
+    const out = polish.polishRace({ mu0: [a, -a], D: [1, 1], A: [[-1, 0]], b: [-0.9], points, fdFallback });
+    holds(`floored saturated pair a=${a.toFixed(3)} points=${points} fd=${fdFallback} is the binding point (#840)`,
+          out.info.converged && Math.abs(out.p[0] - 0.9) < 1e-8 &&
+          Math.abs(out.mu[0] + xStar) < 1e-7 && Math.abs(out.mu[1] - xStar) < 1e-7 &&
+          out.info.active.length === 1 && out.info.active[0] === 0 &&
+          Math.abs(out.info.muDistance - Math.sqrt(2) * (a + xStar)) < 1e-6,
+          `${out.p} ${out.mu} ${out.info.converged} ${out.info.muDistance}`);
+  }
+}
+
+
+
+// --- the Nested/Tree inverse preconditions each runner by its own slope,
+// as python's _structure_sweeps (#887): one field-wide scalar step left a
+// self-generated heterogeneous Nested target at 3.1e-3 after 400 sweeps
+{
+  const quiet = console.warn; console.warn = () => {};
+  const s = structures.Nested([0, 0, 1], [0, 0, 0], [1, 10, 0.01], [0.3, 4, 0.15], 10);
+  const truth = [-0.7, 3.4, -2.7];
+  const target = races.raceProbabilities(truth, { structure: s, points: 257 });
+  const fit = races.abilitiesFromRace(target, { structure: s, points: 257, nIter: 400, tol: 1e-8, returnInfo: true });
+  const back = races.raceProbabilities(fit.mu, { structure: s, points: 257 });
+  const r = Math.max(...back.map((v, i) => Math.abs(Math.log(v) - Math.log(target[i]))));
+  holds("heterogeneous Nested target inverts within budget (#887)",
+        fit.converged && r < 1e-8 && Math.max(...fit.mu.map((v, i) => Math.abs(v - truth[i]))) < 1e-5,
+        `${fit.converged} ${fit.iterations} ${r}`);
+  for (const [D, str, tr] of [
+    [[1, 10, 0.01], [0.3, 3, 0.4], [-0.7, 3.4, -2.7]],
+    [[0.05, 8, 0.5, 2], [0.2, 2.5, 0.1, 1], [-1, 2.5, 0.3, -1.8]],
+    [[20, 0.02, 1], [3, 0.1, 0.5], [2, -1.5, 0.4]],
+  ]) {
+    const n = D.length;
+    const t = structures.Tree([...Array(n).keys()], new Array(n).fill(0), D,
+                              [...Array(n).fill(n), n + 1, -1], [...str, 1.0, 0]);
+    const tg = races.raceProbabilities(tr, { structure: t, points: 257 });
+    const ft = races.abilitiesFromRace(tg, { structure: t, points: 257, nIter: 400, tol: 1e-8, returnInfo: true });
+    // repriced through the public forward, not only the inverse's own
+    // residual (review of #989)
+    const backT = races.raceProbabilities(ft.mu, { structure: t, points: 257 });
+    const rT = Math.max(...backT.map((v, i) => Math.abs(Math.log(v) - Math.log(tg[i]))));
+    holds(`heterogeneous Tree D=${D} inverts (#887)`, ft.converged && ft.maxLogResidual < 1e-8 && rT < 1e-8,
+          `${ft.converged} ${ft.iterations} ${ft.maxLogResidual} ${rT}`);
+  }
+  console.warn = quiet;
+}
+
+
+
+
+// --- a field that fits the lattice is priced exactly (#1006)
+{
+  // mean-centring pushed this off a [0, 7] support that an integer shift
+  // fits; it was priced on the dilating cluster path, 7.9 points off
+  const d = new Array(21).fill(0); d[10] = 0.5; d[17] = 0.5;
+  const off = [6.25, 2, 3.75, 2, 0.75, 0];
+  const got = classic.abilityImpliedStatePrices(off, d, { unit: 1 });
+  const want = classic.statePricesFromOffsets(d, off.map(o => o - 4));
+  holds("atomic field that fits equals the exact primitive (#1006)",
+        got.every((v, i) => Math.abs(v - want[i]) < 1e-14), JSON.stringify([got, want]));
+  holds("atomic field that fits: the 0.75 runner is 0.2835 (#1006)",
+        Math.abs(got[4] - 0.283529) < 1e-6, String(got[4]));
+}
+
+// --- a kinked base polishes on the kink-split lattice (#1011): the
+// uniform lattice's derivative carries an O(dx) artifact and the solve
+// came back converged: false on 2 of 6 capped laplace fields (7.9 s)
+{
+  const sp = races.splitRaceJacobian([0, 0.4, -0.3], { V: null, D: [1, 0.7, 1.3], F: null, W: null, base: "laplace", points: 501 });
+  holds("split laplace Jacobian rows sum to zero (#1011)",
+        Math.max(...sp.J.map(r => Math.abs(r.reduce((a, v) => a + v, 0)))) < 1e-12);
+  // python's race_jacobian(..., kink_split=True) at this race
+  holds("split laplace Jacobian matches python (#1011)",
+        Math.abs(sp.J[0][2] - 0.229670997488052) < 1e-9 && Math.abs(sp.J[2][0] - 0.229670997488052) < 1e-9,
+        JSON.stringify(sp.J));
+  // converged: false on main (uniform lattice), 2.1 s
+  const mu0 = [0.101, -0.106, 0.512, 0.084, -0.429, 0.289, 1.043, 0.758, -0.563, -1.012];
+  const D = [1.316, 0.503, 1.357, 0.534, 1.23, 0.676, 1.363, 1.041, 0.8, 0.923];
+  for (const base of ["laplace", "normal"]) {
+    const r = polish.polishRace({ mu0, D, base, nameCaps: 0.2 });
+    holds(`capped ${base} polish converges (#1011)`,
+          r.info.converged && Math.max(...r.p) <= 0.2 + 1e-6, JSON.stringify(r.info));
+  }
+  const off = polish.polishRace({ mu0, D, base: "normal", nameCaps: 0.2, kinkSplit: false });
+  const on = polish.polishRace({ mu0, D, base: "normal", nameCaps: 0.2 });
+  holds("a smooth base ignores kinkSplit (#1011)",
+        off.p.every((v, i) => v === on.p[i]) && off.mu.every((v, i) => v === on.mu[i]));
+  const p0 = sp.p;
+  const rt = polish.polishRace({ p0, D: [1, 0.7, 1.3], base: "laplace", A: [[1, 0, 0]], b: [0.99] });
+  holds("laplace p0 round-trips through the split inverse (#1011)",
+        rt.info.converged && Math.max(...rt.p.map((v, i) => Math.abs(v - p0[i]))) < 1e-8,
+        JSON.stringify(rt.p));
+  rejects(polish.polishRace, [{ mu0: [0, 0, 0], D: [1, 1, 1], base: "laplace", nameCaps: 0.5, kinkSplit: "yes" }],
+          "polishRace rejects a non-boolean kinkSplit", "kinkSplit");
+  // forward-only evaluations skip J and price the same p, bit for bit
+  const spP = races.splitRaceJacobian([0, 0.4, -0.3], { V: null, D: [1, 0.7, 1.3], F: null, W: null, base: "laplace", points: 501 }, false);
+  holds("split p without J is bitwise the paired p (#1011 review)",
+        spP.J === undefined && spP.p.every((v, i) => v === sp.p[i]));
+  // a p0 whose sum overflows was zeroed; at D ~ 1e80, J + 1/n rounded
+  // to a constant matrix and the split Newton could not move
+  const big = polish.polishRace({ p0: [1e308, 8e307, 2e307], D: [1, 0.7, 1.3], base: "laplace", A: [[1, 0, 0]], b: [0.99] });
+  holds("split inverse of a p0 whose sum overflows (#1011 review)",
+        big.info.converged && Math.max(...big.p.map((v, i) => Math.abs(v - [0.5, 0.4, 0.1][i]))) < 1e-8,
+        JSON.stringify(big.p));
+  const D80 = [1e80, 0.7e80, 1.3e80];
+  const q80 = races.splitRaceJacobian([0, 0.4, -0.3].map(v => v * 1e40), { V: null, D: D80, F: null, W: null, base: "laplace", points: 257 }, false).p;
+  const r80 = polish.polishRace({ p0: q80, D: D80, base: "laplace", A: [[1, 0, 0]], b: [0.99] });
+  holds("split inverse at D ~ 1e80 (#1011 review)",
+        r80.info.converged && Math.max(...r80.p.map((v, i) => Math.abs(v - q80[i]))) < 1e-8,
+        JSON.stringify([r80.p, q80]));
+}
+
+// --- tree races warn on sharpness like block/nested (#11)
+{
+  // a one-leaf tree is the one-block race; at sharpness 21.3 (17.8 before
+  // the one-cluster loading is centred) the fixed 9-node rule prices a
+  // share 0.218 off the factor reference, normalized
+  const mu = [-0.35221016127616167, -0.1465622573159635, -0.06922290846705437,
+    -0.7895801779814065, 0.5263814451172948, -0.45293018920347095,
+    0.8489520382136106, 0.3635434559546411];
+  const v = [-1.4273646213114262, -2.2077446188777685, 3.776806265115738,
+    -1.663014443591237, 0.7718250788748264, -3.9720420967787504,
+    -1.48259686678648, -1.66114398278296];
+  const D = Array(8).fill(0.05), cl = Array(8).fill(0);
+  const warned = [];
+  const keep = console.warn;
+  console.warn = m => warned.push(String(m));
+  const sharpWarns = () => warned.filter(m => m.includes("sharpness")).length;
+  try {
+    const ref = races.raceProbabilities(mu, { V: v, D, points: 1025 });
+    warned.length = 0;
+    const p9 = blocks.treeRaceProbabilities(mu, cl, v, D, [-1], [0], { points: 1025, qa: 9 });
+    const err = Math.max(...p9.map((x, i) => Math.abs(x - ref[i])));
+    holds("sharp one-leaf tree warns (#11)",
+          sharpWarns() === 1 && warned[0].includes("sharpness is 21"), JSON.stringify(warned));
+    holds("the warning guards a material normalized error (#11)",
+          err > 0.2 && Math.abs(p9.reduce((a, b) => a + b, 0) - 1) < 1e-12, String(err));
+    // the same field scaled to sharpness 2.9 is under the threshold
+    warned.length = 0;
+    const v29 = v.map(x => x * 2.9 / 21.287214);
+    blocks.treeRaceProbabilities(mu, cl, v29, D, [-1], [0], { points: 257, qa: 9 });
+    // a common loading shift is gauge with one cluster
+    blocks.treeRaceProbabilities(mu, cl, v29.map(x => x + 40), D, [-1], [0], { points: 257, qa: 9 });
+    holds("tree under sharpness 3 does not warn (#11)", sharpWarns() === 0, JSON.stringify(warned));
+    // just over: the leaf loading alone at 3.1
+    warned.length = 0;
+    const v31 = v.map(x => x * 3.1 / 21.287214);
+    blocks.treeRaceProbabilities(mu, cl, v31, D, [-1], [0], { points: 257, qa: 9 });
+    holds("tree just over sharpness 3 warns (#11)", sharpWarns() === 1, JSON.stringify(warned));
+    // an ancestor strength is on the same fixed rule: leaf loadings 0.1
+    // but strength 1 over two of three leaves is sharpness 4.5
+    warned.length = 0;
+    const tm = [0.1, -0.2, 0.05, 0.3, -0.1, 0.0], tc = [0, 0, 1, 1, 2, 2];
+    const tv = Array(6).fill(0.1), tD = Array(6).fill(0.05);
+    blocks.treeRaceProbabilities(tm, tc, tv, tD, [3, 3, 4, 4, -1], [0, 0, 0, 1.0, 0], { points: 257 });
+    holds("sharp ancestor strength warns (#11)", sharpWarns() === 1, JSON.stringify(warned));
+    warned.length = 0;
+    blocks.treeRaceProbabilities(tm, tc, tv, tD, [3, 3, 4, 4, -1], [0, 0, 0, 0.6, 0], { points: 257 });
+    holds("moderate ancestor strength does not warn (#11)", sharpWarns() === 0, JSON.stringify(warned));
+  } finally { console.warn = keep; }
+}
+
+
+// #783: the automatic rank-one rule's weights move with the sharpness
+// sqrt(2) max |V_i| / sigma_i, so topKJacobians' Jsigma carries
+// (dsharp/dsigma_j) sum_q (dW_q/dsharp) q_ind(mu + V f_q) for the runner
+// setting it. Without it Jsigma sat far from the forward's own central
+// difference inside the moving intervals (sharpness 8.9: -0.0024 against
+// +0.187). 5.5: the sliding GH pair; 8.95: the hand-back to GH(72); 9.5:
+// the GH/midpoint blend.
+{
+  const mu = [-0.7, -0.1, 0.2, 0.8], k = 2, h = 1e-6;
+  for (const s of [5.5, 8.95, 9.5]) {
+    const a = s / Math.SQRT2, V = [[-a], [a / 3], [a / 3], [a / 3]];
+    const Js = topk.topKJacobians(mu, k, { V, D: [1, 1, 1, 1] }).Jsigma;
+    let err = 0;
+    for (let j = 0; j < 4; j++) {
+      const P = e => topk.topKProbabilities(mu, k,
+        { V, D: [1, 1, 1, 1].map((d, i) => i === j ? (1 + e) ** 2 : d) });
+      const pp = P(h), pm = P(-h);
+      for (let i = 0; i < 4; i++)
+        err = Math.max(err, Math.abs(Js[i][j] - (pp[i] - pm[i]) / (2 * h)));
+    }
+    holds(`topKJacobians Jsigma matches central differences at sharpness ${s} (#783)`,
+          err < 1e-7, err.toExponential(2));
+  }
+  // an explicit qa is a fixed rule: no moving-weight term
+  const a = 9.5 / Math.SQRT2, V = [[-a], [a / 3], [a / 3], [a / 3]];
+  const Js = topk.topKJacobians(mu, k, { V, D: [1, 1, 1, 1], qa: 15 }).Jsigma;
+  const P = e => topk.topKProbabilities(mu, k, { V, D: [(1 + e) ** 2, 1, 1, 1], qa: 15 });
+  const pp = P(h), pm = P(-h);
+  const err = Math.max(...Js.map((r, i) => Math.abs(r[0] - (pp[i] - pm[i]) / (2 * h))));
+  holds("topKJacobians qa=15 Jsigma matches central differences (#783)", err < 1e-7,
+        err.toExponential(2));
+}
+
+// #783 residual: at the blend's upper end (w === 1) the automatic rule
+// kept 72 zero-weight Gauss-Hermite nodes, which widened the race window;
+// the issue's field moved a share by 2.9 points under a 1e-8 rescale.
+// Python drops a zero-weight component, and now so does the browser.
+{
+  const a = 10 / Math.SQRT2, V = [[-a], [a / 3], [a / 3], [a / 3]];
+  const rule = races._factorNodeRule(V, [1, 1, 1, 1]);
+  holds("rank-one rule at sharpness 10 has no zero-weight nodes (#783)",
+        rule.W.length === 81 && rule.W.every(w => w > 0), String(rule.W.length));
+  const mu = [-5.148293764259799, -5.258210118723348,
+              -1.2067824387413566, -5.763490194126493];
+  const v = [-0.7382523001151761, 0.08735318946768714,
+             0.8241506923953589, -0.17325158174786998];
+  const D = [0.010900329172506966, 0.013048311261529891,
+             95.08431527274655, 4.291288968615204];
+  const keep = console.warn;
+  console.warn = () => {};
+  try {
+    const p0 = races.raceProbabilities(mu, { V: v.map(x => [x]), D });
+    const p1 = races.raceProbabilities(mu, { V: v.map(x => [(1 + 1e-8) * x]), D });
+    const d = Math.max(...p0.map((x, i) => Math.abs(x - p1[i])));
+    holds("race at the blend's upper end is continuous (#783)", d < 1e-7, d.toExponential(2));
+  } finally { console.warn = keep; }
 }
 
 if (fails) { console.error(`${fails} browser API failures`); process.exit(1); }

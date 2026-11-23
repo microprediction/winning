@@ -1,0 +1,9 @@
+129559 matches, 1985-2024
+1453 players in the static fit; ability sd 0.552
+  Roger Federer      1998-2021  tau 0.30  MAP peak 2006  (1538 matches)
+  Rafael Nadal       2002-2024  tau 0.30  MAP peak 2013  (1317 matches)
+  Novak Djokovic     2004-2024  tau 0.25  MAP peak 2015  (1346 matches)
+  Pete Sampras       1988-2002  tau 0.25  MAP peak 1994  (988 matches)
+  Andre Agassi       1986-2006  tau 0.35  MAP peak 1995  (1136 matches)
+  Andy Murray        2005-2024  tau 0.30  MAP peak 2016  (1006 matches)
+wrote tennis_paths.json

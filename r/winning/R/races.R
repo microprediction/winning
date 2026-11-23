@@ -48,6 +48,10 @@
 # the split lattice there (.kink_lattice, #267); the forward is unchanged
 attr(.base_laplace, "kinks") <- 0
 
+# python's races.KINK_MAX_ORDER: the largest single Gauss rule a kink-split
+# piece uses (#835)
+KINK_MAX_ORDER <- 512L
+
 # Gauss-Legendre nodes and weights on [-1, 1] (Golub-Welsch), cached
 .LEGENDRE <- new.env(parent = emptyenv())
 .legendre <- function(m) {
@@ -93,9 +97,18 @@ attr(.base_laplace, "kinks") <- 0
   cnt <- pmax(4L, as.integer(round(L * eff / sum(eff))))
   xs <- numeric(0); ws <- numeric(0)
   for (j in seq_len(P)) {
-    gl <- .legendre(cnt[j])
-    mid <- 0.5 * (hi[j] + lo[j]); half <- 0.5 * (hi[j] - lo[j])
-    xs <- c(xs, mid + half * gl$t); ws <- c(ws, half * gl$w)
+    # a piece above KINK_MAX_ORDER is split into k equal panels of
+    # ceiling(m / k) nodes: the dense eigen rule is O(m^3), and a large
+    # points= gave one piece thousands of nodes (#835). At or below the cap
+    # nothing changes. As python's kink_lattice and the browser.
+    k <- ceiling(cnt[j] / KINK_MAX_ORDER); m <- ceiling(cnt[j] / k)
+    gl <- .legendre(m)
+    for (s in seq_len(k)) {
+      pl <- if (s == 1) lo[j] else lo[j] + (hi[j] - lo[j]) * (s - 1) / k
+      ph <- if (s == k) hi[j] else lo[j] + (hi[j] - lo[j]) * s / k
+      mid <- 0.5 * (ph + pl); half <- 0.5 * (ph - pl)
+      xs <- c(xs, mid + half * gl$t); ws <- c(ws, half * gl$w)
+    }
   }
   list(x = xs, w = ws)
 }
@@ -206,13 +219,21 @@ attr(.base_laplace, "log_sf") <- function(z) {
 # band meets the unchanged rule outside it continuously at both ends.
 .R1_BLEND_LO <- 9.0
 .R1_BLEND_HI <- 10.0
+# The C1 smoothstep S(t) = t^2 (3 - 2t) and its slope 6 t (1 - t).
+.smoothstep <- function(t) c(t * t * (3 - 2 * t), 6 * t * (1 - t))
+
+# dW: dW/dsharp node for node -- the weights move with the sharpness and so
+# with the sd that sets it (#783).
 .rank1_blend_rule <- function(sharp) {
   t <- (sharp - .R1_BLEND_LO) / (.R1_BLEND_HI - .R1_BLEND_LO)
-  w <- t * t * (3 - 2 * t)
+  ss <- .smoothstep(t)
+  w <- ss[1]
+  dw <- ss[2] / (.R1_BLEND_HI - .R1_BLEND_LO)
   g <- hermite_nodes(1, order = as.integer(8 * .R1_BLEND_LO))
   Q <- as.integer(8 * .R1_BLEND_HI) + 1L
   list(F = rbind(g$F, matrix(qnorm((seq_len(Q) - 0.5) / Q), ncol = 1)),
-       W = c((1 - w) * g$W, rep(w / Q, Q)))
+       W = c((1 - w) * g$W, rep(w / Q, Q)),
+       dW = c(-dw * g$W, rep(dw / Q, Q)))
 }
 
 # Below the band the rank-one rule was Gauss-Hermite of order
@@ -228,32 +249,68 @@ attr(.base_laplace, "log_sf") <- function(z) {
 .R1_PAIR_PER_SHARP <- 5.0
 .R1_PAIR_CAP <- 34
 .rank1_hermite_rule <- function(sharp) {
-  S <- function(t) t * t * (3 - 2 * t)
+  # each part: order q, coefficient cw, d cw / d sharp dc (#783); the
+  # pair order y is clamped to [24, 34], and held there its slope is zero
   x <- 8 * sharp
   lo <- .R1_PAIR_FROM
   if (x <= lo) {
-    m <- floor(x); w <- S(x - m)
-    q <- c(m, m + 1); cw <- c(1 - w, w)
+    m <- floor(x); ss <- .smoothstep(x - m); w <- ss[1]; dw <- 8 * ss[2]
+    q <- c(m, m + 1); cw <- c(1 - w, w); dc <- c(-dw, dw)
   } else if (x <= lo + 1) {
-    w <- S(x - lo)
-    q <- c(lo - 1, lo); cw <- c(0.5 * w, 1 - 0.5 * w)
+    ss <- .smoothstep(x - lo); w <- ss[1]; dw <- 8 * ss[2]
+    q <- c(lo - 1, lo); cw <- c(0.5 * w, 1 - 0.5 * w); dc <- c(0.5 * dw, -0.5 * dw)
   } else {
-    y <- min(max(.R1_PAIR_PER_SHARP * sharp, lo), .R1_PAIR_CAP)
-    m <- floor(y); w <- S(y - m)
+    y_raw <- .R1_PAIR_PER_SHARP * sharp
+    y <- min(max(y_raw, lo), .R1_PAIR_CAP)
+    dy <- if (lo < y_raw && y_raw < .R1_PAIR_CAP) .R1_PAIR_PER_SHARP else 0
+    m <- floor(y); ss <- .smoothstep(y - m); w <- ss[1]; dw <- dy * ss[2]
     q <- c(m - 1, m, m + 1); cw <- c(0.5 * (1 - w), 0.5, 0.5 * w)
+    dc <- c(-0.5 * dw, 0, 0.5 * dw)
     top <- 8 * .R1_BLEND_LO
     if (x > top - 1) {
-      v <- S(x - (top - 1))
-      q <- c(q, top); cw <- c(cw * (1 - v), v)
+      sv <- .smoothstep(x - (top - 1)); v <- sv[1]; dv <- 8 * sv[2]
+      q <- c(q, top); dc <- c(dc * (1 - v) - cw * dv, dv); cw <- c(cw * (1 - v), v)
     }
   }
+  # a part of zero coefficient has zero slope too (S is flat at both ends)
   keep <- cw > 0
   g <- lapply(q[keep], function(o) hermite_nodes(1, order = as.integer(o)))
   list(F = do.call(rbind, lapply(g, function(h) h$F)),
-       W = unlist(Map(function(h, c) c * h$W, g, cw[keep])))
+       W = unlist(Map(function(h, c) c * h$W, g, cw[keep])),
+       dW = unlist(Map(function(h, c) c * h$W, g, dc[keep])))
+}
+
+# How the AUTOMATIC rank-one rule moves with the sds (#783), as python's
+# races._rank1_rule_sigma_slope. V gauge-centred and D validated, as
+# .race_setup sees them. The nodes are fixed, but inside the smooth
+# intervals of the two rules above the weights W(sharp) move with
+# sharp = sqrt(2) max_i |V_i| / sigma_i, so with the sd of the runner j
+# attaining the max: dsharp/dsigma_j = -sharp / sigma_j, zero for the rest.
+# Returns list(j, dsharp, F, dW) over the nodes whose weight moves, or NULL
+# where the rule is piecewise constant in sharp. A tie for the max is a
+# kink: the term goes to the FIRST runner attaining it (its one-sided
+# derivative as its sd falls; each other tied runner's column is its
+# one-sided derivative as its sd rises).
+.rank1_rule_sigma_slope <- function(V, D) {
+  if (ncol(V) != 1L) return(NULL)
+  ratio <- sqrt(rowSums(V^2)) / sqrt(pmax(D, 1e-300))
+  sharp <- sqrt(2) * max(ratio)
+  if (sharp > .R1_BLEND_LO && sharp <= .R1_BLEND_HI) {
+    hw <- .rank1_blend_rule(sharp)
+  } else if (ceiling(8 * sharp) > 80 || !(8 * sharp > 15)) {
+    return(NULL)
+  } else {
+    hw <- .rank1_hermite_rule(sharp)
+  }
+  keep <- hw$dW != 0
+  if (!any(keep)) return(NULL)
+  j <- which.max(ratio)
+  list(j = j, dsharp = -sharp / sqrt(D[j]),
+       F = hw$F[keep, , drop = FALSE], dW = hw$dW[keep])
 }
 
 .race_setup <- function(mu, V, D, F, W, base) {
+  .refuse_matrix(mu, "mu")                                       # (#903)
   mu <- as.numeric(mu)
   n <- length(mu)
   # One idiosyncratic variance per contestant, or a scalar broadcast on
@@ -581,6 +638,8 @@ attr(.base_laplace, "log_sf") <- function(z) {
     } else if (!is.null(prev) && penalty < 1) {
       penalty <- min(1, penalty / 0.75)
     }
+    # the last sweep's own contraction, for the Aitken gate below (#956)
+    prev_max <- if (is.null(prev)) Inf else prev$rmax
     prev <- list(mu = mu, resid = resid, dlogp = dlogp, rmax = rmax, rrms = rrms)
     alpha <- alpha_base * penalty
     # residual-proportional step cap in the field's scale: a near-certain
@@ -602,7 +661,8 @@ attr(.base_laplace, "log_sf") <- function(z) {
           lam <- 1 - (1 - rho) / alpha
           alpha_base <- min(max(2 / (2 - lam), 0.1), 1)
         } else if (cosn > 0.999 && ratio > 0.5 && ratio < 0.999 &&
-                   rmax > 1e3 * tol) {
+                   rmax > 1e3 * tol &&
+                   abs(rmax / prev_max - ratio) <= AITKEN_AGREE) {
           # collinear steps decaying geometrically: sum the tail (Aitken),
           # as a capped, repriced trial (#583, matching python)
           trial <- .aitken_trial(mu, step, ratio, scale, forward, rmax)
@@ -624,7 +684,16 @@ attr(.base_laplace, "log_sf") <- function(z) {
     # exhausted after a step no sweep priced: price the returned iterate
     # (one forward, only here) and keep the better of the two, so the
     # warning describes the mu returned (#497, matching python)
-    fw <- if (is.null(cached)) forward(mu) else cached
+    fw <- cached
+    if (is.null(fw)) fw <- tryCatch(forward(mu), error = function(e) e)
+    if (inherits(fw, "error")) {
+      # the last step crossed the forward's refusal guard: return the last
+      # priced iterate as not converged, as the in-loop backoff does; with
+      # nothing priced it still errors (#823)
+      if (is.null(prev)) stop(fw)
+      return(list(mu = prev$mu, converged = FALSE, resid = prev$rmax,
+                  iters = iters))
+    }
     r_end <- max(abs(fw$resid))
     if (!is.null(prev) && !isTRUE(r_end < prev$rmax)) mu <- prev$mu
     else rmax <- r_end
@@ -637,6 +706,13 @@ attr(.base_laplace, "log_sf") <- function(z) {
 # norm at twice the field scale (never below the ordinary step) and
 # repriced; NULL -- take the ordinary step -- when the forward errors, is
 # non-finite, or its max residual grows tenfold.
+# Aitken sums a geometric tail, which exists only while the residual
+# shrinks by the same factor as the step; when the plain sweeps converge
+# faster than the step ratio says (the superlinear finish after a plateau)
+# the extrapolation overshoots, and #956's exact target ended 13.6 off.
+# python's races.AITKEN_AGREE.
+AITKEN_AGREE <- 0.15
+
 .aitken_trial <- function(mu, step, ratio, scale, forward, rmax) {
   jump <- step / (1 - ratio)
   big <- max(abs(jump))
@@ -726,10 +802,11 @@ race_probabilities <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
     # without the fit at all; everything else needs the factor form and
     # keeps the fit with its warning (matching python)
     routable <- identical(base, "normal") && !return_slopes
-    if (isTRUE(fit$degraded) && routable)
-      return(.ghk_race(mu, cov)$p)
+    if ((b <- .cov_route_budget(fit)) > 0L && routable)
+      return(.ghk_race(mu, cov, budget = b)$p)
     .warn_degraded_cov(fit, "race_probabilities")
-    V <- fit$V; D <- fit$D; F <- fit$F; W <- fit$W
+    nd <- .cov_fit_nodes(fit)
+    V <- fit$V; D <- fit$D; F <- nd$F; W <- nd$W
   }
   if (!is.null(structure)) {
     if (is.null(cov)) .refuse_second_covariance(V, D, F, W)
@@ -862,6 +939,70 @@ race_probabilities <- function(mu, V = NULL, D = NULL, F = NULL, W = NULL,
   slope / sum(p)
 }
 
+# The race AND its Jacobian on the kink-split lattice, one pass: python's
+# race_probabilities(..., kink_split = TRUE) and
+# race_jacobian(..., kink_split = TRUE). Raw masses a, A = da/dmu with
+# the own coordinate integrated, dT = column sums of A; p = a / T and
+# J = (A - p dT') / T. For polish_race on a kinked base only (#1011): the
+# uniform lattice's window slides across every runner's kink, so its
+# derivative carries an O(dx) artifact no fixed-grid Jacobian matches; on
+# this lattice the pair is smooth and consistent.
+.split_race_jacobian <- function(mu, V, D, F, W, base, points) {
+  st <- .race_setup(mu, V, D, F, W, base)
+  n <- length(st$mu)
+  sd <- sqrt(st$D)
+  Q <- nrow(st$F)
+  M_all <- matrix(st$mu, Q, n, byrow = TRUE) + st$F %*% t(st$V)
+  x <- suppressWarnings(.race_lattice(st, M_all, sd, points))$x
+  kinks <- .kinks_of(st$fn)
+  a <- numeric(n); dT <- numeric(n)
+  A <- matrix(0, n, n)
+  clip <- function(v) exp(pmin(pmax(v, -745), 40))
+  for (q in seq_len(Q)) {
+    kl <- .kink_lattice(x, M_all[q, ], sd, kinks)
+    T <- length(kl$x)
+    w <- kl$w
+    z <- (matrix(kl$x, n, T, byrow = TRUE) - M_all[q, ]) / sd
+    b <- st$fn(z)
+    logS <- log(pmax(b$S, 1e-300))
+    logf <- log(pmax(b$f / sd, 1e-300))
+    Lm <- matrix(colSums(logS), n, T, byrow = TRUE)
+    g <- clip(logf + Lm - logS)
+    haz <- clip(logf - logS)
+    own <- -(b$fp / sd^2) * clip(Lm - logS)
+    G <- matrix(colSums(g), n, T, byrow = TRUE)
+    gw <- sweep(g, 2, w, "*")
+    a <- a + st$W[q] * rowSums(gw)
+    Aq <- gw %*% t(haz)
+    diag(Aq) <- diag(Aq) + as.vector(own %*% w) - rowSums(gw * haz)
+    A <- A + st$W[q] * Aq
+    dT <- dT + st$W[q] * as.vector(((G - g) * haz + own) %*% w)
+  }
+  tot <- sum(a)
+  p <- a / tot
+  list(p = p, J = (A - outer(p, dT)) / tot)
+}
+
+# The GHK budget a cov= fit is routed with, 0 for none (python
+# races._fit_cov). A degraded fit goes at 4096 nodes. A polished fit of
+# up to 15 runners (#1051) goes at 2^14: its stage-one start ran out of
+# sweeps and was finished, and the stalled fit it replaces had often
+# degenerated and been routed; on the 2048 factor nodes some such fields
+# priced an order of magnitude worse than the stall had.
+.cov_route_budget <- function(fit) {
+  if (isTRUE(fit$degraded)) return(4096L)
+  if (isTRUE(fit$polished) && fit$n <= 15L) return(16384L)
+  0L
+}
+
+# A polished fit that is not routed keeps the factor form on twice the
+# nodes (#1051; python uses 2^12 Sobol nodes).
+.cov_fit_nodes <- function(fit) {
+  if (isTRUE(fit$polished) && !isTRUE(fit$degraded))
+    return(.halton_normal_nodes(ncol(fit$V), 4096L))
+  list(F = fit$F, W = fit$W)
+}
+
 #' Invert the general race: mean-zero mu reproducing probabilities p
 #'
 #' @param p positive target probabilities (normalized internally)
@@ -882,13 +1023,16 @@ abilities_from_race <- function(p, V = NULL, D = NULL, F = NULL, W = NULL,
     if (!is.null(structure) || !is.null(V) || !is.null(D))
       stop("cov= replaces structure=/V=/D=; pass one only")
     fit <- fit_covariance(cov)
-    if (isTRUE(fit$degraded) && identical(base, "normal")) {
+    dense_budget <- .cov_route_budget(fit)
+    if (dense_budget > 0L && identical(base, "normal")) {
       dense <- as.matrix(cov)
     } else {
       .warn_degraded_cov(fit, "abilities_from_race")
     }
-    V <- fit$V; D <- fit$D; F <- fit$F; W <- fit$W
+    nd <- .cov_fit_nodes(fit)
+    V <- fit$V; D <- fit$D; F <- nd$F; W <- nd$W
   }
+  .refuse_matrix(p, "p")                                         # (#903)
   target <- as.numeric(p)
   # finite BEFORE the sign test: NaN slips past `<= 0` (#110). And
   # before the structure= dispatch, so every grammar shares one target
@@ -978,11 +1122,17 @@ abilities_from_race <- function(p, V = NULL, D = NULL, F = NULL, W = NULL,
     # different races, which is python's #164.
     scale <- sqrt(mean(diag(dense)))
     mu <- -(logt - mean(logt)) / 2 * scale
-    fwd <- function(m) {
-      g <- .ghk_race(m, dense, want_slopes = TRUE)
+    fwd_at <- function(budget) function(m) {
+      g <- .ghk_race(m, dense, budget = budget, want_slopes = TRUE)
       list(resid = g$logp - logt, dres = pmin(g$dlogp, -1e-6 / scale))
     }
-    out <- .jacobi_sweeps(mu, fwd, scale, alpha, max(n_iter, 120), tol)
+    # a polished fit routed at a larger budget (#1051): converge on the
+    # cheap 4096-node map first, then on the map the forward prices with
+    if (dense_budget > 4096L)
+      mu <- .jacobi_sweeps(mu, fwd_at(4096L), scale, alpha,
+                           max(n_iter, 120), tol)$mu
+    out <- .jacobi_sweeps(mu, fwd_at(dense_budget), scale, alpha,
+                          max(n_iter, 120), tol)
     if (!out$converged)
       warning(sprintf("abilities_from_race did not converge: max |log residual| %.2e (tol %.0e)", out$resid, tol), call. = FALSE)
     return(out$mu)

@@ -335,3 +335,52 @@ test_that("an ordinary pair keeps its closed form (#86)", {
                                   D = c(1, .7)),
                c(0.68189917673080014, 0.31810082326919986), tolerance = 1e-14)
 })
+
+# The exhaustion reprice is guarded like the in-loop forward (#823): one
+# permitted step onto an unpriceable iterate returned an error instead of
+# the priced start, and abilities_from_topk threw at n_iter = 3 only. The
+# issue's top-k target is not used here: whether R's renormalization to k
+# slots rounds a membership to 1 depends on the platform's long double.
+test_that("a refused final reprice returns the last priced iterate", {
+  fw <- function(m) {
+    if (max(abs(m)) > 0.5) stop("unpriceable iterate")
+    list(resid = c(1, -1), dres = c(-1, -1))
+  }
+  out <- .jacobi_sweeps(c(0, 0), fw, 1, 1, 1, 1e-8)
+  expect_identical(out$mu, c(0, 0))
+  expect_false(out$converged)
+  expect_identical(out$resid, 1)
+  expect_error(.jacobi_sweeps(c(1, 1), fw, 1, 1, 1, 1e-8), "unpriceable")
+  # ordinary input converges inside the loop, so the guard is never hit
+  q2 <- top_k_probabilities(c(-0.6, -0.1, 0.2, 0.5), 2)
+  expect_true(abilities_from_topk(q2, 2, return_info = TRUE)$converged)
+})
+
+
+test_that("a matrix D is refused, not flattened column-major (#903)", {
+  mu <- c(-2.0, -0.2, 0.4, 1.4)
+  Dmat <- matrix(c(1, 9, 4, 16), nrow = 2, byrow = TRUE)   # visually [1 9; 4 16]
+  expect_error(race_probabilities(mu, D = Dmat), "plain vector, not a 2 x 2")
+  expect_error(abilities_from_race(c(0.4, 0.3, 0.2, 0.1), D = Dmat), "plain vector")
+  # the two readings differ by nine points, so silence hid a real change
+  a <- race_probabilities(mu, D = c(1, 9, 4, 16), points = 1025)
+  b <- race_probabilities(mu, D = c(1, 4, 9, 16), points = 1025)
+  expect_gt(max(abs(a - b)), 0.05)
+  expect_equal(race_probabilities(mu, D = array(c(1, 9, 4, 16)), points = 1025), a)
+})
+
+test_that("an Aitken trial needs the residual to contract as the step does (#956)", {
+  D <- c(41.762407878182444, 0.09543068227692414, 0.014468331935236405,
+         0.30750102862954337, 5.76767363738077, 39.60275014004311,
+         0.05313878565886935, 5.374508765776025, 1.243508995177201,
+         0.02860465678144087)
+  truth <- c(-3.2047748303040864, -2.7799773643724626, -1.1310159973800182,
+             -0.825104952324182, -0.40134965870529415, 0.3350836188532412,
+             0.16529664136469366, 0.2920818901620805, 0.8125011758878828,
+             2.418152273911983)
+  p <- suppressWarnings(race_probabilities(truth, D = D, points = 1001))
+  mu <- suppressWarnings(abilities_from_race(p, D = D, points = 1001,
+                                             n_iter = 60, tol = 1e-8))
+  q <- suppressWarnings(race_probabilities(mu, D = D, points = 1001))
+  expect_lt(max(abs(log(q) - log(p))), 1e-8)        # was 13.6
+})

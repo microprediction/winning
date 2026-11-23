@@ -23,7 +23,7 @@ from __future__ import annotations
 import numpy as np
 
 from .races import (race_probabilities, abilities_from_race, _setup,
-                    forward_grid, kink_lattice)
+                    forward_grid, kink_lattice, _base_kinks, BASES)
 
 
 def _raw_and_derivative(mu, V, D, F, W, fn, sd, x, dx, rows=None,
@@ -63,7 +63,7 @@ def _raw_and_derivative(mu, V, D, F, W, fn, sd, x, dx, rows=None,
     # kink_split (opt-in): a kinked base integrates on its split lattice,
     # exactly as the forward map does (races.kink_lattice); dx becomes
     # weights. Off, this is main's uniform rectangle sum, bit for bit.
-    kinks = getattr(fn, "kinks", ()) if kink_split else ()
+    kinks = _base_kinks(fn) if kink_split else ()
     for q in range(len(F)):
         if kinks:
             xq, w = kink_lattice(x, M_all[q], sd, kinks)
@@ -127,7 +127,36 @@ def race_jacobian(mu, V=None, D=None, F=None, W=None, base="normal",
     lattice race_probabilities(..., kink_split=True) integrates on for a
     kinked base (laplace, exponential power with beta < 2); see there.
     False, or a smooth base, is the uniform lattice unchanged.
+
+    For a kinked base the default (False) is NOT within the grid-motion
+    bound above: the omitted term is first order in the spacing, not
+    spectrally small. The window slides with mu, every runner's kink
+    moves across the fixed rectangle nodes, and the uniform map's own
+    derivative carries an O(dx) lattice artifact. At mu = [0, .4, -.3],
+    D = [1, .7, 1.3], laplace, 501 points, this J is 1.2e-2 from the
+    split one (rows sum to 1e-2, not 0) and 5e-3 from central
+    differences of the uniform forward (#1011). With kink_split=True the
+    pair (forward, J) is smooth and agrees with central differences to
+    ~4e-11. Anything that iterates on this derivative -- polish_race
+    does -- should use the split pair for a kinked base.
+
+    The race is unchanged when abilities, loadings and sds are scaled by a
+    common c, and J scales by 1/c. Far from unit scale (an sd outside
+    [2^-30, 2^30]) the field is moved there by an exact power of two and
+    J moved back: at a unit of 1e-18 a tied race's off-diagonal came back
+    0.82 of the exact value, and 19x it at 1e-20 (#870). Ordinary fields
+    are untouched.
     """
+    if D is not None:
+        Dv = np.asarray(D, dtype=float)
+        sd_max = float(np.sqrt(np.max(Dv))) if Dv.size else 1.0
+        if np.isfinite(sd_max) and sd_max > 0 and not (2.0 ** -30 <= sd_max <= 2.0 ** 30):
+            c = 2.0 ** round(np.log2(sd_max))
+            J = race_jacobian(np.asarray(mu, dtype=float) / c,
+                              None if V is None else np.asarray(V, dtype=float) / c,
+                              Dv / c / c, F, W, base=base, points=points,
+                              window=window, delta=delta, kink_split=kink_split)
+            return J / c
     if (isinstance(base, str) and base == "normal" and np.size(mu) == 2):
         # the forward prices a normal pair in closed form (one Gaussian
         # contrast), so its Jacobian is the closed form's: the lattice
@@ -162,7 +191,23 @@ def race_jacobian_row(mu, y, V=None, D=None, F=None, W=None, base="normal",
     the shared lattice and the quotient rule, so the score it feeds is
     the fixed-grid-exact gradient of the objective the forward map
     defines (grid motion omitted; see race_jacobian). kink_split as in
-    race_jacobian."""
+    race_jacobian. y is an integer runner index in [0, n): int(y) read
+    0.9 as runner 0 and True as runner 1, and -1 meant the last (#846)."""
+    from .topk import _as_runner_index
+    y = _as_runner_index(y, np.size(mu), "y")
+    # the full Jacobian's closed-form pair (#86) and unit rescale (#870)
+    # were never applied here: at a unit of 1e-20 a tied row was 19x the
+    # exact value, and a normal pair's row differentiated a lattice map
+    # the forward does not use (it did not even sum to zero)
+    pair = isinstance(base, str) and base == "normal" and np.size(mu) == 2
+    far = False
+    if D is not None:
+        Dv = np.asarray(D, dtype=float)
+        sd_max = float(np.sqrt(np.max(Dv))) if Dv.size else 1.0
+        far = np.isfinite(sd_max) and sd_max > 0 and not (2.0 ** -30 <= sd_max <= 2.0 ** 30)
+    if pair or far:
+        return race_jacobian(mu, V=V, D=D, F=F, W=W, base=base, points=points,
+                             window=window, delta=delta, kink_split=kink_split)[y]
     mu, V, D, F, W, fn, left, right = _setup(mu, V, D, F, W, base)
     sd = np.sqrt(D)
     M_all = mu[None, :] + F @ V.T
@@ -170,9 +215,9 @@ def race_jacobian_row(mu, y, V=None, D=None, F=None, W=None, base="normal",
                              window=window, delta=delta)
     dx = x[1] - x[0]
     a, A, dT = _raw_and_derivative(mu, V, D, F, W, fn, sd, x, dx,
-                                   rows=[int(y)], kink_split=kink_split)
+                                   rows=[y], kink_split=kink_split)
     T = float(a.sum())
-    p_y = float(a[int(y)]) / T
+    p_y = float(a[y]) / T
     return (A[0] - p_y * dT) / T
 
 
@@ -233,7 +278,8 @@ def concentration_matrix(n, name_caps=None, groups=None):
 
 def polish_race(p0=None, mu0=None, V=None, D=None, F=None, W=None,
                 base="normal", points=257, name_caps=None, groups=None,
-                A=None, b=None, tol=1e-9, max_iter=60, structure=None):
+                A=None, b=None, tol=1e-9, max_iter=60, structure=None,
+                kink_split=None):
     """Nearest race satisfying concentration constraints.
 
     Give either the current weights p0 (inverted to abilities internally) or
@@ -244,19 +290,55 @@ def polish_race(p0=None, mu0=None, V=None, D=None, F=None, W=None,
 
     Solved by SLSQP on mu with the exact race Jacobian supplying constraint
     gradients A J(mu); the mean-zero gauge is an equality constraint.
+
+    kink_split: None (default) chooses it from the base -- True for a base
+    that declares kinks (laplace, exponential_power_base with beta < 2),
+    False otherwise, so a smooth base runs exactly as before. For a kinked
+    base the uniform lattice is not a usable optimisation pair: its
+    window slides with mu across every runner's kink, so the map's
+    derivative carries an O(dx) lattice artifact that no fixed-grid
+    Jacobian matches (race_jacobian was 1.2e-2 off; the exact derivative
+    would have to differentiate the window's bisected quantiles, and is
+    then the derivative of that artifact), and SLSQP stopped at its
+    iteration limit, converged=False (#1011). The split lattice
+    (race_probabilities(..., kink_split=True)) is smooth, its forward and
+    Jacobian are a consistent pair, and the inversion of p0 uses the same
+    map. So for a kinked base the returned p is
+    race_probabilities(mu, ..., kink_split=True) -- the more accurate race
+    (a four-runner laplace race is ~4e-15 off there, 4e-4 off on the
+    uniform lattice at 257 points; see race_probabilities) -- and
+    info["kink_split"] says so. Pass False for the uniform lattice
+    throughout (the pre-#1011 behaviour), True to ask for the split pair
+    explicitly (a no-op for a smooth base). structure= races are Gaussian
+    and take neither.
     """
     from scipy.optimize import minimize, NonlinearConstraint, LinearConstraint
+    if kink_split is not None and not isinstance(kink_split, (bool, np.bool_)):
+        raise TypeError(f"kink_split must be None, True or False; got "
+                        f"{kink_split!r}")
     if structure is not None:
+        if kink_split:
+            raise ValueError("kink_split applies to the factor lattice "
+                             "(V=/D=), not to structure=")
+        split = False
         forward, jac, invert = _structure_engines(structure, points)
     else:
+        if kink_split is None:
+            # an unknown name is left for race_probabilities to refuse
+            fn = base if callable(base) else BASES.get(base)
+            split = fn is not None and bool(_base_kinks(fn))
+        else:
+            split = bool(kink_split)
         forward = lambda m: race_probabilities(m, V=V, D=D, F=F, W=W,
-                                               base=base, points=points)
+                                               base=base, points=points,
+                                               kink_split=split)
         jac = lambda m: race_jacobian(m, V=V, D=D, F=F, W=W, base=base,
-                                      points=points)
+                                      points=points, kink_split=split)
         invert = lambda p: abilities_from_race(np.asarray(p, float), V=V,
                                                D=D, F=F, W=W, base=base,
                                                points=points,
-                                               return_info=True)
+                                               return_info=True,
+                                               kink_split=split)
     # A p0 call is only as good as its inversion: a failed one is not the
     # caller's race, and certifying the polish of it converged was a false
     # certificate (#805). Its verdict is carried to info["converged"].
@@ -264,20 +346,26 @@ def polish_race(p0=None, mu0=None, V=None, D=None, F=None, W=None,
     if mu0 is None:
         if p0 is None:
             raise ValueError("give p0 or mu0")
-        if structure is not None:
-            mu0 = invert(np.asarray(p0, float))
-        else:
-            mu0, inv = invert(np.asarray(p0, float))
-            inv_converged = inv["converged"]
-            if not inv_converged:
-                import warnings
-                warnings.warn(
-                    f"polish_race: abilities_from_race did not converge on "
-                    f"p0: max |log residual| {inv['max_log_residual']:.2e} "
-                    f"after {inv['iterations']} iterations; the polished "
-                    "race starts from a race that is not p0, so "
-                    "info['converged'] is False. Raise points= or pass mu0.",
-                    RuntimeWarning, stacklevel=2)
+        # every engine reports its verdict, structure= included: the
+        # declarative Factor(V, D) path discarded it, so the same failed
+        # inversion the explicit call flags came back converged (#886)
+        p0 = np.asarray(p0, float)
+        # one contract for every engine: the factor inverse refuses a zero
+        # or negative share, while Blocks floored it and Nested clamped it
+        # to 1e-300, and both certified the polish of that race converged
+        if p0.ndim != 1 or not np.all(np.isfinite(p0)) or not np.all(p0 > 0):
+            raise ValueError("all target probabilities must be positive and finite")
+        mu0, inv = invert(p0)
+        inv_converged = inv["converged"]
+        if not inv_converged:
+            import warnings
+            warnings.warn(
+                f"polish_race: the inverse did not converge on "
+                f"p0: max |log residual| {inv['max_log_residual']:.2e} "
+                f"after {inv['iterations']} iterations; the polished "
+                "race starts from a race that is not p0, so "
+                "info['converged'] is False. Raise points= or pass mu0.",
+                RuntimeWarning, stacklevel=2)
     mu0 = np.asarray(mu0, float) - np.mean(mu0)
     n = len(mu0)
     A0, b0 = concentration_matrix(n, name_caps=name_caps, groups=groups)
@@ -288,7 +376,7 @@ def polish_race(p0=None, mu0=None, V=None, D=None, F=None, W=None,
         return forward(mu0), mu0, {"active": [], "nit": 0,
                                    "max_violation": 0.0, "mu_distance": 0.0,
                                    "converged": inv_converged,
-                                   "feasible": True,
+                                   "feasible": True, "kink_split": split,
                                    "status": 0, "message": "unconstrained"}
 
     def p_of(m):
@@ -322,6 +410,37 @@ def polish_race(p0=None, mu0=None, V=None, D=None, F=None, W=None,
                 else:
                     hi_t = mid
             start = lo_t * mu0
+        else:
+            # A floor above 1/n makes the uniform race infeasible too, and
+            # the saturated start came back as the answer, not converged
+            # (#840). Walk from the uniform race along the direction the
+            # violated rows ask for -- near uniform dp/dmu is -c times the
+            # centring projection, so lowering A_k p moves mu along the
+            # centred A_k -- to the first feasible point. The browser's
+            # polishRace does the same.
+            p_u = p_of(np.zeros(n))
+            d = np.zeros(n)
+            for k in np.flatnonzero(A0 @ p_u > b0):
+                row = A0[k] - A0[k].mean()
+                d += row / (np.linalg.norm(row) or 1.0)
+            if np.any(d != 0.0):
+                def feasible_d(t):
+                    return (b0 - A0 @ p_of(t * d)).min() >= 0.0
+                hi_t, found = 1.0, False
+                for _ in range(60):
+                    if feasible_d(hi_t):
+                        found = True
+                        break
+                    hi_t *= 2.0
+                if found:
+                    lo_t = 0.0
+                    for _ in range(60):
+                        mid = 0.5 * (lo_t + hi_t)
+                        if feasible_d(mid):
+                            hi_t = mid
+                        else:
+                            lo_t = mid
+                    start = hi_t * d
     res = minimize(lambda m: 0.5 * np.sum((m - mu0) ** 2), start,
                    jac=lambda m: m - mu0, method="SLSQP",
                    constraints=[
@@ -367,7 +486,7 @@ def polish_race(p0=None, mu0=None, V=None, D=None, F=None, W=None,
                    "mu_distance": float(np.linalg.norm(mu - mu0)),
                    "converged": bool(feasible_out and res.success
                                      and inv_converged),
-                   "feasible": bool(feasible_out),
+                   "feasible": bool(feasible_out), "kink_split": split,
                    "status": int(res.status), "message": str(res.message)}
 
 
@@ -382,12 +501,14 @@ def _structure_engines(structure, points):
         D = np.asarray(structure.D, float)
         return (lambda m: race_probabilities(m, V=V, D=D, points=points),
                 lambda m: race_jacobian(m, V=V, D=D, points=points),
-                lambda p: abilities_from_race(p, V=V, D=D, points=points))
+                lambda p: abilities_from_race(p, V=V, D=D, points=points,
+                                              return_info=True))
     if isinstance(structure, Blocks):
         c, L, D = structure.cluster, structure.loading, structure.D
         return (lambda m: block_race_probabilities(m, c, L, D, points=points),
                 lambda m: block_race_jacobian(m, c, L, D, points=points),
-                lambda p: abilities_from_block_race(p, c, L, D, points=points)[0])
+                lambda p: _verdict(*abilities_from_block_race(p, c, L, D,
+                                                              points=points)))
     if isinstance(structure, Nested):
         c, L, D, g, ga = (structure.cluster, structure.loading, structure.D,
                           structure.coupling, structure.gamma)
@@ -412,16 +533,33 @@ def _structure_engines(structure, points):
                     f"{type(structure).__name__}")
 
 
+# a structure inverse's residual counts as converged below the race
+# inverse's default tolerance, the bar the explicit V, D path applies (#886)
+_STRUCTURE_INVERSE_TOL = 1e-8
+
+
+def _verdict(mu, residual, iterations):
+    """(mu, info) from an inverse that reports (mu, max log residual,
+    iterations), in abilities_from_race's info shape."""
+    return mu, {"converged": bool(residual < _STRUCTURE_INVERSE_TOL),
+                "max_log_residual": float(residual),
+                "iterations": int(iterations)}
+
+
 def _invert_generic(p, forward, tol=1e-9, max_iter=400):
+    """(mu, info): a damped log-residual fixed point for structures without
+    a dedicated inverse, reporting its own residual (#886)."""
     p = np.asarray(p, float); p = p / p.sum()
     lt = np.log(np.maximum(p, 1e-300))
     mu = -(lt - lt.mean())
     eta = 1.0
     lp = np.log(np.maximum(forward(mu), 1e-300))
     err = np.abs(lp - lt).max()
+    it = 0
     for _ in range(max_iter):
         if err < tol:
             break
+        it += 1
         mu_n = mu - eta * (lt - lp); mu_n -= mu_n.mean()
         lp_n = np.log(np.maximum(forward(mu_n), 1e-300))
         e = np.abs(lp_n - lt).max()
@@ -432,4 +570,4 @@ def _invert_generic(p, forward, tol=1e-9, max_iter=400):
             eta *= 0.5
             if eta < 1e-4:
                 break
-    return mu
+    return _verdict(mu, err, it)

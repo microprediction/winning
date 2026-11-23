@@ -7,8 +7,8 @@
 import { TINY, hermite1, solve, checkOpts, OPT_HINTS, asLoadings, asIdio,
          asAbilities, asFiniteVector, asIterations, asTolerance,
          jacobiSweeps, rescaledTarget, applyFloor, gaugeCenter, asPoints,
-         kinkLattice } from "./core.mjs";
-import { BASES, _factorNodeRule, baseResolution, checkTails,
+         kinkLattice, baseKinks } from "./core.mjs";
+import { BASES, _factorNodeRule, _autoRuleSigmaSlope, baseResolution, checkTails,
          lowerCdf, translatedHome, invNormalRational } from "./races.mjs";
 
 /* Each exported call declares its own option keys; see checkOpts in
@@ -367,7 +367,7 @@ export function dyadicPoints(need) {
    the node weights and dx is 1, so every `sum * wt` then `* dx` below is
    the weighted sum; on the default lattice wt is 1 and nothing moves. */
 function kinksOf(fn) {
-  return fn && Array.isArray(fn.kinks) && fn.kinks.length ? fn.kinks : null;
+  return baseKinks(fn);              // a plain or typed finite vector, or null (#907)
 }
 
 function topkGrid(mu, sd, k, fn, points, delta = 1e-12, split = false) {
@@ -377,8 +377,9 @@ function topkGrid(mu, sd, k, fn, points, delta = 1e-12, split = false) {
   let dx = (hi - lo) / (points - 1);
   for (let t = 0; t < points; t++) x[t] = lo + t * dx;
   let w = null;
-  if (split && kinksOf(fn)) {
-    const kl = kinkLattice(x, mu, sd, fn.kinks);
+  const kinks = split ? kinksOf(fn) : null;
+  if (kinks) {
+    const kl = kinkLattice(x, mu, sd, kinks);
     x = kl.xs; w = kl.ws; dx = 1;
   }
   const g = baseGrid(fn, x, mu, sd);
@@ -481,17 +482,20 @@ function checkedTopk(raw, k, kind, massTol = 5e-3) {
    Only a call that would otherwise have thrown pays for it; a call that
    passes first time is untouched. The browser threw at the default 513
    points on a five-runner Laplace field python priced (#769). */
-function refinedTopk(rawAt, k, points, kind) {
+function refinedTopk(rawAt, k, points, kind,
+                     check = (raw) => checkedTopk(raw, k, kind)) {
+  // check: the validator, throwing on a defect; rankProbabilities passes
+  // its own row/column identity checks (#819)
   const raw = rawAt(points);         // validates points, as before
   let err;
-  try { return checkedTopk(raw, k, kind); } catch (e) { err = e; }
+  try { return check(raw); } catch (e) { err = e; }
   const cap = Math.min(4 * (points - 1) + 1, MAX_TOPK_POINTS);
   if (points >= cap) throw err;
   let pts = points;
   while (pts < cap) {
     pts = Math.min(2 * pts - 1, cap);
     const r = rawAt(pts);
-    try { return checkedTopk(r, k, kind); } catch (e) { err = e; }
+    try { return check(r); } catch (e) { err = e; }
   }
   throw new Error(
     `${err.message} (lattice refined from points=${points} to ${pts} ` +
@@ -604,19 +608,26 @@ export function bottomKProbabilities(mu, k, opts = {}) {
   k = asDepth(k, n);
   const sd = asIdio(D, n).map(Math.sqrt);
   const fn = baseFn(base);
-  if (V == null) return checkedTopk(bottomkIndependent(mu, sd, k, fn, points), k, "bottom-k race");
+  // the same bounded 2p - 1 refinement as top-k (#769): the default 513
+  // points threw "membership 1.98" on a Laplace field 1025 resolves (#800)
+  if (V == null)
+    return refinedTopk(pts => bottomkIndependent(mu, sd, k, fn, pts), k, points,
+                       "bottom-k race");
   const { Vm, nodes, w } = factorNodes(V, n, qa, D);
-  const raw = new Array(n).fill(0);
-  for (let q = 0; q < nodes.length; q++) {
-    const shifted = mu.map((m, i) => {
-      let s = m;
-      for (let c = 0; c < nodes[q].length; c++) s += Vm[i][c] * nodes[q][c];
-      return s;
-    });
-    const node = bottomkIndependent(shifted, sd, k, fn, points);
-    for (let i = 0; i < n; i++) raw[i] += w[q] * node[i];
-  }
-  return checkedTopk(raw, k, "bottom-k race");
+  const rawAt = (pts) => {
+    const raw = new Array(n).fill(0);
+    for (let q = 0; q < nodes.length; q++) {
+      const shifted = mu.map((m, i) => {
+        let s = m;
+        for (let c = 0; c < nodes[q].length; c++) s += Vm[i][c] * nodes[q][c];
+        return s;
+      });
+      const node = bottomkIndependent(shifted, sd, k, fn, pts);
+      for (let i = 0; i < n; i++) raw[i] += w[q] * node[i];
+    }
+    return raw;
+  };
+  return refinedTopk(rawAt, k, points, "bottom-k race");
 }
 
 export function topKJacobians(mu, k, opts = {}) {
@@ -628,7 +639,8 @@ export function topKJacobians(mu, k, opts = {}) {
   const n = mu.length;
   k = asDepth(k, n);
   if (V != null) {
-    // exact node mixture: the factor shift commutes with d/dmu, d/dsigma
+    // node mixture: given the nodes the factor shift commutes with
+    // d/dmu, d/dsigma (the moving rule weights are added below, #783)
     const { Vm, nodes, w } = factorNodes(V, n, qa, D);
     const Jmu = [], Jsigma = [];
     for (let i = 0; i < n; i++) {
@@ -647,6 +659,26 @@ export function topKJacobians(mu, k, opts = {}) {
           Jmu[i][j] += w[q] * node.Jmu[i][j];
           Jsigma[i][j] += w[q] * node.Jsigma[i][j];
         }
+    }
+    // The automatic rule's weights move with the sharpness, and so with
+    // the sd that sets it (#783): column j also carries
+    // (dsharp/dsigma_j) sum_q (dW_q/dsharp) q_ind(mu + V f_q), with the
+    // conditional memberships taken as the forward's raw mixture takes
+    // them. Nothing to add where the rule is piecewise constant, or for
+    // an explicit qa (a fixed rule). As python's _add_rule_sigma_slope.
+    if (qa === undefined) {
+      const Dv = asIdio(D, n);
+      const slope = _autoRuleSigmaSlope(Vm, Dv);
+      if (slope) {
+        const sd = Dv.map(Math.sqrt), fn = baseFn(base);
+        const dq = new Array(n).fill(0);
+        for (let q = 0; q < slope.F.length; q++) {
+          const shifted = mu.map((m, i) => m + Vm[i][0] * slope.F[q][0]);
+          const node = topkWithSlopes(shifted, sd, k, fn, points).q;
+          for (let i = 0; i < n; i++) dq[i] += slope.dW[q] * node[i];
+        }
+        for (let i = 0; i < n; i++) Jsigma[i][slope.j] += slope.dsharp * dq[i];
+      }
     }
     return { Jmu, Jsigma };
   }
@@ -695,6 +727,10 @@ function topkJacobiansCore(mu, k, Dv, fn, points, split) {
 export function rankProbabilities(mu, opts = {}) {
   checkOpts(opts, RANK_PROBABILITIES_OPTS, "rankProbabilities", OPT_HINTS);
   const { V = null, D = null, base = "normal", points = 513, qa } = opts;
+  return rankForward(mu, { V, D, base, points, qa }).P;
+}
+
+function rankForward(mu, { V = null, D = null, base = "normal", points = 513, qa }) {
   mu = asAbilities(mu);        // an empty field threw RangeError (#440)
   mu = translatedHome(mu, asIdio(D, mu.length));   // local coordinates (#477)
   const n = mu.length;
@@ -703,7 +739,7 @@ export function rankProbabilities(mu, opts = {}) {
 
   // one factor node: the cavity count pmf against each runner's own
   // density, as in python's rank_probabilities.one_node
-  const oneNode = (m) => {
+  const oneNode = (m, points) => {
     const { dx, F, S, f } = topkGrid(m, sd, n - 1, fn, points);
     const C = countDistribution(F, S);
     const out = [];
@@ -722,22 +758,25 @@ export function rankProbabilities(mu, opts = {}) {
   // Loadings used to be destructured away and the independent rank matrix
   // returned -- plausible, doubly stochastic, and for the wrong model
   // (#199). The mixture is the same one topKProbabilities takes.
-  let P;
+  let rawAt;
   if (V == null) {
-    P = oneNode(mu);
+    rawAt = (pts) => oneNode(mu, pts);
   } else {
     const { Vm, nodes, w } = factorNodes(V, n, qa, D);
-    P = Array.from({ length: n }, () => new Array(n).fill(0));
-    for (let q = 0; q < nodes.length; q++) {
-      const shifted = mu.map((m, i) => {
-        let acc = m;
-        for (let c = 0; c < nodes[q].length; c++) acc += Vm[i][c] * nodes[q][c];
-        return acc;
-      });
-      const node = oneNode(shifted);
-      for (let i = 0; i < n; i++)
-        for (let mm = 0; mm < n; mm++) P[i][mm] += w[q] * node[i][mm];
-    }
+    rawAt = (pts) => {
+      const P = Array.from({ length: n }, () => new Array(n).fill(0));
+      for (let q = 0; q < nodes.length; q++) {
+        const shifted = mu.map((m, i) => {
+          let acc = m;
+          for (let c = 0; c < nodes[q].length; c++) acc += Vm[i][c] * nodes[q][c];
+          return acc;
+        });
+        const node = oneNode(shifted, pts);
+        for (let i = 0; i < n; i++)
+          for (let mm = 0; mm < n; mm++) P[i][mm] += w[q] * node[i][mm];
+      }
+      return P;
+    };
   }
   // Check what is RETURNED. Row normalisation makes every row exact and
   // MOVES the columns, so a matrix that passed the raw check could fail
@@ -763,15 +802,23 @@ export function rankProbabilities(mu, opts = {}) {
       "Raise points=.");
   };
   const finite = (M) => M.every(r => r.every(Number.isFinite));
-  let [reRaw, ceRaw] = defects(P);
-  if (!finite(P) || reRaw > 5e-3 || ceRaw > 5e-3)
-    reject("before normalisation", reRaw, ceRaw);
-  const raw = P.map(r => r.reduce((a, b) => a + b, 0));
-  P = P.map((r, i) => r.map(v => clip01(v / Math.max(raw[i], 1e-300))));
-  const [reOut, ceOut] = defects(P);
-  if (!finite(P) || reOut > 5e-3 || ceOut > 5e-3)
-    reject("in the RETURNED matrix after row normalisation", reOut, ceOut);
-  return P;
+  const checked = ({ P: rawP, pts }) => {
+    let P = rawP;
+    let [reRaw, ceRaw] = defects(P);
+    if (!finite(P) || reRaw > 5e-3 || ceRaw > 5e-3)
+      reject("before normalisation", reRaw, ceRaw);
+    const raw = P.map(r => r.reduce((a, b) => a + b, 0));
+    P = P.map((r, i) => r.map(v => clip01(v / Math.max(raw[i], 1e-300))));
+    const [reOut, ceOut] = defects(P);
+    if (!finite(P) || reOut > 5e-3 || ceOut > 5e-3)
+      reject("in the RETURNED matrix after row normalisation", reOut, ceOut);
+    return { P, mass: raw, points: pts };
+  };
+  // a defect is refined on nested 2p - 1 lattices, as top-k (#769): the
+  // default 513 and 1025 points both rejected a Laplace field that 2049
+  // resolves (#819). A call that passes first time is untouched.
+  return refinedTopk(pts => ({ P: rawAt(pts), pts }), null, points,
+                     "rank marginals", checked);
 }
 
 function validatedTarget(q, k, n, targetFloor) {
@@ -847,15 +894,17 @@ export function abilitiesFromTopk(q, k, opts = {}) {
   // a kinked base takes its slopes from the split lattice, the value from
   // the map being inverted (#267)
   const kinked = !!kinksOf(fn);
-  const withSlopes = m => {
-    const node = topkWithSlopes(m, sd, k, fn, points);
-    if (kinked) node.slopes = topkWithSlopes(m, sd, k, fn, points, true).slopes;
+  const withSlopes = (m, pts) => {
+    const node = topkWithSlopes(m, sd, k, fn, pts);
+    if (kinked) node.slopes = topkWithSlopes(m, sd, k, fn, pts, true).slopes;
     return node;
   };
-  const forward = mu => {
+  // One residual evaluation on a lattice of `pts` points: the raw
+  // memberships and their slopes, not yet checked.
+  const evalAt = (mu, pts) => {
     let qraw, sl;
     if (!fac) {
-      ({ q: qraw, slopes: sl } = withSlopes(mu));
+      ({ q: qraw, slopes: sl } = withSlopes(mu, pts));
       sl = sl.slice();
     } else {
       qraw = new Array(n).fill(0);
@@ -867,14 +916,33 @@ export function abilitiesFromTopk(q, k, opts = {}) {
             s += fac.Vm[i][c] * fac.nodes[j][c];
           return s;
         });
-        const node = withSlopes(shifted);
+        const node = withSlopes(shifted, pts);
         for (let i = 0; i < n; i++) {
           qraw[i] += fac.w[j] * node.q[i];
           sl[i] += fac.w[j] * node.slopes[i];
         }
       }
     }
-    const qhat = checkedTopk(qraw, k, "top-k inversion");
+    return { qraw, sl };
+  };
+  const forward = mu => {
+    // the forward's bounded refinement (refinedTopk, #769): a lattice that
+    // fails the mass check is doubled (2p - 1) up to four times the request,
+    // and the residual and slopes come from the lattice that passed. On one
+    // fixed lattice the inverse refused, at its warm start, a target the
+    // public forward had produced at the same points (#943).
+    let { qraw, sl } = evalAt(mu, points), qhat, err = null;
+    try { qhat = checkedTopk(qraw, k, "top-k inversion"); } catch (e) { err = e; }
+    if (err) {
+      const cap = Math.min(4 * (points - 1) + 1, MAX_TOPK_POINTS);
+      let pts = points;
+      while (err && pts < cap) {
+        pts = Math.min(2 * pts - 1, cap);
+        ({ qraw, sl } = evalAt(mu, pts));
+        try { qhat = checkedTopk(qraw, k, "top-k inversion"); err = null; } catch (e) { err = e; }
+      }
+      if (err) throw err;
+    }
     // a membership above one, clipped to exactly one, leaves a flat
     // logit residual of ~690 the sweeps stall in: refuse the iterate so
     // they back off (the uniform lattice overshoots one near saturation
@@ -1185,13 +1253,15 @@ function rankMarginalWithJacobian(mu, sd, r, fn, points, split = false,
    otherwise attempt(start) runs from each of the fixed starts(first) in
    order and the first converged outcome wins, else the attempt with the
    smallest info[key] is returned, still converged=false. info.iterations
-   becomes the total over every attempt. */
+   becomes the total over every attempt. A retry that throws is skipped:
+   it must not discard the completed attempts (#855). */
 function retryOnFailure(first, attempt, starts, key) {
   // n_iter = 0 prices the start and performs no update: never retried
   if (first.info.converged || first.info.iterations === 0) return first;
   let best = first, total = first.info.iterations;
   for (const start of starts(first)) {
-    const out = attempt(start);
+    let out;
+    try { out = attempt(start); } catch (e) { continue; }
     total += out.info.iterations;
     if (out.info.converged) { best = out; break; }
     if (out.info[key] < best.info[key]) best = out;
@@ -1199,6 +1269,8 @@ function retryOnFailure(first, attempt, starts, key) {
   best.info.iterations = total;
   return best;
 }
+// exported for the contract test only (tests/test_topk_retry.py, #855)
+export { retryOnFailure as _retryOnFailure };
 
 /* The retry starts of abilitiesFromRankMarginal (#779), as python's
    _rank_marginal_starts: the original start nudged -/+ 0.3 typical scale
@@ -1291,20 +1363,19 @@ function rankMarginalOnce(p, r, opts) {
   // LM stalls or crawls, as python.
   const kinked = !!kinksOf(fn);
   const model = (m, jac = true) => {
-    const nx = rankMarginalWithJacobian(m, sd, r, fn, points, false,
-                                        jac && !kinked);
-    const u = nx.p.map((v, i) => v / nx.mass[i]);
+    const ranked = rankForward(m, { D, base, points });
+    const u = ranked.P.map(row => row[r - 1]);
     const tot = u.reduce((a, b) => a + b, 0);
     const logp = u.map(v => Math.log(Math.max(v / tot, 1e-300)));
-    if (!jac) return { logp, Jlog: null };
-    const Jv = kinked
-      ? rankMarginalWithJacobian(m, sd, r, fn, points, true).J
-      : nx.J;
+    if (!jac || logp.every((v, i) => Math.abs(v - logt[i]) < tol))
+      return { logp, Jlog: null };
+    const Jv = rankMarginalWithJacobian(
+      m, sd, r, fn, ranked.points, kinked).J;
     const colw = new Array(n).fill(0);
     for (let i = 0; i < n; i++)
-      for (let j = 0; j < n; j++) colw[j] += Jv[i][j] / nx.mass[i];
+      for (let j = 0; j < n; j++) colw[j] += Jv[i][j] / ranked.mass[i];
     const Jlog = Jv.map((row, i) => row.map((v, j) =>
-      v / Math.max(nx.p[i], 1e-300) - colw[j] / tot));
+      v / ranked.mass[i] / Math.max(u[i], 1e-300) - colw[j] / tot));
     return { logp, Jlog };
   };
   const fdJacobian = (m, logp) => {
@@ -1316,7 +1387,7 @@ function rankMarginalOnce(p, r, opts) {
     }
     return logp.map((_, i) => cols.map(c => c[i]));
   };
-  let { logp, Jlog } = model(mu);
+  let { logp, Jlog } = model(mu, nIter > 0);
   let resid = logp.map((v, i) => v - logt[i]);
   let cost = resid.reduce((a, b) => a + b * b, 0);
   let residMax = Math.max(...resid.map(Math.abs));
@@ -1324,7 +1395,9 @@ function rankMarginalOnce(p, r, opts) {
   for (let it = 0; it < nIter; it++) {
     iters = it + 1;
     if (residMax < tol) break;
-    if (fdMode) Jlog = fdJacobian(mu, logp);
+    if (fdMode) {
+      try { Jlog = fdJacobian(mu, logp); } catch (e) { break; }
+    }
     const A = [], g = new Array(n).fill(0);
     for (let a = 0; a < n; a++) {
       const row = new Array(n).fill(0);
@@ -1345,7 +1418,14 @@ function rankMarginalOnce(p, r, opts) {
       let muN = mu.map((v, i) => v + step[i]);
       const mm = muN.reduce((a, b) => a + b, 0) / n;
       muN = muN.map(v => v - mm);
-      const nx = model(muN, !(kinked || fdMode));
+      let nx;
+      try {
+        nx = model(muN, !(kinked || fdMode));
+      } catch (e) {
+        // An unresolved trial cannot replace the last priced iterate.
+        lam *= 8;
+        continue;
+      }
       const rN = nx.logp.map((v, i) => v - logt[i]);
       const costN = rN.reduce((a, b) => a + b * b, 0);
       if (costN < cost) {

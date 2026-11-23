@@ -7,6 +7,8 @@ max-wins arena interface."""
 
 from __future__ import annotations
 
+from numbers import Integral
+
 import numpy as np
 from scipy.special import log_ndtr, ndtr, ndtri
 
@@ -145,9 +147,11 @@ def factor_model_contrast(C: np.ndarray, k: int, n_iter: int = 200,
     resulting race is materially correlated (shares off by 0.03-0.05).
     The public covariance intake (winning.probit.fit_factor_model,
     fit_covariance) uses factor_model_projected, which minimises the
-    projected residual exactly. This function is retained because the
-    boundary experiments (research/experiments/exp14_boundaries) cite
-    it; prefer factor_model_projected for anything new.
+    projected residual instead (both finish a fit that hits the sweep
+    cap with a Gauss-Newton polish, #1018, #1051). This function is
+    retained because the boundary experiments
+    (research/experiments/exp14_boundaries) cite it; prefer
+    factor_model_projected for anything new.
     """
     C = np.asarray(C, dtype=float)
     n = len(C)
@@ -177,8 +181,38 @@ def factor_model_projected(C: np.ndarray, k: int, n_outer: int = 60,
     heuristic, so the heuristic is not the binding constraint; this exists
     to certify that.
     """
+    V, D, _ = _factor_model_projected_run(C, k, n_outer=n_outer, D0=D0)
+    return V, D
+
+
+def _factor_model_projected_run(C, k, n_outer=60, D0=None):
+    """factor_model_projected, also reporting whether the alternation
+    ran out of sweeps (True) rather than stopping on its own rule.
+
+    The alternation converges only linearly, and on small, barely
+    overdetermined fits (rank 1 at n = 5: 9 parameters, 10 equations)
+    the rate can be so close to one that 60 sweeps leave a residual of
+    1e-3 on an exactly representable covariance (#1018). The flag lets
+    a caller finish those fits without touching the ones that stopped
+    on their own."""
     C = np.asarray(C, dtype=float)
+    # Fit at unit scale and scale back (#1052). The stop on D and the
+    # NNLS water-filling stop are absolute, so a Sigma scaled by 1e-12
+    # stopped after one sweep (relative residual 0.12 against 6e-5 at
+    # n = 5, k = 4). The working scale is fit_covariance's power of four,
+    # applied with ldexp, so it is exact and cannot overflow: the fit of
+    # 4^j C is the fit of C scaled, and every C with mean variance in
+    # [0.5, 2) -- correlation matrices, and every fit_covariance call,
+    # which works at that scale -- is fitted bitwise as before.
+    k2 = _unit_scale_exponent(np.diag(C))
+    if k2 != 0:
+        V, D, cap = _factor_model_projected_run(
+            np.ldexp(C, -2 * k2), k, n_outer=n_outer,
+            D0=None if D0 is None else np.ldexp(np.asarray(D0, dtype=float),
+                                                -2 * k2))
+        return np.ldexp(V, k2), np.ldexp(D, 2 * k2), cap
     n = len(C)
+    hit_cap = True
     # D0 exists for multistart. The objective is nonconvex in (V, D), so
     # the paper offers dispersion across starts as the cheap diagnostic;
     # that diagnostic needs a way to start somewhere else.
@@ -209,10 +243,12 @@ def factor_model_projected(C: np.ndarray, k: int, n_outer: int = 60,
         obj = _projected_sq(C, V, D_new)
         if obj > best[2] * (1.0 + 1e-12):
             V, D = best[0], best[1]
+            hit_cap = False
             break
         best = (V, D_new, obj)
         if np.abs(D_new - D).max() < 1e-12:
             D = D_new
+            hit_cap = False
             break
         D = D_new
     # RELATIVE to each runner's own variance, the rule fit_covariance
@@ -226,9 +262,156 @@ def factor_model_projected(C: np.ndarray, k: int, n_outer: int = 60,
     # floor it has always been; only its covariance under rescaling is
     # new. The inner term keeps the floor positive for a runner whose
     # own variance is zero.
+    return V, _projected_floor(C, D), hit_cap
+
+
+def _unit_scale_exponent(d):
+    """j with mean(d) / 4^j in [0.5, 2): the power of four the fitters
+    work at (#101, #1052). From binary exponents, not log2: a rounded
+    log2 put means just below 2 * 4^j on the next power, and half-to-even
+    rounding put exact ties at 2 * 4^j on alternate sides, so 4C did not
+    always land where C did. The entries are first shifted by the largest
+    one's binary exponent, which is exact and keeps the sum finite where
+    the raw sum overflowed, and which moves by exactly 2j when d is
+    multiplied by 4^j. 0 for a zero or non-finite mean."""
+    d = np.asarray(d, dtype=float)
+    top = float(np.max(d)) if d.size else 0.0
+    if not (top > 0 and np.isfinite(top)):
+        return 0
+    _, et = np.frexp(top)
+    ms = float(np.mean(np.ldexp(d, -int(et))))    # in (0, 1]
+    if not ms > 0:
+        return 0
+    _, e = np.frexp(ms)          # mean(d) = m 2^(e + et), m in [0.5, 1)
+    return (int(e) + int(et)) // 2
+
+
+def _projected_floor(C, D):
+    """The relative variance floor factor_model_projected applies."""
     dc = np.diag(np.asarray(C, dtype=float))
     floor = 1e-8 * np.maximum(dc, 1e-6 * max(float(np.mean(dc)), 1e-300))
-    return V, np.maximum(D, floor)
+    return np.maximum(D, floor)
+
+
+def _polish_projected(C, k, D, max_eval=60):
+    """Finish a projected factor fit the alternation left unconverged.
+
+    The alternation in factor_model_projected is block coordinate
+    descent and converges linearly; in a flat valley the rate is close
+    to one. For an EXACT rank-1-plus-diagonal Sigma at n = 5 it leaves
+    projected residuals up to 2e-3 after its 60 sweeps, and one seed
+    still sits at 5e-7 after 100,000 sweeps (#1018). That is not a
+    local minimum: the iterates are still descending towards the true D.
+    The D-step cannot see that V will move in response, and that
+    coupling is what makes the valley flat.
+
+    This is Gauss-Newton on the variable-projection objective
+    f(D) = min_V ||P (C - V V' - diag D) P||_F^2, the alternation's own
+    objective with V eliminated. In the reduced basis B, let N span the
+    eigenvectors of S - B' diag(D) B that the top-k PSD fit does not
+    keep, with eigenvalues l. The residual is diag(l) in that basis, its
+    Jacobian in D_j is -(N'b_j)(N'b_j)', and the Gauss-Newton system is
+    (Pi o Pi) delta = (X o X) l with X = B N and Pi = X X'. That is the
+    alternation's own D-step with P o P replaced by Pi o Pi: the
+    projector with the factor directions removed. At zero residual the
+    convergence is quadratic (5-12 steps on the #1018 sweep).
+
+    Each step costs one n x n eigh, the same as an alternation sweep,
+    and at most max_eval of them are spent, so a polish costs no more
+    than one of the two starts. D stays nonnegative (variables at the
+    bound with an outward step are frozen, then the step is clipped),
+    and a step is taken only if it lowers f (halving otherwise).
+    Returns (V, D, f) with D before the variance floor; the caller keeps
+    it only if it lowers the floored objective."""
+    C = np.asarray(C, dtype=float)
+    n = len(C)
+    # orthonormal basis of the mean-zero subspace (Helmert), so that
+    # ||B' M B||_F = ||P M P||_F and the objective is the same one
+    B = np.zeros((n, n - 1))
+    for j in range(1, n):
+        B[:j, j - 1] = 1.0
+        B[j, j - 1] = -float(j)
+        B[:, j - 1] /= np.sqrt(j * (j + 1.0))
+    S = B.T @ C @ B
+    budget = [max_eval]
+
+    def evaluate(D):
+        budget[0] -= 1
+        lam, U = np.linalg.eigh(S - (B.T * D) @ B)
+        order = np.argsort(lam)[::-1]
+        lam, U = lam[order], U[:, order]
+        keep = np.zeros(len(lam), dtype=bool)
+        keep[:k] = lam[:k] > 0
+        lc = lam[~keep]
+        V = B @ (U[:, :k] * np.sqrt(np.maximum(lam[:k], 0.0)))
+        if V.shape[1] < k:                     # k >= n - 1
+            V = np.hstack([V, np.zeros((n, k - V.shape[1]))])
+        return float(lc @ lc), lc, B @ U[:, ~keep], V
+
+    D = np.maximum(np.asarray(D, dtype=float), 0.0)
+    f, lc, X, V = evaluate(D)
+    while budget[0] > 0 and f > 0.0:
+        H = (X @ X.T) ** 2
+        h = (X ** 2) @ lc
+        free = np.ones(n, dtype=bool)
+        for _ in range(3):
+            d = np.zeros(n)
+            d[free] = np.linalg.lstsq(H[np.ix_(free, free)], h[free],
+                                      rcond=None)[0]
+            blocked = free & (D <= 0.0) & (d < 0.0)
+            if not blocked.any():
+                break
+            free &= ~blocked
+        t = 1.0
+        while budget[0] > 0:
+            Dn = np.maximum(D + t * d, 0.0)
+            fn, lcn, Xn, Vn = evaluate(Dn)
+            if fn < f:
+                break
+            t *= 0.5
+        else:
+            break
+        if not fn < f:
+            break
+        gain = (f - fn) / f
+        D, f, lc, X, V = Dn, fn, lcn, Xn, Vn
+        if gain < 1e-10:
+            break
+    return V, D, f
+
+
+# A kept eigenvalue below this fraction of the largest is a direction the
+# polished fit does not need (#1066); see _polish_numerical_rank.
+_POLISH_RANK_REL = 1e-6
+
+
+def _polish_numerical_rank(C, k, D):
+    """_polish_projected at k, then again at the polished fit's numerical
+    rank when that is lower; returns (V, D) with D before the floor.
+
+    When k exceeds the rank an exact fit needs (the default k = 3 on an
+    exact rank-1 field), the extra kept eigenvalues are zero at the
+    solution and the Gauss-Newton system is singular there: the polish
+    slows to a crawl and stops on its relative-gain rule wherever
+    rounding leaves it, with D off by anything from 1e-15 to 5e-9 and a
+    spurious column whose squared norm tracks that error -- straddling
+    fit_covariance's 1e-10 column cut, so the reported rank (and the
+    node dimension cov= prices on) varied between machines (#1066). At
+    the numerical rank the system is regular and the polish converges
+    quadratically. The lower-rank polish is kept only if it gives up at
+    most a relative 1e-24 of the squared projected objective (eigenvalues
+    1e-12 of the scale), so a genuine small factor is never dropped
+    here."""
+    V, D1, f = _polish_projected(C, k, D)
+    lam = (V ** 2).sum(axis=0)          # the columns are B U sqrt(lam)
+    top = float(lam.max()) if lam.size else 0.0
+    kn = int((lam > _POLISH_RANK_REL * top).sum())
+    if 0 < kn < k:
+        V2, D2, f2 = _polish_projected(C, kn, D1)
+        scale = float(np.linalg.norm(_center2(C))) ** 2
+        if f2 <= f + 1e-24 * scale:
+            return V2, D2
+    return V, D1
 
 
 def _projected_sq(C, V, D):
@@ -236,7 +419,7 @@ def _projected_sq(C, V, D):
     return float(np.sum(_center2(C - V @ V.T - np.diag(D)) ** 2))
 
 
-def _warn_if_rank_splits_a_tie(C, D, k, tol=1e-6):
+def _warn_if_rank_splits_a_tie(C, D, k, tol=1e-6, stacklevel=3):
     """Warn when the rank cuts through a degenerate eigenvalue.
 
     A rank-k fit is normally a well-defined approximation: the top-k
@@ -305,7 +488,7 @@ def _warn_if_rank_splits_a_tie(C, D, k, tol=1e-6):
         f"fixes it; pass k={resolved} or more to take the whole tied "
         "group, or check it by pricing the race from several starts "
         "(factor_model_projected accepts D0=).",
-        RuntimeWarning, stacklevel=3)
+        RuntimeWarning, stacklevel=stacklevel)
 
 
 def _top_eigen(M, k, Q=None, sweeps=30, pad=3):
@@ -520,6 +703,32 @@ def _without_common_shift(C):
     return B
 
 
+def _as_fit_rank(value, name):
+    """A scalar count, never a negative slice endpoint (#958)."""
+    def refuse():
+        # built only on refusal: formatting a 5000-digit int that would
+        # clip to the field's rank trips Python's int-to-str digit limit
+        return ValueError(f"{name} must be a non-negative integer; got "
+                          f"{type(value).__name__}")
+    # numpy registers timedelta64 as an Integral: a duration is not a count
+    # whatever its unit (1 ns became rank 1; 1 D leaked a TypeError)
+    if (np.ma.is_masked(value) or isinstance(value, (bool, np.bool_))
+            or isinstance(value, (np.timedelta64, np.datetime64))):
+        raise refuse()
+    if isinstance(value, Integral):
+        rank = int(value)  # preserve large integers; the field caps the rank
+    else:
+        v = np.asarray(value)
+        if (v.ndim != 0 or v.dtype.kind not in "iuf"
+                or not np.isfinite(v) or v != np.floor(v)):
+            raise refuse()
+        rank = int(v)
+    if rank < 0:
+        raise ValueError(f"{name} must be a non-negative integer; got a "
+                         "negative one")
+    return rank
+
+
 def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
                    blocks=None, nodes_log2: int = 11,
                    seed: int = 0, return_report: bool = False):
@@ -529,7 +738,9 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
     Stages (the paper's dense-Sigma pipeline, validated against the
     randomcov ensemble battery): (1) k global factors by the certified
     quotient-space fit -- only P Sigma P is choice-relevant, so the fit
-    minimizes the projected residual, not the raw one; (2) average-linkage
+    minimizes the projected residual, not the raw one; a start that runs
+    out of alternation sweeps is finished by Gauss-Newton and kept only
+    if the final residual improves (#1051); (2) average-linkage
     clustering of the residual correlation into blocks, one rank-1 loading
     per block from the off-diagonal residual; (3) the remaining
     off-diagonal residual's top-m eigendirections promoted to further
@@ -537,6 +748,9 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
     Numerically dead columns are dropped so the Sobol node rank stays
     honest. Works on covariances; correlation matrices are the special
     case with unit diagonal.
+
+    k and m: non-negative integer counts (integer-valued real scalars are
+    accepted). Counts above the field size are capped as before.
 
     blocks: None (a count chosen from n), an integer count for stage (2)'s
     clustering, or a length-n integer label array giving the block
@@ -549,11 +763,12 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
     (stage skipped: a count below 2, or n < 3), and "block_labels" the
     0-based membership the fit used; "arm" is "pipeline", or "eigen" when
     a pure eigen fit at the same rank left the smaller residual and
-    replaced the staged fit, blocks included.
+    replaced the staged fit, blocks included; "polished" is True when
+    the stage-one start ran out of sweeps and its Gauss-Newton finish
+    replaced the fit (#1051).
     """
-    from scipy.cluster.hierarchy import fcluster, linkage
-    from scipy.spatial.distance import squareform
-
+    k = _as_fit_rank(k, "k")
+    m = _as_fit_rank(m, "m")
     C = _validate_covariance(C)
     # a common shift cancels from every contrast: fit the representative
     # without it, so C and C + a 11' are fitted identically (#465)
@@ -586,7 +801,8 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
                                 "blocks": "none" if labels is None
                                 else "given",
                                 "block_labels": np.zeros(1, dtype=int),
-                                "arm": "pipeline"}
+                                "arm": "pipeline",
+                                "polished": False}
         return V, D, F, W
     # Fit at UNIT scale and scale back. Several stages carry absolute
     # constants (start values, convergence tests, dead-column and
@@ -596,19 +812,29 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
     # variation (#101). The working scale is a power of FOUR, so C / s
     # and sqrt(s) are exact in binary and the fit of s * C is the fit of
     # C, bit for bit, scaled.
-    md = float(np.mean(np.diag(C)))
-    k2 = int(np.round(np.log2(md) / 2.0)) if md > 0 else 0
-    if k2 != 0:
-        out = fit_covariance(np.ldexp(C, -2 * k2), k=k, m=m,
-                             blocks=blocks if labels is None else labels,
-                             nodes_log2=nodes_log2, seed=seed,
-                             return_report=return_report)
-        Vu, Du = out[0], out[1]
-        return (np.ldexp(Vu, k2), np.ldexp(Du, 2 * k2)) + tuple(out[2:])
+    k2 = _unit_scale_exponent(np.diag(C))
+    # the scaled matrix goes straight to the fitter: it is already
+    # validated and shift-free, and a second shift removal is not a no-op
+    # when the first restored an over-removed part (#1052)
+    out = _fit_covariance_unit(np.ldexp(C, -2 * k2), n, k, m, blocks,
+                               labels, nodes_log2, seed, return_report)
+    if k2 == 0:
+        return out
+    Vu, Du = out[0], out[1]
+    return (np.ldexp(Vu, k2), np.ldexp(Du, 2 * k2)) + tuple(out[2:])
+
+
+def _fit_covariance_unit(C, n, k, m, blocks, labels, nodes_log2, seed,
+                         return_report):
+    """fit_covariance's stages on a validated, shift-free C at unit
+    scale (mean variance in [0.5, 2))."""
+    from scipy.cluster.hierarchy import fcluster, linkage
+    from scipy.spatial.distance import squareform
+
     s = np.sqrt(np.clip(np.diag(C), 1e-12, None))
     corr = C / np.outer(s, s)
     kk = min(k, n - 1)
-    V, D0 = factor_model_projected(C, kk)
+    V, D0, hit_cap = _factor_model_projected_run(C, kk)
     # The alternation is nonconvex and its default start can stall at a
     # nonglobal stationary point precisely on EASY inputs: an exactly
     # in-grammar matrix at small n with idiosyncratic variances spread
@@ -623,23 +849,30 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
         lam_top = np.sort(np.linalg.eigvalsh(C))[::-1][:kk].sum() / n
         for D_start in (0.9 * np.diag(C),
                         np.maximum(np.diag(C) - lam_top, 1e-3)):
-            V2, D2 = factor_model_projected(C, kk, D0=D_start)
+            V2, D2, cap2 = _factor_model_projected_run(C, kk, D0=D_start)
             if _projected_sq(C, V2, D2) < _projected_sq(C, V, D0):
-                V, D0 = V2, D2
+                V, D0, hit_cap = V2, D2, cap2
+    # #1051, the rule fit_factor_model follows (#1018): the alternation
+    # converges linearly, and on an EXACT rank-1-plus-diagonal C at n = 5
+    # all 100 seeds ran out of sweeps and the final fit kept projected
+    # residuals up to 1.5e-3. If the start kept here hit the sweep cap it
+    # is finished by Gauss-Newton on the same projected objective, and the
+    # polished start is a candidate only if it lowers that objective by
+    # more than a relative 1e-10. A start that stopped on its own rule is
+    # untouched, so such fits are bitwise as before.
     V = np.asarray(V, dtype=float)
-    _warn_if_rank_splits_a_tie(C, D0, kk)
+    polished = None
+    if hit_cap and 3 <= n <= 800:
+        V1, D1 = _polish_numerical_rank(C, kk, D0)
+        D1 = _projected_floor(C, D1)
+        if _projected_sq(C, V1, D1) < _projected_sq(C, V, D0) * (1.0 - 1e-10):
+            polished = (np.asarray(V1, dtype=float), D1)
     if blocks is None:
         blocks = max(2, min(n // 5, 20))
     block_source = "none"
-    # everything downstream fits the CHOICE-RELEVANT residual: the raw
-    # residual C - VV' - D0 contains a common component the quotient fit
-    # rightly ignored; chasing it with block loadings would trade real
-    # projected error for irrelevant reconstruction (in-grammar inputs
-    # would come back distorted). Project it out once, here.
-    R = _center2(C - V @ V.T - np.diag(D0))
-    v = np.zeros(n)
     cluster = np.zeros(n, dtype=int)
-    if labels is not None or (n >= 3 and blocks >= 2):
+    use_blocks = labels is not None or (n >= 3 and blocks >= 2)
+    if use_blocks:
         if labels is not None:
             # the caller's membership replaces the clustering stage and
             # nothing else: the per-block rank-1 loadings below are fitted
@@ -651,30 +884,8 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
             Z = linkage(squareform(d, checks=False), method="average")
             cluster = fcluster(Z, blocks, criterion="maxclust") - 1
             block_source = "clustered"
-        for c in np.unique(cluster):
-            idx = np.where(cluster == c)[0]
-            if len(idx) < 2:
-                continue
-            Rb = R[np.ix_(idx, idx)].copy()
-            np.fill_diagonal(Rb, 0.0)
-            wb, Ub = np.linalg.eigh(Rb)
-            if wb[-1] > 0:
-                v[idx] = Ub[:, -1] * np.sqrt(wb[-1])
     uniq = np.unique(cluster)
-    BD = np.zeros((n, len(uniq)))
-    for j, c in enumerate(uniq):
-        idx = np.where(cluster == c)[0]
-        BD[idx, j] = v[idx]
-    E = R - BD @ BD.T
-    np.fill_diagonal(E, 0.0)
     m_eff = min(m, n)
-    lamE, UE, _ = _top_eigen(E, m_eff)
-    Vres = UE * np.sqrt(np.maximum(lamE, 0.0))
-    Vall = np.hstack([V, Vres, BD])
-    keep = (Vall ** 2).sum(axis=0) > 1e-10 * np.trace(C) / n
-    if not keep.any():
-        keep[0] = True
-    Vall = Vall[:, keep]
 
     def _close(Vc):
         # closing D solve: min over d of ||P(C - Vc Vc' - diag(d))P||_F.
@@ -713,20 +924,80 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
         Rm = _center2(C - Vc @ Vc.T - np.diag(Dc))
         return Dc, float(np.abs(Rm).max())
 
-    D, res_pipe = _close(Vall)
-    # second arm: a pure eigen fit at the same total rank. Greedy
-    # factor+blocks allocation is the wrong shape for globally smooth
-    # covariance (measured: smooth RBF kernels at rank 27 hold to 1e-3
-    # under eigen, 0.14 under the pipeline); keep whichever leaves the
-    # smaller choice-relevant residual, pipeline winning ties.
-    rank = Vall.shape[1]
-    lamC, UC, _ = _top_eigen(C, rank, pad=10, sweeps=40)
-    Veig = UC * np.sqrt(np.maximum(lamC, 0.0))
-    Deig, res_eig = _close(Veig)
-    arm = "pipeline"
-    if res_eig < res_pipe:
-        Vall, D, res_pipe = Veig, Deig, res_eig
-        arm = "eigen"
+    eigen_arms = {}
+
+    def _stages(V, D0):
+        # everything downstream fits the CHOICE-RELEVANT residual: the raw
+        # residual C - VV' - D0 contains a common component the quotient
+        # fit rightly ignored; chasing it with block loadings would trade
+        # real projected error for irrelevant reconstruction (in-grammar
+        # inputs would come back distorted). Project it out once, here.
+        R = _center2(C - V @ V.T - np.diag(D0))
+        v = np.zeros(n)
+        if use_blocks:
+            for c in uniq:
+                idx = np.where(cluster == c)[0]
+                if len(idx) < 2:
+                    continue
+                Rb = R[np.ix_(idx, idx)].copy()
+                np.fill_diagonal(Rb, 0.0)
+                wb, Ub = np.linalg.eigh(Rb)
+                if wb[-1] > 0:
+                    v[idx] = Ub[:, -1] * np.sqrt(wb[-1])
+        BD = np.zeros((n, len(uniq)))
+        for j, c in enumerate(uniq):
+            idx = np.where(cluster == c)[0]
+            BD[idx, j] = v[idx]
+        E = R - BD @ BD.T
+        np.fill_diagonal(E, 0.0)
+        lamE, UE, _ = _top_eigen(E, m_eff)
+        Vres = UE * np.sqrt(np.maximum(lamE, 0.0))
+        Vall = np.hstack([V, Vres, BD])
+        keep = (Vall ** 2).sum(axis=0) > 1e-10 * np.trace(C) / n
+        if not keep.any():
+            keep[0] = True
+        Vall = Vall[:, keep]
+        D, res_pipe = _close(Vall)
+        # second arm: a pure eigen fit at the same total rank. Greedy
+        # factor+blocks allocation is the wrong shape for globally smooth
+        # covariance (measured: smooth RBF kernels at rank 27 hold to 1e-3
+        # under eigen, 0.14 under the pipeline); keep whichever leaves the
+        # smaller choice-relevant residual, pipeline winning ties. It
+        # depends on the rank alone, so a second candidate start at the
+        # same rank reuses it.
+        rank = Vall.shape[1]
+        if rank not in eigen_arms:
+            lamC, UC, _ = _top_eigen(C, rank, pad=10, sweeps=40)
+            Veig = UC * np.sqrt(np.maximum(lamC, 0.0))
+            eigen_arms[rank] = (Veig,) + _close(Veig)
+        Veig, Deig, res_eig = eigen_arms[rank]
+        if res_eig < res_pipe:
+            return Veig, Deig, res_eig, "eigen"
+        return Vall, D, res_pipe, "pipeline"
+
+    Vall, D, res_pipe, arm = _stages(V, D0)
+    used_polish = False
+    if polished is not None:
+        # The polished start lowers the stage-one objective, but blocks,
+        # promotion and the closing solve are greedy and can, rarely, end
+        # a hair worse from the better start (relative residual 0.0757 vs
+        # 0.0763 on a 12-runner Wishart). Keep it only if the FINAL
+        # choice-relevant residual is strictly lower in its largest entry
+        # (the criterion that picks the arm) and no higher in Frobenius
+        # norm (the report's projected_residual_rel); otherwise the fit
+        # is bitwise as before.
+        out1 = _stages(*polished)
+
+        def _fro(Vc, Dc):
+            return float(np.linalg.norm(_center2(C - Vc @ Vc.T
+                                                 - np.diag(Dc))))
+        if out1[2] < res_pipe and \
+                _fro(out1[0], out1[1]) <= _fro(Vall, D):
+            Vall, D, res_pipe, arm = out1
+            V, D0 = polished
+            used_polish = True
+    # one frame below fit_covariance, so the warning names its caller
+    _warn_if_rank_splits_a_tie(C, D0, kk, stacklevel=4)
     # the nodes are not rotation or sign invariant, so the basis they
     # meet must be a function of V V' alone, not of LAPACK's choices (#745)
     Vall = _canonical_factor_basis(Vall)
@@ -750,7 +1021,7 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
             "its own size (contrast_residual_max). Global residual norms "
             "cannot see this, so head-to-head probabilities between the "
             "affected pair may be badly wrong even though the covariance "
-            "residual looks small.", RuntimeWarning, stacklevel=2)
+            "residual looks small.", RuntimeWarning, stacklevel=3)
     if return_report:
         denom = float(np.linalg.norm(_center2(C)))
         rel = float(np.linalg.norm(Rfin)) / denom if denom > 0 else 0.0
@@ -769,7 +1040,8 @@ def fit_covariance(C: np.ndarray, k: int = 3, m: int = 5,
                   "contrast_residual_max": worst,
                   "blocks": block_source,
                   "block_labels": np.asarray(cluster, dtype=int).copy(),
-                  "arm": arm}
+                  "arm": arm,
+                  "polished": used_polish}
         return Vall, D, F, W, report
     return Vall, D, F, W
 
@@ -1061,7 +1333,7 @@ def fit_tree(C, parent, k: int = 0, max_n: int = 2000):
 _CONTRAST_WARN = 1.0
 
 
-def _worst_contrast_ratio(C, R, cap_n=4000):
+def _worst_contrast_ratio(C, R, block_rows=128):
     """max over pairs of |contrast residual| / contrast variance.
 
     A Frobenius or max-entry residual normalized by the average variance
@@ -1073,25 +1345,25 @@ def _worst_contrast_ratio(C, R, cap_n=4000):
     residual where choices actually live, pair by pair:
     (e_i - e_j)' R (e_i - e_j) over (e_i - e_j)' C (e_i - e_j).
 
-    O(n^2) memory, so past cap_n it restricts to the cap_n smallest
-    variances, which is where dangerous pairs live (a tiny difference
-    variance needs both variances small or correlation near one, and the
-    former dominates in practice).
+    Scan every pair in row blocks to bound temporary memory. A pair
+    with high marginal variances can still have a tiny contrast variance
+    when its correlation is close to one.
     """
     n = len(C)
-    if n > cap_n:
-        idx = np.argsort(np.diag(C))[:cap_n]
-        C = C[np.ix_(idx, idx)]
-        R = R[np.ix_(idx, idx)]
-        n = cap_n
     dC = np.diag(C)
-    varC = dC[:, None] + dC[None, :] - 2.0 * C
     dR = np.diag(R)
-    varR = np.abs(dR[:, None] + dR[None, :] - 2.0 * R)
     tiny = 1e-12 * max(float(dC.mean()), 1e-300)
-    np.fill_diagonal(varR, 0.0)
-    ratio = varR / np.maximum(varC, tiny)
-    return float(ratio.max())
+    worst = 0.0
+    for start in range(0, n, block_rows):
+        stop = min(start + block_rows, n)
+        varC = dC[start:stop, None] + dC[None, :] - 2.0 * C[start:stop]
+        varR = dR[start:stop, None] + dR[None, :] - 2.0 * R[start:stop]
+        np.abs(varR, out=varR)
+        varR[np.arange(stop - start), np.arange(start, stop)] = 0.0
+        np.maximum(varC, tiny, out=varC)
+        varR /= varC
+        worst = np.maximum(worst, varR.max())
+    return float(worst)
 
 
 def _as_count(x, name, minimum):

@@ -340,12 +340,17 @@ def _tilt_mode(c0, t, sk):
     return m, h, dm_c, dh_c, dm_t, dh_t
 
 
-def _choice_terms(mu, V, choice, s, F, W, tilt=True, score=True):
+def _choice_terms(mu, V, choice, s, F, W, tilt=True, score=True,
+                  split=None):
     """Per-observation log P(choice), d/dmu and d/dV on one node set.
     V is gauge-centred; F holds (factor^r, own-noise) node columns for
     the N(0, I) measure. With tilt, the own-noise column is moved per
     observation (see _tilt_mode). score=False returns (lp, None, None)
-    and skips the score's node arrays; lp is the same to the bit."""
+    and skips the score's node arrays; lp is the same to the bit.
+    With split (and score), a fourth return (T, 2) holds each
+    observation's posterior mass on the nodes before index split and on
+    those from it on, each summed directly (one is not 1 minus the
+    other, which cancels where the other is near 1)."""
     T, J = mu.shape
     r = V.shape[1]
     Fq, xq = F[:, :r], F[:, r]
@@ -354,6 +359,7 @@ def _choice_terms(mu, V, choice, s, F, W, tilt=True, score=True):
     lp = np.zeros(T)
     dmu = np.zeros((T, J))
     dV = np.zeros((T, J, r))
+    mass = np.zeros((T, 2)) if split is not None else None
     half_log2pi = 0.5 * np.log(2 * np.pi)
     for k in range(J):
         idx = np.where(choice == k)[0]
@@ -393,6 +399,9 @@ def _choice_terms(mu, V, choice, s, F, W, tilt=True, score=True):
             continue
         lam = np.exp(-0.5 * A * A - half_log2pi - logPhi)
         omega = pw / rs[:, None]
+        if mass is not None:
+            mass[idx, 0] = omega[:, :split].sum(axis=1)
+            mass[idx, 1] = omega[:, split:].sum(axis=1)
         wl = omega[None, :, :] * lam / sj[:, :, None]          # (R, Ti, Q)
         dc = wl.sum(axis=2)                                    # (R, Ti)
         H = wl @ Fq                                            # (R, Ti, r)
@@ -412,6 +421,8 @@ def _choice_terms(mu, V, choice, s, F, W, tilt=True, score=True):
         dV[idx[None, :], rv[:, None]] -= H
     if not score:
         return lp, None, None
+    if mass is not None:
+        return lp, dmu, dV, mass
     return lp, dmu, dV
 
 
@@ -491,6 +502,29 @@ def _choice_pair(mu, V, choice, D):
 QZ_SMALL, QZ_LARGE, QZ_LARGE_FROM_J = 7, 11, 6
 
 
+# The factor tensor's order rises with the loading sharpness (#1060).
+# Seven nodes per factor resolve the conditional choice probability only
+# while it is smooth on the prior scale; its transitions in f narrow like
+# 1/sharpness. Against scipy's MVN on random J = 3-8 fields the fixed 7^r
+# tensor was off by up to 2.6e-3 nats at smooth sharpness 1-1.5 and 0.16
+# at 2.5-2.9 (rank 1; 0.061 at rank 2), and the exchangeable three-way
+# race priced 0.3296 against 1/3. More own-noise nodes did nothing.
+# Past _FACTOR_LADDER_BAND the tensor has _FACTOR_QF_HIGH[r] nodes per
+# factor: 31 at rank 1 (max error 6e-4 up to the Sobol window, for about
+# 1.8-2x the time) and 11 at rank 2 (1.1e-2 at 2.5-2.9, median 4.9e-4
+# from 3.9e-3, for 2x; 15 nodes would halve that error at 3x). Across
+# the band the probability is the C1 blend of the two tensors and the
+# score carries the weight's derivative, as at the Sobol switch (#420,
+# #1063). Below the band the 7^r tensor was already within the own-noise
+# error and is kept to the bit, as is everything past the Sobol switch.
+# Rank 3+ keeps 7^3: an 11^3 tensor is 7000 nodes. Neither a lower Sobol
+# switch (untilted, 2.7e-2 off on rare choices even at sharpness 0.5)
+# nor a Laplace-recentred factor grid (up to 1 nat off on rare choices
+# with the independent-rival surrogate) was better.
+_FACTOR_LADDER_BAND = (0.8, 1.0)
+_FACTOR_QF_HIGH = {1: 31, 2: 11}
+
+
 def default_qz(J):
     """The own-noise order used when Qz is None: 7 below J = 6, 11 from
     J = 6 (#173)."""
@@ -557,12 +591,41 @@ def _choice_logprob_terms(mu, V, D=None, choice=None, Qf=7, Qz=None,
     if ratio > 1.0:
         Qz = int(min(4 * Qz, np.ceil(Qz * ratio)))
     w, dw = _blend_weight(sharp)
+    # The Hermite tensor's order: the caller's Qf, or past the ladder band
+    # the higher one (#1060). A caller already at or above that order
+    # keeps their tensor throughout, and rank 0 and 3+ have no ladder.
+    qh = _FACTOR_QF_HIGH.get(r)
+    if w < 1.0 and qh is not None and Qf < qh:
+        wh, dwh = _band_weight(sharp, _FACTOR_LADDER_BAND)
+    else:
+        wh, dwh = 0.0, 0.0
+    if 0.0 < wh < 1.0:
+        # Inside the ladder band. Both tensors carry the same own-noise
+        # tilt, so the blend (1 - u) P_lo + u P_hi is ONE rule on the
+        # union of their nodes with weights (1 - u) W_lo and u W_hi: a
+        # single pass. Its score with the weights held is the blend's mu
+        # and loading score; the weight's own derivative adds
+        # (P_hi - P_lo) / P * du/dsharp * dsharp/dV, where P_hi / P is
+        # the posterior mass on the high nodes over u and P_lo / P the
+        # mass on the low nodes over 1 - u.
+        Fl, Wl = nodes_for_likelihood(r, Qf, Qz, 0.0)
+        Fh, Wh = nodes_for_likelihood(r, qh, Qz, 0.0)
+        F = np.vstack([Fl, Fh])
+        Wt = np.concatenate([(1.0 - wh) * Wl, wh * Wh])
+        if not score:
+            return _choice_terms(mu, Vc, choice, s, F, Wt, score=False)
+        lp, dmu, dV, ab = _choice_terms(mu, Vc, choice, s, F, Wt,
+                                        split=len(Fl))
+        gw = (ab[:, 1] / wh - ab[:, 0] / (1.0 - wh)) * dwh      # (T,)
+        dV = dV + gw[:, None, None] * sharp_grad[None, :, :]
+        return lp, dmu, dV
+    Qg = qh if wh == 1.0 else Qf
     if w == 0.0 or w == 1.0:
-        F, Wt = nodes_for_likelihood(r, Qf, Qz, sharp)
+        F, Wt = nodes_for_likelihood(r, Qg, Qz, sharp)
         return _choice_terms(mu, Vc, choice, s, F, Wt, tilt=(w == 0.0),
                              score=score)
-    # inside the blend window: both rules, mixed in probability
-    Fg, Wg = nodes_for_likelihood(r, Qf, Qz, 0.0)
+    # inside the Sobol blend window: both rules, mixed in probability
+    Fg, Wg = nodes_for_likelihood(r, Qg, Qz, 0.0)
     Fs, Ws = nodes_for_likelihood(r, Qf, Qz, np.inf)
     lg, dmg, dVg = _choice_terms(mu, Vc, choice, s, Fg, Wg, score=score)
     ls, dms, dVs = _choice_terms(mu, Vc, choice, s, Fs, Ws, tilt=False,
@@ -584,7 +647,22 @@ def check_choice(choice, T, J):
     """The label contract shared by every MNP boundary that consumes
     observed choices: exactly one finite integer label in 0..J-1 per
     observation. Returns the labels as an int array."""
+    # a masked entry is a missing label and a bool is not a label: the
+    # #915/#928 rules as_labels applies (np.asarray keeps a masked
+    # payload, and [True, False] read as alternatives 1 and 0)
+    if np.ma.isMaskedArray(choice) and np.ma.getmaskarray(choice).any():
+        raise ValueError("choice has a masked (missing) label; drop those "
+                         "observations deliberately")
     choice = np.asarray(choice)
+    if choice.dtype == bool or (choice.dtype == object and any(
+            isinstance(c, (bool, np.bool_)) for c in choice.ravel())):
+        raise ValueError("choice must hold integer alternative indices, not booleans")
+    if choice.dtype.kind in "OUS":
+        if not all(isinstance(c, (int, np.integer, float, np.floating)) for c in choice.ravel()):
+            raise ValueError("choice must hold integer alternative indices")
+        choice = choice.astype(float)          # e.g. an object array of ints
+    if choice.dtype.kind == "c":
+        raise ValueError("choice must hold integer alternative indices, not complex numbers")
     if choice.ndim != 1 or choice.shape[0] != T:
         raise ValueError(
             f"choice must have one entry per observation: got shape "
@@ -609,6 +687,19 @@ def check_choice(choice, T, J):
     return choice.astype(int, copy=False)
 
 
+def _require_finite(A, name, what):
+    """Refuse NaN and +-inf by name and index; shared by the exact
+    multinomial-probit boundaries (#901)."""
+    bad = np.argwhere(~np.isfinite(A))
+    if bad.size:
+        idx = tuple(int(i) for i in bad[0])
+        raise ValueError(
+            f"{name}{list(idx)} = {float(A[idx])!r} is not finite; {what} must be "
+            f"a finite number, and {bad.shape[0]} of {A.size} entries are not. "
+            "A non-finite entry poisons the quadrature and the rank checks "
+            "instead of meaning a deterministic limit")
+
+
 def choice_loglik_and_score(mu, V, choice, D=None, Qf=7, Qz=None):
     """Log-likelihood of observed argmax choices, with analytic score.
 
@@ -618,7 +709,10 @@ def choice_loglik_and_score(mu, V, choice, D=None, Qf=7, Qz=None):
     V : (J, r) factor loadings.
     choice : (T,) chosen alternative indices in 0..J-1.
     D : (J,) idiosyncratic variances, default all ones.
-    Qf : Gauss-Hermite order per factor dimension.
+    Qf : Gauss-Hermite order per factor dimension at low sharpness. At
+        rank 1 and 2 a Qf below 31 (rank 1) or 11 (rank 2) is raised to
+        that order past smooth sharpness 1, blended in over 0.8-1.0
+        (#1060); a Qf at or above that order is used throughout.
     Qz : own-noise Gauss-Hermite order; None (default) takes 7 below
         J = 6 and 11 from J = 6 (#173).
 
@@ -629,8 +723,9 @@ def choice_loglik_and_score(mu, V, choice, D=None, Qf=7, Qz=None):
     dV : (J, r) gradient in the loadings.
 
     J = 2 is the Gaussian contrast in closed form. For J >= 3 the own
-    noise and the factors are integrated on the Hermite tensor or, past
-    sharpness 3, scrambled Sobol, blended continuously across the switch.
+    noise and the factors are integrated on the Hermite tensor (its
+    factor order rising with the sharpness, #1060) or, past sharpness 3,
+    scrambled Sobol, blended continuously across each change of rule.
     Known limits at J >= 3: a large observed utility gap puts the mass
     outside the fixed own-noise nodes (#128, #270), and a near-
     deterministic rival makes the integrand a step (#352). The Hermite
@@ -643,6 +738,11 @@ def choice_loglik_and_score(mu, V, choice, D=None, Qf=7, Qz=None):
     """
     mu = np.asarray(mu, dtype=float)
     T, J = mu.shape
+    # A non-finite utility is not a deterministic limit here: at J >= 3
+    # it returned a NaN log-likelihood with NaN mu-scores and exactly
+    # zero loading scores, and an optimiser took those as a flat
+    # direction (#901). V and D meet the same rule in their own doors.
+    _require_finite(mu, "mu", "a utility")
     # Every observation must be accounted for. The loop below walks the
     # LEGAL labels and gathers the rows matching each, so a row whose
     # choice is outside 0..J-1 is never visited: it contributed nothing
@@ -672,6 +772,140 @@ def choice_loglik_and_score(mu, V, choice, D=None, Qf=7, Qz=None):
 # softmax is a sharper integrand and turns over sooner, which is why
 # these two numbers differ (#272).
 _FACTOR_SOBOL_SHARP = 2.0
+
+
+# A RANKING is sharper than the single choice the table above measured:
+# a k-stage order multiplies k softmaxes, so the factor posterior has
+# width about 1/(sharp*sqrt(k)), and the fixed tensor -- centred at the
+# prior mode with prior width -- misses it. J = 5, rank 1, sharpness
+# 1.91, a full order: Qf=7 put the probability 9.4% high (0.090 nats)
+# and the loading score at about half its true value; full orders of 10
+# at sharpness 1.9 were up to 0.32 nats off, against 2e-3 above 2 where
+# Sobol takes over (#1017). So the Gauss-Hermite branch gates on
+# sharp*sqrt(k): above this value the same Qf tensor is moved to the
+# ranking's posterior mode and scaled by its curvature (adaptive
+# Gauss-Hermite). Over 210 gated random fields (rank 1 and 2, 8 seeds)
+# the worst error went from 0.077 to 3.0e-4 nats, at 2-4x the cost of
+# those observations only. Below the gate, and for every length-1
+# order, the rule is the fixed tensor, bitwise unchanged; just under it
+# (k >= 2) the fixed tensor is within 1.4e-3.
+_RANKING_ADAPTIVE_GATE = 2.0
+
+
+# Both gates above were hard switches between rules that do not agree
+# exactly, so the log-likelihood jumped as a loading or the temperature
+# crossed one -- up to 6e-4 nats per observation at the adaptive gate and
+# 4e-4 at the Sobol one -- and the score could not see it (#1063). Across
+# a band beside each gate the probability is the blend of the two rules'
+# probabilities with the C1 smoothstep weight of the gate's own statistic
+# (sharpness * sqrt(k) for the adaptive rule, sharpness for Sobol), and
+# the score carries the blend's derivative, as the MNP choice likelihood
+# does at its own switch (#420). Each band sits on the side of its gate
+# where the rule it blends in is the more accurate one: below the
+# adaptive gate (median error against a 40-node adaptive reference
+# 2.5e-5 -> 6.9e-6 over 400 observations in the band) and ABOVE the Sobol
+# one, where the Gauss-Hermite side is blended into the 2^10 cloud; a
+# band below it would have moved the median error from 1.8e-5 to 2.2e-4.
+# Every observation outside both bands is priced exactly as before. For
+# k >= 2 the adaptive statistic is past its gate wherever the Sobol band
+# lies, so no observation is in both.
+_RANKING_SOBOL_BAND = (_FACTOR_SOBOL_SHARP, _FACTOR_SOBOL_SHARP + 0.2)
+_RANKING_ADAPTIVE_BAND = (_RANKING_ADAPTIVE_GATE - 0.2,
+                          _RANKING_ADAPTIVE_GATE)
+
+
+def _band_weight(x, band):
+    """(w, dw/dx): C1 smoothstep from 0 at band[0] to 1 at band[1];
+    0 at and below the band, 1 from its top. Only the gate point itself
+    changes rule: the hard gate (`x > gate`) priced it on the old one."""
+    lo, hi = band
+    if not x > lo:
+        return 0.0, 0.0
+    if x >= hi:
+        return 1.0, 0.0
+    t = (x - lo) / (hi - lo)
+    return t * t * (3.0 - 2.0 * t), 6.0 * t * (1.0 - t) / (hi - lo)
+
+
+def _sharpness_grad(V):
+    """d sharpness_bound(V) / dV (D = 1): sqrt(2) times the unit centred
+    row of largest norm, through the centring. Exact off row-norm ties,
+    where the statistic has a cusp; there the first tied row's one-sided
+    derivative."""
+    C = V - V.mean(axis=0)
+    nrm = np.sqrt((C ** 2).sum(axis=1))
+    i = int(np.argmax(nrm))
+    G = np.zeros_like(V)
+    if nrm[i] > 0.0:
+        G[i] = np.sqrt(2.0) * C[i] / nrm[i]
+    return G - G.mean(axis=0)
+
+
+def _ranking_mode(mu_t, V, order, tau, iters=30, tol=1e-10):
+    """Mode and Hessian of the log factor posterior of ONE ranking,
+    -|f|^2/2 + log PL(order | f), by backtracking Newton from f = 0.
+
+    Strictly concave: the PL log-likelihood is concave in f (each stage
+    is a log-softmax of an affine map) and the prior term is strictly
+    concave, so the Hessian H = -I - sum_s Cov_s(V/tau) has every
+    eigenvalue at most -1 and the Newton step is always an ascent
+    direction. The k stages are evaluated together, one (k, J) mask of
+    the runners still alive at each stage."""
+    J, r = V.shape
+    k = len(order)
+    order = np.asarray(order)
+    # A loading common to every alternative cancels from each stage's
+    # softmax, so centring is exact here, and it keeps the second moments
+    # below from overflowing on a huge common loading.
+    V = V - V.mean(axis=0)
+    Vt = V / tau
+    alive = np.ones((k, J), dtype=bool)
+    for s in range(1, k):
+        alive[s] = alive[s - 1]
+        alive[s, order[s - 1]] = False
+
+    def evaluate(f):
+        z = (mu_t + V @ f) / tau
+        Z = np.where(alive, z[None, :], -np.inf)
+        m = Z.max(axis=1, keepdims=True)
+        E = np.exp(Z - m)
+        S = E.sum(axis=1, keepdims=True)
+        sm = E / S                                   # (k, J) stage softmaxes
+        lp = z[order].sum() - (m[:, 0] + np.log(S[:, 0])).sum() - 0.5 * f @ f
+        Vbar = sm @ Vt                               # (k, r) stage means
+        g = (Vt[order] - Vbar).sum(axis=0) - f
+        H = -(np.einsum("sj,ja,jb->ab", sm, Vt, Vt) - Vbar.T @ Vbar) - np.eye(r)
+        return lp, g, H
+
+    f = np.zeros(r)
+    lp, g, H = evaluate(f)
+    for _ in range(iters):
+        step = -np.linalg.solve(H, g)
+        a = 1.0
+        while True:
+            f2 = f + a * step
+            lp2, g2, H2 = evaluate(f2)
+            if lp2 >= lp - 1e-12 or a < 1e-6:
+                break
+            a *= 0.5
+        f, lp, g, H = f2, lp2, g2, H2
+        if np.abs(a * step).max() < tol:
+            break
+    return f, H
+
+
+def _ranking_adaptive_nodes(mu_t, V, order, tau, X):
+    """The prior-centred tensor X moved to the ranking's factor
+    posterior: F = f* + X L^T with L L^T = (-H)^{-1}, and the log
+    importance correction phi(F) / N(F; f*, L L^T) to add to the log
+    weights (the Qf weights integrate against N(0, I), so the moved rule
+    integrates against the Laplace proposal)."""
+    fm, H = _ranking_mode(mu_t, V, order, tau)
+    L = np.linalg.cholesky(np.linalg.inv(-H))
+    F = fm + X @ L.T
+    logw = (-0.5 * (F ** 2).sum(axis=1) + 0.5 * (X ** 2).sum(axis=1)
+            + np.log(np.diag(L)).sum())
+    return F, logw
 
 
 def _factor_nodes(r, Qf=7, nodes_log2=10, sharp=0.0):
@@ -729,6 +963,21 @@ def ranking_loglik_and_score(mu, V, orders, temperature=1.0, Qf=7,
         ranking or any top-k prefix.
     temperature : Gumbel scale tau (softmax weights exp(mu/tau)).
 
+    Factor rule: at rank one or two with loading sharpness at most 2 a
+    Qf-node Gauss-Hermite tensor; past that, Sobol. A ranking of length
+    k >= 2 with sharpness * sqrt(k) above 2 moves that tensor to its own
+    factor posterior (adaptive Gauss-Hermite, #1017). Neither switch is a
+    jump: the fixed and adaptive rules are blended over sharpness *
+    sqrt(k) in (1.8, 2], and the Gauss-Hermite and Sobol rules over
+    sharpness in (2, 2.2), in probability with a C1 weight whose
+    derivative the score carries (#1063). The score is the
+    exact derivative of the rule with its nodes held where they were
+    placed; finite differences of the value also move the nodes, and
+    that term is of the size of the quadrature error (measured 5e-4
+    relative on the loading score, 2.4e-4 on the utility score, full
+    rankings of 5 at sharpness in [1, 2), where the old rule's score was
+    19% off the true one).
+
     Returns
     -------
     loglik : float
@@ -737,6 +986,9 @@ def ranking_loglik_and_score(mu, V, orders, temperature=1.0, Qf=7,
     """
     mu = np.asarray(mu, dtype=float)
     T, J = mu.shape
+    # the #901 guard choice_loglik_and_score has: NaN or +inf returned a
+    # NaN log-likelihood and score with no error
+    _require_finite(mu, "mu", "a utility")
     V = as_loadings(V, J)
     r = V.shape[1]
     # finite and positive, BEFORE the sharpness dispatch: -1 fitted the
@@ -762,33 +1014,108 @@ def ranking_loglik_and_score(mu, V, orders, temperature=1.0, Qf=7,
     # the sharpness is measured on.
     sharp = sharpness_bound(V / tau, n=J)
     F, W = _factor_nodes(r, Qf=Qf, nodes_log2=nodes_log2, sharp=sharp)
-    Q = len(F)
     shift = (F @ V.T)                       # (Q, J)
+    # Order lengths whose ranking posterior is too narrow for the fixed
+    # tensor (#1017): decided once per length, so observations outside
+    # the gate pay one set lookup. Only the Gauss-Hermite branch (rank 1
+    # or 2, sharpness <= 2) is ever adapted; Sobol and rank 0 are not.
+    gh_branch = 0 < r <= 2 and not sharp > _FACTOR_SOBOL_SHARP
+    adaptive = set()
+    lengths = {len(o) for o in orders}
+    if gh_branch:
+        adaptive = {k for k in lengths
+                    if k >= 2 and sharp * np.sqrt(k) > _RANKING_ADAPTIVE_GATE}
+    # The blend bands beside the two gates (#1063): per order length, the
+    # rule blended in, its weight and the weight's derivative in
+    # sharpness. Lengths in neither band take one dict lookup.
+    blend = {}
+    if gh_branch:
+        for k in lengths - adaptive:
+            if k >= 2:
+                wa, dwa = _band_weight(sharp * np.sqrt(k),
+                                       _RANKING_ADAPTIVE_BAND)
+                if wa > 0.0:
+                    blend[k] = ("adaptive", wa, dwa * np.sqrt(k))
+    elif 0 < r <= 2 and sharp < _RANKING_SOBOL_BAND[1]:
+        # just past the Sobol gate: F is the cloud, and the Gauss-Hermite
+        # side blended in is the rule the length had at the gate --
+        # adaptive for k >= 2 (sharp * sqrt(k) > 2.8 there), fixed for k = 1
+        ws, dws = _band_weight(sharp, _RANKING_SOBOL_BAND)
+        Fg, Wg = _factor_nodes(r, Qf=Qf, nodes_log2=nodes_log2, sharp=0.0)
+        shift_g = Fg @ V.T
+        for k in lengths:
+            blend[k] = ("adaptive" if k >= 2 else "fixed", 1.0 - ws, -dws)
+    if blend:
+        # sharp is measured on V / tau, so d sharp / dV carries 1 / tau
+        sharp_grad = _sharpness_grad(V / tau) / tau
+        if gh_branch:
+            Fg, Wg = F, W
     loglik = 0.0
     dmu = np.zeros((T, J))
     dV = np.zeros((J, r))
     for t in range(T):
         order = orders[t]
-        z = (mu[t][None, :] + shift) / tau  # (Q, J)
-        logp_q = np.zeros(Q)
-        grad_q = np.zeros((Q, J))
-        alive = np.ones(J, dtype=bool)
-        for w in order:
-            zz = np.where(alive[None, :], z, -np.inf)
-            m = zz.max(axis=1, keepdims=True)
-            lse = m[:, 0] + np.log(np.exp(zz - m).sum(axis=1))
-            logp_q += z[:, w] - lse
-            sm = np.exp(zz - lse[:, None])
-            sm[:, ~alive] = 0.0
-            grad_q[:, w] += 1.0
-            grad_q -= sm
-            alive[w] = False
-        mstar = logp_q.max()
-        pw = W * np.exp(logp_q - mstar)
-        tot = pw.sum()
-        omega = pw / tot                     # posterior node weights
-        loglik += mstar + np.log(tot)
-        g_mu = (omega[:, None] * grad_q).sum(axis=0) / tau
+        if len(order) in adaptive:
+            Ft, logw = _ranking_adaptive_nodes(mu[t], V, order, tau, F)
+            ll, g_mu, g_V = _ranking_obs_terms(
+                mu[t], (Ft @ V.T), order, tau, Ft, W, logw)
+        else:
+            ll, g_mu, g_V = _ranking_obs_terms(
+                mu[t], shift, order, tau, F, W, None)
+        b = blend.get(len(order))
+        if b is not None:
+            kind, w, dw = b
+            if kind == "fixed":
+                l2, m2, v2 = _ranking_obs_terms(
+                    mu[t], shift_g, order, tau, Fg, Wg, None)
+            else:
+                Ft, logw = _ranking_adaptive_nodes(mu[t], V, order, tau, Fg)
+                l2, m2, v2 = _ranking_obs_terms(
+                    mu[t], (Ft @ V.T), order, tau, Ft, Wg, logw)
+            if w == 1.0:                # the adaptive gate point itself
+                ll, g_mu, g_V = l2, m2, v2
+            else:
+                lb = np.logaddexp(np.log1p(-w) + ll, np.log(w) + l2)
+                a = np.exp(np.log1p(-w) + ll - lb)   # posterior rule weights
+                c = np.exp(np.log(w) + l2 - lb)
+                # d lb / dV through w: (P_new - P_old) / P * dw * dsharp/dV
+                gw = (np.exp(l2 - lb) - np.exp(ll - lb)) * dw
+                ll, g_mu = lb, a * g_mu + c * m2
+                g_V = a * g_V + c * v2 + gw * sharp_grad
+        loglik += ll
         dmu[t] += g_mu
-        dV += ((omega[:, None] * grad_q).T @ F) / tau
+        dV += g_V
     return float(loglik), dmu, dV
+
+
+def _ranking_obs_terms(mu_t, shift, order, tau, Ft, W, logw):
+    """One ranking on one node rule: (log P, d/dmu_t, d/dV with the nodes
+    held fixed). shift = Ft @ V.T; logw the adaptive rule's log importance
+    correction, or None."""
+    J = len(mu_t)
+    Q = len(Ft)
+    z = (mu_t[None, :] + shift) / tau      # (Q, J)
+    logp_q = np.zeros(Q)
+    grad_q = np.zeros((Q, J))
+    alive = np.ones(J, dtype=bool)
+    for w in order:
+        zz = np.where(alive[None, :], z, -np.inf)
+        m = zz.max(axis=1, keepdims=True)
+        lse = m[:, 0] + np.log(np.exp(zz - m).sum(axis=1))
+        logp_q += z[:, w] - lse
+        sm = np.exp(zz - lse[:, None])
+        sm[:, ~alive] = 0.0
+        grad_q[:, w] += 1.0
+        grad_q -= sm
+        alive[w] = False
+    if logw is not None:
+        logp_q = logp_q + logw               # importance-corrected log weights
+    mstar = logp_q.max()
+    pw = W * np.exp(logp_q - mstar)
+    tot = pw.sum()
+    omega = pw / tot                         # posterior node weights
+    g_mu = (omega[:, None] * grad_q).sum(axis=0) / tau
+    # the nodes this observation was integrated on: the score is exact
+    # for them held fixed (see ranking_loglik_and_score)
+    g_V = ((omega[:, None] * grad_q).T @ Ft) / tau
+    return mstar + np.log(tot), g_mu, g_V
