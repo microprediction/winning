@@ -1,13 +1,16 @@
 # Reproducing "Scalable Inversion of Contests with Correlated Performances"
 
-Every number in `main.tex` is produced by a committed, seeded script in this
-repository. `CLAIMS.md` maps each claim to its `make` target and script.
+Every table in `main.tex`, and most numbers in its text, are produced by a
+committed, seeded script in this repository. `MANIFEST.md` maps each table
+and number to its command, seed and log line, and its last section lists
+the numbers that no committed command regenerates. `CLAIMS.md` is the
+history of those mappings through review.
 
 ## One command
 
 ```sh
 git clone https://github.com/microprediction/winning && cd winning
-git checkout paper-r12
+git checkout paper-r12      # paper-r13 adds the manifest and the revision's analyses
 cd docs/latex_src/general_inversion
 make env      # Python 3.12 virtualenv at the repository root (needs uv)
 make          # the accuracy claims, about 15 minutes
