@@ -12,7 +12,7 @@ two differ, this file is the current one.
 
 ```sh
 git clone https://github.com/microprediction/winning && cd winning
-git checkout paper-r12
+git checkout paper-r13      # paper-r12 plus this manifest and the files marked (r13)
 cd docs/latex_src/general_inversion
 make env            # Python 3.12 virtualenv from requirements.lock (needs uv)
 make <target>       # one row of the tables below; log in out/<target>.log
