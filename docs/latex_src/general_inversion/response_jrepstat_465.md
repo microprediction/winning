@@ -1,7 +1,7 @@
 # Response to the decision on submission #465 (minor revision)
 
 Draft for the revision page. "Done" items name where the change is.
-Section numbers are those of the revised PDF (44 pages).
+Section numbers are those of the revised PDF (43 pages).
 
 ## Required
 
@@ -32,8 +32,8 @@ Section numbers are those of the revised PDF (44 pages).
    "every number" was too strong: twelve groups of in-text figures
    (development measurements, several of them describing rules the code
    no longer contains) have no committed command. The manifest lists
-   them in its last section, and the footnote and `REPRODUCE.md` now say
-   "tables". The revision's own analyses are three small scripts at
+   them in its last section. The title footnote no longer claims every
+   number, and Section 9 and `REPRODUCE.md` point to that list. The revision's own analyses are three small scripts at
    paper-r13.
 
 ## Recommended

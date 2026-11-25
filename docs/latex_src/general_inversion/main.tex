@@ -223,7 +223,7 @@ extreme scale also, in around twelve minutes. In both runs the round-trip log-pr
 
 Comparisons die well before this scale, as far as we know. Other approaches are considered in detail presently, but briefly, if the comparison set is taken to be those approaches providing smoothness suitable for inversion, GHK is generally regarded as leading that category.
 
-At the sizes where both run, GHK is slower. The comparator is our own Rust implementation, with pseudorandom draws and no variance reduction (\S\ref{sec:num}); no third-party GHK implementation was timed. At $n=200$ it is over a hundred times slower with $R=10^{4}$ draws and about eleven times slower with $R=10^{3}$. GHK's empirical complete-vector cost is superquadratic and steepening as we pass beyond that scale.\footnote{Empirically, the log-log slope is
+From $n=50$ upward GHK is slower. The comparator is our own Rust implementation, with pseudorandom draws and no variance reduction (\S\ref{sec:num}); no third-party GHK implementation was timed. At $n=200$ it is over a hundred times slower with $R=10^{4}$ draws and about eleven times slower with $R=10^{3}$. GHK's empirical complete-vector cost is superquadratic and steepening as we pass beyond that scale.\footnote{Empirically, the log-log slope is
 $1.9$ from $n=10$ to $200$ (at $R=10^{4}$) and $2.9$ from $200$ to $1000$
 (at $R=10^{3}$). The times at $R=10^{3}$ were $0.18$, $1.69$, and $19.4$
 seconds at $n=200,500,1000$, scaling by about ten at $R=10^{4}$.} In fact in our tests, the gap to our method grows almost quadratically with $n$ beyond $n=200$ because in that regime (measured from $n=200$ to $1000$ at $R=10^{3}$) GHK scales at roughly $n^{2.9}$ while our shared-field pass is close to linear in $n$ at fixed
@@ -615,7 +615,7 @@ $\beta\sim N(b,\Omega)$, utilities have covariance
 $X\Omega X'+\mathrm{diag}(D)$, which is the factor grammar with loadings
 $V=X\Omega^{1/2}$ of rank $d$ and idiosyncratic variances $D$.
 
-However, we must pay attention to numerical issues and lattice choice in particular. The integral over $f$ is $k$-dimensional, and experiments have taught us that the rule that discretizes it
+We must pay attention to numerical issues and lattice choice in particular. The integral over $f$ is $k$-dimensional, and experiments have taught us that the rule that discretizes it
 has to depend on $k$ and the shape of the integrand.
 
 Gauss--Hermite is the natural rule for a single Gaussian dimension.
@@ -1409,8 +1409,8 @@ benchmark families but not universal. We can try to break the algorithm and cons
 correlated fields on which the damped iteration stalls at a residual
 near $10^{-4}$ instead of converging: at $n=200$, rank-two loadings drawn
 $N(0,1.6^2)$ against idiosyncratic variances in $[0.15,0.25]$, priced on
-a fixed $15\times15$ Gauss--Hermite rule
-(\texttt{research/experiments/exp23\_newton\_cg/run\_newton\_cg3.py}).
+a fixed $15\times15$ Gauss--Hermite rule (\texttt{run\_newton\_cg3.py} in
+\texttt{research/experiments/exp23\_newton\_cg}).
 The mechanism is spectral. Strongly correlated alternatives have large
 mutual tie conductances $w_{ij}$, so their own-slopes
 $|\tilde s_i|=\sum_{j\ne i}w_{ij}$ are large, while a coordinated shift of
@@ -1544,7 +1544,7 @@ evaluated each sweep at $O(n^2)$. A sweep that fails to improve it is
 discarded, and the alternation returns the best iterate.
 \item The working residual is then
 projected once, $R=P\,(\Sigma-VV'-\mathrm{diag}\,D_0)\,P$: the raw residual
-still contains the choice-irrelevant common component the quotient fit
+still contains the choice-irrelevant common component the stage~1 fit
 rightly ignored, and letting later stages chase it manufactures projected
 error (measurably: the raw-residual variant distorts an input already of the
 form $VV'+\mathrm{diag}(D)$ by $1.7\times10^{-2}$ of total variation;
@@ -2256,7 +2256,7 @@ antithetics, no quasi-random sequence, no variable-reordering heuristic,
 parallelized across alternatives. No third-party GHK implementation
 (Stata's \texttt{cmmprobit}, R's \texttt{mlogit} or \texttt{mvProbit})
 was timed, and the implementation was not checked against one; the
-speed ratios in the abstract and introduction are against this
+speed ratios in the introduction are against this
 implementation only. Cost figures are complete-vector; the
 large-$n$ table of Appendix~\ref{app:extrap} is an extrapolation of the measured
 law and is displayed as such.

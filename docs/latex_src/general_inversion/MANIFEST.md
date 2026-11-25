@@ -53,7 +53,7 @@ make <target>       # one row of the tables below; log in out/<target>.log
 
 ## Numbers in the text
 
-### Abstract and Section 1
+### Section 1
 
 | Number | Command | Seed | Read |
 |---|---|---|---|
