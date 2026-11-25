@@ -6,7 +6,8 @@ and one constructed stall case. This battery characterizes it on random
 fields: for each grammar and each strength of shared variation it draws
 SEEDS fields, prices them with the shipped forward map, inverts the
 result with the default settings (tolerance 1e-8 on the log-probability
-residual, at most 60 sweeps), and records the solver's own report.
+residual; at most 60 sweeps for the independent and factor grammars and
+120 for blocks), and records the solver's own report.
 
 Per cell it prints the fraction converged, the median and largest sweep
 count, and the largest residual reached.

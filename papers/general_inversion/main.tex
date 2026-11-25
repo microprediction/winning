@@ -81,9 +81,9 @@ changing the method, and supplied the estimation and testing apparatus,
 which is why the family carries both names.\footnote{Mosteller's
 relaxation is an early sighting of the identification this paper relies
 on throughout. With equal dispersions and a common correlation,
-$\Sigma=\sigma^2[(1-\rho)I+\rho\mathbf{1}\mathbf{1}^{\top}]$, and since
-the centering projection $P=I-\tfrac1n\mathbf{1}\mathbf{1}^{\top}$ has
-$P\mathbf{1}=0$ the common correlation component --- that component, not
+$\Sigma=\sigma^2[(1-\rho)I+\rho\mathbf{1}\mathbf{1}^{\top}]$. The
+centering projection $P=I-\tfrac1n\mathbf{1}\mathbf{1}^{\top}$ has
+$P\mathbf{1}=0$, so the common correlation component --- that component, not
 the whole covariance --- lies in the choice-irrelevant direction:
 $P\Sigma P=\sigma^2(1-\rho)P$, observationally equivalent to independent
 noise at variance $\sigma^2(1-\rho)$. The two price every contest
@@ -1432,7 +1432,8 @@ rank-two factor and blocks of ten, with loadings scaled by $0.25$,
 $0.5$, $1$ and $2$, and ten seeded fields per cell.
 
 Of $130$ inversions, $125$ reach the $10^{-8}$ tolerance within the
-default $60$ sweeps. The median sweep count rises with the loading
+default sweep cap, which is $60$ for the independent and factor grammars
+and $120$ for blocks. The median sweep count rises with the loading
 scale, from $10$ to $21$ at scale $0.25$ to $53$ to $58$ at scale $2$.
 The five failures are all rank-one factor fields at scale $2$. They stop
 at the sweep cap with a residual of at most $9.5\times10^{-8}$.
