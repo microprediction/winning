@@ -303,7 +303,7 @@ prices and inverts the distribution the modeller actually specifies.
 \citet{mcculloch1994} sidestep the integral entirely by Gibbs sampling the latent
 utilities; \citet{imai2005} implement the marginal data-augmentation version
 in the \texttt{MNP} package, and \citet{loaizamaya2022} carry the Bayesian
-route to large choice sets by variational methods. For Bayesian inference
+route to large choice sets by Markov chain Monte Carlo under a factor-structured covariance. For Bayesian inference
 this is a complete and often excellent answer. It is simply answering a different question than the
 one benchmarked here: the cost moves into the Markov chain, the likelihood
 surface is never formed, and choice probabilities appear only as posterior
@@ -1001,9 +1001,9 @@ the diagonal of edge conductances $w_{ij}$,
    \qquad
    (Jh)_i=\sum_{j\ne i}w_{ij}\,(h_j-h_i),
 \]
-for any vector $h\in\R^n$ of ability perturbations. This is the discrete analogue of $-\operatorname{div}(a\nabla h)$: $Bh$ takes
+for any vector $h\in\R^n$ of ability perturbations. This is the discrete analogue of $\operatorname{div}(a\nabla h)$: $Bh$ takes
 differences across photo-finish boundaries, $W_eBh$ is the flux across
-them, $B^{\top}W_eBh$ the net flow into each winning region. The
+them, $-B^{\top}W_eBh$ the net flow into each winning region. The
 mass-one identity is the same theorem in dimension one, since
 $\sum_i f_i\prod_{j\ne i}S_j = \tfrac{d}{dt}(1-\prod_j S_j)$
 integrates to one; this is why the implementation's unnormalized mass
@@ -1937,9 +1937,8 @@ runs on synthetic data: fields, covariances and choices drawn from the
 model families themselves under stated seeds. The one real data set is
 the Fishing data, used for a single likelihood diagnostic. The applied
 uses named in the introduction (demand estimation, handicapping,
-portfolio weights read as choice probabilities) are supported to the
-extent these benchmarks support them. A real-data application is future
-work.
+portfolio weights read as choice probabilities) are not demonstrated on
+real data here. A real-data application is future work.
 
 \paragraph{Hardware and timing.} Every time in this paper was measured on
 one Apple Mac Studio (M3 Ultra: twenty performance and eight efficiency
@@ -2097,7 +2096,7 @@ On these three problems, refining from the default to $1025$ lattice
 points and $41$ Gauss--Hermite nodes per factor dimension moves the
 lattice answer by $3\times10^{-8}$ to $3\times10^{-7}$ in total
 variation. No probability moves by more than $10^{-7}$ and no log
-probability by more than $2\times10^{-5}$, the latter at probabilities
+probability by more than $3\times10^{-5}$, the latter at probabilities
 down to $2\times10^{-12}$ (\texttt{selfconv.py}). GHK error
 contracts as $O(R^{-1/2})$ and its measured complete-vector cost grows
 superquadratically: the log-log slope is $1.9$ from $n=10$ to $200$ at
@@ -2180,8 +2179,7 @@ $0.0112\pm0.0006$, nearly nineteen standard errors, winning $39$ of $40$
 replications; against $R=1000$ by $0.0017\pm0.0002$, seven standard
 errors (the unrounded ratio is $6.9$), winning $33$ of $40$.
 
-The $R=1000$ margin is small in absolute terms, which is the honest
-characterization: enough simulation draws do approach the exact answer,
+The $R=1000$ margin is small in absolute terms: enough simulation draws do approach the exact answer,
 at six times the cost per fit, and the surviving paired gap is
 consistent with finite-$R$ simulation bias rather than multinomial
 sampling noise, though pairing alone cannot rule out another systematic
@@ -2366,8 +2364,8 @@ the block, nested and tree kernels (\S\ref{sec:blocks}), and return of
 the merit function $W(\mu)$ from a field pass (\S\ref{sec:jac}).
 
 \section*{Competing interests}
-The author founded and owns microprediction.com, whose domain hosts the
-demonstration site. The author wrote and maintains the open-source
+The author's affiliation is microprediction.com, which the author founded
+and owns and whose domain hosts the demonstration site. The author wrote and maintains the open-source
 \texttt{winning} package (MIT license) that this paper benchmarks, wrote
 the Rust GHK implementation and the Python minimax-tilting
 implementation it is timed against, and wrote the cited prior method
