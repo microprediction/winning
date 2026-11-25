@@ -223,7 +223,7 @@ extreme scale also, in around twelve minutes (\texttt{bench.py invertmillion}). 
 
 Comparisons die well before this scale, as far as we know. Other approaches are considered in detail presently, but briefly, if the comparison set is taken to be those approaches providing smoothness suitable for inversion, GHK is generally regarded as leading that category.
 
-From $n=50$ upward GHK is slower. The comparator is our own Rust implementation, with pseudorandom draws and no variance reduction (\S\ref{sec:num}); no third-party GHK implementation was timed. At $n=200$ it is over a hundred times slower with $R=10^{4}$ draws and about eleven times slower with $R=10^{3}$. GHK's empirical complete-vector cost is superquadratic and steepening as we pass beyond that scale.\footnote{Empirically, the log-log slope is
+From approximately $n=50$ upward GHK is slower. The comparator is our own Rust implementation, with pseudorandom draws and no variance reduction (\S\ref{sec:num}); no third-party GHK implementation was timed. At $n=200$ it is over a hundred times slower with $R=10^{4}$ draws and about eleven times slower with $R=10^{3}$. GHK's empirical complete-vector cost is superquadratic and steepening as we pass beyond that scale.\footnote{Empirically, the log-log slope is
 $1.9$ from $n=10$ to $200$ (at $R=10^{4}$) and $2.9$ from $200$ to $1000$
 (at $R=10^{3}$). The times at $R=10^{3}$ were $0.18$, $1.69$, and $19.4$
 seconds at $n=200,500,1000$, scaling by about ten at $R=10^{4}$.} In fact in our tests, the gap to our method grows almost quadratically with $n$ beyond $n=200$ because in that regime (measured from $n=200$ to $1000$ at $R=10^{3}$) GHK scales at roughly $n^{2.9}$ while our shared-field pass is close to linear in $n$ at fixed
