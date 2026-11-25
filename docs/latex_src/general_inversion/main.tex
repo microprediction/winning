@@ -18,16 +18,8 @@
 
 \title{Scalable Inversion of Contests with Correlated Performances,\\
 Including Softmax and Multinomial Probit}
-\author{Peter Cotton\thanks{\texttt{peter.cotton@microprediction.com}. The reference
-implementation (Python), its parity-locked ports (R, Rust, JavaScript) and the seeded
-scripts behind the tables of this paper live at
-\texttt{github.com/microprediction/winning}; the tables were
-produced at repository tag \texttt{paper-r12}, package version
-\texttt{1.4.0}; the analyses added in revision are at tag
-\texttt{paper-r13} and run against the same package.
-\texttt{MANIFEST.md}, beside this paper's source in that
-repository, maps each table and number to its command and seed, and lists the
-numbers no committed command regenerates.}}
+\author{Peter Cotton\thanks{\texttt{peter.cotton@microprediction.com}. Code and
+reproduction manifest: \texttt{github.com/microprediction/winning} (\S\ref{sec:avail}).}}
 \date{Original version: 1 September 2026\\ This version: 25 November 2026}
 
 \begin{document}
@@ -2340,9 +2332,13 @@ interface, and a zero-dependency browser port drives a live demonstration at
 
 \paragraph{Reproduction.} \texttt{MANIFEST.md}, beside this paper's
 source in the repository, maps each table and each number in the text to
-the command that produces it at tag \texttt{paper-r12}, the seed it
+the command that produces it, the seed it
 uses, and the log line to read. Its last section lists the numbers in
-the text that no committed command regenerates. \texttt{REPRODUCE.md} gives the one-command
+the text that no committed command regenerates. The tables were produced
+at repository tag \texttt{paper-r12}, package version \texttt{1.4.0};
+the analyses added in revision are at tag \texttt{paper-r13} and run
+against the same package. The repository also holds the parity-locked
+ports (R, Rust, JavaScript). \texttt{REPRODUCE.md} gives the one-command
 build.
 
 \paragraph{Environment.} \texttt{requirements.lock} pins every Python
