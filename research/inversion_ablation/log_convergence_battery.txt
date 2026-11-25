@@ -1,0 +1,15 @@
+n=100, 10 seeds per cell, default solver settings
+grammar        scale  converged  sweeps med/max  worst residual  worst |mu err|  seconds
+independent        -   10/10      10 / 16      9.4e-09         6.1e-09        0
+factor rank 1   0.25   10/10      10 / 14      9.1e-09         6.6e-09        0
+factor rank 1    0.5   10/10      15 / 20      1.0e-08         6.9e-09        1
+factor rank 1      1   10/10      33 / 38      9.3e-09         6.7e-09        2
+factor rank 1      2    5/10      58 / 60      9.5e-08         1.2e-07        5
+factor rank 2   0.25   10/10      12 / 15      7.3e-09         3.1e-09        2
+factor rank 2    0.5   10/10      18 / 20      9.7e-09         3.6e-09        3
+factor rank 2      1   10/10      30 / 38      9.6e-09         7.3e-09        169
+factor rank 2      2   10/10      53 / 60      9.9e-09         1.1e-08        292
+blocks          0.25   10/10      21 / 23      7.8e-09         9.7e-10        2
+blocks           0.5   10/10      20 / 21      9.1e-09         1.7e-09        2
+blocks             1   10/10      21 / 35      9.4e-09         5.1e-09        2
+blocks             2   10/10      53 / 58      9.8e-09         7.2e-09        4
