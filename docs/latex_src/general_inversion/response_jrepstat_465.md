@@ -41,9 +41,9 @@ Section numbers are those of the revised PDF (44 pages).
 - **Unqualified statements.** Done: "exact given its structure"
   (Section 4), "all four" (Section 2), "only logit" (Section 8),
   "unthinkable" and "It cannot compete" (Section 1.2).
-- **Synthetic data.** Done: a Data paragraph opens Section 7; the
-  abstract and Section 8 carry the same scope; a real-data application
-  is named as future work.
+- **Synthetic data.** Done: a Data paragraph opens Section 7 and
+  Section 8 carries the same scope; a real-data application is named as
+  future work.
 - **Parity scenarios.** Done (Section 7, Parity). The three are
   constrained projections solved by different optimizers per language.
   No random numbers enter them.
