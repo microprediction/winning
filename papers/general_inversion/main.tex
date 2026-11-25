@@ -18,13 +18,9 @@
 
 \title{Scalable Inversion of Contests with Correlated Performances,\\
 Including Softmax and Multinomial Probit}
-\author{Peter Cotton\thanks{\texttt{peter.cotton@microprediction.com}. The reference
-implementation (Python), its parity-locked ports (R, Rust, JavaScript) and the seeded
-scripts behind every number in this paper live at
-\texttt{github.com/microprediction/winning}; this revision's tables were
-produced at repository tag \texttt{paper-r12}, package version
-\texttt{1.4.0}.}}
-\date{Original version: 1 September 2026\\ This version: 23 November 2026}
+\author{Peter Cotton\thanks{\texttt{peter.cotton@microprediction.com}. Code and
+reproduction manifest: \texttt{github.com/microprediction/winning} (\S\ref{sec:avail}).}}
+\date{Original version: 1 September 2026\\ This version: 25 November 2026}
 
 \begin{document}
 \maketitle
@@ -34,10 +30,8 @@ Multinomial probit choice probabilities over $n$ alternatives are
 Gaussian orthant integrals, computed by simulation for thirty years, one
 expensive integral per alternative. Inversion, which is to say determining item
 attractiveness consistent with a prescribed choice probability vector, is even more difficult and has been
-considered impractical for correlated contests when $n$ is large. Yet here, for families lying within a grammar including factor, block and hierarchical covariance structures, we exhibit a calibration tested at $n=1{,}000{,}000$ reproducing probabilities to very high accuracy, even in the extreme tail. Comparison with existing methods is possible only on much smaller problems. The Geweke--Hajivassiliou--Keane simulator is the standard (and still appropriate for high rank) but is over a hundred times slower
-already at $n=200$, and its measured cost grows roughly as $n^{2.9}$ while
-ours is linear. Furthermore the independent and factor implementations apply to any sufficiently regular continuous performance distribution, while the current block, nested and tree kernels are Gaussian: the Thurstone--Mosteller model families
-thereby become a practical alternative to logit at modern scale.
+considered impractical for correlated contests when $n$ is large. In response, we exhibit a new approach that prices and inverts the whole probability vector from one shared survival field, for covariance within a grammar of factor, block and hierarchical structures. The cost is close to linear in $n$. We calibrate a million alternatives, with the Geweke--Hajivassiliou--Keane simulator and other referees as points of comparison in much lower dimensional problems, such as $n=2000$. With this advance the Thurstone--Mosteller model families
+become a practical alternative to logit at modern scale, subject to rank and other limitations of the covariance family we present.
 \end{abstract}
 
 \section{Introduction}\label{sec:intro}
@@ -50,9 +44,9 @@ In psychology an underlying model for choice is required for the computation of 
 
 Nature holds races at all scales, such as activation pathways in the brain, reaction sites or lightning strikes. Simulations of physical systems, such as material breaking points, can also be approximated as correlated races. There is a close connection between winning probabilities and local times in Atlas models (ranks of stochastic processes), for another day.
 
-We initially consider the multinomial probit model (an example of the race we speak of) as a point of reference to prior art, even though our method does not impose an assumption of normal performance, nor any particular distribution family for that matter. Write
+We initially consider the multinomial probit model (an example of the race we speak of) as a point of reference to prior art, even though the independent and factor kernels do not impose an assumption of normal performance; the shared factors are Gaussian throughout, and the block, nested and tree kernels are Gaussian. Write
 \begin{equation}
-U_i = \mu_i + \varepsilon_i, \qquad \varepsilon\sim N(0,\Sigma);
+U_i = \mu_i + \epsilon_i, \qquad \epsilon\sim N(0,\Sigma);
 \end{equation}
 the probability that alternative $i$ is chosen is
 \begin{equation}\label{eq:orthant}
@@ -197,7 +191,7 @@ It tends to be the case in financial practice and elsewhere that structured cova
 
 Within such a class of covariance matrices (we will term it the factor grammar) the derivatives are computed in the same pass at the same cost. This yields Jacobian--vector products and own-survival curves. The cost is also $O(nLQ)$, where again $L$ dictates the lattice size and $Q$ the number of quadrature points.
 
-We will show that the Jacobian is a weighted graph Laplacian. It is applied as an operator and is never materialized in the code. The block and nested kernels materialize their Jacobians, and the tree's cross-cluster block is approximate. The most important distinction from the prior art is that there is no need to run the entire algorithm for each choice of $i$, a point we will return to shortly when discussing the existing methods.
+The Jacobian is a weighted graph Laplacian of tie densities, a structure \citet{muller2022} derived before us (\S\ref{sec:jac}). What is added here is its reading as a boundary flux and its application as a matrix-free operator: for the factor grammar it is never materialized in the code. The block and nested kernels materialize their Jacobians, and the tree's cross-cluster block is approximate. The most important distinction from the prior art is that there is no need to run the entire algorithm for each choice of $i$, a point we will return to shortly when discussing the existing methods.
 
 The error is controlled by quadrature. It is deterministic for the Gauss--Hermite rules and reproducibly randomized for
 scrambled-Sobol nodes.
@@ -219,20 +213,20 @@ hierarchies & tree: uniform shared effects & \S\ref{sec:tree} \\
 dense $\Sigma$ & fitted grammar $+$ residual factors (approx.) & \S\ref{sec:general} \\
 \bottomrule
 \end{tabular}
-\caption{The covariance grammar.}\label{tab:grammar}
+\caption{The covariance grammar. $\Sigma$ is the covariance of performances, $V$ an $n\times k$ matrix of factor loadings and $D$ the vector of idiosyncratic variances (\S\ref{sec:factor}).}\label{tab:grammar}
 \end{table}
 
-Our chief contribution is scaling. We seek to bring probit modeling to a qualitatively different problem space.  To put it in perspective, we note that on one desktop machine, the forward computation of all-$n$ probabilities from known utilities, assuming a rank-one factor and using the Rust kernels, takes $0.12$, $1.2$, and $18$ seconds respectively for $n=10^{4},10^{5},10^{6}$ (\texttt{bench.py scale}). That speed was unthinkable previously.
+Our chief contribution is scaling. We seek to bring probit modeling to a qualitatively different problem space.  To put it in perspective, we note that on one desktop machine, the forward computation of all-$n$ probabilities from known utilities, assuming a rank-one factor and using the Rust kernels, takes $0.12$, $1.2$, and $18$ seconds respectively for $n=10^{4},10^{5},10^{6}$ (\texttt{bench.py scale}). We are not aware of a reported complete-vector probit computation at $n=10^{6}$.
 
 The inversion is the tougher problem yet at $n=10^{6}$ this takes under two minutes for the independent case, and the rank-one factor problem can be solved at this
-extreme scale also, in around twelve minutes (\texttt{bench.py invertmillion}).
+extreme scale also, in around twelve minutes (\texttt{bench.py invertmillion}). In both runs the round-trip log-probability residual is below $10^{-8}$ (\S\ref{sec:num}). Block, nested and tree inversions are measured at $n=400$.
 
 Comparisons die well before this scale, as far as we know. Other approaches are considered in detail presently, but briefly, if the comparison set is taken to be those approaches providing smoothness suitable for inversion, GHK is generally regarded as leading that category.
 
-It cannot compete. We estimate a two order of magnitude speed gap at $n=200$ that is steadily worsening with $n$. GHK's empirical complete-vector cost is superquadratic and steepening as we pass beyond that scale.\footnote{Empirically, the log-log slope is
+From $n=50$ upward GHK is slower. The comparator is our own Rust implementation, with pseudorandom draws and no variance reduction (\S\ref{sec:num}); no third-party GHK implementation was timed. At $n=200$ it is over a hundred times slower with $R=10^{4}$ draws and about eleven times slower with $R=10^{3}$. GHK's empirical complete-vector cost is superquadratic and steepening as we pass beyond that scale.\footnote{Empirically, the log-log slope is
 $1.9$ from $n=10$ to $200$ (at $R=10^{4}$) and $2.9$ from $200$ to $1000$
 (at $R=10^{3}$). The times at $R=10^{3}$ were $0.18$, $1.69$, and $19.4$
-seconds at $n=200,500,1000$, scaling by about ten at $R=10^{4}$.} In fact in our tests, the gap to our method grows almost quadratically with $n$ beyond $n=200$ because in that regime GHK scales at roughly $n^{2.9}$ while our shared-field pass is approximately linear in $n$ at fixed
+seconds at $n=200,500,1000$, scaling by about ten at $R=10^{4}$.} In fact in our tests, the gap to our method grows almost quadratically with $n$ beyond $n=200$ because in that regime (measured from $n=200$ to $1000$ at $R=10^{3}$) GHK scales at roughly $n^{2.9}$ while our shared-field pass is close to linear in $n$ at fixed
 lattice and node budgets. We have provided in Appendix~\ref{app:extrap} some brave extrapolations of GHK performance to
 $10^{4}$--$10^{6}$ alternatives and the wall clock time ratios, so dramatic as to not be reproducible in any reasonable time.\footnote{See \texttt{bench.py}.}
 
@@ -261,7 +255,7 @@ call also grows with $n$, that ratio widens as the field grows.
 \citet{lerman1981} counts argmax draws. It is unbiased for the whole vector at
 once but not smooth in parameters, and its per-entry relative error explodes for
 small $p_i$. Measured below: at wall clock matched to the lattice it carries
-eleven to twenty-eight times the total-variation error, with tail
+eleven to twenty-eight times the total-variation error (TV, defined throughout as $\tfrac12\sum_i|p_i-\hat p_i|$ between a computed vector $p$ and a reference $\hat p$), with tail
 log-errors near $0.6$ at $n=30$, and at ten times the budget remains four
 to eleven times behind.
 
@@ -324,10 +318,10 @@ in two milliseconds within $2\times10^{-3}$ of the reference, then drifts to
 $3\times10^{-2}$ at $n=30$ with tail probabilities off by more than a factor
 of two, and nothing in the output announces the change. The Clark-type recursion
 behaves alike, its tail entries off by a factor of nearly four. The family is current practice, not history:
-\citet{bhat2011} builds the MACML estimator on an analytic approximation
+\citet{bhat2011} builds the maximum approximate composite marginal likelihood (MACML) estimator on an analytic approximation
 of this sequential-conditioning family (that of \citealt{solow1990}), and the \texttt{Rprobit} package implements it
 \citep{bauerRprobit}, with its asymptotics examined by
-\citet{batram2019}. Expectation propagation \citep{minka2001}
+\citet{batram2019}. Expectation propagation (EP; \citealt{minka2001})
 is the modern member of the same family, and for the multinomial probit
 it is no longer one-pass: nested EP \citep{riihimaki2013} iterates
 moment-matched site approximations to a fixed point, is free of the
@@ -355,7 +349,13 @@ tables below is fifteen to twenty times faster at these sizes):
 at $n=50$, $0.3$ s against $0.07$ s and $2.5\times10^{-3}$ error against
 $2.9\times10^{-5}$; at $n=200$, $31$ s against $0.28$ s and
 $1.4\times10^{-3}$ against $4.1\times10^{-5}$
-(\texttt{research/experiments/exp22\_minimax\_tilting}). Raising the
+(\texttt{research/experiments/exp22\_minimax\_tilting}). The tilting
+code timed in this paragraph is our own Python implementation of the
+estimator, checked against a two-alternative closed form and a
+$10^{7}$-draw simulation at $n=5$. The errors are maximum absolute
+errors against twin $5\times10^{7}$-draw simulation references. The
+referee of \S\ref{sec:num} is the method's reference implementation, the
+R package \texttt{TruncatedNormal}. Raising the
 tilting sample to $R=10^{4}$ narrows the accuracy gap and widens the time
 one: at $n=200$ that is $50$ s, a hundred and eighty times the reference
 implementation's cost and still an order of magnitude short of its error.
@@ -365,7 +365,7 @@ implementation's cost and still an order of magnitude short of its error.
 The reader will note the common thread. Smoothness has been, and continues to be, bought at a significant performance cost. The cost, compared to Monte Carlo, is that one alternative is computed at a time, and this cost seems to have been accepted as unavoidable. We will show that it is not, at least within the covariance grammar we specify.
 
 We offer a different Faustian bargain that will often, but not always, be preferable. In exchange for the assumed covariance structure, which is very often assumed anyway, the user does not have to choose between
-speed, accuracy, scale, or smoothness. They can have all four, and very often they need them for downstream modeling tasks beyond share inversion, such as welfare analysis, game theory, and propagation of derivatives to other parts of a system (for ratings or belief networks).
+speed, accuracy, scale, or smoothness. Within the grammar and its stated limits (sharp shared effects in the block, nested and tree kernels, \S\ref{sec:factor}; kernel covariance, \S\ref{sec:general}) they can have all four, and very often they need them for downstream modeling tasks beyond share inversion, such as welfare analysis, game theory, and propagation of derivatives to other parts of a system (for ratings or belief networks).
 
 \section{The lattice race}\label{sec:lattice}
 
@@ -415,17 +415,17 @@ We are economical with the lattice points. The lattice must cover the winning ti
 hopeless a contestant is, it wins only by finishing in the range where
 winning times fall; thus, outside that range, the integrand is negligible. In contrast, a lattice that was stretched across the whole ability span would waste compute as most of its points lie where nothing happens.
 
-There is a key defensive measure taken, however. Let $$G(x)=1-\prod_j S_j(x),$$ the probability that somebody has finished
+There is a key defensive measure taken, however. Let $$H(x)=1-\prod_j S_j(x),$$ the probability that somebody has finished
 by $x$, which is the distribution function of the winning time. It is
 built from the caller's own base survival (rather than a normal
 surrogate, say), and it is made conservative. For
-the lower endpoint every contestant is placed at its most favourable conditional location, and for the upper endpoint at its least favourable.
+the lower endpoint every contestant is placed at its most favorable conditional location, and for the upper endpoint at its least favorable.
 
 Those componentwise extremes need not occur at any single factor node, which is what makes the result an envelope: wider than any one conditional race requires, and covering every conditional race represented by the retained factor nodes.\footnote{This is akin, in cycling, to assuming a fast pace to floor the worst performance of sprinters, and a slow pace to ceil the best performance of climbers.}
 
 Factor realizations outside the node set belong to the outer quadrature error, not to the lattice
-window. Solving $G(x)=\delta$ and
-$G(x)=1-\delta$ by bisection gives the two ends of the region the race
+window. Solving $H(x)=\delta$ and
+$H(x)=1-\delta$ by bisection gives the two ends of the region the race
 is decided in. The lattice is placed there with two standard deviations of padding at
 each end for safety. At the achieved $\delta$ (which may be relaxed, as
 described next), the truncated tails are controlled separately from the
@@ -433,23 +433,23 @@ bulk discretization error, and in the benchmark configurations they lie
 below the accuracy floors reported shortly.
 
 We also need a starting interval known to contain the answer. Bisection
-halves an interval repeatedly and finds the point where $G$ crosses a
+halves an interval repeatedly and finds the point where $H$ crosses a
 given level only if that point lies inside the interval it began with. A
 fixed starting interval does not always contain it. Nine standard
 deviations beyond the outermost contestant is wide enough for a Gaussian
 race, whose survival decays exponentially, but not for a base with
 polynomial tails: with Student-$t$ performance at four degrees of
-freedom, the point where $G$ falls to $10^{-12}$ lies $1456$ standard
+freedom, the point where $1-H$ falls to $10^{-12}$ lies $1456$ standard
 units out.
 
 Bisecting an interval that excludes the crossing neither fails nor warns.
 It converges to whichever endpoint is nearer and returns that instead.
 Each endpoint is therefore moved outward, doubling the distance each
-time, until $G$ at the lower endpoint is at most $\delta$ and $G$ at the
+time, until $H$ at the lower endpoint is at most $\delta$ and $H$ at the
 upper endpoint is at least $1-\delta$. Only then is the interval
 bisected.
 
-A finer point is that $\delta$ cannot always be honoured. The
+A finer point is that $\delta$ cannot always be honored. The
 lattice has a fixed number of points, chosen by the caller, spread evenly
 across whatever window the quantiles ask for, so a wider window means
 coarser spacing. The two error sources therefore move in opposite
@@ -533,7 +533,7 @@ Column and row sums do not behave the same numerically. Columns sum to zero iden
 divides by the lattice total, so $\mathbf{1}^{\top}J=0$ whatever the
 lattice does, at $6\times10^{-17}$ from the coarsest grid to the finest.
 Rows sum to zero only as the quadrature converges (translation
-invariance is a property of the integral, but not the actual sum as implemented). The row sum discrepancy is a useful diagnostic.\footnote{The deviation is very small. It is
+invariance is a property of the integral, but not the actual sum as implemented). The row sum discrepancy is a useful diagnostic.\footnote{The largest absolute row sum is
 $1\times10^{-3}$ at $25$ points,
 $2\times10^{-10}$ at $65$, and machine precision at the $257$-point
 default, under either the Gaussian or the Gumbel base.}
@@ -552,11 +552,11 @@ The second is a removal counterfactual: the probability that $j$ wins
 once $i$ is taken out of the field. In the continuum this is one more
 division, since deleting $i$ simply drops $S_i$ from the product. However, numerically, to continue our theme, care is required. Suppose the lattice is placed where the
 \emph{original} winner finishes, but the survivors of a deletion need not
-finish there. So, for example if we remove a dominant favourite, the race is decided where the original runner-up would have finished and it is entirely possible that the winner-bulk lattice would not reach that zone.\footnote{
+finish there. So, for example if we remove a dominant favorite, the race is decided where the original runner-up would have finished and it is entirely possible that the winner-bulk lattice would not reach that zone.\footnote{
 Take $\mu=(-20,0,1)$ with unit variances, so the first contestant wins
 essentially always and the bulk window sits at about $[-29,-11]$. Remove
 it and the answer is $\Phi(1/\sqrt2)=0.760$, writing $\Phi$ for the
-standard normal distribution function. Dividing the favourite out on the
+standard normal distribution function. Dividing the favorite out on the
 original grid instead leaves a total lattice mass of $3\times10^{-28}$
 where a correct integration would give one, so renormalizing it is
 renormalizing rounding error. Removals are therefore integrated on their
@@ -567,15 +567,19 @@ than normalized away.}
 
 \section{The covariance grammar}\label{sec:grammar}
 
-Now we turn to a fixed set of covariance choices that can be accommodated with extremely high accuracy. Naturally, some structures make contestants conditionally independent given a few shared variables. Without that, we have no algorithm so, in increasing order of hierarchy, we consider:
+Now we turn to a fixed set of covariance choices that the field construction accommodates. Naturally, some structures make contestants conditionally independent given a few shared variables. Without that, we have no algorithm so, in increasing order of hierarchy, we consider:
 \begin{enumerate}
 \item a global factor,
 \item factors per cluster, and
 \item a tree of uniform shared effects.
 \end{enumerate}
 Each keeps the shared
-field and the $O(nLQ)$ volumetrics but they come with additional numerical lattice considerations, the topic of this section. Each is exact given its structure;
-estimating that structure from data is a separate problem we do not address
+field and the $O(nLQ)$ volumetrics but they come with additional numerical lattice considerations, the topic of this section. Each is exact given its structure up to lattice and quadrature error.
+That error is measured in \S\ref{sec:num}. It is not uniformly small: the
+block, nested and tree kernels can lose $5\times10^{-2}$ of total
+variation on sharp cluster loadings (\S\ref{sec:blocks}), and the tree's
+cross-cluster Jacobian is approximate (\S\ref{sec:jaccomp}).
+Estimating the structure from data is a separate problem we do not address
 here. The approximate reduction of a dense covariance to this family is considered, but deferred to \S\ref{sec:general}.
 
 \subsection{Factor covariance with sharpness as a guide}\label{sec:factor}
@@ -587,13 +591,14 @@ the performances are independent with means $\mu+Vf$, and
 p \;=\; \sum_q w_q\, p^{\mathrm{ind}}(\mu+Vf_q),
 \end{equation}
 a $Q$-node quadrature over runs of the independent algorithm at a cost of
-$O(nLQ)$.
+$O(nLQ)$, with $f_q$ the quadrature nodes for the factor and $w_q$ their
+weights.
 
 We are merely averaging the independent race over the shared luck, so to speak. This device is far from new, of course; indeed
 \citet{butler1982} built exactly this quadrature for the one-factor
 random-effects probit. The \texttt{lpRR}/\texttt{slpRR} interfaces of
 \texttt{mvtnorm} integrate over the factor dimensions of
-$BB'+\mathrm{diag}(D)$ by Monte Carlo. As we noted at the outset, each of
+$BB'+\mathrm{diag}(D)$ (their $B$ is our $V$) by Monte Carlo. As we noted at the outset, each of
 those integrals returns only one alternative's probability, which is one
 reason their performance dies at scale.
 
@@ -604,7 +609,13 @@ at no extra cost (negative in this min-wins convention: raising a time
 mean lowers the win probability), which \S\ref{sec:jac} uses to
 precondition the inversion.
 
-However, we must pay attention to numerical issues and lattice choice in particular. The integral over $f$ is $k$-dimensional, and experiments have taught us that the rule that discretizes it
+Random-coefficient (mixed) probit is a member of this family. With
+characteristics $x_i\in\R^{d}$ and coefficients
+$\beta\sim N(b,\Omega)$, utilities have covariance
+$X\Omega X'+\mathrm{diag}(D)$, which is the factor grammar with loadings
+$V=X\Omega^{1/2}$ of rank $d$ and idiosyncratic variances $D$.
+
+We must pay attention to numerical issues and lattice choice in particular. The integral over $f$ is $k$-dimensional, and experiments have taught us that the rule that discretizes it
 has to depend on $k$ and the shape of the integrand.
 
 Gauss--Hermite is the natural rule for a single Gaussian dimension.
@@ -673,7 +684,7 @@ family changes, scrambled Sobol points replacing the product rule, since
 more nodes of a smooth rule is the wrong medicine for a near-step
 integrand. Rank one with extreme sharpness gets a third treatment, an
 equal-weight grid on quantiles, because Gauss--Hermite clusters its nodes
-near the centre and that is the wrong place when the integrand is nearly
+near the center and that is the wrong place when the integrand is nearly
 a step. Concretely, with $s=s_{\mathrm{trigger}}$ and rank $r$, the rules
 apply in order: at $r\ge2$ and $s>3$, $2^{13}$ scrambled Sobol nodes; at
 $r=1$ with $\lceil8s\rceil>201$, the equal-weight grid
@@ -682,7 +693,11 @@ past a tensor budget of $15^r>10^5$ nodes, $2^{13}$ Sobol nodes; and
 otherwise the product Gauss--Hermite rule of order
 $Q=\min(\max(\lceil8s\rceil,15),c_r)$ per dimension, with
 $c_r=201,41,15$ for $r=1$, $2$ and above, its nodes of weight below
-$10^{-7}$ of the largest pruned. The block, nested and tree kernels do
+$10^{-7}$ of the largest pruned. (At rank two the cap of $41$ cannot
+bind, since the first rule takes over past $s=3$, where
+$\lceil8s\rceil\le24$.) These budgets are the factor kernel's defaults;
+the dense-covariance pipeline of \S\ref{sec:general} calls the same
+kernel with $2^{11}$ Sobol nodes. The block, nested and tree kernels do
 not yet escalate: they use fixed Gauss--Hermite rules ($9$ cluster
 nodes, $15$ global nodes), warn when a cluster's loading exceeds three
 idiosyncratic standard deviations, and past that point can lose
@@ -707,7 +722,9 @@ G_c(x)\;=\;\E_a\Bigl[\prod_{j\in c} S_j(x\mid a)\Bigr]
        \;=\;\sum_q w_q\, e^{S_c(x,a_q)},
 \end{equation}
 with $S_c(x,a)=\sum_{j\in c}\log S_j(x\mid a)$ the cluster's conditional
-log-survival. To say this another way, $G_c(x)$ is just the probability that every member of
+log-survival, $S_j(x\mid a)$ contestant $j$'s survival given the cluster
+effect $a$, and $(a_q,w_q)$ the Gauss--Hermite nodes and weights for that
+effect. To say this another way, $G_c(x)$ is just the probability that every member of
 cluster $c$ survives past $x$, with the cluster's shared luck integrated out.
 
 Contestant $i$ then wins against a ``cavity'' field ($i$ removed):
@@ -750,8 +767,8 @@ automatically. However, porting that escalation to the hierarchical kernels is n
 
 The hierarchical kernels place their lattice by the same envelope
 principle as \S\ref{sec:lattice}: for the lower endpoint every
-contestant sits at its most favourable retained conditional location,
-for the upper at its least favourable, and the idiosyncratic scale
+contestant sits at its most favorable retained conditional location,
+for the upper at its least favorable, and the idiosyncratic scale
 alone sets the bisection.\footnote{The obvious shortcut is an
 independent-marginal proxy using each runner's total standard deviation
 at its unconditional location. This fails exactly where these kernels are
@@ -845,9 +862,13 @@ subtraction on the floored cluster log-fields $\log\max(G_c,10^{-300})$,
 so neither divides.\footnote{We checked that a depth-one tree with zero strengths reproduces the rank-one block race to machine
 precision. We ran a long $2^{22}$-path Monte Carlo and found that the recursion was
 accurate as far as this could determine on every resolvable
-entry at depths one through four (root-mean-square $z$ between $0.75$ and
-$1.1$ noise level). Entries below the resolution agreed with minimax tilting
-\citep{botev2017} to $0.3$ percent relative at probabilities down to
+entry at depths one through four. The statistic is the root mean square
+of $z=(p-\hat p)/\mathrm{se}$ over those entries, with $p$ the recursion's
+probability, $\hat p$ the Monte Carlo frequency and $\mathrm{se}$ its
+binomial standard error under $p$; a value near one means the
+differences are at the Monte Carlo noise level. It lies between $0.75$
+and $1.1$. Entries below the resolution agreed with minimax tilting
+(\citealt{botev2017}; \texttt{TruncatedNormal} 2.3) to $0.3$ percent relative at probabilities down to
 $7\times10^{-8}$, which is within the tilting estimate's own error.}
 
 \begin{remark}[A connection to top-down portfolio construction]\label{rem:hrp}
@@ -858,7 +879,9 @@ built from the correlation distance $d_{ij}=\sqrt{(1-\rho_{ij})/2}$,
 invert the distance transform at each merge height and floor at zero. Give internal node $t$ strength
 $\lambda_t^2=\rho_t-\rho_{\mathrm{parent}(t)}$, with
 $\rho_t=\max(1-2h_t^2,0)$ at merge height $h_t$, and leaf $i$
-idiosyncratic variance $1-\rho_{\mathrm{first}(i)}$.\footnote{The floor at zero is not optional. Shared effects contribute nonnegative
+idiosyncratic variance $1-\rho_{\mathrm{first}(i)}$, where
+$\mathrm{first}(i)$ is the first merge that includes leaf $i$ and the
+root's parent is taken to have $\rho=0$.\footnote{The floor at zero is not optional. Shared effects contribute nonnegative
 correlation. A tree race cannot represent a negative cophenetic
 correlation and dropping the floor pushes the other implied correlations
 above one. The shipped \texttt{from\_linkage} constructor keeps the root at its
@@ -888,8 +911,10 @@ a convex cone: the outcomes in which nobody beats $i$. These cones tile
 the space, one per contestant, and each win probability is the mass the
 joint density puts on its own cone,
 \[
-  p_i(\mu)=\int_{R_i}q_\mu,\qquad q_\mu(x)=q_0(x-\mu).
+  p_i(\mu)=\int_{R_i}q_\mu,\qquad q_\mu(x)=q_0(x-\mu),
 \]
+with $q_0$ the joint density of the noise, which is the performance
+density at zero location.
 Where two cones meet, two contestants dead-heat ahead of the field. So we refer to the
 shared boundary
 \[
@@ -919,7 +944,7 @@ with $n$ the outward unit normal.
 
 However for this we take $q_0$ continuously differentiable with $q_0$
 integrable, $\nabla q_0$ locally dominated (bounded on compact
-$\mu$-neighbourhoods by an integrable function, which the substitution
+$\mu$-neighborhoods by an integrable function, which the substitution
 $u=x-\mu$, $p_i(\mu)=\int_{R_i-\mu}q_0(u)\,du$, reduces to integrability
 of $\nabla q_0$), and $|x|^{n-1}q_0(x)\to0$ uniformly in direction,
 conditions any non-degenerate Gaussian law satisfies outright.
@@ -968,7 +993,7 @@ to zero.
 Everything else follows from the geometry. Symmetry is $F_{ij}=F_{ji}$:
 one surface, one number, so $w_{ij}=\partial p_i/\partial\mu_j$ is
 symmetric and nonnegative. The zero row sum is translation invariance, a
-conservation law: what leaves one cone enters its neighbours. Writing $B$
+conservation law: what leaves one cone enters its neighbors. Writing $B$
 for the oriented incidence matrix of the photo-finish graph and $W_e$ for
 the diagonal of edge conductances $w_{ij}$,
 \[
@@ -976,7 +1001,7 @@ the diagonal of edge conductances $w_{ij}$,
    \qquad
    (Jh)_i=\sum_{j\ne i}w_{ij}\,(h_j-h_i),
 \]
-the discrete analogue of $-\operatorname{div}(a\nabla h)$: $Bh$ takes
+for any vector $h\in\R^n$ of ability perturbations. This is the discrete analogue of $-\operatorname{div}(a\nabla h)$: $Bh$ takes
 differences across photo-finish boundaries, $W_eBh$ is the flux across
 them, $B^{\top}W_eBh$ the net flow into each winning region. The
 mass-one identity is the same theorem in dimension one, since
@@ -1093,8 +1118,10 @@ latter (an optimizer, say) should difference the forward map.}
 The continuum form is implemented alongside the grid form because it is
 symmetric by construction and can be used as a preconditioner without
 further checking. The grid form is symmetric only to the accuracy of its
-row sums, for the same reason: at $25$ points it is off by
-$3\times10^{-4}$ and at $65$ by $7\times10^{-11}$, but at the $257$-point
+row sums, for the same reason: at $25$ points its largest asymmetry
+$|J_{ij}-J_{ji}|$ is
+$3\times10^{-4}$ and at $65$ it is $7\times10^{-11}$ (a different
+statistic from the row sums quoted in \S\ref{sec:lattice}), but at the $257$-point
 default the two forms agree to machine precision, so the distinction is
 one of guarantee rather than of observed values in production.
 
@@ -1108,7 +1135,8 @@ looks more natural, overflows wherever survivals vanish.
 As a final remark, the block Jacobian is exact for
 rank-one cluster loadings. The nested Jacobian is the
 mixture of block Jacobians. The tree Jacobian is exact within a cluster
-and Gram-approximate across clusters: with $u_i(x)=h_i(x)R_{c(i)}(x)$ the
+and approximate across clusters, where a product of two leaf-cavity
+integrands (a Gram form) stands in for the tie density: with $u_i(x)=h_i(x)R_{c(i)}(x)$ the
 leaf-cavity integrand of \S\ref{sec:tree} and $G_{\mathrm{root}}$ the
 root message, the cross-cluster tie density is taken as
 $w_{ij}\approx\int u_i(x)\,u_j(x)\,G_{\mathrm{root}}(x)^{-1}\,dx$, which is
@@ -1275,7 +1303,7 @@ already of the form $VV'+\mathrm{diag}(D)$ passes through whenever its
 factor rank lies within the fitted grammar's budget --- up to the
 common-shock equivalence, factor-quadrature error, and a diagonal floor
 of $10^{-6}$ of each runner's own variance.\footnote{Where
-the introduction speaks of an identified class, it means the restriction
+the introduction speaks of an equivalence class, it means the restriction
 that is choice-relevant and computable on $\mathbf{1}^{\perp}$: choices
 depend on $\Sigma$ only through $P\Sigma P$, an observational-equivalence
 statement, not a claim about what an estimation design can recover.
@@ -1343,8 +1371,10 @@ root equation; it can affect convergence and the finite-tolerance point
 returned.
 
 Setting $d_i\equiv-1$ instead recovers the log-share contraction of
-\citet{berry1994} in min-wins form, exact for logit at small shares, so
-the iteration is a diagonally preconditioned generalization of that map,
+\citet{berry1994}, which \citet{berry1995} introduced as a contraction
+mapping for random-coefficient demand, in min-wins form. It is exact for
+logit at small shares, so
+the iteration is a diagonally preconditioned extension of that map,
 and the preconditioner is what makes it work for probit. With everything
 else held fixed (start, clip, recentering, tolerance) at $n=200$ under a
 rank-two factor covariance, the own-slope iteration converges in $16$,
@@ -1379,8 +1409,8 @@ benchmark families but not universal. We can try to break the algorithm and cons
 correlated fields on which the damped iteration stalls at a residual
 near $10^{-4}$ instead of converging: at $n=200$, rank-two loadings drawn
 $N(0,1.6^2)$ against idiosyncratic variances in $[0.15,0.25]$, priced on
-a fixed $15\times15$ Gauss--Hermite rule
-(\texttt{research/experiments/\allowbreak exp23\_newton\_cg/\allowbreak run\_newton\_cg3.py}).
+a fixed $15\times15$ Gauss--Hermite rule (\texttt{run\_newton\_cg3.py} in
+\texttt{research/experiments/exp23\_newton\_cg}).
 The mechanism is spectral. Strongly correlated alternatives have large
 mutual tie conductances $w_{ij}$, so their own-slopes
 $|\tilde s_i|=\sum_{j\ne i}w_{ij}$ are large, while a coordinated shift of
@@ -1393,6 +1423,24 @@ merit function for a line search where the $\ell_\infty$ log residual
 does not; $W(\mu)$ is the mean of the winning time, which a field pass
 could accumulate from the winner's distribution at $O(L)$ extra cost,
 though the shipped kernels do not yet return it.
+
+A battery on random fields gives rates
+(\texttt{run\_convergence\_battery.py}, beside the ablation script).
+Fields have $n=100$, abilities $N(0,1)$ and idiosyncratic variances
+uniform on $[0.5,1.5]$. The grammars are independent, rank-one factor,
+rank-two factor and blocks of ten, with loadings scaled by $0.25$,
+$0.5$, $1$ and $2$, and ten seeded fields per cell.
+
+Of $130$ inversions, $125$ reach the $10^{-8}$ tolerance within the
+default $60$ sweeps. The median sweep count rises with the loading
+scale, from $10$ to $21$ at scale $0.25$ to $53$ to $58$ at scale $2$.
+The five failures are all rank-one factor fields at scale $2$. They stop
+at the sweep cap with a residual of at most $9.5\times10^{-8}$.
+
+The battery does not contain the constructed stall case above, whose
+idiosyncratic variances are smaller than any it draws. The
+million-contestant runs of \S\ref{sec:num} are closest to its independent
+cell and to its rank-one factor cell at scale $0.5$, and are single runs.
 
 A matrix-free Newton--Krylov solver using the exact grid Jacobian--vector product is
 provided also but is work in progress. Naively assembled it lost badly to the damped diagonal iteration.\footnote{
@@ -1486,7 +1534,7 @@ choice rather than the grammar.}
 
 The stages, in order:
 \begin{enumerate}
-\item Global factors: the quotient fit of \S\ref{sec:jac}
+\item Global factors: the projected-residual fit of \S\ref{sec:jac}
 (\texttt{factor\_model\_projected}), $k=3$ throughout, returning $(V,D_0)$
 by alternation. Each half-step is optimal in its own block, so the projected objective descends monotonically to a
 coordinatewise-stationary point.\footnote{Above $n=800$ the $V$-step is subspace
@@ -1496,7 +1544,7 @@ evaluated each sweep at $O(n^2)$. A sweep that fails to improve it is
 discarded, and the alternation returns the best iterate.
 \item The working residual is then
 projected once, $R=P\,(\Sigma-VV'-\mathrm{diag}\,D_0)\,P$: the raw residual
-still contains the choice-irrelevant common component the quotient fit
+still contains the choice-irrelevant common component the stage~1 fit
 rightly ignored, and letting later stages chase it manufactures projected
 error (measurably: the raw-residual variant distorts an input already of the
 form $VV'+\mathrm{diag}(D)$ by $1.7\times10^{-2}$ of total variation;
@@ -1596,9 +1644,11 @@ contrast can also cause problems. The report therefore carries
      {(e_i-e_j)^{\top}\Sigma\,(e_i-e_j)} ,
 \]
 the worst pairwise difference-variance error in units of that
-difference variance, which is $0.49$ on the diagonal example above
-(where the global residual is $5\times10^{-4}$) and $10^{-8}$ once the
-relative floor restores the fit.
+difference variance. On the diagonal example above the absolute floor's
+fit scores $3.3\times10^{4}$, the ratio of the two difference variances
+quoted there, while the global residual is $5\times10^{-4}$. Once the
+relative floor restores the fit the statistic is below $10^{-8}$
+(\texttt{tests/test\_fit\_covariance.py}).
 
 The objective is nonconvex in $(V,D)$, so
 no global optimization can be assured. The residual report exposes the
@@ -1616,7 +1666,11 @@ choices as well, to a total variation of $10^{-14}$.
 
 Block equicorrelation is the exception, and it was an instructive one. There the
 starts agree on the objective and on $D$ to every digit, and still price
-races that differ by a total variation of $0.25$. The cause is degeneracy
+races that differ by a total variation of $0.25$. That figure is for the
+stage~1 rank-three fit alone, which is what the multistart experiment
+runs. In the shipped pipeline stages~3 and~4 add one loading per cluster
+and five residual columns, the total rank exceeds the five-fold tie, and
+block equicorrelation is the best-fitted ensemble of the table below. The cause is degeneracy
 rather than optimization. Centering a six-block matrix leaves a five-fold
 tied leading eigenvalue, so a rank-three fit selects an arbitrary
 three-dimensional subspace of a five-dimensional one. Every selection is
@@ -1728,9 +1782,19 @@ Fitting
 $VV'+\mathrm{diag}(D)$ \emph{to} $P\Sigma P$ is the wrong
 objective (\S\ref{sec:jac}). With the identified objective and projected residuals throughout, the ensemble
 study below ran a raw top-$k$ eigenfit pipeline and the identified
-pipeline over twenty seeds per ensemble, paired by seed. The identified
-arm is better on eleven of fifteen named ensembles (Wilcoxon signed-rank,
-$p<0.05$), indistinguishable on three (AR(1), hierarchical, Wishart), and
+pipeline over twenty seeds per ensemble, paired by seed. The per-seed
+quantity is total variation against that seed's simulation referee, and
+the paired difference is raw minus identified. Table~\ref{tab:paired}
+gives, per ensemble, the median paired difference, a distribution-free
+$95$ percent interval for its center (Hodges--Lehmann), the seeds on
+which the identified arm wins, and a two-sided Wilcoxon signed-rank
+$p$-value (\texttt{paired\_ensembles4.py}).
+
+The comparison is descriptive: fifteen tests are reported, and the last
+column gives the Holm adjustment for readers who want one. The identified
+arm is better on eleven of fifteen ensembles at an unadjusted $0.05$ and
+on ten after adjustment (the spiked spectrum drops out). It is
+indistinguishable on AR(1), hierarchical and Wishart, and
 worse on one: on sparse-precision graphical covariances the raw arm wins
 on all twenty seeds ($5.1\times10^{-3}$ against $6.8\times10^{-3}$ at the
 median). The largest gain is on block equicorrelation, where the
@@ -1738,6 +1802,34 @@ identified arm is eight times better at the median ($2.5\times10^{-3}$
 against $2.0\times10^{-2}$), with a worst seed of $3.2\times10^{-3}$
 against the raw arm's $0.16$: the raw eigenfit spends its rank on a
 near-common component, as the identification argument predicts.
+
+\begin{table}[h]\centering\footnotesize
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lrrrrr}
+\toprule
+ensemble & median diff. & $95\%$ interval & wins & $p$ & Holm \\
+\midrule
+animals & $1.4\times10^{-2}$ & $[1.1,\,1.7]\times10^{-2}$ & $20$ & $2\times10^{-6}$ & $3\times10^{-5}$\\
+AR(1) & $-2.3\times10^{-4}$ & $[-4.3,\,10]\times10^{-3}$ & $10$ & $0.73$ & $0.73$\\
+Archakov--Hansen & $1.3\times10^{-2}$ & $[0.97,\,1.7]\times10^{-2}$ & $19$ & $6\times10^{-6}$ & $6\times10^{-5}$\\
+block equicorrelation & $1.7\times10^{-2}$ & $[1.1,\,3.4]\times10^{-2}$ & $20$ & $2\times10^{-6}$ & $3\times10^{-5}$\\
+factor $+$ sparse links & $7.4\times10^{-4}$ & $[4.7,\,8.6]\times10^{-4}$ & $19$ & $6\times10^{-6}$ & $6\times10^{-5}$\\
+hierarchical & $-3.8\times10^{-4}$ & $[-11,\,3.9]\times10^{-4}$ & $8$ & $0.28$ & $0.55$\\
+LKJ & $2.9\times10^{-3}$ & $[2.1,\,3.8]\times10^{-3}$ & $20$ & $2\times10^{-6}$ & $3\times10^{-5}$\\
+onion & $3.5\times10^{-3}$ & $[1.8,\,4.1]\times10^{-3}$ & $17$ & $6\times10^{-5}$ & $4\times10^{-4}$\\
+residuals (dense-strong) & $1.5\times10^{-2}$ & $[1.2,\,2.2]\times10^{-2}$ & $18$ & $5\times10^{-5}$ & $4\times10^{-4}$\\
+sparse-precision graphical & $-1.6\times10^{-3}$ & $[-2.0,\,-1.4]\times10^{-3}$ & $0$ & $2\times10^{-6}$ & $3\times10^{-5}$\\
+Marchenko--Pastur spectrum & $7.0\times10^{-4}$ & $[3.6,\,17]\times10^{-4}$ & $15$ & $4\times10^{-3}$ & $0.018$\\
+spiked spectrum & $1.0\times10^{-3}$ & $[0.062,\,1.5]\times10^{-3}$ & $15$ & $0.044$ & $0.18$\\
+vine & $3.2\times10^{-3}$ & $[2.6,\,4.3]\times10^{-3}$ & $20$ & $2\times10^{-6}$ & $3\times10^{-5}$\\
+elliptope walk & $2.5\times10^{-3}$ & $[1.1,\,3.4]\times10^{-3}$ & $16$ & $6\times10^{-4}$ & $4\times10^{-3}$\\
+Wishart & $8.8\times10^{-4}$ & $[-0.91,\,16]\times10^{-4}$ & $13$ & $0.090$ & $0.27$\\
+\bottomrule
+\end{tabular}
+\caption{Raw minus identified total variation, paired over twenty seeds
+per ensemble. Positive favors the identified arm. Wins counts seeds on
+which the identified arm has the smaller total variation.}\label{tab:paired}
+\end{table}
 
 
 \subsection{Testing against different covariance generation families}
@@ -1781,7 +1873,8 @@ twenty distinct covariance seeds, whose genuine spread the q90 and worst
 columns report. Eight further named
 ensembles (LKJ, onion, vine, elliptope walk, animals, Marchenko--Pastur
 and spiked spectra, hierarchical) fall between the third and fifth
-rows; Archakov--Hansen sits between residuals and AR(1) at $3.7\times10^{-2}$.
+rows. The names are \texttt{randomcov}'s generator names, and its
+documentation defines each sampler. Archakov--Hansen sits between residuals and AR(1) at $3.7\times10^{-2}$.
 
 \subsection{Kernel covariance as a weakness}
 
@@ -1813,7 +1906,8 @@ correlation lengths in the domain, and accordingly extra rank helps
 ($3.6\to3.2\times10^{-2}$) while extra quadrature does not.
 
 At long length scale the fit is not the problem at all. A rank-$27$
-eigenfit holds the RBF draw at length scale $0.4$ to a projected residual
+eigenfit (the stage~6 rank on this draw: the surviving columns of the
+$k+m+20=28$ budget) holds the RBF draw at length scale $0.4$ to a projected residual
 of $10^{-3}$. But pricing a well-fitted smooth kernel means a
 twenty-seven-dimensional \emph{sharp} factor integral, since the closing
 diagonal is nearly zero and the conditional races are nearly
@@ -1830,13 +1924,22 @@ limit of the grammar.
 
 The dispatch conclusion stands. Genuinely local covariance wants
 sequential conditioning with cheap sparse-precision draws, and Mat\'ern
-is exactly the family with the SPDE route \citep{lindgren2011}.
+is exactly the family with the stochastic partial differential equation (SPDE) route \citep{lindgren2011}.
 Near-singular smooth covariance wants either a larger node budget or
 plain simulation. A production front door should dispatch on the
 structure it detects, and the shipped call's warnings distinguish the two
 regimes.
 
 \section{Benchmarks}\label{sec:num}
+
+\paragraph{Data.} Every accuracy and estimation benchmark in this section
+runs on synthetic data: fields, covariances and choices drawn from the
+model families themselves under stated seeds. The one real data set is
+the Fishing data, used for a single likelihood diagnostic. The applied
+uses named in the introduction (demand estimation, handicapping,
+portfolio weights read as choice probabilities) are supported to the
+extent these benchmarks support them. A real-data application is future
+work.
 
 \paragraph{Hardware and timing.} Every time in this paper was measured on
 one Apple Mac Studio (M3 Ultra: twenty performance and eight efficiency
@@ -1846,7 +1949,7 @@ quarter per core, which \texttt{retime.py} checks before it measures. The
 lattice kernels run on one core. The Rust GHK comparator is parallelized
 across alternatives and uses every free core, so its times, and every
 ratio against it (including the simulated-likelihood columns of the
-estimation tables), favour GHK by up to the core count. Absolute times
+estimation tables), favor GHK by up to the core count. Absolute times
 will differ on other hardware.
 
 \paragraph{The structure-aware per-alternative comparator.} The fairest
@@ -1868,7 +1971,7 @@ alternatives.
 
 \paragraph{Against the field.} All-$n$ choice probabilities under the rank-2
 factor covariance family of \S\ref{sec:factor}, against a
-$2^{20}$-point QMC reference. Tail is the maximum absolute log-error over
+$2^{20}$-point quasi-Monte Carlo (QMC) reference. Tail is the maximum absolute log-error over
 reference probabilities in $[10^{-4},10^{-3}]$; the $n=10$ draw has none.
 Frequency simulation is run at wall clock matched to the lattice and at ten
 times that budget.
@@ -1903,15 +2006,19 @@ six digits needs multi-second budgets (the committed \texttt{bench.py
 genz200}). The full vector therefore costs $114$ s against $14$ ms for the
 lattice, a factor of $8\times10^{3}$ before any accuracy matching.
 
-The Mendell--Elston and Clark-type moment recursions are the only
+The Mendell--Elston and Clark-type rows are our own implementations of
+those recursions (in \texttt{bench.py}); no existing package was run.
+They are the only
 entries whose error grows
 silently: their tail entries are off by up to $e^{1.36}\approx3.9$ with nothing in
 the output to say so. The race's tail figure is the reference's own
-noise, and lattice self-convergence places its error near $10^{-8}$.
+noise; the lattice's own refinement error is measured below.
 
 \paragraph{Referee agreement.} A replay harness maps each benchmark
 probability to its difference orthant and prices it through the two
-field-standard R implementations. \texttt{mvtnorm}'s Genz--Bretz agrees with
+field-standard R implementations (R 4.6.1): \texttt{mvtnorm} 1.4-2 for
+Genz--Bretz and \texttt{TruncatedNormal} 2.3 for minimax tilting.
+\texttt{mvtnorm}'s Genz--Bretz agrees with
 the lattice to within its own reported error bound in every family:
 $2.2\times10^{-7}$ against a bound of $7.1\times10^{-7}$ at $n=10$, and
 $1.3\times10^{-8}$ against $6.7\times10^{-8}$ on a case whose smallest
@@ -1974,14 +2081,28 @@ $n$ & time & TV & tail & time & TV & tail & time & TV & tail\\
 \end{center}
 
 The $n=10$ draw has no reference probability in the tail band. The
-lattice's tail figures equal the reference's own noise; GHK's are two to
-ten times larger in log terms even at ten times the draws, which is the
+lattice's tail figures equal the reference's own noise. GHK's are about
+ten times larger in log terms at $R=10^3$ and two to three times larger
+at $R=10^4$, which is the
 tail blindness the TV column cannot show.
 
-Self-convergence places the lattice error near $10^{-8}$. GHK error
+The three lattice error figures in this paper measure different things.
+The TV column here is against the QMC reference and is limited by that
+reference's noise. The $2.9\times10^{-5}$ at $n=50$ in
+\S\ref{sec:alternatives} is a maximum absolute error against a
+$5\times10^{7}$-draw simulation. The third is self-convergence, the
+change under lattice and node refinement, given next.
+
+On these three problems, refining from the default to $1025$ lattice
+points and $41$ Gauss--Hermite nodes per factor dimension moves the
+lattice answer by $3\times10^{-8}$ to $3\times10^{-7}$ in total
+variation. No probability moves by more than $10^{-7}$ and no log
+probability by more than $2\times10^{-5}$, the latter at probabilities
+down to $2\times10^{-12}$ (\texttt{selfconv.py}). GHK error
 contracts as $O(R^{-1/2})$ and its measured complete-vector cost grows
-superquadratically, with exponent $1.9$ to $2.9$ across the measured
-range. The lattice is deterministic under Gauss--Hermite nodes and
+superquadratically: the log-log slope is $1.9$ from $n=10$ to $200$ at
+$R=10^4$ and $2.9$ from $n=200$ to $1000$ at $R=10^3$ (\texttt{bench.py
+law}). The lattice is deterministic under Gauss--Hermite nodes and
 seeded-reproducible under scrambled Sobol, supplies smooth matrix-free
 derivatives free of simulation noise, and prices the tails. Simulated
 likelihoods can of course be differentiated, but they inherit the noise.
@@ -1989,8 +2110,13 @@ likelihoods can of course be differentiated, but they inherit the noise.
 Our claim is bounded as follows. For complete-vector pricing and
 inversion under the factor, block, nested and tree covariance grammars,
 the shared-field construction removes the per-alternative repetition
-intrinsic to standard GHK implementations, and dominates the
-per-alternative GHK implementation tested here in both accuracy and cost.
+intrinsic to standard GHK implementations. Against the
+per-alternative GHK implementation tested here it is more accurate in
+every row of the table and faster at $n=50$ and $n=200$ at both draw
+counts. At $n=10$ GHK with $R=10^3$ is faster ($0.9$\,ms against
+$2.9$\,ms). The time ratios combine the $n$-fold factor with
+implementation differences, a compiled lattice kernel on one core
+against a compiled GHK on all cores, and we do not apportion them.
 GHK implementations with antithetics, quasi-random sequences or
 reordering heuristics would move the constants, not the $n$-fold shape.
 Estimation pipelines built around GHK are a larger object than this loop,
@@ -2017,7 +2143,8 @@ penalized likelihood in simplex coordinates, add-half is the
 $\mathrm{Dirichlet}(\tfrac32)$ mode.) In the saturated model the estimator
 is the race inverse of that smoothed vector, and the simulated arms
 maximize the same add-half-smoothed criterion, so the comparison stays
-like for like.
+like for like. MSL in the tables below is maximum simulated
+likelihood, with GHK probabilities at $R$ draws.
 
 This is not cosmetic. The unpenalized saturated likelihood has \emph{no}
 finite maximizer when any count is zero, which Theorem~\ref{thm:inverse}
@@ -2051,7 +2178,7 @@ time. Because the arms share every draw, the paired differences
 are the sharper statement: against $R=100$ the exact arm is better by
 $0.0112\pm0.0006$, nearly nineteen standard errors, winning $39$ of $40$
 replications; against $R=1000$ by $0.0017\pm0.0002$, seven standard
-errors, winning $33$ of $40$.
+errors (the unrounded ratio is $6.9$), winning $33$ of $40$.
 
 The $R=1000$ margin is small in absolute terms, which is the honest
 characterization: enough simulation draws do approach the exact answer,
@@ -2088,7 +2215,9 @@ MSL, $R=1000$ & $0.0367\pm0.0067$ & $27.9$ s \\
 \noindent All three estimators reach the statistical floor. With three
 parameters and eight hundred observations the simulation error averages
 out, and a well-implemented simulator at $R=100$ is the fastest of the
-three at this size. The exact path's time is dominated by the Jacobian,
+three at this size. With eight replications and every arm at the floor,
+the table cannot separate the methods on accuracy; it is a timing and
+floor demonstration. The exact path's time is dominated by the Jacobian,
 which is still evaluated in Python one observation at a time: the
 compiled forward kernel accounts for about six percent of it, so the
 comparison at $n=10$ measures plumbing, not method.
@@ -2098,14 +2227,14 @@ table. It is freedom from the choice of $R$, gradients without simulation
 noise, the cost law as $n$ grows, and diagnostics that simulation smooths
 over.
 
-That last point is not hypothetical. On the classic Fishing data, the
+One instance of the last point: on the classic Fishing data, the
 unrestricted-covariance MNP likelihood evaluated exactly is
-boundary-seeking, still rising at loading norms near $4000$: a ridge
-that the finite-$R$ simulated objective had obscured. The behavior is
+boundary-seeking, still rising at loading norms near $4000$. The behavior is
 reproducible from the committed estimator (\texttt{winning.mnprobit}),
 which detects the ridge and reports it as a \texttt{boundary\_}
-diagnostic rather than returning the interior point simulation would have
-manufactured.
+diagnostic. We did not fit a simulated likelihood to the same data and
+specification, so we make no statement about what a finite-$R$ objective
+returns there.
 
 For interpretability of that norm: the parameterization is rank-2
 loadings with the reference alternative's rows fixed at zero and unit
@@ -2114,10 +2243,12 @@ normalization and the growing norm is a genuine choice-relevant
 direction, not the scale gauge. A profile likelihood along that
 normalized direction is the diagnostic a full treatment would add.
 
-\paragraph{The Genz--Bretz score.} Our quadrature comparator used
-\texttt{pmvnorm}, which exposes no score, with finite-difference gradients
-($31$ vector evaluations per step at $n=30$, roughly eight times the entire
-exact-gradient share-inversion fit). The \texttt{mvtnorm} manual (v1.4-2)
+\paragraph{The Genz--Bretz score.} The estimation tables have no
+Genz--Bretz arm. \texttt{pmvnorm} exposes no score, so a quadrature arm
+would need finite-difference gradients: $31$ vector evaluations per step
+at $n=30$, which at the $3.15$\,s per vector of the against-the-field
+table is $98$\,s per step, about thirty times the entire
+exact-gradient share-inversion fit. The \texttt{mvtnorm} manual (v1.4-2)
 also documents \texttt{slpmvnorm} and, for the reduced-rank covariance
 $BB'+\mathrm{diag}(D)$ of this paper's benchmarks, \texttt{lpRR} and
 \texttt{slpRR}: simulated log-likelihoods and score functions that
@@ -2132,24 +2263,56 @@ reference-differenced covariance with a fresh Cholesky factorization per
 alternative, pseudorandom draws (xoshiro family) with a per-alternative
 seed offset so that parameter evaluations share common random numbers, no
 antithetics, no quasi-random sequence, no variable-reordering heuristic,
-parallelized across alternatives. Cost figures are complete-vector; the
-large-$n$ columns of the introduction are extrapolations of the measured
-law and are displayed as such.
+parallelized across alternatives. No third-party GHK implementation
+(Stata's \texttt{cmmprobit}, R's \texttt{mlogit} or \texttt{mvProbit})
+was timed, and the implementation was not checked against one; the
+speed ratios in the introduction are against this
+implementation only. Cost figures are complete-vector; the
+large-$n$ table of Appendix~\ref{app:extrap} is an extrapolation of the measured
+law and is displayed as such.
 
 \paragraph{Scale.} Ten million contestants price in $102$ seconds under the
 block grammar (ten thousand clusters, $257$-point lattice, the streaming
 field pass; the committed \texttt{bench.py tenmillion}), and the Rust
 classic-calibration kernel runs about $100$ to $200$ times the speed of
 the pure-Python implementation, for fields of $200$ down to $10$ (the
-committed \texttt{bench.py classic}). Throughput at this size is a systems statement; the accuracy
-evidence lives at the scales the referees above can reach.
+committed \texttt{bench.py classic}).
+
+Inversion at a million contestants was run for two covariance classes
+(the committed \texttt{bench.py invertmillion}). In both, abilities are
+centered $N(0,0.64)$ draws and the target is the forward map's own
+output. Independent performances with unit variances invert in $105$
+seconds. The maximum log-probability residual over all $10^{6}$ entries
+is $7.3\times10^{-10}$ and the maximum ability error is
+$7.5\times10^{-11}$. A rank-one factor covariance, with loadings
+$N(0,0.25)$ and idiosyncratic variances uniform on $[0.5,1.5]$, inverts
+in $699$ seconds, with residual $7.7\times10^{-9}$ and ability error
+$2.4\times10^{-9}$.
+
+Both residuals are below the solver's $10^{-8}$ stopping tolerance. The
+sweep counts were not logged. These are round trips against the forward
+map, not comparisons with an external referee. No block, nested or tree
+inversion was run at this size; those are measured at $n=400$
+(\S\ref{sec:jac}).
+
+Throughput at this size is a systems statement; the accuracy
+evidence lives at the scales the referees above can reach, which is
+$n=2000$.
 
 \paragraph{Parity.} One vector file embeds the inputs and outputs of
 $22$ scenarios spanning the principal implemented grammars, boundary
 cases and numerical identities used above. The four language
 implementations of \S\ref{sec:avail} replay them: nineteen to within
-$10^{-7}$ (most to $10^{-10}$), and the three fit- or optimizer-mediated
+$10^{-7}$ (most to $10^{-10}$), and the three optimizer-mediated
 scenarios to between $5\times10^{-4}$ and $5\times10^{-3}$.
+
+Those three are constrained projections of a probability vector (a cap
+on each entry), two under a factor covariance and one under a tree. No
+random numbers enter them: the quadrature is Gauss--Hermite, so each
+implementation returns the same output on every run on a given platform.
+The cross-language gap is the stopping point of different constrained
+optimizers (SciPy's SLSQP in the reference, each port's own solver)
+on a nonlinear constraint set, not nondeterminism.
 
 \section{Summary}\label{sec:summary}
 
@@ -2158,7 +2321,7 @@ representation of the choice event is in \citet{domencich1975}, who
 judged it computationally intractable for correlated probit. The convex
 duality of calibration is in \citet{li2018}. The tie-density
 derivatives and the surplus function's Laplacian structure are in
-\citet{muller2022}, albeit independently arrived at from a different direction. A Hessian vector product at the cost of a gradient
+\citet{muller2022}, albeit independently arrived at from a different direction. A Hessian--vector product at the cost of a gradient
 is \citet{pearlmutter1994}. Building the survival field once and dividing each contestant out to collapse the forward vector to $O(nL)$ is performed here differently than in \citet{cotton2021}, but that is where the idea is borrowed and crucially, this is the point of departure from other smooth methods that require iteration over all items.
 
 Herein we have organized the pieces into an efficient algorithm where a
@@ -2166,7 +2329,9 @@ single shared survival field renders probabilities for all $n$
 alternatives at once and supplies the own-coordinate slopes that
 precondition the million-alternative calibrations reported here.
 
-We have applied and interpreted the dense tie-density Jacobian: a weighted graph Laplacian and a probability flux through the boundary between winning regions computable in linear work per lattice point. We have supplied a covariance grammar that, subject to its self-described limitations, lifts probit models and their cousins out of the small-to-medium scale domain and makes them practical for a variety of modern problems where previously, only logit was deemed to be a starter.
+We have applied and interpreted the dense tie-density Jacobian: a weighted graph Laplacian and a probability flux through the boundary between winning regions computable in linear work per lattice point. We have supplied a covariance grammar that, subject to its self-described limitations, lifts probit models and their cousins out of the small-to-medium scale domain.
+
+The scope of that statement is the evidence of \S\ref{sec:num}, which is synthetic. Million-contestant inversion is demonstrated for the independent and rank-one factor cases. Block, nested and tree inversions use an approximate preconditioner and are measured at $n=400$. Dense covariance is approximate, with the kernel limitation of \S\ref{sec:general}. Within those limits the models are usable at sizes where logit has been the usual choice.
 
 
 \section{Availability}\label{sec:avail}
@@ -2174,6 +2339,43 @@ We have applied and interpreted the dense tie-density Jacobian: a weighted graph
 Rust kernels as one abi3 wheel per platform. A base-R package mirrors the full
 interface, and a zero-dependency browser port drives a live demonstration at
 \texttt{winning.microprediction.org}.
+
+\paragraph{Reproduction.} \texttt{MANIFEST.md}, beside this paper's
+source in the repository, maps each table and each number in the text to
+the command that produces it, the seed it
+uses, and the log line to read. Its last section lists the numbers in
+the text that no committed command regenerates. The tables were produced
+at repository tag \texttt{paper-r12}, package version \texttt{1.4.0};
+the analyses added in revision are at tag \texttt{paper-r13} and run
+against the same package. The repository also holds the parity-locked
+ports (R, Rust, JavaScript). \texttt{REPRODUCE.md} gives the one-command
+build.
+
+\paragraph{Environment.} \texttt{requirements.lock} pins every Python
+package, including \texttt{randomcov} 0.2.1 and the compiled kernels as
+the \texttt{fastrace} 0.1.2 wheel. The Rust toolchain is not pinned: the
+benchmarks install that published wheel and do not build it from source.
+
+\paragraph{Shipped and in progress.} The numbers in this paper come from
+code shipped at the tag: forward pricing, Jacobians and the diagonal
+inversion for the independent, factor, block, nested and tree grammars,
+and the dense-covariance fit. Three items the text mentions are in
+progress and back no reported result other than their own description:
+the Newton--Krylov solver (\S\ref{sec:jac}), quadrature escalation in
+the block, nested and tree kernels (\S\ref{sec:blocks}), and return of
+the merit function $W(\mu)$ from a field pass (\S\ref{sec:jac}).
+
+\section*{Competing interests}
+The author founded and owns microprediction.com, whose domain hosts the
+demonstration site. The author wrote and maintains the open-source
+\texttt{winning} package (MIT license) that this paper benchmarks, wrote
+the Rust GHK implementation and the Python minimax-tilting
+implementation it is timed against, and wrote the cited prior method
+\citep{cotton2021} and working paper \citep{cottonsurvey}. Neither the
+package nor the results of this paper generate revenue for the author.
+
+\section*{Funding}
+This work received no external funding.
 
 \begin{thebibliography}{19}\small
 \bibitem[Ahipasaoglu et~al.(2019)Ahipasaoglu, Li and
@@ -2202,6 +2404,9 @@ Betting Markets}, Academic Press, 1994, 183--198.
 Estimating discrete-choice models of product differentiation.
 \emph{RAND Journal of Economics} 25(2):242--262, 1994.
 \href{https://doi.org/10.2307/2555829}{\nolinkurl{doi:10.2307/2555829}}.
+\bibitem[Berry et~al.(1995)Berry, Levinsohn and Pakes]{berry1995}
+S.~Berry, J.~Levinsohn, A.~Pakes. Automobile prices in market
+equilibrium. \emph{Econometrica} 63(4):841--890, 1995.
 \bibitem[Bhat(2011)]{bhat2011} C.~R. Bhat.
 The maximum approximate composite marginal likelihood (MACML) estimation of
 multinomial probit-based unordered response choice models.
@@ -2400,7 +2605,8 @@ beyond any regime in which GHK has been run, and cache effects,
 parallelism, Cholesky reuse or a change of regime would move it. Both
 ends of each bracket are anchored at the largest measured point, the
 complete vector at $n=1000$ ($19.4$\,s at $R=10^3$, so $194$\,s at
-$R=10^4$; \texttt{bench.py law}):
+$R=10^4$; \texttt{bench.py law}). The multiplier column is the ratio of
+the GHK bracket to the measured lattice time:
 $t(n)=194\,\mathrm{s}\times(n/1000)^{\beta}$ with $\beta=1.9$ and
 $\beta=2.9$. The lower end therefore applies the gentler exponent only
 beyond $n=1000$; the measured growth from $n=200$ to $1000$ is already in
