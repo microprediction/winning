@@ -6,8 +6,9 @@ Section numbers are those of the revised PDF (44 pages).
 ## Required
 
 1. **Accuracy at n = 1,000,000.** Done, both ways. The abstract now says
-   what is measured at that size: a calibration round trip to within
-   1e-8 in log probability, with external referees reaching n = 2000. Section 7, Scale,
+   what is measured: calibration is demonstrated at that size, and
+   accuracy is checked against external referees up to n = 2000. It no
+   longer claims tail accuracy at a million. Section 7, Scale,
    reports the two covariance classes, the log residuals (7.3e-10,
    7.7e-9) and the ability errors, from the log committed at paper-r12
    (`timings_2026-11-11/retime.json`). It also says the sweep counts were
@@ -16,14 +17,12 @@ Section numbers are those of the revised PDF (44 pages).
    One correction to the letter: Section 7, Stress boundaries, does not
    report a factor rule "low by a factor of twelve at p near 10^-20". No
    such figure is in the submitted text.
-2. **Speed comparison.** Done. The abstract no longer quotes a single
-   ratio or an exponent. It says GHK handles general covariance, which
-   this method does not, and that within the grammar our implementation
-   of it is one to two orders of magnitude slower at n = 200 (eleven
-   times at R = 1e3, over a hundred at R = 1e4). Section 1.2 states R
-   for both ratios, the range of the 2.9 exponent (n = 200 to 1000 at
-   R = 1e3), that the comparator is our own Rust implementation without
-   variance reduction, and "close to linear".
+2. **Speed comparison.** Done. The abstract no longer makes the GHK
+   comparison; it says only that cost is close to linear in n. Section
+   1.2 states R for both ratios (over a hundred times at R = 1e4, about
+   eleven at R = 1e3), the range of the 2.9 exponent (n = 200 to 1000 at
+   R = 1e3), and that the comparator is our own Rust implementation
+   without variance reduction.
 3. **Competing interests and funding.** Done. Two unnumbered sections
    after Section 9.
 4. **Manifest.** Done. `MANIFEST.md` beside the paper's source maps each
