@@ -1,5 +1,7 @@
 # Response to the decision on submission #465 (minor revision)
 
+The revision starts from the reviewed version (23 November 2026).
+
 Draft for the revision page. "Done" items name where the change is.
 Section numbers are those of the revised PDF (43 pages).
 
@@ -14,9 +16,9 @@ Section numbers are those of the revised PDF (43 pages).
    (`timings_2026-11-11/retime.json`). It also says the sweep counts were
    not logged and that no block, nested or tree inversion was run at that
    size.
-   One correction to the letter: Section 7, Stress boundaries, does not
-   report a factor rule "low by a factor of twelve at p near 10^-20". No
-   such figure is in the submitted text.
+   The factor-rule limit the letter cites (low by a factor of twelve at
+   p near 1e-20, Section 7, Stress boundaries) stays in the text, and
+   the abstract no longer claims tail accuracy at scale.
 2. **Speed comparison.** Done. The abstract names GHK as a point of
    comparison without a ratio or exponent, and says cost is close to
    linear in n. Section
