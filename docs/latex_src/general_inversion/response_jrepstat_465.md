@@ -6,9 +6,8 @@ Section numbers are those of the revised PDF (44 pages).
 ## Required
 
 1. **Accuracy at n = 1,000,000.** Done, both ways. The abstract now says
-   what is measured at that size: the calibration round trip against the
-   forward map, with residuals 7e-10 (independent) and 8e-9 (rank-one
-   factor), and that external referees reach n = 2000. Section 7, Scale,
+   what is measured at that size: a calibration round trip to within
+   1e-8 in log probability, with external referees reaching n = 2000. Section 7, Scale,
    reports the two covariance classes, the log residuals (7.3e-10,
    7.7e-9) and the ability errors, from the log committed at paper-r12
    (`timings_2026-11-11/retime.json`). It also says the sweep counts were
@@ -17,11 +16,11 @@ Section numbers are those of the revised PDF (44 pages).
    One correction to the letter: Section 7, Stress boundaries, does not
    report a factor rule "low by a factor of twelve at p near 10^-20". No
    such figure is in the submitted text.
-2. **Speed comparison.** Done. Abstract and Section 1.2 state R for both
-   ratios (over a hundred times at R = 1e4, about eleven at R = 1e3), the
-   range of the 2.9 exponent (n = 200 to 1000 at R = 1e3), that the
-   comparator is our own Rust implementation without variance reduction,
-   and "close to linear".
+2. **Speed comparison.** Done. The abstract states the draw count
+   (1e4), the range of the 2.9 exponent (n = 200 to 1000), that the
+   comparator is our own implementation without variance reduction, and
+   "close to linear". Section 1.2 adds the R = 1e3 ratio (about eleven)
+   and the draw count behind the exponent.
 3. **Competing interests and funding.** Done. Two unnumbered sections
    after Section 9.
 4. **Manifest.** Done. `MANIFEST.md` beside the paper's source maps each

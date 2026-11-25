@@ -38,13 +38,8 @@ Multinomial probit choice probabilities over $n$ alternatives are
 Gaussian orthant integrals, computed by simulation for thirty years, one
 expensive integral per alternative. Inversion, which is to say determining item
 attractiveness consistent with a prescribed choice probability vector, is even more difficult and has been
-considered impractical for correlated contests when $n$ is large. For families within a grammar including factor, block and hierarchical covariance structures, we price and invert the whole probability vector from one shared survival field.
-
-Against external referees, which reach $n=2000$, probabilities agree to the referees' own error; tail probabilities are checked against minimax tilting at small $n$. At $n=1{,}000{,}000$ the measured quantity is the calibration round trip against the same forward map. The largest log-probability residual is $7\times10^{-10}$ for independent performances and $8\times10^{-9}$ under a rank-one factor covariance. Quadrature escalates automatically for the independent and factor families. The block, nested and tree kernels use fixed rules and can lose $5\times10^{-2}$ of total variation on sharp shared effects.
-
-Speed is compared at smaller sizes. A Geweke--Hajivassiliou--Keane simulator (our own Rust implementation, pseudorandom draws, no variance reduction) is over a hundred times slower at $n=200$ with $R=10^{4}$ draws and about eleven times slower with $R=10^{3}$. Its measured cost grows roughly as $n^{2.9}$ from $n=200$ to $1000$ at $R=10^{3}$, while ours is close to linear. That simulator remains appropriate for high-rank covariance.
-
-The independent and factor implementations apply to any sufficiently regular continuous performance distribution, while the current block, nested and tree kernels are Gaussian. Every accuracy and estimation benchmark uses synthetic data. On that evidence the Thurstone--Mosteller model families are a practical alternative to logit at these scales under structured covariance.
+considered impractical for correlated contests when $n$ is large. Yet here, for families lying within a grammar including factor, block and hierarchical covariance structures, we price and invert the whole probability vector from one shared survival field. Accuracy is checked against external referees up to $n=2000$, and at $n=1{,}000{,}000$ a calibration round trip reproduces its target to within $10^{-8}$ in log probability. Our own implementation of the Geweke--Hajivassiliou--Keane simulator, without variance reduction (the method is still appropriate for high rank), is over a hundred times slower at $n=200$ with $10^{4}$ draws, and its measured cost grows roughly as $n^{2.9}$ from $n=200$ to $1000$ while ours is close to linear. The independent and factor implementations apply to any sufficiently regular continuous performance distribution, while the current block, nested and tree kernels are Gaussian. On synthetic benchmarks the Thurstone--Mosteller model families
+thereby become a practical alternative to logit at modern scale under structured covariance.
 \end{abstract}
 
 \section{Introduction}\label{sec:intro}
