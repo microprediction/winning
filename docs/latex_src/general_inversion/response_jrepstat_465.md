@@ -3,7 +3,7 @@
 The revision starts from the reviewed version (23 November 2026).
 
 Draft for the revision page. "Done" items name where the change is.
-Section numbers are those of the revised PDF (43 pages).
+Section numbers are those of the revised PDF (44 pages).
 
 ## Required
 
