@@ -17,8 +17,9 @@ Section numbers are those of the revised PDF (44 pages).
    One correction to the letter: Section 7, Stress boundaries, does not
    report a factor rule "low by a factor of twelve at p near 10^-20". No
    such figure is in the submitted text.
-2. **Speed comparison.** Done. The abstract no longer makes the GHK
-   comparison; it says only that cost is close to linear in n. Section
+2. **Speed comparison.** Done. The abstract names GHK as a point of
+   comparison without a ratio or exponent, and says cost is close to
+   linear in n. Section
    1.2 states R for both ratios (over a hundred times at R = 1e4, about
    eleven at R = 1e3), the range of the 2.9 exponent (n = 200 to 1000 at
    R = 1e3), and that the comparator is our own Rust implementation
