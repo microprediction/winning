@@ -17,9 +17,9 @@ and the known limits, and `CLAIMS.md` maps every claim to its `make`
 target. The scripts in this directory and under `research/` on `main`
 track the current package and can differ from the tag in the last digits.
 
-`MANIFEST.md` in this directory maps each table and each number in the
-paper to its command, seed and log line, and lists the numbers that no
-committed command regenerates. The analyses added in the journal
+`MANIFEST.md` in this directory records the provenance of the paper's
+tables and numbers: command, seed and log line where a committed command
+produces them, and a list of the measurements that none regenerates. The analyses added in the journal
 revision (`selfconv.py` here, `research/general_sigma/paired_ensembles4.py`,
 `research/inversion_ablation/run_convergence_battery.py`) run against the
 `paper-r12` package; the branch `paper/inversion-r13` carries them on
