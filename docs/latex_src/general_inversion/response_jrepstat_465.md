@@ -27,15 +27,21 @@ Section numbers are those of the revised PDF (43 pages).
    R = 1e3), and that the comparator is our own Rust implementation
    without variance reduction.
 3. **Competing interests and funding.** Done. Two unnumbered sections
-   after Section 9.
-4. **Manifest.** Done. `MANIFEST.md` beside the paper's source maps each
-   table and each number in the text to its command at paper-r12, its
-   seed and the log line. Writing it showed that the title footnote's
-   "every number" was too strong: twelve groups of in-text figures
-   (development measurements, several of them describing rules the code
-   no longer contains) have no committed command. The manifest lists
-   them in its last section. The title footnote no longer claims every
-   number, and Section 9 and `REPRODUCE.md` point to that list. The revision's own analyses are three small scripts at
+   after Section 9 give the affiliation (microprediction.com, founded
+   and owned by the author), the interest in the software and platform
+   (no revenue from either), the self-written comparators, and the
+   funding (none external).
+4. **Manifest.** Done for every table and for the in-text numbers that a
+   committed command produces; the rest are disclosed, not mapped.
+   `MANIFEST.md` beside the paper's source gives, for each table and
+   number, the command at paper-r12, its seed and the log line.
+   Twelve groups of in-text figures have no committed command: they are
+   development measurements, and several describe rules the code no
+   longer contains, so they cannot be regenerated. They remain in the
+   paper. The manifest's last section lists each group, where it appears
+   and where it is recorded, and Section 9 and `REPRODUCE.md` point to
+   that list. The title footnote no longer claims a script behind every
+   number. The revision's own analyses are three small scripts at
    paper-r13.
 
 ## Recommended
