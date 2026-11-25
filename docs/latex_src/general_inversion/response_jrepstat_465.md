@@ -7,7 +7,7 @@ Section numbers are those of the revised PDF (43 pages).
 
 ## Required
 
-1. **Accuracy at n = 1,000,000.** Done, both ways. The abstract now says
+1. **Accuracy at n = 1,000,000.** Done. The abstract now says
    what is measured: calibration is demonstrated at that size, and
    accuracy is checked against external referees up to n = 2000. It no
    longer claims tail accuracy at a million. Section 7, Scale,
@@ -31,18 +31,19 @@ Section numbers are those of the revised PDF (43 pages).
    and owned by the author), the interest in the software and platform
    (no revenue from either), the self-written comparators, and the
    funding (none external).
-4. **Manifest.** Done for every table and for the in-text numbers that a
-   committed command produces; the rest are disclosed, not mapped.
-   `MANIFEST.md` beside the paper's source gives, for each table and
-   number, the command at paper-r12, its seed and the log line.
-   Twelve groups of in-text figures have no committed command: they are
-   development measurements, and several describe rules the code no
-   longer contains, so they cannot be regenerated. They remain in the
-   paper. The manifest's last section lists each group, where it appears
-   and where it is recorded, and Section 9 and `REPRODUCE.md` point to
-   that list. The title footnote no longer claims a script behind every
-   number. The revision's own analyses are three small scripts at
-   paper-r13.
+4. **Manifest.** Manifest supplied; exceptions explained. `MANIFEST.md`
+   beside the paper's source records, for each table and number, the
+   command at paper-r12, its seed and the log line, wherever a committed
+   command produces it. The request for complete regeneration is only
+   partly met. Twelve groups of figures have no committed command: they
+   are development measurements, several describing implementations
+   since superseded, and they include the entries of the equal-groups
+   table of Section 6.2. We decline to recreate those experiments for
+   this revision. The figures remain in the paper, and the manifest's
+   last section lists each group, where it appears and where it is
+   recorded. Section 9, `REPRODUCE.md` and the title footnote no longer
+   claim a script behind every number. The revision's own analyses are
+   three small scripts at paper-r13.
 
 ## Recommended
 
@@ -66,8 +67,10 @@ Section numbers are those of the revised PDF (43 pages).
 - **0.25 across starts.** Done (Section 6.2): it is the stage 1
   rank-three fit alone; stages 3 and 4 remove it.
 - **G used twice; sign of J.** The winning-time distribution function is
-  now H. The display already reads J = -B'W_eB in the submitted PDF
-  (p. 19), consistent with the other two statements; no change.
+  now H. The display already reads J = -B'W_eB in the reviewed PDF
+  (p. 19) and is unchanged. The sentence after it is corrected: J is the
+  discrete analogue of div(a grad h), not of its negative, and the net
+  flow into each region is -B'W_eBh.
 - **TV and abbreviations.** Done: TV defined at first use; MACML, EP,
   QMC, MSL, SPDE expanded; ensemble names pointed to randomcov.
 - **GHK against an established routine.** Declined for this revision.
@@ -78,7 +81,8 @@ Section numbers are those of the revised PDF (43 pages).
   1.4-2, R 4.6.1. Checking this showed that the minimax-tilting timings
   of Section 2 use our own Python implementation, not the R package;
   the text now says so, and the competing-interests statement lists it.
-- **Fishing data.** Reworded to the exact-likelihood finding only.
+- **Fishing data.** Reworded to the exact-likelihood finding only; the
+  lead-in that tied it to what simulation smooths over is removed.
 - **Wilcoxon comparisons.** Done: Table 2 gives per-ensemble paired
   differences, intervals, wins, two-sided p and its Holm adjustment, and
   the text calls the comparison descriptive.
@@ -89,7 +93,6 @@ Section numbers are those of the revised PDF (43 pages).
   "Seven standard errors" is correct: the unrounded ratio is 6.9
   (regenerated with `make estimation`); the 8.5 comes from the rounded
   0.0017 and 0.0002.
-- **No third-party GHK sentence.** Done.
 - **Solver convergence battery.** Done (Section 5.7): 130 seeded fields,
   125 converge, the five failures are rank-one fields at the largest
   loading scale.

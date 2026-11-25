@@ -1,9 +1,10 @@
 # Reproducing "Scalable Inversion of Contests with Correlated Performances"
 
-Every table in `main.tex`, and most numbers in its text, are produced by a
-committed, seeded script in this repository. `MANIFEST.md` maps each table
-and number to its command, seed and log line, and its last section lists
-the numbers that no committed command regenerates. `CLAIMS.md` is the
+The tables in `main.tex`, with one exception, and most numbers in its text
+are produced by a committed, seeded script in this repository. `MANIFEST.md`
+records each one's command, seed and log line, and its last section lists
+the measurements that no committed command regenerates (the entries of the
+equal-groups table among them). `CLAIMS.md` is the
 history of those mappings through review.
 
 ## One command

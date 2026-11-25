@@ -759,7 +759,8 @@ One limitation of the hierarchical kernels is stated here but we aim to remove i
 Their quadrature is a fixed-order rule, without
 the sharpness heuristic of \S\ref{sec:factor} being applied. So when a cluster loading
 is large against the idiosyncratic noise the conditional integrand is a
-near-step and Gauss--Hermite fails at any order (measured at cluster
+near-step and the fixed-order Gauss--Hermite rules tested have
+substantial error (measured at cluster
 sharpness $18$: $5\times10^{-2}$ of total variation against a
 four-million-path referee).\footnote{At time of writing, the shipped kernels warn past sharpness $3$ and
 direct such fields to the factor grammar whose node family escalates
@@ -1082,7 +1083,7 @@ exact derivative of the full adaptive map, which adds a grid-motion term,
 since the window itself depends on $\mu$.
 
 The collapsed operator displayed above is the second object: it imposes
-the diagonal through the zero row sum. The factor implementation returns the third. It differentiates the rectangle sum
+the diagonal through the zero row sum. The factor Jacobian and row routines return the third; the matrix-free routine offers both forms, with \texttt{form="grid"} selecting the fixed-grid derivative and \texttt{form="ibp"}, its default, the continuum-based form. The grid form differentiates the rectangle sum
 itself, then applies the normalization quotient: a directional derivative
 $v$ of the unnormalized masses is returned as
 $(v-p\,\mathbf{1}^{\top}v)/T$. The unnormalized $v=Ah$ differs from the
@@ -1191,7 +1192,8 @@ same answer: the derivative is that of the selected branch, here $\partial/\part
 $\mu_i+\epsilon_i$, which is one, on the event that $i$ is the
 minimiser and zero otherwise. Taking expectations gives the win
 probability. Full support is what supplies uniqueness, since ties then
-have measure zero; without it $W$ has kinks and only a subdifferential.
+have measure zero. If ties for the minimum have positive probability,
+differentiability can fail and a subgradient formulation is needed.
 This is the step that makes $p$ a gradient, and hence the inversion a
 convex program rather than a root-find.}
 
@@ -1786,8 +1788,9 @@ study below ran a raw top-$k$ eigenfit pipeline and the identified
 pipeline over twenty seeds per ensemble, paired by seed. The per-seed
 quantity is total variation against that seed's simulation referee, and
 the paired difference is raw minus identified. Table~\ref{tab:paired}
-gives, per ensemble, the median paired difference, a distribution-free
-$95$ percent interval for its center (Hodges--Lehmann), the seeds on
+gives, per ensemble, the median paired difference, a $95$ percent
+signed-rank (Hodges--Lehmann) interval for the location of the
+differences under the usual symmetry assumption, the seeds on
 which the identified arm wins, and a two-sided Wilcoxon signed-rank
 $p$-value (\texttt{paired\_ensembles4.py}).
 
@@ -1808,7 +1811,7 @@ near-common component, as the identification argument predicts.
 \setlength{\tabcolsep}{4pt}
 \begin{tabular}{lrrrrr}
 \toprule
-ensemble & median diff. & $95\%$ interval & wins & $p$ & Holm \\
+ensemble & median diff. & HL interval & wins & $p$ & Holm \\
 \midrule
 animals & $1.4\times10^{-2}$ & $[1.1,\,1.7]\times10^{-2}$ & $20$ & $2\times10^{-6}$ & $3\times10^{-5}$\\
 AR(1) & $-2.3\times10^{-4}$ & $[-4.3,\,10]\times10^{-3}$ & $10$ & $0.73$ & $0.73$\\
@@ -2223,10 +2226,9 @@ comparison at $n=10$ measures plumbing, not method.
 
 What the exact likelihood buys in estimation is not this row of the
 table. It is freedom from the choice of $R$, gradients without simulation
-noise, the cost law as $n$ grows, and diagnostics that simulation smooths
-over.
+noise, and the cost law as $n$ grows.
 
-One instance of the last point: on the classic Fishing data, the
+On the classic Fishing data, the
 unrestricted-covariance MNP likelihood evaluated exactly is
 boundary-seeking, still rising at loading norms near $4000$. The behavior is
 reproducible from the committed estimator (\texttt{winning.mnprobit}),
@@ -2341,10 +2343,10 @@ interface, and a zero-dependency browser port drives a live demonstration at
 
 \paragraph{Reproduction.} The repository is
 \texttt{github.com/microprediction/winning}. \texttt{MANIFEST.md}, beside this paper's
-source there, maps each table and each number in the text to
-the command that produces it, the seed it
-uses, and the log line to read. Its last section lists the numbers in
-the text that no committed command regenerates. The tables were produced
+source there, records the provenance of the paper's numerical claims,
+giving commands, seeds and log lines where available. Its last section
+identifies the measurements, among them the entries of the equal-groups
+table, for which no committed command is available. The original tables were produced
 at repository tag \texttt{paper-r12}, package version \texttt{1.4.0};
 the analyses added in revision are at tag \texttt{paper-r13} and run
 against the same package. The repository also holds the parity-locked

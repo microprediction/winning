@@ -1,10 +1,13 @@
-# Manifest: every table and number in the paper, its command and its seed
+# Manifest: provenance of the paper's tables and numbers
 
 Paper: "Scalable Inversion of Contests with Correlated Performances,
 Including Softmax and Multinomial Probit" (`main.tex` in this directory).
 
-This file maps each table and each number in the text to the command
-that produces it, the seed that command uses, and the log line to read.
+This file records the provenance of each table and each number in the
+text: the command, seed and log line where a committed command produces
+it, and otherwise where it is recorded. The last section lists the
+measurements with no regenerating command, which include the entries of
+the equal-groups table.
 `CLAIMS.md` records how the mappings changed through review; where the
 two differ, this file is the current one.
 
