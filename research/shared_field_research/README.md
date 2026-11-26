@@ -451,3 +451,152 @@ Batch=2 for this stress. Fixed defaults are not safe in this regime.
 3. Add independent high-accuracy width-3 references, more graph/order
    families, analytic leaf performance, adaptive resolution, and
    compiled GHK comparison. The arbitrary covariance goal remains open.
+
+
+## 2026-11-26 — Shared affine lower envelope: a dense route, with negative results
+
+**Status: exact conditional estimator for any Gaussian square root; not yet
+a convincing general GHK replacement.** Research files envelope.py,
+test_envelope.py, bench_envelope.py, on existing draft PR #1093. Rechecked
+main README, CLAUDE.md, races.py, general_sigma/NOTES.md, previous
+bounded-width code and PR. No production dispatch changes. Targeted PR
+search for preintegration/envelope found no overlapping implementation
+in titles; not an exhaustive code search. This direction deliberately
+does not repeat the failed scalar diagonal split or indicator control
+variate in general_sigma/NOTES.md.
+
+### Derivation
+
+Let X=mu+A Z, Z standard normal, A any exact square root of PSD Sigma,
+including rectangular/singular. Remove one common loading row and mean
+from every contestant (choice-invariant). Rotate the latent coordinates
+orthogonally, with the leading right singular direction of the centered
+contrast loadings first. Write X_i=a_i(Y)+b_i T, T~N(0,1) independent of
+Y. For fixed Y, every contestant is an affine line of T. The minimum
+envelope is concave, so the active slopes appear in decreasing order
+and each active line owns a single interval (l_i,r_i). Its conditional
+winning credit is Phi(r_i)-Phi(l_i); absent lines have zero credit.
+Coincident lines split the credit equally, and crossings of distinct
+slopes have zero conditional probability. Parallel lines are reduced
+to minimum intercepts, retaining multiplicities for ties.
+
+Sort slopes ONCE. Scan the lines, popping the previous line whenever
+the new intersection lies before its entry breakpoint. Each line is
+pushed and popped at most once. Hence all n conditional winning credits
+cost O(n) per outer draw after O(n log n) sorting; no per-alternative
+orthant or lattice. The shared field here is the lower envelope, not
+the existing survival product. Gaussian interval masses use survival
+differences in the positive tail; cancellation for extremely short
+intervals and overflow in extreme contrasts remain possible.
+The rank-one case is exact with no outer samples. For rank r>1 the
+integrand is a probability vector bounded by one. IID outer sampling
+would give strong consistency by the law of large numbers and
+Rao-Blackwell variance no larger than the plain indicator for the same
+rotation. The implemented outer sampler is scrambled Sobol: in the
+ideal unbounded-bit fixed-dimensional limit, the integrand is Riemann
+integrable on the unit cube (discontinuities confined to cube boundary
+and finitely many equal-parallel-line hyperplanes, unless those lines
+are permanently identical, in which case tie splitting is constant).
+Thus low-discrepancy quadrature converges; practical finite-bit Sobol
+has a finite resolution, not an unlimited asymptotic guarantee. No
+covariance approximation or quadrature of T. Refinement is outer sample
+count, not rank. Dense factorization/rotation costs O(n^3) for square
+input and residual draw multiplication O(n r) per sample; O(n) is
+only the shared-envelope scan. Memory batched. Current explicit-A API
+avoids a ridge or rank cutoff and supports singular laws, including
+identical rows and deterministic races. Equal splitting is the declared
+tie convention, consistent with classic fractional dead-heat credit;
+the existing continuous factor dispatcher does not promise such atoms.
+A covariance-to-root constructor preserving exact clone identities and
+rejecting indefinite matrices is still needed. Float-rounding can make
+nearly equal lines numerically indistinguishable; not certified.
+
+### Prior art (important)
+
+This is NOT a new convex-hull algorithm. Frazier, Powell and Dayanik
+(2009), The Knowledge-Gradient Policy for Correlated Normal Beliefs,
+DOI 10.1287/ijoc.1080.0314, section 3.1 Algorithm 1
+(https://people.orie.cornell.edu/pfrazier/pub/CorrelatedKG.pdf),
+already gives the linear-time upper-envelope scan for Gaussian expected
+maxima. Liu and Owen (2023), Preintegration via Active Subspace,
+DOI 10.1137/22M1479129, explicitly study Gaussian rotation followed by
+preintegration and RQMC. The current experiment combines these known
+ideas to price the whole Gaussian win book; do not claim novelty for
+either ingredient or claim a literature-first combination without
+further search. The interesting goal is practical all-share pricing.
+
+### Reproducible measurements
+
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python -m pytest -q test_envelope.py
+passed 6 standalone tests in 1.88s: brute per-line pairwise intervals
+over 400 rows with repeated slopes/intercepts; exact rank-one and binary
+answers; common shift/scale/permutation in rank one; deterministic and
+singular duplicate rows. Repo-wide CI not run; local standalone copies
+of the research files and existing ordered-GHK comparator were used.
+
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python -u bench_envelope.py
+(seed 53 per model). Numba optional, installed locally, warmed before
+timings; Python fallback is slower and unbenchmarked. Direct baseline
+uses same PCA rotation, not naive unrotated normals. GHK is existing
+Python log-domain greedy reordered Sobol; its times include per-runner
+preprocessing. Envelope/direct times exclude common Cholesky+SVD prep
+(.0006-.0064s for reported cases), include sampling, batched matrix
+products and scan. No compiled GHK baseline. Reference is mean of 4
+independent GHK scrambles at 2^14 per alternative (16/48 wishart and
+48 factor), 3 at 2^14 (16 near), or 3 at 2^12 (96 wishart). Errors
+are differences from those stochastic references, NOT true errors;
+max spreads respectively 3.11e-5, 1.64e-4, 2.42e-4, 1.04e-5,
+2.66e-4. Test scrambles seeds 0..3 or 0..2, refs seeds 100+.
+Wishart covariance .3I+.7 normalized Gram, factor V V'+.3I (rank3 V),
+near-singular vv'+.01I (condition number 765 for n16). Mixed signs.
+
+| n/model | method (log2 draws) | seconds | median max difference | RMSE |
+|---|---|---:|---:|---:|
+|16 wishart|GHK 10|.0256|1.24e-4|6.51e-5|
+|16 wishart|envelope 15|.0252|6.90e-4|3.20e-4|
+|16 wishart|direct 15|.0185|1.41e-3|8.03e-4|
+|16 wishart|envelope 18|.1899|1.90e-4|9.35e-5|
+|48 wishart|GHK 10|.2401|3.11e-4|1.14e-4|
+|48 wishart|envelope 18|.5707|4.21e-4|1.37e-4|
+|48 wishart|direct 18|.3713|4.81e-4|1.75e-4|
+|48 factor|GHK 10|.2447|3.63e-4|8.04e-5|
+|48 factor|envelope 15|.0663|4.07e-4|1.28e-4|
+|48 factor|direct 15|.0561|1.73e-3|4.83e-4|
+|16 near|GHK 10|.0293|9.21e-5|4.22e-5|
+|16 near|envelope 15|.0224|2.27e-4|7.09e-5|
+|16 near|direct 15|.0205|1.26e-3|6.04e-4|
+|16 near|envelope 18|.1701|3.94e-5|1.97e-5|
+|96 wishart|GHK 10|1.0034|4.62e-4|1.28e-4|
+|96 wishart|envelope 18|1.2030|4.72e-4|1.31e-4|
+|96 wishart|direct 18|.7755|5.48e-4|1.38e-4|
+
+Both local benchmark invocations hit execution time limits before all
+rows (48 factor at 2^18 and 96 factor comparison not completed).
+The committed script contains all case commands. Envelope and direct
+sum to one by construction (envelope deviations <=4.5e-16 observed
+in first run); GHK raw mass deviations up to .00584. This is not an
+accuracy certificate. Strong low-rank directional signal gives useful
+variance reduction against direct simulation. On dense high-rank
+Wishart, it does NOT currently beat ordered GHK at matched accuracy or
+direct Sobol reliably at matched time; n96 is close to GHK but reference
+noise is material. On a true factor model existing survival pricing is
+likely better still; no comparison against that path yet. No claim of
+practical general breakthrough or useful rare-tail reliability.
+
+### Next iteration
+
+The precision-tree/cycle/width extension remains the strongest new
+structured result. For universal dense pricing, try integrating two
+Gaussian coordinates via a planar lower-envelope power diagram
+(Gaussian polygon probabilities), or use a pilot to select a direction
+that maximizes changes in the likely WINNER, not total contrast
+variance. The latter can be learned from near-tied pairs of pilot
+draws: maximize a weighted sum of squared projected contrasts with
+weights depending on closeness and relevance to the minimum. Train on
+independent pilot draws, freeze direction, then integrate exact
+intervals as above. Compare to direct QMC with same rotation and to
+ordered GHK, including pilot cost. A second exact improvement may be
+to integrate out analytically all low-width leaf buckets in the earlier
+precision code; not performed this run. Do not promote the current
+envelope estimator without stronger matched-time tests on large,
+high-rank dense cases and independent reference precision.
