@@ -32,7 +32,8 @@ make <target>       # one row of the tables below; log in out/<target>.log
   tag that first carries them: this manifest, `selfconv.py`,
   `research/general_sigma/paired_ensembles4.py` and
   `research/inversion_ablation/run_convergence_battery.py` (r13), and
-  `equal_groups.py` (r14). All run unchanged against the `paper-r12`
+  `equal_groups.py`, `small_figures.py`, `invert_structures.py` and
+  `plot_inversion_scaling.py` (r14). All run unchanged against the `paper-r12`
   package. `paper-r14` is the tag of the final version.
 - One data file changed at `paper-r14`: a stray line holding only the
   number 577697 was deleted from
@@ -72,7 +73,7 @@ make <target>       # one row of the tables below; log in out/<target>.log
 | Inversion at n=1e6: under two minutes independent (105 s), about twelve minutes rank-one factor (699 s); log residuals 7.3e-10 and 7.7e-9; ability errors 7.5e-11 and 2.4e-9 | `make invertmillion` = `$PY bench.py invertmillion` | `default_rng(0)` per case | one line per n and class: "inversion ... max\|log p resid\| ... max\|mu err\|". **time** and the residuals as logged: key `invert_million` in `retime.json` |
 | GHK over a hundred times slower at n=200, R=1e4 (1.84 s against 15 ms); about eleven times at R=1e3 (170 ms against 15 ms) | `make ghk` | as the GHK table | **time**; n=200 row |
 | GHK log-log slope 1.9 from n=10 to 200 (R=1e4) and 2.9 from n=200 to 1000 (R=1e3); 0.18, 1.69, 19.4 s at n=200, 500, 1000 | `make law` = `$PY bench.py law`; the 1.9 slope is from the `ghk` table's R=1e4 times at n=10 and 200 | `default_rng(4)` | **time**; key `law` in `retime2.json` |
-| Equicorrelation prices as independent noise, to 6e-17 (footnote) | partly: `$PY -m pytest -q ../../../tests/test_race_invariants.py::test_case_v_is_choice_equivalent_to_independence` | `default_rng(0)` | the test asserts agreement below 1e-12; the 6e-17 itself is not printed (gap G1) |
+| Equicorrelation prices as independent noise, to 1e-16 (footnote) | **(r14)** `$PY small_figures.py G1` | `default_rng(0)` | "worst 1.1e-16" |
 
 ### Section 2
 
@@ -88,10 +89,10 @@ make <target>       # one row of the tables below; log in out/<target>.log
 | Number | Command | Seed | Read |
 |---|---|---|---|
 | Bulk window: 33 points match 500 on the span window; span floor 6e-11; five or more orders at 33 to 65 points, two to eight times from 129 | `make window` = `$PY run_window_savings.py` in `research/lattice_window` | `default_rng(0)` | table of error by point count for the two windows |
-| Student-t, 4 degrees of freedom: tail level 1e-12 lies 1456 standard units out; spacing 5.7 at 257 points | none (gap G2) | | recorded in the docstring of `winning/factor/races.py` |
-| Student-t, nu=2.5, n=40: 5e-3 TV under a normal envelope, 5e-5 with the true survival | none (gap G2) | | recorded in `CLAIMS.md` (5.1e-3 before, 5.2e-5 after) and the same docstring |
-| Jacobian against finite differences: J 2e-11, J0 1e-8 (65-point Gaussian); 1e-6, 1e-5 (Student-t) | partly: `$PY -m pytest -q ../../../tests/test_polish.py::test_jacobian_is_the_derivative_of_the_map_that_was_evaluated` | `default_rng(3)` | asserts J below 1e-9 (Gaussian, 65 points) and below 5e-6 (Student-t, at 257 points); the J0 figures are not computed (gap G3) |
-| Column sums 6e-17; row sums 1e-3 at 25 points, 2e-10 at 65, machine precision at 257 | partly: `$PY -m pytest -q ../../../tests/test_polish.py::test_jacobian_matches_finite_differences` | `default_rng(5)` | asserts row sums below 1e-9 at 257 points; the column-sum figure and the 25- and 65-point row sums are not computed (gap G3) |
+| Student-t, 4 degrees of freedom, six runners: level 1e-12 lies 1456 standard units out; spacing 5.7 at 257 points | **(r14)** `$PY small_figures.py G2` | none (closed form) | first G2 section |
+| Student-t, nu=2.5, n=40: shipped window 2e-5 TV at 513 points and 6e-3 at the default 257; the 5e-3 under a normal envelope is earlier code (gap G2) | **(r14)** `$PY small_figures.py G2` | `default_rng(0)` | second G2 section: 5.6e-3, 2.0e-5, 1.1e-5 at 257, 513, 1025 points |
+| Jacobian against finite differences: J 5e-10, J0 1e-9 (65-point Gaussian); both 1e-8 (Student-t, 257 points) | **(r14)** `$PY small_figures.py G3` | `default_rng(3)` | section G3a. Regenerated at `paper-r14`; the earlier print had 2e-11, 1e-8, 1e-6, 1e-5 from a configuration that was not recorded |
+| Column sums 1e-16; row sums 1e-3 at 25 points, 2e-10 at 65, machine precision at 257 (Gaussian); 1e-3, 3e-8, machine precision (Gumbel) | **(r14)** `$PY small_figures.py G3` | `default_rng(5)` | section G3b |
 | Removal example mu=(-20,0,1): 0.760; lattice mass 3e-28 on the original grid | partly: `$PY -m pytest -q ../../../tests/test_race_invariants.py::test_removal_shares_dominant_favorite` | none | asserts 0.760 to 1e-4; the 3e-28 mass on the original grid is not computed (gap G4) |
 
 ### Section 4
@@ -102,7 +103,7 @@ make <target>       # one row of the tables below; log in out/<target>.log
 | Raw row-norm example: 2.90, 4.10, 6.1e-3, 3.87 (footnote) | partly: `$PY -m pytest -q ../../../tests/test_bases.py::test_sharpness_dispatch_is_gauge_invariant_and_safe` | none | asserts the shipped dispatch is within 5e-5 of the analytic orthant; the four footnote figures describe the rejected rule and are not computed (gap G5) |
 | Fixed 15-node rule loses up to five percent of total variation | `make fixed-rule` = `$PY fixed_rule_loss.py` in `research/fuzz` | case seed 11540 (`default_rng(seed)`) | "4.79e-2" for the fixed rule, "3.8e-3" for the default |
 | Sharp-factor escalation is applied past a trigger of 3 | `make tests` (`tests/test_sharp_factor_escalation.py`) | seeds inside each test | pytest pass |
-| Block, nested, tree kernels lose 5e-2 TV at cluster sharpness 18, against a four-million-path referee | partly: `$PY -m pytest -q ../../../tests/test_blocks.py::test_sharp_blocks_warn_that_gh_cannot_converge` | none | asserts the warning fires; the 5e-2 and its four-million-path referee have no script (gap G6) |
+| Block kernel loses 1.0e-1 TV at cluster sharpness 18, against a four-million-path referee | **(r14)** `$PY small_figures.py G6` | field `default_rng(0)`; referee `default_rng(1)` | section G6. Regenerated at `paper-r14`; the earlier print had 5e-2 from a configuration that was not recorded |
 | Rank two, about sixty nodes: tensor Gauss-Hermite 3e-5 against Sobol 3e-3 at n=50; 3e-6 against 3e-3 at n=200 | `make gh-vs-sobol` = `$PY run_gh_vs_sobol.py` in `research/factor_nodes` | `default_rng(24)`; Sobol scrambles `seed=s` | one line per n and rule |
 | 400-runner cluster at correlation 0.99: proxy window drops 28 percent; shares 0.68/0.32 (footnote) | partly: `$PY -m pytest -q ../../../tests/test_blocks.py::test_window_covers_near_common_shock_winner_mass` | none | asserts shares of 0.5 under the shipped window; the 28 percent and 0.68/0.32 describe the rejected proxy window, which is no longer in the code (gap G5) |
 | Depth-one tree with zero strengths reproduces the block race to machine precision (footnote) | partly: `$PY -m pytest -q ../../../tests/test_polish.py::test_tree_jacobian_flat_equals_block` | `default_rng(3)` | asserts the Jacobians agree to 1e-12; for probabilities `research/fuzz/fuzz_races.py` (`make fuzz`) checks `tree_flat_is_blk` to 5e-9 on every case |
@@ -114,7 +115,7 @@ make <target>       # one row of the tables below; log in out/<target>.log
 
 | Number | Command | Seed | Read |
 |---|---|---|---|
-| Directional derivative against central differences: 2e-3 at L=25 without the quotient; 3e-11 from L=101; 6e-4 at L=25 (grid motion); asymmetry 3e-4 at 25 points, 7e-11 at 65 | none (gap G3) | | 2.06e-3, 3.1e-11 and 6.2e-4 are recorded in `CLAIMS.md`; the asymmetry figures are recorded nowhere else |
+| Directional derivative against central differences: 3e-2 without the quotient and 2e-2 with it at L=25; 1e-11 either way from L=101; asymmetry 3e-4 at 25 points, 7e-11 at 65 | **(r14)** `$PY small_figures.py G3` | `default_rng(5)` for the field, `default_rng(7)` for the direction | sections G3c and G3b. The L=25 figures were regenerated at `paper-r14`; the earlier print had 2e-3 and 6e-4 from a configuration that was not recorded |
 | Own-slope iteration 16, 17, 27 sweeps; unpreconditioned map fails in 500 sweeps on two fields and needs 68 to 144 on the third (n=200, rank two) | `make blp-ablation` = `$PY run_blp_ablation.py` in `research/inversion_ablation` | `default_rng(31)` | one line per field and map |
 | Stall case: damped iteration stalls near 1e-4 (n=200, loadings N(0,1.6^2), variances in [0.15,0.25]); Newton-Krylov converges to 9.6e-10 on the benchmark field at about sixty times the wall clock and diverges on the stall case | `make newton-krylov` = `$PY run_newton_cg3.py` in `research/experiments/exp23_newton_cg` | `default_rng(21)` | "Jacobi stalls at 1.1e-4"; "9.6e-10". The sixty-fold is a **time** ratio in the same log |
 | Naive Newton-CG: 370 s without converging against 3.5 s (footnote) | `$PY run_newton_cg.py` in `research/experiments/exp23_newton_cg` (run by `make timings`, key `newton_cg`) | `SEED = 21` | **time**; `retime3.json` |
@@ -165,21 +166,20 @@ These in-text figures were measured during development and are recorded
 in the places named, but no committed command prints them. Group G5 and
 the items marked "earlier code" in G2 and G4 describe code since
 replaced and cannot be produced by the shipped package; the others
-could be scripted. G7 (the equal-groups table) was closed at `paper-r14`
-by `equal_groups.py`. Where
+could be scripted. Five groups were closed at `paper-r14`: G7 (the
+equal-groups table) by `equal_groups.py`; G1, G3 and G6 and most of G2
+by `small_figures.py`; G12 (sweep counts) by `invert_structures.py`.
+Where a regenerated figure differs from the earlier print, the row above
+says so and the paper carries the regenerated figure. Where
 a committed test pins the same configuration at a looser tolerance, the
 rows above name it.
 
 | Gap | Paper location | Figures | Status |
 |---|---|---|---|
-| G1 | Section 1.1, footnote | 6e-17 | a test asserts 1e-12; the tighter figure is not printed |
-| G2 | Section 3.1 | Student-t window: 1456, 5.7; 5e-3 against 5e-5 | no script; the 5e-3 is from the earlier normal-envelope window (earlier code) |
-| G3 | Sections 3.2 and 5.2 | Jacobian against finite differences (J0 figures; 25- and 65-point row sums; column sums; quotient 2e-3, 3e-11, 6e-4; asymmetry 3e-4, 7e-11) | tests assert looser bounds at other lattice sizes; no script prints these |
+| G2 | Section 3.1 | 5e-3 TV under a normal envelope for the window | earlier code |
 | G4 | Section 3.3, footnote | lattice mass 3e-28 | no script; removal on the winner's grid is not what the shipped routine does (earlier code) |
 | G5 | Sections 4.1, 4.2, 6.1 | figures describing rules the code no longer contains: raw row-norm dispatch (2.90, 4.10, 6.1e-3, 3.87), proxy window (28 percent, 0.68/0.32), raw-residual fitter (1.7e-2) | cannot be regenerated from the shipped code; tests pin the shipped behavior |
-| G6 | Sections 4.1, 4.2 | 5e-2 TV at cluster sharpness 18 against a four-million-path referee | a test asserts the warning; no referee script |
 | G8 | Section 6.6 | rank 27, residual 1e-3; 2^16 nodes reach 6e-3; 0.14; 7e-2 | no script |
 | G9 | Section 7 | Python and R escalated rules agree to 5e-4 | no script |
 | G10 | Section 7 | Fishing likelihood rising at loading norms near 4000 | no script; data not in the repository |
 | G11 | Section 7 | compiled kernel about six percent of the covariate fit's time | a profile, recorded in `CLAIMS.md`; no command |
-| G12 | Section 7 | million-contestant inversion sweep counts | not logged by `bench.py invertmillion` |
