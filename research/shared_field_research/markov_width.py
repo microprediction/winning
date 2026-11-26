@@ -1,7 +1,7 @@
 """Research: all min-win shares on a bounded-width Gaussian precision graph."""
 import numpy as np
 from scipy.sparse import csr_matrix
-from scipy.special import roots_legendre
+from scipy.special import roots_legendre, ndtr
 
 
 def prepare(Q, order=None, max_width=3):
@@ -56,11 +56,19 @@ def _align(a, small, big):
     return a.reshape((a.shape[0],)+tuple(a.shape[1+small.index(j)] if j in small else 1 for j in big))
 
 
-def width_shares(mu, Q, order=None, *, L=64, M=24, span=9., max_width=3, batch=4):
+def interval(a, b):
+    """Gaussian interval, reflecting positive-tail endpoints."""
+    return np.where(a >= 0, ndtr(-a)-ndtr(-b), ndtr(b)-ndtr(a))
+
+
+def width_shares(mu, Q, order=None, *, L=64, M=24, span=9., max_width=3, batch=4,
+                 collapse=False):
     """Raw probabilities; SPD precision only. Nested positive quadrature.
 
     Complexity O(n L M**(width+1)) for fixed width; sparse preparation
     O(n width**2), memory O(n batch M**(width+1)). No covariance fit.
+    With collapse=True, leaf buckets integrate the conditional Gaussian
+    exactly and retain its boundary density for the reverse sweep.
     """
     order, sep, beta, pivot, sd = prepare(Q, order, max_width)
     n = len(order); mu = np.asarray(mu, float)
@@ -79,6 +87,7 @@ def width_shares(mu, Q, order=None, *, L=64, M=24, span=9., max_width=3, batch=4
     children = [[] for _ in range(n)]; roots = []
     for i,s in enumerate(sep):
         (children[s[0]] if s else roots).append(i)
+    leaf = [collapse and not kids for kids in children]
     a,b = np.min(mu-span*sd), np.min(mu+span*sd)
     x,wx = roots_legendre(L); x,wx = a+(b-a)*(1+x)/2, wx*(b-a)/2
     q,w = roots_legendre(M); out = np.zeros(n)
@@ -93,6 +102,18 @@ def width_shares(mu, Q, order=None, *, L=64, M=24, span=9., max_width=3, batch=4
             safe = np.where(m > 0,m,1.)
             return v/safe.reshape((-1,)+(1,)*(v.ndim-1)),np.log(safe)
         for i,scope in enumerate(scopes):
+            if leaf[i]:
+                s = sep[i]
+                mean = np.zeros((len(cut),)+(1,)*len(s))
+                for j,coef in zip(s,beta[i]):
+                    mean = mean+coef*_align(z[:,j],(j,),s)
+                lower = (lo[:,i].reshape((-1,)+(1,)*len(s))-mean)/tau[i]
+                upper = (span-mean)/tau[i]
+                m,ls = norm(interval(lower,upper))
+                # No axis for i; boundary insertion is the conditional density.
+                K.append(None); H.append(np.exp(-.5*lower**2)/(tau[i]*np.sqrt(2*np.pi)))
+                msg.append(m); scales.append(ls)
+                continue
             resid = _align(z[:,i],(i,),scope)
             for j,coef in zip(sep[i],beta[i]):
                 resid = resid-coef*_align(z[:,j],(j,),scope)
@@ -115,9 +136,12 @@ def width_shares(mu, Q, order=None, *, L=64, M=24, span=9., max_width=3, batch=4
         for i in range(n-1,-1,-1):
             scope=scopes[i]; outside=_align(ctx[i],sep[i],scope)
             subscale=sum((scales[j] for j in children[i]),np.zeros(len(cut)))
-            val=(H[i][:,-1]*outside[:,0]).reshape(len(cut),-1).sum(axis=1)
+            boundary = H[i] if leaf[i] else H[i][:,-1]
+            val=(boundary*outside[:,0]).reshape(len(cut),-1).sum(axis=1)
             ok=(np.abs(cut[:,i])<=span)&(val>0)
             out[i]+=np.sum(wx[sl][ok]*np.exp(np.log(val[ok])+cs[i][ok]+subscale[ok]-np.log(sd[i])))
+            if leaf[i]:
+                continue
             # Reverse derivative: exclude child's message using prefix/suffix
             # products, so boundary zero weights and underflowed zeros are safe.
             kids=children[i]
