@@ -296,3 +296,158 @@ matrices pursue structured backbones with unbiased residual
 corrections, not the already failed fixed-rank approximations. Limit
 memory by streaming outer thresholds; current cycle reference
 allocates large batched matrices. Keep this isolated from production.
+
+
+## 2026-11-26 — Arbitrary bounded-width precision graphs
+
+**Status: tested extension of PR #1093, not a universal dense competitor.**
+Main README, CLAUDE.md, factor/races.py, general-Sigma research notes, and
+the previous tree/cycle code and PR were rechecked. Main's dense route
+still includes GHK; the old residual-factor fitting ladder already has
+substantial negative results. This iteration implements the generic
+elimination idea rather than fitting another covariance grammar.
+
+### Conditional-factor elimination and reverse cavities
+
+Use a supplied elimination order, and perform sparse Gaussian Schur
+elimination without dropping fill. At vertex i let S_i be its remaining
+neighbors in the filled graph, a clique; pivot d_i>0 and regression
+b_i=-Q_i,S_i/d_i are the conditional precision and coefficients in the
+CURRENT Schur complement. For centered X,
+X_i | X_{i+1:n} ~ N(b_i X_{S_i},1/d_i). Thus the joint density is a
+product of normalized conditional Gaussian kernels, with scopes
+B_i={i} union S_i. Unlike raw pair potentials these have nonpositive
+quadratic exponents. Selected covariance entries can be computed in
+reverse order: C_{i,S_i}=b_i C_{S_i,S_i},
+C_ii=1/d_i+b_i C_{S_i,S_i} b_i^T. All needed pairs have been retained
+because S_i is a clique. Sparse elimination and selected inversion
+cost O(n t^2) arithmetic for maximum filled width t, given the order
+and sparse input (excluding permutation validation/sorting and CSR
+conversion, dense input scanning and finding the order). No dense
+inverse inside the solver.
+
+Standardize using these marginal variances. At threshold x, use the
+same truncated positive quadrature as the previous cycle work, with an
+extra zero-weight boundary node. Attach bucket i to the smallest member
+of S_i; if S_i empty it is a root. Every child's separator lies in
+the parent's bucket scope. In the forward direction form
+
+    H_i = K_i * product_{j child of i} m_j
+    m_i = sum_{z_i} w_i(z_i) H_i
+
+where K_i is the conditional density in standardized coordinates.
+In reverse, let A_i be the derivative of the complete scalar
+partition function with respect to the outgoing message m_i.
+Root A_i is the product of all other root messages (disconnected
+components are independent). Child context A_j is the sum over
+B_i minus S_j of A_i K_i w_i times all sibling messages except j.
+The boundary derivative is sum_{S_i} A_i H_i(z_i=c_i(x)).
+Multiply by 1/sd_i and integrate in x to price winner i. This is
+the finite-quadrature partial derivative with respect to the boundary
+weight, not a derivative of quadrature nodes or normalized messages.
+The code keeps explicit logarithmic scales and uses prefix/suffix
+products without division by weights or zero-valued messages.
+
+This is exact for the finite product quadrature, and has the same
+compact-domain convergence argument as previous iterations: at fixed
+span B, positive product Gauss-Legendre quadrature converges for the
+continuous joint density on the bounded integration domains, then
+outer quadrature converges (boundary mask has finitely many jumps).
+The omitted total probability is <= 2n Phi(-B); increase B after
+resolving the quadrature. SPD only, no ties, no hidden ridge, no
+covariance fit. A dense graph with width n-1 is formally covered but
+exponential and explicitly refused by the default width cap. The code
+does not solve singular covariance. A good order is the caller's
+responsibility. Adding a common shock to the covariance can destroy
+precision sparsity; explicitly specified common shocks can be ignored
+by choice invariance. Complexity O(n L (M+1)^(t+1)) for fixed t, with
+batched threshold memory O(n batch (M+1)^(t+1)). Prefix/suffix means
+even high-degree buckets need only linear-in-degree contractions.
+The Gaussian factors are not individually log-scaled; finite precision
+can underflow at sharp conditionals or many children. No automatic
+resolution or error certificate; raw probabilities are never renormalized.
+
+Prior art: Darwiche, *A Differential Approach to Inference in Bayesian
+Networks*, UAI 2000 / JACM 2003, https://arxiv.org/abs/1301.3847,
+explicitly differentiates a network polynomial to obtain all marginals.
+Do not claim reverse-mode graphical inference or zero-weight evidence
+derivatives as new in themselves. The contribution here is the
+winning-specific all-boundary integral and practical Gaussian
+precision solver, including sparse selected inversion.
+
+### Experiments
+
+Local isolated prototype, not full repository CI (network cloning
+not available in prior runs). Commands from this directory:
+    OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python -m pytest -q test_markov_width.py
+    OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python bench_width.py
+
+12 tests passed in 1.52s locally (benchmark comparator duplicated the
+previous tree benchmark locally; committed benchmark imports that same
+GHK function). Five independent bivariate contrast orthant integrations
+for n=3: largest error 1.17e-14. Selected inversion compared with dense
+inverse for width 1,2,3; cycle with nontrivial fill, arbitrary
+permutation with corresponding order, scale/location invariance,
+independent disconnected unequal-variance race, width-limit and
+singular/indefinite refusals all tested. No production dispatch changes.
+
+Seed 42 random branching k-trees (not lifted banded chains), mixed-sign
+precision edges U(-.65,.65) and diagonal 1+sum absolute edges; strong
+negative edges -U(.7,1.2) and diagonal .15+sum absolute edges; means
+N(0,.5^2). Single-thread Python; GHK includes greedy ordering and
+contrast factorization, 1024 Sobol draws per alternative, four
+scrambles seeds 0..3. Precision input given, covariance inverse for
+GHK excluded; each shared-field timing includes sparse prep. Error
+against highest-resolution same-method reference, not a certificate.
+
+| n,width,mode | (L,M) | shared sec | max abs error | GHK sec | median GHK max abs error |
+|---|---|---:|---:|---:|---:|
+|32,2,mixed|48,16|.148|5.57e-6|.132|1.47e-4|
+|32,2,mixed|64,24|.587|3.90e-8|.132|1.47e-4|
+|100,2,mixed|48,16|.617|9.88e-5|1.335|2.17e-4|
+|100,2,mixed|64,24|2.171|1.87e-7|1.335|2.17e-4|
+|32,2,strong|64,24|.724|1.13e-8|not completed|not completed|
+|16,3,mixed|48,14|.867|6.31e-6|.0354|1.19e-4|
+
+Reference levels 112,44 (32 mixed), 88,36 (100 mixed and 32 strong),
+80,24 (16 width 3). Preceding finer-grid changes 1.06e-11, 3.49e-9,
+3.56e-13, 2.61e-8 respectively. Direct dense Gaussian Sobol (4 scrambles
+2^17 each) corroborated bulk for 32 and 100 mixed, max differences
+2.10e-4 and 2.02e-4 from refined quadrature; not an independent
+fine-accuracy reference. Benchmark timed out before strong GHK and
+width-3 MC portions, so no claims there. Width 2 is competitive
+in these examples, particularly at high accuracy, but width 3 is
+uncompetitive at tested small n. The initial log-space implementation
+was substantially slower: 32 mixed at (48,16) .431s vs .148s,
+same answer; use positive scaled contractions for moderate cases.
+No compiled or amortized GHK comparison.
+
+Near-singular stress: graph(8,2,seed=99,strong=True), subtract .145 I
+from Q, multiply mu by .25, condition number 1368.83. Four ordered
+GHK scrambles with 2^14 samples/alternative, max spread 8.17e-6.
+(L,M)=(64,24): mass 1.002577, max error vs mean GHK 2.94e-3;
+(80,40): mass .999993987, max difference 1.39e-6;
+(112,64) and (144,80): mass essentially one, max difference
+1.24e-6, and errors at last two refinements agree to displayed digits.
+Batch=2 for this stress. Fixed defaults are not safe in this regime.
+
+### Next research priorities
+
+1. Do not simply increase graph width: the explicit tensor cost becomes
+   uncompetitive already at width 3. Exploit analytical leaf elimination:
+   a leaf's forward message is a univariate normal interval CDF
+   conditional on the separator; its boundary factor is a density.
+   This removes an entire quadrature axis for leaf buckets and preserves
+   the exact target (with truncation). More generally integrate or
+   compress the conditional Gaussian kernel in a separator basis,
+   and monitor both partition and boundary derivatives under refinement.
+2. Investigate a convergent residual correction based on a low-width
+   precision backbone, rather than solely fitting covariance or using
+   the already failed binary-indicator control variates. One option:
+   exact Gaussian density ratio on the winner boundary, conditional
+   quadrature under the backbone, with bounds on second moments or
+   a tempering path. Need real experiments and comparison, not a
+   formal exponential algorithm or trivial importance sampling claim.
+3. Add independent high-accuracy width-3 references, more graph/order
+   families, analytic leaf performance, adaptive resolution, and
+   compiled GHK comparison. The arbitrary covariance goal remains open.
