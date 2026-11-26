@@ -1219,3 +1219,158 @@ previous affine envelope along a race-specific contrast direction.
 Test with higher-budget independent references and a compiled
 GHK baseline where available. The arbitrary-covariance goal is
 still open.
+
+
+## 2026-11-26 — Sparse line cavities: overcome diffuse near-null modes
+
+Research-only in existing open PR #1093; current main README, CLAUDE.md,
+factor/races.py and methods/native.py rechecked. Previous general_sigma
+notes path attempted but unavailable at that path; prior durable log
+already records the diagonal transfer experiments. Open PR title
+search for conditional found no matches. No production dispatch.
+Rather than compute correlated bivariate survival denominators, this
+iteration combines the earlier affine-envelope idea with an
+alternative-specific Gaussian direction and shared order statistics.
+
+Let P=I-11'/n, A A'=P C P, A full column rank n-1, and let Q be
+the inverse of P C P restricted to contrast space (zero on 1).
+For entrant i choose a single companion j, and v=P(e_i+a e_j).
+Set a=-Q_ij/Q_jj, which minimizes v'Qv over a. Choose j maximizing
+Q_ij^2/Q_jj. This choice is fixed before sampling, independent of
+the Gaussian draw. Let s=1/sqrt(v'Qv) and w=s A^+ v. Then w is a unit
+latent direction, A w=s v. For sample z, conditional on its
+orthogonal projection away from w, replacement of the scalar
+z'w by an independent N(0,1) is exact. Modulo common translation
+it moves entrant i by r and j by a*r, with
+r | projection ~ N(-s z'w,s^2) when measured from the sampled x.
+The winning interval is the intersection of
+
+    r <= min_{l != i,j} x_l - x_i
+    (1-a) r <= x_j - x_i.
+
+If 1-a<0, the latter supplies a lower bound; if zero, it is a
+deterministic comparison. Evaluate the interval mass by Gaussian
+CDF differences, reflecting positive-tail intervals. The three
+smallest sampled performances suffice for all leave-two-out minima.
+One shared sample matrix and one shared score matrix compute all
+entrant integrands; O(n) additional work per sample after O(n^2)
+dense matrix multiplications, O(n^3) preparation. Unlike the
+shared-minimum hazard vector, columns condition on DIFFERENT
+sigma fields, so their sum need not be 1 at finite budget.
+Each entry is bounded and nonnegative, unbiased under iid or
+ideal uniformly scrambled nodes and strongly consistent under iid.
+Increasing ideal Sobol resolution gives convergence for the bounded
+a.e. continuous integrand (finite bits/roundoff impose floors).
+Normalizing the final vector would be consistent but not unbiased;
+raw mass defects reported, no normalization performed.
+No model approximation, ridge or numerical quadrature.
+Conditional covariance reduction holds coordinatewise for iid
+draws, not necessarily jointly or at matched QMC time.
+This is Gaussian preintegration (Liu/Owen 2023,
+https://doi.org/10.1137/22M1479129; constrained active subspaces,
+Liu 2024, https://doi.org/10.1137/23M1548918); the proposed
+contribution is sparse entrant-specific directions and shared
+leave-two-out minima, not the general preintegration identity.
+
+**Diffuse near-null escape.** Consider contrast covariance
+P-(1-eps)uu' with centered unit u. Its restricted inverse is
+Q=P+(1/eps-1)uu'. For any i except a largest-|u_i| entry, take
+a=-u_i/u_j with j a largest-|u_j| entry. Then |a|<=1 and
+v'u=0, hence v'Qv=||v||^2<=2 independently of eps. Optimizing a
+can only lower energy. Thus s>=1/sqrt(2) for at least n-1
+entrants, even as eps tends to zero. For the balanced +/-1/sqrt(n)
+mode, this holds for every entrant. In contrast, single-entrant
+directions have s tending to zero and independent-noise packing
+has mean variance <=eps. This is a useful mathematical distinction:
+each entrant gets its own conditional integral, so simultaneous PSD
+packing is no longer required. It does not establish a GHK speed win
+or solve arbitrary many diffuse null modes.
+
+The code requires SPD on contrast space. For truly singular laws
+one can work with a supplied exact root: a sparse v must lie in
+range(A), and use w proportional to A^+ v; otherwise direct
+equal-tie credit is a valid fallback (the existing exact-root
+hazard_draw direct mode already does this). This generalization
+has NOT been implemented here. Never silently ridge, drop positive
+eigenvalues or infer ties from a tolerance. Extreme units, very
+small interval mass and eigensystem accuracy remain limitations.
+
+### Reproducible measurements
+
+sparse_cavity.py, test_sparse_cavity.py, bench_sparse_cavity.py.
+Run from this folder with OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1
+python -m pytest -q test_sparse_cavity.py and python -u
+bench_sparse_cavity.py (set the same environment). Local standalone
+copies passed 6 tests in .76s: exact binary, direct dense line
+inequality cross-check, balanced diffuse near-null, independent
+three-runner adaptive quadrature, credit gauge/scale/permutation and
+singular refusal. The exact dense directions check matches A*w
+against sparse contrast v. No full repository CI.
+
+Seed 812, same matrix and means generator as bench_packed_split.
+Four test scrambles 0..3. Reference mean of three ordered log-domain
+GHK scrambles 100..102, 8192 points/runner for n32 and 4096 for n64.
+Same fetched ordered_cholesky and ghk functions in local benchmark.
+All differences below are relative to noisy reference, not exact
+errors. Single-thread Python, mean seconds over seeds; GHK includes
+preprocessing, cavity prep separately .00027-.00185s. Direct uses
+same PCA contrast root and nodes as single/pair, keeps winner label.
+Medmax is median maximum absolute difference, RMSE pooled across
+rows and scrambles. Raw mass defects up to .00878 for cavity, .00681
+for GHK; direct sums to one.
+
+| n/case | method log2 draws | seconds | medmax | RMSE |
+|---|---|---:|---:|---:|
+|32 diffuse|GHK 10|.09401|2.48e-4|1.15e-4|
+||single 14|.06342|2.68e-3|7.45e-4|
+||pair 14|.06159|5.01e-4|1.91e-4|
+||pair 16|.20611|1.68e-4|6.88e-5|
+||direct 16|.05436|1.50e-3|5.16e-4|
+|64 diffuse|GHK 10|.38108|2.46e-4|1.26e-4|
+||single 14|.13109|1.70e-3|5.19e-4|
+||pair 14|.11483|5.11e-4|1.23e-4|
+||pair 16|.47175|2.40e-4|5.95e-5|
+||direct 16|.10668|1.08e-3|3.53e-4|
+|32 Wishart|GHK 10|.09479|3.83e-4|1.23e-4|
+||single 14|.05913|1.28e-3|4.02e-4|
+||pair 14|.05388|9.44e-4|3.66e-4|
+||pair 16|.21530|3.22e-4|1.34e-4|
+||direct 16|.05068|1.05e-3|3.98e-4|
+|32 hetero|GHK 10|.09279|2.19e-5|6.28e-6|
+||single 14|.04981|4.23e-4|1.12e-4|
+||pair 14|.04869|4.07e-4|1.03e-4|
+||pair 16|.19747|2.43e-4|5.39e-5|
+||direct 16|.05419|8.59e-4|2.51e-4|
+|64 clone|GHK 10|.37177|2.25e-4|1.29e-4|
+||single 14|.12072|4.77e-4|1.28e-4|
+||pair 14|.11954|3.92e-4|1.14e-4|
+||pair 16|.47729|1.19e-4|4.07e-5|
+||direct 16|.11201|8.54e-4|3.37e-4|
+
+Reference max spreads 1.09e-4, 2.55e-4, 1.35e-4, 8.08e-6,
+2.62e-4 respectively; reference raw mass 1.000246, 1.001608,
+1.000129, .99999957, 1.001923. Median smoothing SD single/pair
+for diffuse n32 .18560/.98615, n64 .24601/.96505, n128
+.41976/.99234. n128 reference attempt timed out; no n128
+accuracy or runtime claim. Cavity can improve over direct and
+scalar cavity, and is competitive in pooled RMSE in the diffuse
+n64 case, but worst-coordinate error is not decisively better
+at equal time; heteroscedastic case strongly favors GHK.
+No compiled comparison or certified accuracy. No new PR;
+preserved as research in existing draft.
+
+### Next experiment
+
+Generalize the sparse direction by choosing a small companion set
+J and solving a=-Q_JJ^{-1} Q_Ji. For r diffuse near-null modes,
+r suitably selected companion rows can cancel the dangerous modes
+if their restriction is nonsingular. Use the k+2 smallest sample
+values for deleting k+1 changing contestants; intersect all the
+linear inequalities with the shared cap. A pivoted rank-revealing
+selection on the near-null eigenvectors may be much better than
+greedy pair gain, with explicit conditioning safeguards. Also test
+a mass control variate with coefficients fitted on an independent
+pilot (the sum of individual conditional credits has expectation
+one), and compare full-vector error including rare shares. For
+singular laws require explicit exact support and tie semantics.
+The arbitrary-matrix performance objective remains open.
