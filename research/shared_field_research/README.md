@@ -729,3 +729,171 @@ against existing factor code and ordered GHK, including high-rank
 limits. It is an exact decomposition for a given separator, not a
 claim of efficient arbitrary-matrix pricing. A dense graph has no
 large independent set, so the universal objective remains open.
+
+
+## 2026-11-26 — Probability-coordinate shared field with an exact random cap
+
+**Status: research-only addition to draft PR #1093.** Rechecked main
+README, CLAUDE.md, races.py (_setup requires strictly positive D;
+dense cov route fits and falls back to GHK for degraded Gaussian fits),
+core.py, methods/native.py, general_sigma/NOTES.md, earlier width and
+analytic-leaf implementations and benchmark, and the open PR head.
+Targeted PR title searches for quantile and conditional minimum had
+no matches. No production changes. Do not confuse this with a new
+low-rank covariance fit; the factor law is exact and includes zero
+conditional variances, which the current continuous lattice refuses.
+
+### Derivation: integrate in the distribution of the minimum, not time
+
+Write X = mu + A Z + diag(s) eps, with s>=0. Given Z, the contestants
+with s>0 are independent Gaussians, while those with s=0 have known
+performances. Let c be the minimum of the deterministic contestants
+(infinity if none). For the independent leaves let
+
+    G(x) = product_i S_i(x), H(x) = -log G(x),
+    h_i(x) = f_i(x)/S_i(x), F(x)=1-G(x).
+
+The original winning shared field gives leaf i mass
+integral_{-infty}^c G(x) h_i(x) dx. Substituting u=F(x), for which
+du=G(x) sum_i h_i(x) dx, gives exactly
+
+    p_i | Z = F(c) integral_0^1
+                 h_i(F^{-1}(F(c)*t))/sum_j h_j(F^{-1}(F(c)*t)) dt.
+
+The earliest core contestant(s) get G(c), shared equally on exact
+ties. All leaf credits are fractions of a *single* hazard field,
+and all conditional credits sum to one for EVERY t, not by
+post-normalizing a quadrature result. This is the existing survival
+product expressed in probability coordinates. There is no tail cutoff
+in the mathematical integral or a narrow density at the core's
+winning boundary. The min CDF is strictly increasing if at least one
+leaf has positive s. For n_l leaves, quantile x(u) lies between
+min_i [a_i+s_i Phi^{-1}(u/n_l)] and
+min_i [a_i+s_i Phi^{-1}(u)], by the union and maximum bounds.
+Safeguarded Newton on sum log S_i uses this bracket, with log-domain
+hazard fractions; one leaf needs no root solve. Use either one
+scrambled-Sobol coordinate t together with Z or positive
+Gauss-Legendre integration in t. Conditional credit stays in [0,1].
+For L=1 ideal iid sampling would give unbiased strong consistency;
+the implemented RQMC is low-discrepancy integration of a bounded
+function continuous away from cube boundaries and core tie planes
+(permanent clones split exactly). It converges in the ideal
+fixed-dimensional infinite-resolution limit. L>=2 fixed quadrature
+can have deterministic bias; send L and the outer sample count to
+infinity, for example iteratively refining one then the other.
+Root numerical tolerance and finite-bit Sobol/clipping impose
+practical floors; this is not an arbitrary-precision certificate.
+Extremely tiny masses, underflow and cancellation in severe utility
+scales remain possible, and a nonconverged root raises. No covariance
+approximation. For a supplied rectangular exact root with d=0,
+deterministic tie splitting works including singular laws, but
+degenerates to direct QMC (no general speed claim).
+
+For SPD precision Q, any independent set I gives an exact conditional
+decomposition with diagonal conditional covariance 1/Q_ii and
+regression B=-Q_II^{-1}Q_IC. Core precision is the Schur complement
+Q_CC+Q_CI B. Use its Cholesky inverse transpose R; A_C=R, A_I=B R.
+The helper precision_factor requires exact structural zeros; no
+thresholding or ridge. Dense preprocessing O(k^3+n k^2), k=core
+size, per sample O(n k+n J L) with J root iterations; finite
+root iteration count is empirical, not a uniform accuracy bound.
+Dense graph has independent set size one: exact but not an efficient
+general solution. Main novelty claim is limited to this application
+of shared survival pricing; cause-specific hazards and the cumulative
+incidence integral are standard competing-risks identities (e.g.
+Beyersmann et al., Understanding competing risks: a simulation point
+of view, 2011, https://doi.org/10.1186/1471-2288-11-86). Inverse-CDF
+simulation and Rao-Blackwellization are standard as well.
+
+### Tests and results
+
+Research files capped_field.py, test_capped_field.py,
+bench_capped_field.py. Local standalone source passed 7 tests in
+0.71s (binary closed form, adaptive independent capped quadrature,
+single leaf, deterministic ties, permutation/common loading/location/
+scale with same nodes, equal leaf hazards, exact precision conversion
+and non-independent set rejection). No full repo CI.
+Run OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python -m pytest -q
+test_capped_field.py from this folder, and python -u bench_capped_field.py
+with the same environment. Local benchmark copied ordered_cholesky/ghk
+from bench_markov_tree.py; committed benchmark imports it. Same
+arrowhead generator as iteration 5, seed 79, weak strength .2 or
+strong 1, sharp residual variances multiplied by .015. Mean of three
+ordered log-domain GHK scrambles at 4096 per alternative (seeds
+100..102) is the noisy reference, NOT truth. Test seeds 0..2;
+times single-thread means, given A,d and C, preprocessing excluded
+except per-runner GHK ordering. No compiled GHK or production factor
+comparison; production rejects D=0 so it cannot directly price these
+exact laws. Table reports median max abs difference and pooled RMSE.
+
+| n,k,mode | method (m,L) | seconds | median max diff | RMSE |
+|---|---|---:|---:|---:|
+|32,2,weak|GHK 10|.0929|1.79e-4|9.15e-5|
+| |direct 16|.0854|8.28e-4|3.20e-4|
+| |cap 10,1|.0114|2.63e-4|4.27e-5|
+| |cap 12,1|.0437|6.61e-5|1.50e-5|
+| |cap 10,4|.0414|7.57e-4|1.63e-4|
+|32,2,sharp|GHK 10|.0988|3.69e-4|9.38e-5|
+| |direct 16|.0669|6.22e-4|1.92e-4|
+| |cap 10,1|.0750|6.22e-4|1.88e-4|
+| |cap 12,1|.2875|2.15e-4|6.43e-5|
+| |cap 10,4|.2620|7.08e-4|1.48e-4|
+|100,2,weak|GHK 10|.9719|3.74e-4|8.80e-5|
+| |direct 16|.2644|8.37e-4|2.31e-4|
+| |cap 10,1|.0615|1.07e-4|2.41e-5|
+| |cap 12,1|.1241|7.37e-5|1.67e-5|
+| |cap 10,4|.1068|6.85e-4|1.02e-4|
+|48,8,strong|GHK 10|.2024|3.67e-4|1.25e-4|
+| |direct 16|.1146|1.23e-3|3.69e-4|
+| |cap 10,1|.0180|9.55e-4|3.97e-4|
+| |cap 12,1|.0664|5.07e-4|1.61e-4|
+| |cap 10,4|.0578|1.26e-3|3.57e-4|
+
+Reference max spreads respectively 1.23e-4, 2.16e-4, 1.82e-4,
+2.92e-4; reference raw mass defects 4e-5, 1.33e-4, 5.36e-4,
+2.53e-4. All cap/direct mass defects <=2.3e-16. GHK test defects
+up to .00615. Mass conservation is NOT an accuracy certificate.
+The n100 weak case is favorable and promising but the cap's small
+differences are below reference noise; a higher-budget n100 GHK
+attempt timed out before completion. No claimed true error ratio.
+Four-point deterministic t quadrature was worse than random t at
+these budgets. Increasing the outer sample count is preferable.
+
+Sharp condition-number-100965 case refined against three 2^14 GHK
+scrambles (spread 1.03e-4, raw reference mass 1.00011949):
+GHK10 .0987s / 4.10e-4 median max diff; cap12,1 .2783s /
+2.21e-4; cap14,1 1.123s / 6.12e-5; cap10,8 .5217s /
+5.17e-4; cap10,16 1.109s / 5.27e-4. Here exact mass and
+absence of a sharp core lattice are useful, but no matched-time
+win versus GHK demonstrated, and fine reference uncertainty remains.
+
+Dense Wishart negative control: seed87, n48, C=G G'/48+.25I
+(where G is unscaled standard Gaussian), cond15.0, use one leaf
+with largest conditional variance, exact precision_factor prep
+.00085s (dense inverse excluded), k47. Three 2^13 GHK refs,
+spread 9.94e-5. GHK10 .2137s / 2.88e-4; cap16,1 .1038s /
+1.00e-3; cap18,1 .4087s / 4.80e-4; direct16 .0856s / 1.19e-3;
+direct18 .3146s / 5.17e-4. One-leaf conditional split is marginally
+better than direct per sample but not competitive with GHK at
+matched accuracy. No arbitrary-matrix breakthrough.
+
+### Next iteration
+
+The positive result is a shared probability-coordinate field that
+admits exact deterministic conditional contestants, and a useful
+randomized quadrature with only ONE extra integration coordinate
+regardless of number of independent leaves. The dense negative
+control rules out claiming universal advantage just from one-leaf
+conditioning. The natural next extension is to a separator whose
+conditional components are small correlated groups: each component
+has its own minimum-survival function and boundary densities;
+the identical hazard-ratio identity works for all groups and all
+contestants. Seek efficient bivariate/block minimum CDFs and
+derivatives, plus an adaptive choice between group conditional
+quantile integration and explicit tensor cavities. Another worthwhile
+direction is choosing a Gaussian rotation to integrate a whole
+coordinate along the earlier affine envelope, targeted at near ties,
+or using a tractable backbone with an exact correction. The root
+solver is the bottleneck in sharp cases: avoid 64 iterations across
+already converged rows; compare with a capped fixed-x field at equal
+time. No need to increase tensor width indiscriminately.
