@@ -1,17 +1,16 @@
 # Reproducing "Scalable Inversion of Contests with Correlated Performances"
 
-The tables in `main.tex`, with one exception, and most numbers in its text
-are produced by a committed, seeded script in this repository. `MANIFEST.md`
-records each one's command, seed and log line, and its last section lists
-the measurements that no committed command regenerates (the entries of the
-equal-groups table among them). `CLAIMS.md` is the
+The tables in `main.tex` and most numbers in its text are produced by a
+committed, seeded script in this repository. `MANIFEST.md` records each
+one's command, seed and log line, and its last section lists the in-text
+measurements that no committed command regenerates. `CLAIMS.md` is the
 history of those mappings through review.
 
 ## One command
 
 ```sh
 git clone https://github.com/microprediction/winning && cd winning
-git checkout paper-r12      # paper-r13 adds the manifest and the revision's analyses
+git checkout paper-r14      # paper-r12 plus the manifest and the revision's analyses
 cd docs/latex_src/general_inversion
 make env      # Python 3.12 virtualenv at the repository root (needs uv)
 make          # the accuracy claims, about 15 minutes

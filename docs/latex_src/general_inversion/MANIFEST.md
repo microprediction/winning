@@ -5,9 +5,9 @@ Including Softmax and Multinomial Probit" (`main.tex` in this directory).
 
 This file records the provenance of each table and each number in the
 text: the command, seed and log line where a committed command produces
-it, and otherwise where it is recorded. The last section lists the
-measurements with no regenerating command, which include the entries of
-the equal-groups table.
+it, and otherwise where it is recorded. Every table has a command. The
+last section lists the in-text measurements with no regenerating
+command, and says which of them describe code since replaced.
 `CLAIMS.md` records how the mappings changed through review; where the
 two differ, this file is the current one.
 
@@ -15,7 +15,7 @@ two differ, this file is the current one.
 
 ```sh
 git clone https://github.com/microprediction/winning && cd winning
-git checkout paper-r13      # paper-r12 plus this manifest and the files marked (r13)
+git checkout paper-r14      # paper-r12 plus this manifest and the files marked (r13) or (r14)
 cd docs/latex_src/general_inversion
 make env            # Python 3.12 virtualenv from requirements.lock (needs uv)
 make <target>       # one row of the tables below; log in out/<target>.log
@@ -27,12 +27,17 @@ make <target>       # one row of the tables below; log in out/<target>.log
 - All scripts at `paper-r12` are unchanged in the revision, with one
   addition: `break.py` gained section I (a closed-form check of factor
   tail depth) on 2026-11-23; its other sections are as at the tag, and
-  section I runs unchanged against the `paper-r12` package. Four files
-  were added by the revision and are not in `paper-r12`: this manifest,
-  `selfconv.py`, `research/general_sigma/paired_ensembles4.py` and
-  `research/inversion_ablation/run_convergence_battery.py`. They are
-  marked **(r13)** and are in the revision tag `paper-r13`. The scripts
-  run unchanged against the `paper-r12` package.
+  section I runs unchanged against the `paper-r12` package.
+- Files added after `paper-r12` are marked **(r13)** or **(r14)** by the
+  tag that first carries them: this manifest, `selfconv.py`,
+  `research/general_sigma/paired_ensembles4.py` and
+  `research/inversion_ablation/run_convergence_battery.py` (r13), and
+  `equal_groups.py` (r14). All run unchanged against the `paper-r12`
+  package. `paper-r14` is the tag of the final version.
+- One data file changed at `paper-r14`: a stray line holding only the
+  number 577697 was deleted from
+  `research/general_sigma/results_ensembles4.csv` (line 602). No data row
+  was touched. `summarize_ensembles4.py` stopped on that line.
 - "Seed" is the argument of the NumPy generator (`np.random.default_rng`)
   that draws the problem, or R's `set.seed`. "None" means the computation
   uses no random numbers.
@@ -51,9 +56,9 @@ make <target>       # one row of the tables below; log in out/<target>.log
 | Against GHK: lattice, GHK R=1e3, GHK R=1e4 at n=10, 50, 200 | 7 | `make ghk` = `$PY bench.py ghk` | problems `default_rng(4)`; QMC reference Sobol `seed=1`; GHK draws: fixed per-alternative offsets inside `fastrace` | one line per n: time, TV, tail for each arm. **time** columns from `timings_2026-11-11/retime.json`, key `ghk` |
 | Share inversion under sampling noise: RMSE and paired differences, 40 replications | 7 | `make estimation` = `$PY run_mle2.py --reps 40 --out out/results_40.json` in `research/mnp_estimation` | design `default_rng(3)`; replication r uses `default_rng(100 + r)`, r = 0..39 | block "method / median rmse / mean +/- se" and "paired against exact". **time** column: key `saturated` in `retime.json` (first eight replications) |
 | Covariate estimation: RMSE of beta, 8 replications | 7 | `make covariates` = `$PY run_mle3.py && $PY run_mle4.py` in `research/mnp_estimation` | design `default_rng(9)`; replication r uses `default_rng(1000 + r)` | summary block. **time** column: key `covariates` in `retime2.json` |
-| Equal groups: multiplicity, rank cut, TV against the block grammar (n=24) | 6.2 | partly: `tests/test_fit_covariance.py::test_group_degeneracy_is_predictable_and_detected` (see Section 6.2 below) | `default_rng(0)` | gap G7 |
+| Equal groups: multiplicity, rank cut, TV against the block grammar (n=24) | 6.2 | **(r14)** `$PY equal_groups.py` | `default_rng(0)` for the abilities; pricing nodes are the pipeline's seeded default | one line per group count: multiplicity, bulk/lead eigenvalue ratio, rank cut, warning, fit rank, projected residual, TV. The four table columns are the first, second, fourth and last. Values regenerated at `paper-r14`: rows 3, 4, 6 and 12 moved in the last digit or two from the earlier print (2.8e-4, 1.8e-4, 1.0e-2, 4.0e-2 became 1.8e-4, 3.7e-4, 1.1e-2, 3.9e-2) |
 | Raw minus identified, paired over 20 seeds, 15 ensembles (Table 2) | 6.4 | **(r13)** `$PY paired_ensembles4.py` in `research/general_sigma`; reads `results_ensembles4.csv`, which `make ensembles` writes | none in the analysis; the CSV's seeds are those of the next row | one line per ensemble: median difference, interval, wins, p, Holm |
-| Ensemble accuracy: median, q90, worst TV and median per-entry error, 6 ensembles | 6.5 | `make ensembles` = `$PY run_ensembles4.py` in `research/general_sigma`, then `$PY summarize_ensembles4.py` | seed s = 0..19 per ensemble: covariance from `randomcov` at `1000 + s`; referee draws `default_rng(s)`; abilities `default_rng(5)`; pricing nodes Sobol `seed=3` | `summarize_ensembles4.py` prints the LaTeX rows (projected arm). The committed `results_ensembles4.csv` has one malformed line (602) on which that script stops; `make ensembles` rewrites the file, and `paired_ensembles4.py` skips the line. The line is a stray number, not a data row: all fifteen ensembles keep twenty pairs, which the script prints as `n` |
+| Ensemble accuracy: median, q90, worst TV and median per-entry error, 6 ensembles | 6.5 | `make ensembles` = `$PY run_ensembles4.py` in `research/general_sigma`, then `$PY summarize_ensembles4.py` | seed s = 0..19 per ensemble: covariance from `randomcov` at `1000 + s`; referee draws `default_rng(s)`; abilities `default_rng(5)`; pricing nodes Sobol `seed=3` | `summarize_ensembles4.py` prints the LaTeX rows (projected arm) |
 | Kernel stratification: RBF and Matern at three length scales, three budgets | 6.6 | `make kernel` = `$PY run_kernel4.py` in `research/general_sigma` | s = 0..19: kernel inputs `default_rng(1000 + s)` via `kernel_C`; referee draws `default_rng(s)`; abilities `default_rng(5)` | one line per kernel, length scale and budget |
 | Extrapolated GHK cost brackets (Appendix A) | A | `make law` = `$PY bench.py law` for the anchor (19.4 s at n=1000, R=1e3); `make scale` for the lattice column; the brackets are `194 s * (n/1000)^beta`, beta = 1.9 and 2.9, computed by hand | `default_rng(4)` (law), `default_rng(1)` (scale) | **time**: keys `law` in `retime2.json`, `scale` in `retime.json` |
 
@@ -126,7 +131,7 @@ make <target>       # one row of the tables below; log in out/<target>.log
 | Absolute floor on diag(1e-8,1e-8,1): Var(X1-X2) from 2e-8 to 6.7e-4, choice error 0.48; pairwise diagnostic 3.3e4; global residual 5e-4; below 1e-8 after the fix | `$PY -m pytest -q ../../../tests/test_fit_covariance.py::test_relative_floor_preserves_near_singular_contrasts` | none | the test rebuilds the failure by hand: `_worst_contrast_ratio` returns 33299 and the global norm 5.5e-4; the shipped fit's `contrast_residual_max` is 6.9e-10 |
 | In-grammar n=12 stall at objective 0.88, rescued to 1e-13 | `$PY -m pytest -q ../../../tests/test_fit_covariance.py::test_in_grammar_small_n_spread_variances_fits_exactly` | `default_rng(0)` | pytest pass |
 | Multistart at n=300, eight starts: objectives agree to 4e-16; choices agree to 1e-14 on three ensembles; block equicorrelation differs by 0.25 TV; 8e-4 at the tie's rank | `make multistart` = `$PY run_multistart.py --starts 8 --n 300` in `research/general_sigma` | ensembles `default_rng(0)`; starts `default_rng(11)` | one block per ensemble |
-| Equal-groups table (n=24, correlation 0.7) and eigenvalue ratios 0.051, 0.034 | partly: `$PY -m pytest -q ../../../tests/test_fit_covariance.py::test_group_degeneracy_is_predictable_and_detected` | `default_rng(0)` | asserts the pattern for 2, 4, 6 and 12 groups (TV below 1e-3 or above 5e-3, multiplicity g-1); the six table values and the two eigenvalue ratios are not printed (gap G7) |
+| Equal-groups table (n=24, correlation 0.7); eigenvalue ratios 0.051, 0.034; fit rank 9 and projected residuals 0.07, 0.10, 0.32 for six, eight and twelve groups | **(r14)** `$PY equal_groups.py` | `default_rng(0)` | columns "bulk/lead", "fit rank", "proj resid" |
 | Dense n=2000: fit and price 3.6 s (1.0 s fit) against 18.5 s for 1e6 draws; 82 percent of the 1,563 alternatives priced below 1e-5 take no simulation win; bulk TV 1.01e-2 | `make large-n` = `$PY run_large_n.py` in `research/general_sigma` | `default_rng(7)`; nodes `seed=3`; draws `seed=9` | summary lines. **time**: `timings_2026-11-11/README.md`, `quiet_large_n.log` |
 | Split referee at n=2000: 63.6 percent zero-win; model mass 1.13e-4; 111 wins; interval [9.13e-5, 1.34e-4]; TV 4.4e-3 against a floor of 5.4e-3 | `make split-referee` = `$PY run_split_referee.py --n 2000 --draws 2000000` in `research/general_sigma` | covariance `default_rng(7)`; halves `seed=11`, `seed=12` | summary lines; also `split_referee_2000.json` |
 | Identified against raw arm: better on 11 of 15 unadjusted, 10 after Holm; sparse precision 5.1e-3 against 6.8e-3; block equicorrelation 2.5e-3 against 2.0e-2, worst seed 3.2e-3 against 0.16 | **(r13)** `$PY paired_ensembles4.py` for the counts; `$PY summarize_ensembles4.py` for the medians and worst seeds, both in `research/general_sigma` | as Table 2 | last line of `paired_ensembles4.py`; rows `block_equicorr`, `sparse_precision` of the summary |
@@ -156,20 +161,23 @@ make <target>       # one row of the tables below; log in out/<target>.log
 
 Listed here so that the gaps are visible in one place.
 
-These figures were measured during development and are recorded in the
-places named, but no committed command at `paper-r12` prints them. Where
+These in-text figures were measured during development and are recorded
+in the places named, but no committed command prints them. Group G5 and
+the items marked "earlier code" in G2 and G4 describe code since
+replaced and cannot be produced by the shipped package; the others
+could be scripted. G7 (the equal-groups table) was closed at `paper-r14`
+by `equal_groups.py`. Where
 a committed test pins the same configuration at a looser tolerance, the
 rows above name it.
 
 | Gap | Paper location | Figures | Status |
 |---|---|---|---|
 | G1 | Section 1.1, footnote | 6e-17 | a test asserts 1e-12; the tighter figure is not printed |
-| G2 | Section 3.1 | Student-t window: 1456, 5.7; 5e-3 against 5e-5 | no script |
+| G2 | Section 3.1 | Student-t window: 1456, 5.7; 5e-3 against 5e-5 | no script; the 5e-3 is from the earlier normal-envelope window (earlier code) |
 | G3 | Sections 3.2 and 5.2 | Jacobian against finite differences (J0 figures; 25- and 65-point row sums; column sums; quotient 2e-3, 3e-11, 6e-4; asymmetry 3e-4, 7e-11) | tests assert looser bounds at other lattice sizes; no script prints these |
-| G4 | Section 3.3, footnote | lattice mass 3e-28 | no script |
+| G4 | Section 3.3, footnote | lattice mass 3e-28 | no script; removal on the winner's grid is not what the shipped routine does (earlier code) |
 | G5 | Sections 4.1, 4.2, 6.1 | figures describing rules the code no longer contains: raw row-norm dispatch (2.90, 4.10, 6.1e-3, 3.87), proxy window (28 percent, 0.68/0.32), raw-residual fitter (1.7e-2) | cannot be regenerated from the shipped code; tests pin the shipped behavior |
 | G6 | Sections 4.1, 4.2 | 5e-2 TV at cluster sharpness 18 against a four-million-path referee | a test asserts the warning; no referee script |
-| G7 | Section 6.2 | equal-groups table values; 0.051, 0.034 | a test asserts the pattern for four of the six rows; values not printed |
 | G8 | Section 6.6 | rank 27, residual 1e-3; 2^16 nodes reach 6e-3; 0.14; 7e-2 | no script |
 | G9 | Section 7 | Python and R escalated rules agree to 5e-4 | no script |
 | G10 | Section 7 | Fishing likelihood rising at loading norms near 4000 | no script; data not in the repository |

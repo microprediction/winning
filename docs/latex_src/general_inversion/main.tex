@@ -30,7 +30,7 @@ Multinomial probit choice probabilities over $n$ alternatives are
 Gaussian orthant integrals, computed by simulation for thirty years, one
 expensive integral per alternative. Inversion, which is to say determining item
 attractiveness consistent with a prescribed choice probability vector, is even more difficult and has been
-considered impractical for correlated contests when $n$ is large. In response, we exhibit a new approach that prices and inverts the whole probability vector from one shared survival field, for covariance within a grammar of factor, block and hierarchical structures. The cost is close to linear in $n$. We calibrate a million alternatives, with the Geweke--Hajivassiliou--Keane simulator and other referees as points of comparison in much lower dimensional problems, such as $n=2000$. With this advance the Thurstone--Mosteller model families
+considered impractical for correlated contests when $n$ is large. In response, we exhibit a new approach that prices and inverts the whole probability vector from one shared survival field, for covariance within a grammar of factor, block and hierarchical structures. The cost is close to linear in $n$. We calibrate a million alternatives under independent and rank-one factor covariance. The Geweke--Hajivassiliou--Keane simulator, run to $n=1000$, and a simulation referee at $n=2000$ are points of comparison in much lower dimensional problems. With this advance the Thurstone--Mosteller model families
 become a practical alternative to logit at modern scale, subject to rank and other limitations of the covariance family we present.
 \end{abstract}
 
@@ -44,7 +44,7 @@ In psychology an underlying model for choice is required for the computation of 
 
 Nature holds races at all scales, such as activation pathways in the brain, reaction sites or lightning strikes. Simulations of physical systems, such as material breaking points, can also be approximated as correlated races. There is a close connection between winning probabilities and local times in Atlas models (ranks of stochastic processes), for another day.
 
-We initially consider the multinomial probit model (an example of the race we speak of) as a point of reference to prior art, even though the independent and factor kernels do not impose an assumption of normal performance; the shared factors are Gaussian throughout, and the block, nested and tree kernels are Gaussian. Write
+We initially consider the multinomial probit model (an example of the race we speak of) as a point of reference to prior art. The independent and factor kernels leave the performance family free. The shared factors, and the block, nested and tree kernels, are Gaussian. Write
 \begin{equation}
 U_i = \mu_i + \epsilon_i, \qquad \epsilon\sim N(0,\Sigma);
 \end{equation}
@@ -191,7 +191,7 @@ It tends to be the case in financial practice and elsewhere that structured cova
 
 Within such a class of covariance matrices (we will term it the factor grammar) the derivatives are computed in the same pass at the same cost. This yields Jacobian--vector products and own-survival curves. The cost is also $O(nLQ)$, where again $L$ dictates the lattice size and $Q$ the number of quadrature points.
 
-The Jacobian is a weighted graph Laplacian of tie densities, a structure \citet{muller2022} derived before us (\S\ref{sec:jac}). What is added here is its reading as a boundary flux and its application as a matrix-free operator: for the factor grammar it is never materialized in the code. The block and nested kernels materialize their Jacobians, and the tree's cross-cluster block is approximate. The most important distinction from the prior art is that there is no need to run the entire algorithm for each choice of $i$, a point we will return to shortly when discussing the existing methods.
+The Jacobian is a weighted graph Laplacian of tie densities, a structure \citet{muller2022} derived before us (\S\ref{sec:jac}). What is added here is its reading as a boundary flux and its application as a matrix-free operator: the inversion and the Jacobian--vector product do not need the matrix. Routines that materialize it are also provided, and the tree's cross-cluster block is approximate. The most important distinction from the prior art is that there is no need to run the entire algorithm for each choice of $i$, a point we will return to shortly when discussing the existing methods.
 
 The error is controlled by quadrature. It is deterministic for the Gauss--Hermite rules and reproducibly randomized for
 scrambled-Sobol nodes.
@@ -218,7 +218,7 @@ dense $\Sigma$ & fitted grammar $+$ residual factors (approx.) & \S\ref{sec:gene
 
 Our chief contribution is scaling. We seek to bring probit modeling to a qualitatively different problem space.  To put it in perspective, we note that on one desktop machine, the forward computation of all-$n$ probabilities from known utilities, assuming a rank-one factor and using the Rust kernels, takes $0.12$, $1.2$, and $18$ seconds respectively for $n=10^{4},10^{5},10^{6}$ (\texttt{bench.py scale}). We are not aware of a reported complete-vector probit computation at $n=10^{6}$.
 
-The inversion is the tougher problem yet at $n=10^{6}$ this takes under two minutes for the independent case, and the rank-one factor problem can be solved at this
+The inversion is the tougher problem, yet at $n=10^{6}$ this takes under two minutes for the independent case, and the rank-one factor problem can be solved at this
 extreme scale also, in around twelve minutes (\texttt{bench.py invertmillion}). In both runs the round-trip log-probability residual is below $10^{-8}$ (\S\ref{sec:num}). Block, nested and tree inversions are measured at $n=400$.
 
 Comparisons die well before this scale, as far as we know. Other approaches are considered in detail presently, but briefly, if the comparison set is taken to be those approaches providing smoothness suitable for inversion, GHK is generally regarded as leading that category.
@@ -297,7 +297,7 @@ answers a genuinely different question from ours --- the worst case over
 a moment class rather than a specified law, with representative-agent
 rather than distributional semantics --- so the two are complements: that
 family avoids ever specifying the joint distribution, while this paper
-prices and inverts the distribution the modeller actually specifies.
+prices and inverts the distribution the modeler actually specifies.
 
 \paragraph{Bayesian data augmentation.} \citet{albert1993} and
 \citet{mcculloch1994} sidestep the integral entirely by Gibbs sampling the latent
@@ -357,8 +357,8 @@ errors against twin $5\times10^{7}$-draw simulation references. The
 referee of \S\ref{sec:num} is the method's reference implementation, the
 R package \texttt{TruncatedNormal}. Raising the
 tilting sample to $R=10^{4}$ narrows the accuracy gap and widens the time
-one: at $n=200$ that is $50$ s, a hundred and eighty times the reference
-implementation's cost and still an order of magnitude short of its error.
+one: at $n=200$ that is $50$ s, a hundred and eighty times the cost of the lattice's NumPy
+implementation and still an order of magnitude short of its error.
 
 \medskip
 
@@ -1671,9 +1671,10 @@ Block equicorrelation is the exception, and it was an instructive one. There the
 starts agree on the objective and on $D$ to every digit, and still price
 races that differ by a total variation of $0.25$. That figure is for the
 stage~1 rank-three fit alone, which is what the multistart experiment
-runs. In the shipped pipeline stages~3 and~4 add one loading per cluster
-and five residual columns, the total rank exceeds the five-fold tie, and
-block equicorrelation is the best-fitted ensemble of the table below. The cause is degeneracy
+runs. The shipped pipeline adds stages~3 to~6. On the
+block-equicorrelation ensemble at $n=300$ its median error is
+$2.5\times10^{-3}$, the smallest of the ensembles in
+\S\ref{sec:ensembles}. The cause is degeneracy
 rather than optimization. Centering a six-block matrix leaves a five-fold
 tied leading eigenvalue, so a rank-three fit selects an arbitrary
 three-dimensional subspace of a five-dimensional one. Every selection is
@@ -1703,8 +1704,10 @@ none.
 
 Group structures degenerate the same way. One can arrange equal-sized groups with equal within-group correlation. This leaves one tied leading direction per contrast among the groups, so $g$ equal
 groups give multiplicity $g-1$, with equicorrelation the case $g=n$. The
-default $k=3$ is therefore exactly right for four equal groups but otherwise wrong, or should we say, inefficient. Measured at $n=24$ and within-group correlation
-$0.7$, against the same race priced through the block grammar directly:
+default $k=3$ is therefore exactly right for four equal groups but otherwise wrong, or should we say, inefficient. The table prices the shipped pipeline, the one call with a dense
+covariance, at $n=24$ and within-group correlation
+$0.7$, against the same race priced through the block grammar directly
+(\texttt{equal\_groups.py}):
 
 \begin{center}\small
 \begin{tabular}{rrrr}
@@ -1712,14 +1715,19 @@ $0.7$, against the same race priced through the block grammar directly:
 equal groups & leading multiplicity & rank cuts the tie & TV against grammar\\
 \midrule
 $2$ & $1$ & no & $2.4\times10^{-4}$\\
-$3$ & $2$ & no & $2.8\times10^{-4}$\\
-$4$ & $3$ & no & $1.8\times10^{-4}$\\
-$6$ & $5$ & yes & $1.0\times10^{-2}$\\
+$3$ & $2$ & no & $1.8\times10^{-4}$\\
+$4$ & $3$ & no & $3.7\times10^{-4}$\\
+$6$ & $5$ & yes & $1.1\times10^{-2}$\\
 $8$ & $7$ & yes & $3.7\times10^{-2}$\\
-$12$ & $11$ & yes & $4.0\times10^{-2}$\\
+$12$ & $11$ & yes & $3.9\times10^{-2}$\\
 \bottomrule
 \end{tabular}
 \end{center}
+
+The later stages do not remove the tie at this size. Stage~3 allows
+four clusters at $n=24$, fewer than the groups in the last three rows,
+and the fit's own report gives rank~$9$ with a relative projected
+residual of $0.07$, $0.10$ and $0.32$ for six, eight and twelve groups.
 
 The first three rows sit at the fitter's ordinary approximation error.
 The last three are the rank cutting a tied group, and the cost grows with
@@ -1836,7 +1844,7 @@ which the identified arm has the smaller total variation.}\label{tab:paired}
 \end{table}
 
 
-\subsection{Testing against different covariance generation families}
+\subsection{Testing against different covariance generation families}\label{sec:ensembles}
 
 Accuracy depends on the family. We used the named collections of the \texttt{randomcov} library
 (version 0.2.1, pinned in the reproduction lockfile; earlier drafts used
@@ -2056,7 +2064,7 @@ factor space and Gauss--Hermite converges slowly in the node count: at
 loading scale $4$ the $25$-node rule still sits at $8\times10^{-3}$ total
 variation. Scrambled-Sobol factor nodes restore reference-level accuracy
 ($4\times10^{-4}$) at the same call: heavy correlation wants
-quasi-Monte-Carlo nodes, not deeper polynomial rules. The default
+quasi-Monte Carlo nodes, not deeper polynomial rules. The default
 escalates the family automatically past sharpness $3$, in both the Python
 and R implementations (scrambled Sobol and Halton respectively), which
 agree to $5\times10^{-4}$ on the worst case; the figures above are
@@ -2102,12 +2110,16 @@ lattice answer by $3\times10^{-8}$ to $3\times10^{-7}$ in total
 variation. No probability moves by more than $10^{-7}$ and no log
 probability by more than $3\times10^{-5}$, the latter at probabilities
 down to $2\times10^{-12}$ (\texttt{selfconv.py}). GHK error
-contracts as $O(R^{-1/2})$ and its measured complete-vector cost grows
-superquadratically: the log-log slope is $1.9$ from $n=10$ to $200$ at
-$R=10^4$ and $2.9$ from $n=200$ to $1000$ at $R=10^3$ (\texttt{bench.py
-law}). The lattice is deterministic under Gauss--Hermite nodes and
+contracts as $O(R^{-1/2})$. Its measured complete-vector cost grows
+superquadratically from $n=200$ to $1000$ at $R=10^3$, where the log-log
+slope is $2.9$; from $n=10$ to $200$ at $R=10^4$ the slope is $1.9$
+(\texttt{bench.py law}). The lattice is deterministic under Gauss--Hermite nodes and
 seeded-reproducible under scrambled Sobol, supplies smooth matrix-free
-derivatives free of simulation noise, and prices the tails. Simulated
+derivatives free of simulation noise, and prices the tails of the table
+above to the reference's noise floor, a log-error of $0.11$ to $0.15$ at
+$n=50$ and $200$. Deeper tails are subject to the factor-rule limit
+reported under Stress boundaries, a factor of twelve at $p$ near
+$10^{-20}$ on the default rule. Simulated
 likelihoods can of course be differentiated, but they inherit the noise.
 
 Our claim is bounded as follows. For complete-vector pricing and
@@ -2120,8 +2132,9 @@ counts. At $n=10$ GHK with $R=10^3$ is faster ($0.9$\,ms against
 $2.9$\,ms). The time ratios combine the $n$-fold factor with
 implementation differences, a compiled lattice kernel on one core
 against a compiled GHK on all cores, and we do not apportion them.
-GHK implementations with antithetics, quasi-random sequences or
-reordering heuristics would move the constants, not the $n$-fold shape.
+We expect GHK implementations with antithetics, quasi-random sequences
+or reordering heuristics to move the constants and not the $n$-fold
+shape, but we did not test one.
 Estimation pipelines built around GHK are a larger object than this loop,
 and the estimation paragraphs below report where simulation remains
 competitive at face value. GHK also retains general rectangle
@@ -2345,10 +2358,10 @@ interface, and a zero-dependency browser port drives a live demonstration at
 \texttt{github.com/microprediction/winning}. \texttt{MANIFEST.md}, beside this paper's
 source there, records the provenance of the paper's numerical claims,
 giving commands, seeds and log lines where available. Its last section
-identifies the measurements, among them the entries of the equal-groups
-table, for which no committed command is available. The original tables were produced
+identifies the measurements for which no committed command is available.
+Every table has a command. The original tables were produced
 at repository tag \texttt{paper-r12}, package version \texttt{1.4.0};
-the analyses added in revision are at tag \texttt{paper-r13} and run
+the analyses added in revision are at tag \texttt{paper-r14} and run
 against the same package. The repository also holds the parity-locked
 ports (R, Rust, JavaScript). \texttt{REPRODUCE.md} gives the one-command
 build.
@@ -2358,10 +2371,26 @@ package, including \texttt{randomcov} 0.2.1 and the compiled kernels as
 the \texttt{fastrace} 0.1.2 wheel. The Rust toolchain is not pinned: the
 benchmarks install that published wheel and do not build it from source.
 
-\paragraph{Shipped and in progress.} The numbers in this paper come from
-code shipped at the tag: forward pricing, Jacobians and the diagonal
-inversion for the independent, factor, block, nested and tree grammars,
-and the dense-covariance fit. Three items the text mentions are in
+\paragraph{Shipped and in progress.} The numbers that the manifest maps
+to a command come from code shipped at the tag: forward pricing,
+Jacobians and the diagonal inversion for the independent, factor, block,
+nested and tree grammars, and the dense-covariance fit.
+
+Five reported figures describe earlier code and cannot be produced by
+the shipped package. They are the $5\times10^{-3}$ lost to a normal
+envelope for the lattice window (\S\ref{sec:lattice}); the lattice mass
+of $3\times10^{-28}$ when a favorite is removed on the winner's grid
+(\S\ref{sec:lattice}, footnote); the $6.1\times10^{-3}$ error of a
+dispatcher using the raw row norm (\S\ref{sec:factor}, footnote); the
+$28$ percent of mass and the $0.68/0.32$ shares of the proxy window
+(\S\ref{sec:blocks}, footnote); and the $1.7\times10^{-2}$ distortion of
+the raw-residual fitter (\S\ref{sec:general}). Two further figures
+describe replaced rules but are reproduced by a committed command that
+rebuilds the old rule: the five percent lost by the fixed fifteen-node
+rule (\S\ref{sec:factor}) and the absolute diagonal floor's example
+(\S\ref{sec:general}).
+
+Three items the text mentions are in
 progress and back no reported result other than their own description:
 the Newton--Krylov solver (\S\ref{sec:jac}), quadrature escalation in
 the block, nested and tree kernels (\S\ref{sec:blocks}), and return of
