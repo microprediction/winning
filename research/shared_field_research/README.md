@@ -1053,3 +1053,169 @@ Compare equal-time on strong dense spectra, not merely weak
 Wishart. The bounded-width precision extension remains a
 separate valid structured result. No claim of solving the
 arbitrary-matrix performance objective yet.
+
+
+## 2026-11-26 — Heterogeneous diagonal packing: localized vs diffuse near-null modes
+
+**Status: research-only on existing draft PR #1093.** Current main README,
+CLAUDE.md, factor/races.py, methods/native.py and general_sigma/NOTES.md
+rechecked, as well as the preceding hazard_draw.py and ordered GHK
+benchmark. PR #1093 open; targeted open PR title search for diagonal
+found none. Earlier diagonal transfer and scalar smoothing experiments
+are not new. This iteration changes the exact independent-noise
+allocation for the sampled-minimum shared field; no production dispatch.
+
+### Exact split, not a fitted covariance
+
+Let B be an orthonormal basis of the contrast subspace, S=B' C B SPD.
+In normalized units write S=U diag(lam) U', and define v_i to be column
+i of diag(lam)^(-1/2) U' B'. We can assign any d_i>=0 such that
+
+    R = I - sum_i d_i v_i v_i' >= 0.
+
+The residual T=S-B' diag(d) B is then PSD. Its full square root,
+mapped back via B, gives A so that X=mu+A Z+diag(sqrt(d)) eps has
+exactly the desired contrast law. The sampled-minimum hazard ratio
+of the previous iteration is unchanged. In particular, a finite
+number of optimization iterations incurs no model or quadrature
+bias: the entire residual is retained, not truncated. IID estimates
+are unbiased and strongly consistent by conditional expectation;
+ideal scrambled Sobol refinement converges for the bounded a.e.
+continuous integrand, as in iteration 7. Singular contrast input is
+refused; a supplied exact root with d=0 still uses direct sampling
+and explicit equal tie credit (see previous iteration). No ridge or
+silent clipping. Dense cost O(sweeps*n^3) preprocessing, O(n^2)
+sample generation and O(n) shared hazard evaluation. Permutation
+changes the finite coordinate-ascent order and QMC rotation, not the
+target. Common covariance shocks and units are removed in contrast
+space, subject to floating-point limits.
+
+We use weighted proportional fairness with a logdet barrier:
+maximize sum_i w_i log(d_i)+beta logdet(R), w_i,beta>0.
+For fixed other coordinates, write h=v_i' R^(-1) v_i. The matrix
+determinant lemma gives the exact coordinate maximizer
+
+    d_i_new = w_i/(w_i+beta) * (d_i + 1/h).
+
+Sherman-Morrison updates the inverse in O(n^2). Use 12 sweeps,
+beta=.25, all w_i=1 (race-specific weights are NOT validated).
+Initialize d=.5 lambda_min(S), not zero: the first zero-start
+sweep of the Wishart example drove R into numerical singularity
+through successive downdates; the positive initialization corrected
+this in completed cases. Rebuild R each sweep; reject infeasible
+or nonpositive residual rather than repairing covariance. No claim
+that 12 sweeps solve the optimization or that this objective
+minimizes estimator variance. Diagonal-plus-PSD decomposition and
+minimum-trace factor analysis are old (Shapiro 1982,
+https://doi.org/10.1007/BF02296274; Saunderson et al. 2012,
+https://arxiv.org/abs/1204.1220). The experiment is the contrast-space
+allocation for shared-minimum conditional credit.
+
+**Structural limitation.** For any unit contrast vector u with
+u'C u=lambda, every feasible diagonal satisfies
+sum_i d_i u_i^2 <= lambda. If u=(e_0-e_1)/sqrt(2) is a localized
+near-null mode, only d_0+d_1<=2 lambda is forced; all other rows
+may retain substantial smoothing. If every |u_i|=1/sqrt(n), then
+mean(d)<=lambda. No diagonal optimization can fix the latter
+case; a genuinely different conditioning/control-variate approach
+is needed. For diffuse null modes with unequal coordinates the
+weighted budget still applies. This is a mathematical obstruction,
+not a solver-tuning problem.
+
+### Reproducible experiment
+
+Files packed_split.py, test_packed_split.py, bench_packed_split.py.
+Standalone local copies passed seven tests in .70s: reconstruction
+(random 2,8,32 dimensions and permutations), localized mode bound,
+common shock and scale, exact binary reference, singular/indefinite
+contrast refusal. No full repo CI. Local copies of hazard_draw and
+ordered GHK use the same computational paths as the branch (the
+local hazard copy omitted input validation; committed benchmark
+imports the full branch code). Run from this folder:
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python -m pytest -q test_packed_split.py
+and OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python -u bench_packed_split.py.
+
+Seed 812, means N(0,.4^2); C=.2 GG'/n+I; clone case duplicates
+row and column 0 into 1, adds .0005I and mu_1=mu_0+.008; hetero
+rescales rows/columns by geomspace(.04,1.5); Wishart GG'/n+.05I;
+diffuse I-.9995 uu' for a random centered unit u. Four test
+scrambles 0..3. Reference is mean of four ordered log-domain
+QMC-GHK scrambles 100..103 (8192 points/runner for n32, 4096
+for n64/128), NOT exact truth. Single-thread local Python. GHK
+includes ordering and factorizations; scalar/packed preprocessing
+reported separately, excluded from per-race estimate below.
+Direct uses identical packed split and Sobol nodes, keeps sampled
+winner instead of hazards. Med max = median maximum absolute
+difference from noisy reference, pooled RMSE over all seeds/rows.
+
+| n/case | method (log2 draws) | sec | med max | RMSE |
+|---|---|---:|---:|---:|
+|32 clone|GHK 10|.09372|1.53e-4|1.09e-4|
+||scalar 14|.05589|2.33e-3|8.72e-4|
+||packed 14|.05036|9.59e-4|2.35e-4|
+||packed 16|.19397|4.02e-4|9.45e-5|
+||direct 16|.11335|9.36e-4|4.13e-4|
+|64 clone|GHK 10|.36488|2.02e-4|1.20e-4|
+||scalar 14|.11681|2.09e-3|7.23e-4|
+||packed 14|.10377|5.19e-4|1.14e-4|
+||packed 16|.43580|1.73e-4|4.61e-5|
+||direct 16|.26841|1.07e-3|3.28e-4|
+|32 hetero|GHK 10|.08851|2.19e-5|6.32e-6|
+||scalar 14|.05992|8.72e-4|3.46e-4|
+||packed 14|.04893|6.72e-4|2.24e-4|
+||packed 16|.20178|3.15e-4|8.10e-5|
+||direct 16|.11444|2.38e-3|6.28e-4|
+|32 wishart|GHK 10|.09246|3.81e-4|1.21e-4|
+||scalar 14|.05329|1.53e-3|5.10e-4|
+||packed 14|.05427|1.18e-3|5.07e-4|
+||packed 16|.20831|6.15e-4|2.30e-4|
+||direct 16|.11685|1.13e-3|4.42e-4|
+|32 diffuse|GHK 10|.09544|2.54e-4|1.15e-4|
+||scalar 14|.05549|2.95e-3|9.43e-4|
+||packed 14|.05481|1.85e-3|7.42e-4|
+||packed 16|.22609|9.58e-4|3.76e-4|
+||direct 16|.11257|1.08e-3|4.13e-4|
+|128 clone|GHK 10|1.60018|2.84e-4|9.50e-5|
+||scalar 14|.25363|2.01e-3|5.91e-4|
+||packed 14|.23080|4.10e-4|7.04e-5|
+||packed 16|.89414|1.84e-4|3.67e-5|
+||direct 16|.55434|1.01e-3|2.52e-4|
+
+Packed prep (in table case order) .00985,.01702,.00563,.00536,
+.00552,.09823 seconds; scalar .0002-.00345s. Median d for clone
+cases .8844,.8891,.8854 vs scalar .0004995; for hetero .05378
+vs .002123; Wishart .06863 vs .05509; diffuse .0005494 vs
+.0004995. All estimated packed/direct mass defects <=2.3e-16;
+GHK defects up to .01016. Reference max spreads 8.20e-5,2.62e-4,
+9.89e-6,2.29e-4,1.09e-4,4.28e-4 respectively; the 128 clone
+reference mass .99890. The apparent advantage vs GHK at 128
+is encouraging, but reference spread exceeds both methods'
+reported differences. Do not infer a certified true error ratio.
+The comparison does not support a general dense win. Large
+Wishart run timed out after preparation; no accuracy claim
+for that case. No compiled GHK comparison or production factor
+comparison. Exact split has practical value on localized near-null
+modes, but heterogeneous variance alone does not deliver a
+universal competitor. No extra PR.
+
+### Next experiment
+
+Test grouping the near-null mode rather than treating each row as
+a separate independent noise source. For a conditional independent
+block B, the survival of its minimum is G_B(t), and the winning
+boundary numerator for row i in B is
+f_i(t) P(X_{B\{i}}>t | X_i=t). Shared conditional credit at
+a sampled global minimum is this numerator divided by G_B(t),
+normalized across all rows/blocks. For bivariate blocks the
+numerator is analytic; the denominator is a bivariate Gaussian
+survival probability. Need stable vectorized denominator and
+matched-time results. This can allow correlated smoothing in
+directions a diagonal split cannot touch. However a diffuse
+near-null mode can still force each small block to remove variance
+along its restricted direction; do not assume block packing
+solves that adversary. Another route is low-width precision
+backbone with an exact likelihood-ratio correction, or the
+previous affine envelope along a race-specific contrast direction.
+Test with higher-budget independent references and a compiled
+GHK baseline where available. The arbitrary-covariance goal is
+still open.
