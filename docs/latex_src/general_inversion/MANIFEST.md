@@ -32,8 +32,8 @@ make <target>       # one row of the tables below; log in out/<target>.log
   tag that first carries them: this manifest, `selfconv.py`,
   `research/general_sigma/paired_ensembles4.py` and
   `research/inversion_ablation/run_convergence_battery.py` (r13), and
-  `equal_groups.py`, `small_figures.py`, `invert_structures.py` and
-  `plot_inversion_scaling.py` (r14). All run unchanged against the `paper-r12`
+  `equal_groups.py`, `small_figures.py`, `port_agreement.py`,
+  `invert_structures.py` and `plot_inversion_scaling.py` (r14). All run unchanged against the `paper-r12`
   package. `paper-r14` is the tag of the final version.
 - One data file changed at `paper-r14`: a stray line holding only the
   number 577697 was deleted from
@@ -71,6 +71,8 @@ make <target>       # one row of the tables below; log in out/<target>.log
 |---|---|---|---|
 | Forward rank-one factor at n=1e4, 1e5, 1e6: 0.12, 1.2, 18 s | `make scale` = `$PY bench.py scale` | `default_rng(1)` | **time**; key `scale` in `retime.json` |
 | Inversion at n=1e6: under two minutes independent (105 s), about twelve minutes rank-one factor (699 s); log residuals 7.3e-10 and 7.7e-9; ability errors 7.5e-11 and 2.4e-9 | `make invertmillion` = `$PY bench.py invertmillion` | `default_rng(0)` per case | one line per n and class: "inversion ... max\|log p resid\| ... max\|mu err\|". **time** and the residuals as logged: key `invert_million` in `retime.json` |
+| Inversion at n=1e6 for one field of each class: sweeps 11, 39 (independent, rank-one factor) and 30, 20, 30 (blocks, tree, nested); residuals 3.0e-9, 9.8e-9, 3.2e-9; ability errors 2.3e-10, 1.2e-9, 2.3e-10; smallest target probability 1.1e-26 or less in the last three | **(r14)** `$PY invert_structures.py 1000000` | `default_rng(0)` per class | one line per class: "inversion ... converged ... sweeps ... max\|log p resid\| ... max\|mu err\| ... min p". Logged run: `log_invert_structures.txt` (an M1 Ultra shared with other jobs, so its times are not the paper's; the nested class takes about an hour and a half there and all five about two and a half hours) |
+| Documentation-site plot and table of inversion time against n, by class (Section 1.2, footnote); not printed in the paper | **(r14)** `$PY invert_structures.py N` for N = 10000, 20000, 50000, 100000, 200000, 500000, 1000000, 2000000, output appended to `log_invert_structures.txt`; then `$PY plot_inversion_scaling.py` | `default_rng(0)` per class | `inversion_scaling.csv` and `inversion_scaling.png`. **time**; sweeps and residuals should reproduce, times depend on the machine |
 | GHK over a hundred times slower at n=200, R=1e4 (1.84 s against 15 ms); about eleven times at R=1e3 (170 ms against 15 ms) | `make ghk` | as the GHK table | **time**; n=200 row |
 | GHK log-log slope 1.9 from n=10 to 200 (R=1e4) and 2.9 from n=200 to 1000 (R=1e3); 0.18, 1.69, 19.4 s at n=200, 500, 1000 | `make law` = `$PY bench.py law`; the 1.9 slope is from the `ghk` table's R=1e4 times at n=10 and 200 | `default_rng(4)` | **time**; key `law` in `retime2.json` |
 | Equicorrelation prices as independent noise, to 1e-16 (footnote) | **(r14)** `$PY small_figures.py G1` | `default_rng(0)` | "worst 1.1e-16" |
@@ -149,7 +151,7 @@ make <target>       # one row of the tables below; log in out/<target>.log
 | Referee agreement: mvtnorm 2.2e-7 against a bound of 7.1e-7 (n=10); 1.3e-8 against 6.7e-8 at smallest probability 3e-10; tilting 1.0e-4 relative against a reported 4.6e-4; adaptive quadrature 1.9e-15; invariance battery 1e-16; two-runner 7e-9 | `make referee` = `$PY referee_cases.py && $PY referee_check.py` (replays `referee_out.json`); `make referee-r` reruns R (mvtnorm 1.4-2, TruncatedNormal 2.3) | cases `default_rng(4)`; R `set.seed(20260827)` | `referee_check.py` prints one line per case and referee |
 | Stress boundaries: 4e-13 at p near 1e-30; 2e-8 at 1e-50; breakdown near 1e-119; round trip 2e-9 in log with a 1e-10 entry; Gumbel equals softmax to 1e-15 at n=1000; duplicates split exactly; Gauss-Hermite 25 nodes 8e-3 at loading scale 4; Sobol 4e-4 | `make stress` = `$PY break.py` | `default_rng(99)`; Sobol `seed=1` | sections A (vanishing noise), C (deep tails), D (Gumbel), E (duplicates), F (round trip), G (Jacobian-vector product), H (factor strength) |
 | Factor tail depth, two-runner closed form: the default fifteen-node rule is within 0.2 percent at p near 5e-10 and low by a factor of twelve at 1e-20; an inversion of 1e-20 on that rule converges to the wrong contrast | **(r13)** `make stress` = `$PY break.py`, section I | none | lines "a=15" (closed/rule 0.9988) and "a=22.688" (12.35) |
-| Python and R escalated rules agree to 5e-4 on the worst case | none (gap G9) | | recorded in a commit message (5.15e-4) |
+| Python and R escalated rules agree to 3e-4 on a loading-scale-4 case | **(r14)** `$PY port_agreement.py` (needs Rscript and jsonlite) | `default_rng(99)`; reference Sobol `seed=1` | "TV Python default against R default 2.99e-04". The earlier print was 5e-4 (5.15e-4 in a commit message, case not recorded); the paper now carries the regenerated figure |
 | Share inversion: RMSE over the sixteen alternatives with true share above one percent ("identified alternatives: 16/30"); smallest alternative p=2.5e-5, expected count 1.27; 13 of 40 replications empty; paired differences 0.0112 +/- 0.0006 (18.7 standard errors, 39 of 40) and 0.0017 +/- 0.0002 (6.9 standard errors, 33 of 40) | `make estimation` | as the table | "(seed ..., k empty)" per replication; "paired against exact" |
 | Covariate fit: compiled forward kernel about six percent of the exact path's time | profile recorded in `CLAIMS.md` (reproduction map, covariates row); no make target | n/a | not regenerated by a command |
 | Fishing data: exact likelihood still rising at loading norms near 4000 | none (gap G10) | | recorded in the docstring of `winning/mnprobit.py`; the Fishing data is not in the repository |
@@ -166,9 +168,10 @@ These in-text figures were measured during development and are recorded
 in the places named, but no committed command prints them. Group G5 and
 the items marked "earlier code" in G2 and G4 describe code since
 replaced and cannot be produced by the shipped package; the others
-could be scripted. Five groups were closed at `paper-r14`: G7 (the
+could be scripted. Six groups were closed at `paper-r14`: G7 (the
 equal-groups table) by `equal_groups.py`; G1, G3 and G6 and most of G2
-by `small_figures.py`; G12 (sweep counts) by `invert_structures.py`.
+by `small_figures.py`; G9 by `port_agreement.py`; G12 (sweep counts) by
+`invert_structures.py`.
 Where a regenerated figure differs from the earlier print, the row above
 says so and the paper carries the regenerated figure. Where
 a committed test pins the same configuration at a looser tolerance, the
@@ -180,6 +183,5 @@ rows above name it.
 | G4 | Section 3.3, footnote | lattice mass 3e-28 | no script; removal on the winner's grid is not what the shipped routine does (earlier code) |
 | G5 | Sections 4.1, 4.2, 6.1 | figures describing rules the code no longer contains: raw row-norm dispatch (2.90, 4.10, 6.1e-3, 3.87), proxy window (28 percent, 0.68/0.32), raw-residual fitter (1.7e-2) | cannot be regenerated from the shipped code; tests pin the shipped behavior |
 | G8 | Section 6.6 | rank 27, residual 1e-3; 2^16 nodes reach 6e-3; 0.14; 7e-2 | no script |
-| G9 | Section 7 | Python and R escalated rules agree to 5e-4 | no script |
 | G10 | Section 7 | Fishing likelihood rising at loading norms near 4000 | no script; data not in the repository |
 | G11 | Section 7 | compiled kernel about six percent of the covariate fit's time | a profile, recorded in `CLAIMS.md`; no command |

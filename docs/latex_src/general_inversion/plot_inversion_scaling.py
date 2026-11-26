@@ -1,7 +1,7 @@
 """Scaling plot and table from the log of invert_structures.py.
 
 Reads log_invert_structures.txt (the output of invert_structures.py at
-n = 10,000, 100,000 and 1,000,000) and writes
+each n from 10,000 to 2,000,000) and writes
 
   inversion_scaling.png   log-log wall-clock time of the inversion
                           against n, one line per covariance class,
@@ -10,6 +10,9 @@ n = 10,000, 100,000 and 1,000,000) and writes
   inversion_scaling.csv   one row per class and n: forward seconds,
                           inversion seconds, converged, sweeps, largest
                           log residual, largest ability error
+  inversion_scaling.html  the table on the documentation site: one row
+                          per n, one column per class, each cell the
+                          inversion time and the sweep count
 
 No random numbers. Times are whatever the log holds; the log's first
 lines name the machine.
@@ -51,6 +54,32 @@ with open(f"{out}/inversion_scaling.csv", "w", newline="") as f:
     w = csv.DictWriter(f, fieldnames=list(rows[0]))
     w.writeheader()
     w.writerows(rows)
+
+
+
+def human(t):
+    if t < 60:
+        return f"{t:.1f} s" if t < 10 else f"{t:.0f} s"
+    if t < 3600:
+        return f"{t / 60:.1f} min" if t < 600 else f"{t / 60:.0f} min"
+    return f"{t / 3600:.1f} h"
+
+
+KINDS = ["independent", "factor r1", "blocks", "tree", "nested"]
+HEAD = ["independent", "factor, rank one", "blocks", "tree", "nested"]
+cell = {(r["kind"], r["n"]): r for r in rows}
+with open(f"{out}/inversion_scaling.html", "w") as f:
+    f.write('<table class="cmp">\n  <tr><th>\\(n\\)</th>'
+            + "".join(f"<th>{h}</th>" for h in HEAD) + "</tr>\n")
+    for size in sorted({r["n"] for r in rows}):
+        f.write(f'  <tr><td class="num">{size:,d}</td>')
+        for k in KINDS:
+            r = cell.get((k, size))
+            f.write('<td class="num">'
+                    + (f'{human(r["inversion_s"])} ({r["sweeps"]})' if r else "")
+                    + "</td>")
+        f.write("</tr>\n")
+    f.write("</table>\n")
 
 # name, colour, marker: fixed order, one entry per class
 SERIES = [("independent", "independent", "#2a78d6", "o"),
@@ -104,7 +133,7 @@ ax.tick_params(colors=MUTED)
 ax.legend(frameon=False, fontsize=9, loc="upper left", labelcolor=INK)
 fig.tight_layout()
 fig.savefig(f"{out}/inversion_scaling.png", facecolor=fig.get_facecolor())
-print(f"{len(rows)} rows -> {out}/inversion_scaling.csv, {out}/inversion_scaling.png")
+print(f"{len(rows)} rows -> {out}/inversion_scaling.csv, .png, .html")
 for r in rows:
     print(f"{r['kind']:12s} n={r['n']:>9,d}  forward {r['forward_s']:7.1f} s  "
           f"inversion {r['inversion_s']:8.1f} s  sweeps {r['sweeps']:3d}  "

@@ -2072,7 +2072,8 @@ variation. Scrambled-Sobol factor nodes restore reference-level accuracy
 quasi-Monte Carlo nodes, not deeper polynomial rules. The default
 escalates the family automatically past sharpness $3$, in both the Python
 and R implementations (scrambled Sobol and Halton respectively), which
-agree to $5\times10^{-4}$ on the worst case; the figures above are
+agree to $3\times10^{-4}$ on a case of this kind
+(\texttt{port\_agreement.py}); the figures above are
 measured with that escalation disabled, to expose the boundary itself.
 
 \paragraph{Against GHK.} All-$n$ choice probabilities under a rank-2 factor
@@ -2319,7 +2320,7 @@ nested under a global factor. All three converge, in $30$, $20$ and $30$
 sweeps, with residuals of $3.0\times10^{-9}$, $9.8\times10^{-9}$ and
 $3.2\times10^{-9}$ and ability errors of $2.3\times10^{-10}$,
 $1.2\times10^{-9}$ and $2.3\times10^{-10}$. The smallest target
-probabilities in these fields are $10^{-26}$ or less.
+probabilities in these fields are $1.1\times10^{-26}$ or less.
 
 These three runs were made on a different, shared machine from the
 timings above, so their times are not quoted here. The nested inversion
