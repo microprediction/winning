@@ -159,3 +159,140 @@ No claims for arbitrary precision graphs or extreme tails.
 4. Preserve this branch/log between runs; no changes to main. If an
    improved direction merits a second PR, prefer extending the existing
    research PR rather than opening duplicate drafts.
+
+## 2026-11-26 — Close the loop: precision cycles and a route to junction trees
+
+**Status: tested research extension on the same PR #1093.** Current main
+README, CLAUDE.md, dense dispatcher and general-Sigma notes were rechecked.
+The prior chain engine does not solve the closed cycle; no overlapping
+cycle PR found in targeted search. This is not a covariance fitting method.
+
+### One shared partition field, all boundary insertions
+
+Let Q be SPD cyclic tridiagonal precision on n>=3 vertices in cycle
+order; input is its diagonal and the n cyclic edge entries, with either
+sign and arbitrary magnitudes consistent with SPD. Compute marginal
+standard deviations s and logdet Q in O(n) using tridiagonal LDL of
+the first n-1 vertices, a scalar Schur complement for the last, and
+the diagonal inverse recurrence. No dense matrix is constructed.
+In standardized coordinates let R=diag(s) Q diag(s), c_i(x)=(x-mu_i)/s_i.
+Write the joint density as a normalizing constant times the product
+of pair factors
+
+    K_i(u,v)=exp(-R_ii u^2/4 - R_i,i+1 u v - R_i+1,i+1 v^2/4).
+
+At fixed threshold x, quadrature on [max(c_i,-B),B] at every vertex
+turns the truncated survival integral into trace(A_0 ... A_{n-1}),
+A_i=diag(w_i)K_i (cyclic indices, w_i are positive quadrature weights).
+Append one extra node c_i, clipped to [-B,B], with ZERO weight.
+The derivative with respect to that node's weight inserts the winner's
+boundary, rather than integrating it. This is exact for the finite
+quadrature of the other n-1 vertices; it is NOT a numerical derivative
+of a moving quadrature rule. With P_i=A_0...A_{i-1} and
+S_{i+1}=A_{i+1}...A_{n-1}, the derivative is
+
+    (K_i S_{i+1} P_i)[boundary,boundary].
+
+Two sweeps (prefix products and suffix products) compute all n
+derivatives. Multiply by the Gaussian normalizing constant and
+1/s_i, mask the winner's boundary outside [-B,B], then integrate x.
+No per-alternative orthants. No loopy belief propagation, no fitted
+covariance. The trace identity is a standard transfer-matrix/
+tensor-network identity, not new graphical inference. See Baz,
+Alonso and Perez-Fernandez (2023), DOI 10.1016/j.laa.2022.12.028
+for Gaussian cycle models; Robeva and Seigal, *Duality of graphical
+models and tensor networks*, DOI 10.1093/imaiai/iay009, for the general
+junction-tree connection.
+
+Fixed-resolution work O(n L M^3) and current memory O(n L M^2).
+Preprocessing O(n) from explicit precision edges, not from dense
+covariance. Positive integrands and compact-domain polynomial
+approximation justify convergence of nested positive quadrature as
+M,L increase (at fixed B, then B increases). The omitted probability
+of any standardized coordinate outside [-B,B] is <=2n Phi(-B);
+the bound is for truncation only. The outer boundary mask introduces
+finitely many jumps; Gauss-Legendre converges on these bounded
+piecewise continuous functions. For any fixed SPD Q all ties have
+probability zero. Indefinite/singular Q is refused; no jitter.
+Scaled matrix products and exponent shifts help but extreme exponent
+cancellation can underflow before the final rescaling. No guarantee
+of robust finite-precision convergence at arbitrary condition number.
+Raw mass is diagnostic only and not forced to one. Arbitrary permutation
+requires reordering into a cycle; rotation and reversal were tested.
+An explicitly supplied independent common shock can be ignored by
+choice invariance, but adding it to Q^{-1} need not preserve the cycle
+precision grammar.
+
+### Experiments
+
+Commands from this folder (single-thread, isolated prototype):
+    OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python -m pytest -q test_markov_cycle.py
+    OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python bench_markov_cycle.py
+
+14 standalone tests passed in 0.87 s. Sparse marginal variances and
+logdet match dense inverse; six independent bivariate orthant
+integrations plus a frustrated non-diagonally-dominant SPD triangle
+agree. Rotation, reversal, common location, unit scaling, exchangeable
+and independent cases, and indefinite refusal tested. Repository-wide
+CI not run: local network does not permit cloning, so sources were
+inspected via GitHub connector and new files tested in isolation.
+
+Seed 41 per row: mixed edge Q entries U(-.6,.6), diagonal 1 plus
+incident absolute edges; strong negative edges -U(.7,1.2), diagonal
+.3 plus incident absolute edges; means N(0,.5^2). Reference (112,64)
+vs (96,56) max change <=1.34e-9 across all four cases. Four GHK
+scrambles 0..3, 1024 nodes per alternative, previous ordered/log-domain
+implementation, includes ordering and factorizations; dense C already
+provided (its construction excluded). Cycle timing includes O(n)
+preprocessing. Errors below against the refined quadrature reference.
+
+| n / edges | cycle (64,32) s | max abs err | ordered QMC-GHK s | median max abs err |
+|---|---:|---:|---:|---:|
+|32 mixed|.0397|2.95e-7|.1001|1.92e-4|
+|32 strong|.0417|9.79e-11|.0959|1.64e-4|
+|100 mixed|.1237|2.31e-6|.9670|1.55e-4|
+|100 strong|.1167|1.76e-7|.9857|1.91e-4|
+
+At (80,40), 100 mixed: .243 s and 8.01e-8 max error; 100 strong:
+.232 s and 3.59e-10. Four independent direct dense Gaussian Sobol
+scrambles (2^18 paths each, seeds 100..103) agreed in bulk (mean
+vector max differences 2.34e-4, 2.33e-4, 5.16e-4, 5.15e-4);
+they do not establish the fine quadrature accuracy independently.
+The comparison is single-thread Python, not compiled GHK or an
+amortized preordered baseline. It is evidence for these matrices,
+not universal superiority. The benchmark also includes 256-node GHK.
+
+Near-singular positive-correlation stress, seed 99:
+    n=8; e=-rng.uniform(.7,1.2,n)
+    d=.005+abs(e)+abs(np.roll(e,1)); mu=rng.normal(0,.2,n)
+Q condition number 808.5. Four ordered GHK scrambles at 2^15 per
+runner mean sum 1.000002916. Cycle (64,32) mass 1.000010797, max
+difference from GHK mean 5.55e-6. Cycle (96,64) mass 1+1.8e-13,
+max difference 1.21e-6, and (128,96), (160,144), (192,192) agree
+with that GHK mean to the same 1.21e-6. This is a useful stress,
+not a general near-singular guarantee.
+
+### Generalization and next experiment
+
+The zero-weight boundary insertion is the useful unifying idea.
+For ANY Gaussian precision graph, the shared survival partition
+function can be represented as a product of pair potentials and
+unary quadrature weights. Reverse-mode differentiation of a single
+variable-elimination contraction with respect to each boundary weight
+extracts all winners, even though those weights are zero. Equivalently
+use a calibrated junction tree of tensor messages; no division by
+a zero boundary weight. For treewidth t, elimination with explicit
+clique tables costs O(n L M^(t+1)) at fixed resolution, assuming a
+supplied bounded-width elimination order. This is an exact integral
+representation with convergent quadrature for SPD, but on dense
+graphs t=n-1, so not a practical universal competitor to GHK.
+
+Next: (a) implement a generic bounded-width contraction with reverse
+boundary insertion (small width 2 and 3); (b) compress the closing
+edge's quadrature kernel by adaptive low-rank separation, reducing
+cycle work toward O(n L M^2 r), but rigorously monitor signed
+cancellation and approximation error; (c) for arbitrary dense
+matrices pursue structured backbones with unbiased residual
+corrections, not the already failed fixed-rank approximations. Limit
+memory by streaming outer thresholds; current cycle reference
+allocates large batched matrices. Keep this isolated from production.
