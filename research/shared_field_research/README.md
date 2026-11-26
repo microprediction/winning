@@ -600,3 +600,132 @@ to integrate out analytically all low-width leaf buckets in the earlier
 precision code; not performed this run. Do not promote the current
 envelope estimator without stronger matched-time tests on large,
 high-rank dense cases and independent reference precision.
+
+
+## 2026-11-26 — Collapse Gaussian leaf quadrature axes exactly
+
+**Status: opt-in improvement to existing draft PR #1093, not a new
+universal solver.** Rechecked main README, CLAUDE.md, factor/core.py,
+races.py, general_sigma/NOTES.md, existing envelope and bounded-width
+research. PR #1093 open on this branch; targeted search for leaf/precision
+PRs did not reveal an overlapping implementation. Continued the prior
+bounded-width route because PCA-envelope results were unconvincing on
+dense Wishart. No production changes, no default change even in the
+research width solver.
+
+At an elimination bucket i with no children, the message is exactly
+the truncated conditional normal mass:
+
+    a = (clip(c_i,-B,B) - b_i z_S)/tau_i
+    b = (B - b_i z_S)/tau_i
+    m_i(z_S) = Phi(b)-Phi(a).
+
+Its winner boundary insertion is phi(a)/tau_i, masked when c_i is
+outside [-B,B]. Store these TWO separator tables, rather than the full
+conditional density tensor with the extra i-axis. Reverse context A_i
+already excludes m_i, so its contraction with the boundary table gives
+the same continuous boundary integral for i. No division by a possibly
+zero survival message. Other contestants use the exact CDF message in
+their forward and reverse contractions. Disconnected singleton roots
+also collapse, and the independent race therefore needs only the outer
+threshold quadrature, as in the original shared-survival-product engine.
+
+For a leaf with s separator variables the local forward cost and
+storage drop from O(M^(s+1)) to O(M^s) per threshold (fixed s).
+The parent reverse contractions still have their original scopes;
+this does NOT imply an M-fold end-to-end gain or remove the general
+treewidth barrier. The remaining quadrature still converges under
+the previous compact-domain argument (exact continuous leaf messages).
+No covariance approximation; SPD only, singular refused, no ridge.
+Stable tail reflection for interval CDF; extremely tiny interval
+differences can still round to zero. Near-singular narrow boundary
+densities may be missed on separator axes even though the leaf axis
+has been integrated exactly. The numerical gain is not a novelty claim
+about Gaussian conditioning: e.g. Genz (1992),
+DOI 10.1080/10618600.1992.10477010, and Genz & Trinh (2016),
+DOI 10.1007/978-3-319-33507-0_13, study conditional normal probability
+integration. Here it is the application to shared all-winner cavities.
+
+### Experiment
+
+New option width_shares(..., collapse=True); default False.
+Bench and test files bench_analytic_width.py / test_analytic_width.py.
+Run from this folder with OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1:
+    python -m pytest -q test_analytic_width.py
+    python -u bench_analytic_width.py
+
+Local standalone equivalent implementation (copied prior prepare and
+_align, then full contraction with same option) passed all six tests
+in 1.14 s: four independent 3-way orthant references (adaptive
+one-dimensional integral), mixed disconnected graph versus full tensor,
+mass/nonnegativity, permutation, common location and scale, independent
+case with M=2 and one contestant with M=1. No repository-wide CI; cannot
+clone in local environment, connector used for source inspection and
+branch writes. The local benchmark used the same copied ordered GHK
+routine from bench_markov_tree.py. Timings from separate single-thread
+invocations, not compiled GHK; include sparse prep and GHK reordering,
+exclude construction of Q and dense inverse for GHK.
+
+Seed 79: k core contestants with covariance G G'/k+.5I; all others
+conditionally independent with Gaussian regression on the core,
+mixed-sign loadings A=strength*N(0,1)/sqrt(k), D=U(.5,1.5).
+This is a deliberately favorable leaf-rich graph (width k; n-k
+analytic leaves), not a generic bounded-width graph or a new covariance
+grammar claim. Means N(0,.35^2). GHK: four scrambles, 1024 per runner.
+Differences against refined same-method quadrature, not independently
+certified errors at large n. Reference changes (64,28)->(88,36) for
+100/2 weak: 2.05e-6; (64,24)->(80,32) for 64/3 weak: 1.82e-6;
+(80,32)->(112,44) for 32/3 strong: 7.96e-7;
+(96,56)->(128,80) for 32/2 strong: 3.77e-8.
+Here weak/strong mean loading strength .2/1 (not the sharp-noise case).
+
+| n,width,strength | L,M | analytic sec | max diff | full tensor sec | max diff | GHK sec | median max diff |
+|---|---|---:|---:|---:|---:|---:|---:|
+|100,2,.2|48,12|.180|6.63e-5|.195|3.30e-4|1.066|2.73e-4|
+|100,2,.2|64,20|.356|2.05e-6|.632|2.06e-6|1.066|2.73e-4|
+|64,3,.2|48,12|.485|5.03e-5|.655|1.36e-4|.391|4.23e-4|
+|64,3,.2|64,20|2.562|1.82e-6|4.186|1.82e-6|.391|4.23e-4|
+|32,3,1|48,16|.475|9.75e-4|.689|6.65e-3|.094|1.19e-4|
+|32,3,1|64,24|1.792|1.70e-5|4.125|1.42e-4|.094|1.19e-4|
+|32,2,1|48,16|.073|4.38e-3|.099|1.32e-2|.095|2.30e-4|
+|32,2,1|64,24|.129|3.75e-4|.231|8.57e-4|.095|2.30e-4|
+
+100/2 weak reference raw mass 1.000000120; 64/3 weak 1.000000520.
+At 100/2, 64,20 the error is mainly outer quadrature (the result
+matches 64,28 closely); 2.05e-6 is not a certified error. 16/3 strong
+(64,24) analytic .784s vs full 1.956s, both about 8.25e-7 from
+(96,56) reference, GHK .0227s / 2.06e-4; no second high-order
+reference. Strong loading 100/3 high resolution attempt timed out,
+no reported comparison. GHK is much faster in the small strong cases
+and no comparison against the existing factor engine on these
+leaf-rich examples was performed. They can be represented by
+conditioning on a small core, so don't claim they are a new class
+or the best approach. The meaningful result is the exact local
+axis removal in arbitrary existing bounded-width graphs.
+
+**Important negative result:** sharp residual variance D *= .015
+for n32 width2 strength1, condition number 100965. Analytic mass
+1.062106 at (64,24), full tensor mass .126055; analytic high orders
+(96,64) were not used in the completed run; (96,56)->(128,80)
+changed 5.66e-3 and masses .994852->.997368. GHK median difference
+from the last unresolved reference 9.80e-4. This reference is not
+accurate enough to compare errors. Analytic leaves fix the underresolved
+leaf kernel but not the sharp separator boundary. Do not normalize
+or call this solved.
+
+### Next research direction
+
+Instead of raising all M, consider eliminating *blocks* of terminal
+vertices with analytic low-dimensional Gaussian CDF and boundary
+derivatives, and choose elimination orders by the actual number of
+remaining tensor axes rather than width alone. More ambitious: for
+leaf-rich arrowheads condition on the core contestants directly and
+integrate the independent leaves up to the exact minimum of the core.
+Each sample of the core gives the earliest core contestant credit
+equal to the shared leaf survival at that minimum; all leaf credits
+come from the usual shared product integral below the cap. This
+avoids sharp boundary densities on core separator grids. Compare
+against existing factor code and ordered GHK, including high-rank
+limits. It is an exact decomposition for a given separator, not a
+claim of efficient arbitrary-matrix pricing. A dense graph has no
+large independent set, so the universal objective remains open.
