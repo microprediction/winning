@@ -221,7 +221,7 @@ Our chief contribution is scaling. We seek to bring probit modeling to a qualita
 The inversion is the tougher problem, yet at $n=10^{6}$ this takes under two minutes for the independent case, and the rank-one factor problem can be solved at this
 extreme scale also, in around twelve minutes (\texttt{bench.py invertmillion}). In both runs the round-trip log-probability residual is below $10^{-8}$ (\S\ref{sec:num}). Block, nested and tree inversions are measured at $n=400$.
 
-Comparisons die well before this scale, as far as we know. Other approaches are considered in detail presently, but briefly, if the comparison set is taken to be those approaches providing smoothness suitable for inversion, GHK is generally regarded as leading that category.
+As far as we know, no comparison method reaches this scale. Other approaches are considered in detail presently, but briefly, if the comparison set is taken to be those approaches providing smoothness suitable for inversion, GHK is generally regarded as leading that category.
 
 From approximately $n=50$ upward GHK is slower. The comparator is our own Rust implementation, with pseudorandom draws and no variance reduction (\S\ref{sec:num}); no third-party GHK implementation was timed. At $n=200$ it is over a hundred times slower with $R=10^{4}$ draws and about eleven times slower with $R=10^{3}$. GHK's empirical complete-vector cost is superquadratic and steepening as we pass beyond that scale.\footnote{Empirically, the log-log slope is
 $1.9$ from $n=10$ to $200$ (at $R=10^{4}$) and $2.9$ from $200$ to $1000$
@@ -319,9 +319,9 @@ $3\times10^{-2}$ at $n=30$ with tail probabilities off by more than a factor
 of two, and nothing in the output announces the change. The Clark-type recursion
 behaves alike, its tail entries off by a factor of nearly four. The family is current practice, not history:
 \citet{bhat2011} builds the maximum approximate composite marginal likelihood (MACML) estimator on an analytic approximation
-of this sequential-conditioning family (that of \citealt{solow1990}), and the \texttt{Rprobit} package implements it
+of this sequential-conditioning family (that of \citealp{solow1990}), and the \texttt{Rprobit} package implements it
 \citep{bauerRprobit}, with its asymptotics examined by
-\citet{batram2019}. Expectation propagation (EP; \citealt{minka2001})
+\citet{batram2019}. Expectation propagation (EP; \citealp{minka2001})
 is the modern member of the same family, and for the multinomial probit
 it is no longer one-pass: nested EP \citep{riihimaki2013} iterates
 moment-matched site approximations to a fixed point, is free of the
@@ -364,7 +364,7 @@ implementation and still an order of magnitude short of its error.
 
 The reader will note the common thread. Smoothness has been, and continues to be, bought at a significant performance cost. The cost, compared to Monte Carlo, is that one alternative is computed at a time, and this cost seems to have been accepted as unavoidable. We will show that it is not, at least within the covariance grammar we specify.
 
-We offer a different Faustian bargain that will often, but not always, be preferable. In exchange for the assumed covariance structure, which is very often assumed anyway, the user does not have to choose between
+We offer a different trade that will often, but not always, be preferable. In exchange for the assumed covariance structure, which is very often assumed anyway, the user does not have to choose between
 speed, accuracy, scale, or smoothness. Within the grammar and its stated limits (sharp shared effects in the block, nested and tree kernels, \S\ref{sec:factor}; kernel covariance, \S\ref{sec:general}) they can have all four, and very often they need them for downstream modeling tasks beyond share inversion, such as welfare analysis, game theory, and propagation of derivatives to other parts of a system (for ratings or belief networks).
 
 \section{The lattice race}\label{sec:lattice}
@@ -603,7 +603,7 @@ random-effects probit. The \texttt{lpRR}/\texttt{slpRR} interfaces of
 \texttt{mvtnorm} integrate over the factor dimensions of
 $BB'+\mathrm{diag}(D)$ (their $B$ is our $V$) by Monte Carlo. As we noted at the outset, each of
 those integrals returns only one alternative's probability, which is one
-reason their performance dies at scale.
+reason they do not scale.
 
 The survival field changes that: one pass shares the survival product across all
 $n$ alternatives, and \S\ref{sec:num} measures the difference against the
@@ -872,7 +872,7 @@ probability, $\hat p$ the Monte Carlo frequency and $\mathrm{se}$ its
 binomial standard error under $p$; a value near one means the
 differences are at the Monte Carlo noise level. It lies between $0.75$
 and $1.1$. Entries below the resolution agreed with minimax tilting
-(\citealt{botev2017}; \texttt{TruncatedNormal} 2.3) to $0.3$ percent relative at probabilities down to
+(\citealp{botev2017}; \texttt{TruncatedNormal} 2.3) to $0.3$ percent relative at probabilities down to
 $7\times10^{-8}$, which is within the tilting estimate's own error.}
 
 \begin{remark}[A connection to top-down portfolio construction]\label{rem:hrp}
@@ -882,7 +882,7 @@ There is a tree race whose implied correlation is exactly the
 built from the correlation distance $d_{ij}=\sqrt{(1-\rho_{ij})/2}$,
 invert the distance transform at each merge height and floor at zero. Give internal node $t$ strength
 $\lambda_t^2=\rho_t-\rho_{\mathrm{parent}(t)}$, with
-$\rho_t=\max(1-2h_t^2,0)$ at merge height $h_t$, and leaf $i$
+$\rho_t=\max(1-2d_t^2,0)$ at merge distance $d_t$, and leaf $i$
 idiosyncratic variance $1-\rho_{\mathrm{first}(i)}$, where
 $\mathrm{first}(i)$ is the first merge that includes leaf $i$ and the
 root's parent is taken to have $\rho=0$.\footnote{The floor at zero is not optional. Shared effects contribute nonnegative
@@ -894,7 +894,7 @@ this is the covariance-reporting choice of \S\ref{sec:tree}, and the
 pricing kernel ignores the common component regardless. Setting the root
 effect to zero instead gives the same choices, since a common effect
 cannot move an argmin, but different raw correlations. The construction
-needs a monotone (ultrametric) linkage, $h_t\le h_{\mathrm{parent}(t)}$,
+needs a monotone (ultrametric) linkage, $d_t\le d_{\mathrm{parent}(t)}$,
 as single, complete and average linkage are; a merge-height inversion
 (centroid or median linkage) would make some $\lambda_t^2$ negative, which
 the constructor clamps to zero, and it floors leaf variances at
@@ -909,13 +909,13 @@ inversions. We do not pursue the application here.
 We now arrive at the central object of the algorithm: the Jacobian. An outcome of the race is a vector $x$ of finishing values, one per
 contestant. Contestant $i$ wins on the set
 \[
-  R_i=\{x:\;x_i\le x_k\ \text{for every }k\},
+  \mathcal{C}_i=\{x:\;x_i\le x_k\ \text{for every }k\},
 \]
 a convex cone: the outcomes in which nobody beats $i$. These cones tile
 the space, one per contestant, and each win probability is the mass the
 joint density puts on its own cone,
 \[
-  p_i(\mu)=\int_{R_i}q_\mu,\qquad q_\mu(x)=q_0(x-\mu),
+  p_i(\mu)=\int_{\mathcal{C}_i}q_\mu,\qquad q_\mu(x)=q_0(x-\mu),
 \]
 with $q_0$ the joint density of the noise, which is the performance
 density at zero location.
@@ -930,11 +930,11 @@ Now differentiate. Abilities enter the density only as a translation, so
 raising $\mu_j$ slides the density rather than reshaping it, and sliding
 the density one way is the same as sliding the coordinate the other:
 $\partial q_\mu/\partial\mu_j=-\,\partial q_\mu/\partial x_j$. The region
-$R_i$ does not depend on $\mu$ at all, so for $j\ne i$ the whole
+$\mathcal{C}_i$ does not depend on $\mu$ at all, so for $j\ne i$ the whole
 derivative falls on the integrand,
 \[
   \frac{\partial p_i}{\partial\mu_j}
-   =-\int_{R_i}\frac{\partial q_\mu}{\partial x_j}\,dx .
+   =-\int_{\mathcal{C}_i}\frac{\partial q_\mu}{\partial x_j}\,dx .
 \]
 
 We recognize this as a derivative integrated over a region, so the
@@ -942,14 +942,14 @@ divergence theorem applies to the vector field $q_\mu e_j$. This lets us
 compute over the boundary instead of the volume:
 \[
   \frac{\partial p_i}{\partial\mu_j}
-   =-\int_{\partial R_i}q_\mu\,n_j\,dS ,
+   =-\int_{\partial \mathcal{C}_i}q_\mu\,n_j\,dS ,
 \]
 with $n$ the outward unit normal.
 
 However for this we take $q_0$ continuously differentiable with $q_0$
 integrable, $\nabla q_0$ locally dominated (bounded on compact
 $\mu$-neighborhoods by an integrable function, which the substitution
-$u=x-\mu$, $p_i(\mu)=\int_{R_i-\mu}q_0(u)\,du$, reduces to integrability
+$u=x-\mu$, $p_i(\mu)=\int_{\mathcal{C}_i-\mu}q_0(u)\,du$, reduces to integrability
 of $\nabla q_0$), and $|x|^{n-1}q_0(x)\to0$ uniformly in direction,
 conditions any non-degenerate Gaussian law satisfies outright.
 Integrability alone would
@@ -958,7 +958,7 @@ the flux at infinity. A covariance that is singular along $\mathbf{1}$,
 such as $P\Sigma P$, has no density on $\R^n$, but the argument runs
 unchanged on the contrast space $\mathbf{1}^{\perp}$, where every pairwise
 difference keeps a positive variance. With them the contribution over the sphere at
-infinity vanishes, and only the faces of $R_i$ remain.
+infinity vanishes, and only the faces of $\mathcal{C}_i$ remain.
 
 The observation: those faces are the photo-finish surfaces $F_{ik}$, one
 for each rival $k$, and on $F_{ik}$ the outward normal is
@@ -1709,7 +1709,7 @@ none.
 
 Group structures degenerate the same way. One can arrange equal-sized groups with equal within-group correlation. This leaves one tied leading direction per contrast among the groups, so $g$ equal
 groups give multiplicity $g-1$, with equicorrelation the case $g=n$. The
-default $k=3$ is therefore exactly right for four equal groups but otherwise wrong, or should we say, inefficient. The table prices the shipped pipeline, the one call with a dense
+default $k=3$ is therefore exactly right for four equal groups but otherwise inefficient. The table prices the shipped pipeline, the one call with a dense
 covariance, at $n=24$ and within-group correlation
 $0.7$, against the same race priced through the block grammar directly
 (\texttt{equal\_groups.py}):
