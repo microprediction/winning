@@ -897,3 +897,159 @@ or using a tractable backbone with an exact correction. The root
 solver is the bottleneck in sharp cases: avoid 64 iterations across
 already converged rows; compare with a capped fixed-x field at equal
 time. No need to increase tensor width indiscriminately.
+
+
+## 2026-11-26 — Sample the minimum, forget the sampled winner
+
+**Status: research-only in existing draft PR #1093.** Read current main
+CLAUDE.md, README, factor/core.py, races.py, general_sigma/NOTES.md,
+and the preceding capped_field.py and ordered GHK benchmark. PR #1093
+is open, on this branch. Searches of open PR titles for hazard,
+diagonal transfer and conditional minimum found no matches. No production
+dispatch changes.
+
+Earlier general_sigma experiments already attempted a scalar diagonal
+split plus lattice Rao-Blackwellization, with poor time/accuracy. Do
+not claim the split is new. Iteration 6's quantile method costs many
+hazard evaluations in the Newton solver. This iteration removes both
+the root solve and the lattice, at the price of more QMC coordinates.
+
+Given the exact law X=a(Z)+diag(s) eps, sample all eps and retain only
+the minimum T. Conditional on Z and a continuous minimum T=t, the
+winner label distribution is
+
+    w_i(Z,t)=h_i(t)/sum_j h_j(t),
+
+where h_i=f_i/S_i is the individual conditional Gaussian hazard.
+This follows by cancelling the common survival field in the joint
+density G(t) h_i(t). For deterministic conditional rows, if the
+minimum reaches their cap, divide credit equally among the earliest
+deterministic rows instead. Conditional expectation of the simulated
+winner credit gives this vector, so its expectation is the exact
+winning vector. No truncation, inversion, lattice, post-normalization,
+or covariance approximation. For iid nodes the law of total variance
+gives a positive semidefinite covariance reduction relative to direct
+winner indicators on the SAME split, not a guarantee for different
+QMC rotations or equal time. Sampling the minimum in high dimension
+adds dimensions compared with iteration 6. Each row is a simplex
+vector. The formula is the standard competing-risks conditional
+cause identity, not a novel identity; see Beyersmann et al. (2011),
+doi:10.1186/1471-2288-11-86, and Lindqvist (2021), Conditional Monte
+Carlo revisited, doi:10.1111/sjos.12549. Novelty here is limited to
+the computational experiment on the shared race field.
+
+For a covariance positive definite in contrast space, set B to an
+orthonormal basis of 1-perp, S=B' C B, and d=.999 lambda_min(S).
+Then S-dI is PSD and A=B U sqrt(Lambda-dI) reproduces the full
+contrast covariance with independent noise d per row. The .999
+is NOT a ridge: the removed variance is restored as independent
+noise. It avoids an exactly zero eigenmode in this prototype.
+Descending spectral order for QMC. Preprocessing O(n^3), per draw
+O(nr+n) with r=n-1 here. The hazard calculation is O(n) for all
+contestants with log-domain evaluation. Dense sample generation
+still costs O(n^2); there is no near-linear general claim.
+For supplied exact rectangular roots, including singular ones,
+zero d is allowed and degenerates to direct sampling, with exact
+equal credit for identical rows/means. The dense helper refuses
+nonpositive contrast eigenvalues: no numerical rank threshold or
+ridge that silently changes the target. Singular covariance intake
+is therefore not a complete API; the caller must provide an exact
+root and exact deterministic duplicate rows. Near ties and floating
+underflow/overflow can still cause failures at extreme scales;
+this is not a rare-tail solver.
+
+For fixed exact input law the bounded conditional credit integrand
+is continuous off Gaussian-cube boundaries, tie surfaces and the
+cap transitions (permanent identical rows split exactly). Ideal iid
+sampling is unbiased and strongly consistent; ideal infinite-bit
+scrambled Sobol with increasing m converges for this bounded
+almost-everywhere continuous integrand. Finite precision, clipping,
+finite Sobol bits and covariance roundoff give practical floors.
+No deterministic quadrature bias; exact covariance split up to
+roundoff. Permuting rows changes the Sobol coordinate order in
+general, so finite QMC estimates need not be identical.
+
+### Tests and measurements
+
+Files hazard_draw.py, test_hazard_draw.py, bench_hazard_draw.py.
+Local standalone copy passed seven tests in .86s:
+contrast reconstruction/common covariance shock, independent
+three-way adaptive quadrature, exact equal independent hazards,
+deterministic cap/clones, singular exact root, common shift/loading
+and scaling, binary exact normal contrast. No full repository CI.
+Run OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python -m pytest -q
+test_hazard_draw.py and python -u bench_hazard_draw.py in this folder.
+
+Seed 731, means N(0,.4^2), dense G iid normal. Wishart GG'/n+.25I,
+weak .15 GG'/n+I, rank3 factor V=G[:,:3]/sqrt(3) plus .5I or .01I
+(sharp). Four test scrambles 0..3. Reference mean of three ordered
+Python GHK scrambles 100..102 at 8192 points/runner for n32, 4096
+for n64/128. Errors below are DIFFERENCES from noisy references,
+not certified true errors. GHK times include ordering; split
+preprocessing .0003-.0022s excluded from hazard/direct times,
+included (recomputed) for PCA. Times are means, single-thread,
+local copy of current research comparator, no compiled GHK.
+PCA is direct Sobol with exact contrast root, d=0; direct is the
+same split and same nodes as hazard. Report median max abs diff
+across seeds, pooled RMSE.
+
+| n/case | method (log2 draws) | seconds | med max diff | RMSE |
+|---|---|---:|---:|---:|
+|32 wishart|GHK 10|.08993|2.09e-4|6.48e-5|
+||hazard 14|.05041|8.45e-4|3.49e-4|
+||hazard 16|.18967|3.81e-4|1.36e-4|
+||direct 16|.11305|8.46e-4|4.23e-4|
+||PCA 18|.21359|5.10e-4|1.80e-4|
+|64 wishart|GHK 10|.38742|2.48e-4|1.09e-4|
+||hazard 14|.12716|8.36e-4|2.90e-4|
+||hazard 16|.47921|4.11e-4|1.31e-4|
+||direct 16|.33544|1.20e-3|3.52e-4|
+||PCA 18|.43821|4.59e-4|1.50e-4|
+|32 factor|GHK 10|.09618|1.87e-4|5.75e-5|
+||hazard 14|.05320|1.80e-4|6.43e-5|
+||hazard 16|.18971|6.80e-5|2.63e-5|
+||direct 16|.11581|9.29e-4|3.40e-4|
+||PCA 18|.21478|5.43e-4|1.92e-4|
+|32 sharp|GHK 10|.09925|6.30e-4|1.49e-4|
+||hazard 14|.05526|4.41e-4|1.08e-4|
+||hazard 16|.22413|1.27e-4|3.85e-5|
+||direct 16|.11411|8.79e-4|2.79e-4|
+||PCA 18|.21067|2.14e-4|8.58e-5|
+|64 weak|GHK 10|.42457|2.53e-4|1.33e-4|
+||hazard 14|.11621|1.25e-4|4.35e-5|
+||hazard 16|.39259|7.65e-5|3.34e-5|
+||direct 16|.25296|1.04e-3|3.26e-4|
+||PCA 18|.42907|5.12e-4|1.61e-4|
+|128 weak|GHK 10|1.6898|6.23e-4|1.13e-4|
+||hazard 14|.25819|2.93e-4|5.11e-5|
+
+Reference max spreads respectively 8.58e-5, 3.41e-4, 7.92e-5,
+1.46e-4, 2.38e-4, 1.51e-4. Sharp condition number 1186.
+Hazard/direct raw mass errors <=1.2e-16; GHK mass defects up to
+.00945 (not necessarily systematic bias). Initial benchmark hit a
+too-strict elementwise symmetry check on weak C; fixed to use
+matrix-scale tolerance, then reran weak cases. n128 completed the
+first two rows before execution timeout. Factor/strong examples
+may be better served by the production structured engine; not
+benchmarked here. No relative rare-tail assessment or compiled GHK
+comparison. The weak dense case is promising but reference noise
+is material, and stronger Wishart is a negative result against
+GHK. This is a useful lower-cost alternative to root inversion
+and lattice evaluation, not an unconditional general winner.
+
+### Next step
+
+Compare against the previous quantile field for the SAME exact
+diagonal split, and against a much finer reference, rather than
+comparing across different covariance decompositions. Optimize
+heterogeneous diagonal noise allocation (e.g. PSD-constrained
+diagonal packing in contrast space): a tiny minimum eigenvalue
+can make scalar smoothing useless even when nearly every runner
+has large independent conditional variance. A particularly
+interesting extension is to analytically smooth only promising
+contenders while sampling others to set a random cap, selecting
+the subset using Z alone, not their unobserved independent noise.
+Compare equal-time on strong dense spectra, not merely weak
+Wishart. The bounded-width precision extension remains a
+separate valid structured result. No claim of solving the
+arbitrary-matrix performance objective yet.
