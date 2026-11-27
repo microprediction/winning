@@ -27,7 +27,7 @@ def prepare(C, rank, fraction=.8):
     return U*r, U*r0, np.sqrt(d),V,s2
 
 
-def field(mu,V,s2,order=21,points=513):
+def field(mu,V,s2,order=21,points=513,pad=10.):
     """Same shared survival integral as factor/core.py, per-node windows.
     Tensor GH over rank <=2 in the experiment. No renormalization.
     """
@@ -40,7 +40,7 @@ def field(mu,V,s2,order=21,points=513):
     p=np.zeros(n);u=np.linspace(0,1,points);tw=np.ones(points);tw[[0,-1]]=.5
     for a in range(0,len(means),max(1,2**20//(points*n))):
         M=means[a:a+max(1,2**20//(points*n))];W=weights[a:a+len(M)]
-        lo=M.min(1)-10*sd; hi=M.max(1)+10*sd
+        lo=M.min(1)-pad*sd; hi=M.max(1)+pad*sd
         t=lo[:,None]+(hi-lo)[:,None]*u;z=(t[:,:,None]-M[:,None,:])/sd
         ls=log_ndtr(-z); lp=ls.sum(2,keepdims=True)-ls-.5*z*z-np.log(sd*np.sqrt(2*np.pi))
         p+=(W*(hi-lo)/(points-1))@np.einsum('mln,l->mn',np.exp(lp),tw)
