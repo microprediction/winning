@@ -1,0 +1,55 @@
+# machine: Apple M1 Ultra, 20 cores, 64 GB; 2026-11-26T15:48Z; other jobs on the machine at nice 20
+# load averages: 21.63 21.59 17.12
+n=10,000
+independent  forward     0.1 s  inversion      1.0 s  converged True  sweeps   8  max|log p resid| 8.9e-11  max|mu err| 1.5e-11  min p 6.7e-14  peak 0.1 GB
+factor r1    forward     0.3 s  inversion      8.2 s  converged True  sweeps  33  max|log p resid| 6.1e-09  max|mu err| 1.9e-09  min p 3.0e-20  peak 0.8 GB
+blocks       forward     0.1 s  inversion      5.2 s  converged True  sweeps  23  max|log p resid| 5.1e-09  max|mu err| 4.6e-10  min p 3.0e-20  peak 0.9 GB
+tree         forward     0.1 s  inversion      4.6 s  converged True  sweeps  18  max|log p resid| 5.0e-09  max|mu err| 1.2e-09  min p 3.1e-19  peak 0.9 GB
+nested       forward     1.7 s  inversion     43.3 s  converged True  sweeps  24  max|log p resid| 6.2e-09  max|mu err| 5.9e-10  min p 3.0e-20  peak 0.9 GB
+n=100,000
+independent  forward     1.3 s  inversion     12.1 s  converged True  sweeps  10  max|log p resid| 1.0e-10  max|mu err| 1.2e-11  min p 4.5e-20  peak 0.5 GB
+factor r1    forward     2.8 s  inversion     90.7 s  converged True  sweeps  36  max|log p resid| 9.9e-09  max|mu err| 2.8e-09  min p 6.2e-31  peak 7.7 GB
+blocks       forward     1.1 s  inversion     60.3 s  converged True  sweeps  26  max|log p resid| 9.6e-09  max|mu err| 8.3e-10  min p 1.3e-26  peak 8.0 GB
+tree         forward     1.5 s  inversion     54.4 s  converged True  sweeps  20  max|log p resid| 4.8e-09  max|mu err| 7.9e-10  min p 4.5e-24  peak 8.0 GB
+nested       forward    17.6 s  inversion    499.9 s  converged True  sweeps  27  max|log p resid| 3.3e-09  max|mu err| 2.8e-10  min p 2.8e-26  peak 8.0 GB
+n=1,000,000
+independent  forward    12.2 s  inversion    134.2 s  converged True  sweeps  11  max|log p resid| 7.3e-10  max|mu err| 7.5e-11  min p 1.0e-22  peak 0.6 GB
+factor r1    forward    30.3 s  inversion   1140.6 s  converged True  sweeps  39  max|log p resid| 7.7e-09  max|mu err| 2.4e-09  min p 5.2e-39  peak 8.8 GB
+blocks       forward    11.7 s  inversion    714.8 s  converged True  sweeps  30  max|log p resid| 3.0e-09  max|mu err| 2.3e-10  min p 9.3e-32  peak 8.8 GB
+tree         forward    15.6 s  inversion    542.4 s  converged True  sweeps  20  max|log p resid| 9.8e-09  max|mu err| 1.2e-09  min p 1.1e-26  peak 8.8 GB
+nested       forward   197.6 s  inversion   5733.1 s  converged True  sweeps  30  max|log p resid| 3.2e-09  max|mu err| 2.3e-10  min p 2.4e-31  peak 8.8 GB
+# finished 2026-11-26T18:24Z; load averages: 30.06 30.97 31.49
+# second batch (intermediate sizes) started 2026-11-26T18:24Z; load averages: 27.19 30.33 31.26
+n=20,000
+independent  forward     0.2 s  inversion      2.2 s  converged True  sweeps   9  max|log p resid| 2.0e-12  max|mu err| 2.6e-13  min p 6.5e-16  peak 0.1 GB
+factor r1    forward     0.6 s  inversion     19.2 s  converged True  sweeps  36  max|log p resid| 8.1e-09  max|mu err| 2.6e-09  min p 3.4e-24  peak 1.6 GB
+blocks       forward     0.2 s  inversion     10.5 s  converged True  sweeps  23  max|log p resid| 7.7e-09  max|mu err| 7.3e-10  min p 3.5e-19  peak 1.8 GB
+tree         forward     0.3 s  inversion     10.9 s  converged True  sweeps  21  max|log p resid| 4.9e-09  max|mu err| 9.9e-10  min p 5.6e-18  peak 1.8 GB
+nested       forward     3.3 s  inversion     84.3 s  converged True  sweeps  24  max|log p resid| 3.6e-09  max|mu err| 4.4e-10  min p 5.6e-19  peak 1.8 GB
+n=50,000
+independent  forward     0.6 s  inversion      6.1 s  converged True  sweeps  10  max|log p resid| 6.4e-14  max|mu err| 1.6e-14  min p 2.9e-19  peak 0.3 GB
+factor r1    forward     1.3 s  inversion     42.3 s  converged True  sweeps  34  max|log p resid| 8.9e-09  max|mu err| 2.6e-09  min p 8.6e-30  peak 4.0 GB
+blocks       forward     0.6 s  inversion     29.1 s  converged True  sweeps  25  max|log p resid| 8.0e-09  max|mu err| 6.9e-10  min p 2.2e-23  peak 4.1 GB
+tree         forward     0.7 s  inversion     27.9 s  converged True  sweeps  21  max|log p resid| 6.1e-09  max|mu err| 1.0e-09  min p 1.7e-21  peak 4.1 GB
+nested       forward     8.4 s  inversion    233.9 s  converged True  sweeps  26  max|log p resid| 3.8e-09  max|mu err| 3.6e-10  min p 1.9e-23  peak 4.1 GB
+n=200,000
+independent  forward     2.5 s  inversion     27.0 s  converged True  sweeps  11  max|log p resid| 8.5e-14  max|mu err| 8.0e-15  min p 6.8e-21  peak 0.5 GB
+factor r1    forward     5.7 s  inversion    225.2 s  converged True  sweeps  41  max|log p resid| 6.8e-09  max|mu err| 1.9e-09  min p 1.3e-40  peak 7.9 GB
+blocks       forward     2.3 s  inversion    130.7 s  converged True  sweeps  28  max|log p resid| 4.1e-09  max|mu err| 3.3e-10  min p 1.1e-27  peak 7.9 GB
+tree         forward     3.0 s  inversion     99.9 s  converged True  sweeps  19  max|log p resid| 5.0e-09  max|mu err| 6.5e-10  min p 3.6e-24  peak 7.9 GB
+nested       forward    34.5 s  inversion   1015.2 s  converged True  sweeps  28  max|log p resid| 6.8e-09  max|mu err| 5.4e-10  min p 1.3e-27  peak 7.9 GB
+n=500,000
+independent  forward     6.2 s  inversion     67.2 s  converged True  sweeps  11  max|log p resid| 1.4e-14  max|mu err| 1.8e-15  min p 6.0e-22  peak 0.5 GB
+factor r1    forward    12.9 s  inversion    526.5 s  converged True  sweeps  41  max|log p resid| 7.1e-09  max|mu err| 2.0e-09  min p 8.8e-39  peak 8.4 GB
+blocks       forward     5.8 s  inversion    323.9 s  converged True  sweeps  28  max|log p resid| 8.5e-09  max|mu err| 7.0e-10  min p 1.1e-30  peak 8.4 GB
+tree         forward     7.1 s  inversion    245.2 s  converged True  sweeps  19  max|log p resid| 9.2e-09  max|mu err| 1.1e-09  min p 3.6e-26  peak 8.4 GB
+nested       forward    83.0 s  inversion   2522.0 s  converged True  sweeps  28  max|log p resid| 8.6e-09  max|mu err| 6.5e-10  min p 1.6e-30  peak 8.4 GB
+# second batch finished 2026-11-26T20:01Z; load averages: 29.26 29.45 28.72
+# third batch (n = 2,000,000) started 2026-11-26T20:02Z; load averages: 20.58 27.26 27.95
+n=2,000,000
+independent  forward    24.7 s  inversion    293.5 s  converged True  sweeps  12  max|log p resid| 3.6e-13  max|mu err| 5.2e-14  min p 1.9e-24  peak 0.8 GB
+factor r1    forward    61.3 s  inversion   2883.3 s  converged True  sweeps  46  max|log p resid| 8.1e-09  max|mu err| 2.3e-09  min p 1.9e-41  peak 9.7 GB
+blocks       forward    33.5 s  inversion   1746.1 s  converged True  sweeps  31  max|log p resid| 2.7e-09  max|mu err| 1.7e-10  min p 3.3e-36  peak 9.7 GB
+tree         forward    28.1 s  inversion   1091.3 s  converged True  sweeps  21  max|log p resid| 4.7e-09  max|mu err| 5.6e-10  min p 4.5e-30  peak 9.7 GB
+nested       forward   485.8 s  inversion  15439.8 s  converged True  sweeps  31  max|log p resid| 4.9e-09  max|mu err| 3.4e-10  min p 2.6e-36  peak 9.7 GB
+# third batch finished 2026-11-27T02:10Z; load averages: 49.09 47.75 39.35
