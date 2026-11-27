@@ -1729,3 +1729,172 @@ priced low-rank structured model for the backbone, and compare
 with compiled GHK before promoting the result. Preserve negative
 cases as adversarial tests. The universal performance objective
 remains open; this is the strongest weak-residual result to date.
+
+
+## 2026-11-26 — Spectral factor backbone with an exact smooth correction
+
+Rechecked main README, CLAUDE.md, factor/core.py (fit_covariance,
+factor_model_projected, win_probabilities_factor), factor/races.py,
+methods/native.py and existing draft PR #1093. Current dense fit
+has projected NNLS and global factors, block clustering, residual
+eigendirections, diagonal matching, capped-fit polish, and a GHK
+route for dense cases. Recent related PRs #1064, #1068, #1050
+concern the fit itself. This experiment is NOT a new covariance
+fit offered as the target model: the backbone is a control variate,
+with the entire dense residual retained in the stochastic correction.
+No production dispatch change. Existing draft #1093 remains the
+only PR. No checkout/installed winning or fastrace in the sandbox;
+tested standalone copies of the code and the ordered GHK from the
+previous iteration, not the full repository suite.
+
+**Derivation.** Write P=I-11'/n, B orthonormal basis of contrasts,
+and S=B' C B with eigenvalues lambda_1>=...>=lambda_(n-1)>0 and
+eigenvectors in ambient contrast coordinates U. For fixed
+0<d<lambda_min, set a_j=sqrt(lambda_j-d). Fit a rank-r spike plus
+isotropic variance backbone C0 = V V' + s^2 I. Define
+b=mean(a_(r+1),...,a_(n-1)), s^2=d+b^2 and
+V=U[:,1:r] diag(sqrt(lambda_j-s^2)). Then
+A=U diag(a), A0=U diag(a_1,...,a_r,b,...,b).
+The coupled laws X=mu+A Z+sqrt(d) E and
+X0=mu+A0 Z+sqrt(d) E have exact contrast covariances
+P C P and P C0 P. Neither adds a ridge to the target. Their
+residual-mean displacement is minimized in squared Frobenius norm
+within this isotropic-plus-rank-r class for fixed d: for any chosen
+backbone residual eigenvalues, the optimal Gaussian root coupling
+aligns ordered eigendirections (von Neumann trace inequality /
+Gaussian Bures distance); the leading r root eigenvalues are
+matched exactly, and least squares for the common trailing root
+gives b above. Since b<=a_r, this respects the positive-spike
+constraint. Objective is sum_(j>r)(a_j-b)^2, not raw covariance
+Frobenius or directly hazard variance. This is a shifted
+square-root analogue of PPCA (Tipping & Bishop 1999,
+doi:10.1111/1467-9868.00196), which averages trailing covariance
+eigenvalues instead; optimal Gaussian coupling and CRN are not
+novel (Glasserman & Yao 1992, doi:10.1287/mnsc.38.6.884).
+The research contribution is to combine this particular backbone
+with the existing shared minimum hazard correction and the existing
+deterministic shared survival field. No claim of optimal race
+variance or priority for the spectral fit.
+
+Use previous H_i = h_i(T)/sum h_j(T), with each law's own T,
+and p_hat=p0+mean(H-H0). Exactly the same conditional hazard
+identity and local O(||A-A0||_F^2) variance result apply for fixed
+d>0. Expected correction plus exact p0 equals the original
+target, no structural approximation error at any rank. The target
+law and chosen contrast representation are invariant to common
+shocks, common translation, positive scale and permutation (at
+a spectral cutoff tie, a nonunique backbone can be selected);
+finite scrambled samples need not be equivariant. Signed finite
+estimates may be negative; mass equals p0 mass. Optional prior
+simplex projection is consistent but biased; not used here.
+The SPD-on-contrasts prototype refuses singular contrasts; the
+previous supplied-exact-root hard_root_correction is a consistent
+fallback with equal permanent-tie credit, not a competitive
+singular method. No ridge. Iid strong consistency and ideal
+Sobol equidistribution as in previous iteration, refining sample
+count independently of backbone quadrature. Prototype field is
+the same conditional product integral as factor/core.py with
+per-node trapezoidal grids, tensor Gauss-Hermite for the factors,
+but not a call to the installed production code. Fixed 10-sigma
+tails omit at most (n+1) Phi(-10) conditional total probability
+(by union bound on the left, one marginal on the right); to
+remove even this tiny fixed truncation in a convergence statement,
+increase the window padding alongside GH order and grid resolution.
+No quadrature certification; check refinement explicitly. Cost
+O(n^3) eigensolve once, O(Q n L) backbone field per mu, O(M n^2)
+correction for all contestants, two dense multiplies, no per-runner
+orthant computation. In future use main win_probabilities_factor
+with explicit F,W or race_probabilities(V=V,D=...) and validate
+quadrature independently. Root prep reusable across mu; price
+p0 again when mu changes.
+
+**Experiments.** spectral_backbone.py, test_spectral.py,
+bench_spectral.py, compare_diagonal.py. Local standalone tests:
+4 passed in .95s (root reconstruction, common shock/scale and
+permutation of backbone covariance, exact rank-one zero correction,
+field shift/scale/permutation, independent three-runner zero-mean
+arcsine orthant formula, singular refusal). Run from directory:
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 python -m pytest -q test_spectral.py
+and same environment python -u bench_spectral.py
+and python -u compare_diagonal.py. The committed benchmark imports
+the identical ordered_cholesky/ghk functions from bench_coupled.py;
+the local run used a verbatim copy normalized to unit mass.
+Seed 9011, mu~N(0,.4^2), W=GG'/n; weak=I+.12 W;
+spike adds vv' with centered v~N(0,.65^2); Wishart=W+.05I;
+diffuse=I-.99999 uu' centered normalized v. Mixed sign correlations,
+all SPD. d=.8 lambda_min on contrasts; rank 0 vs rank 1.
+GH order 21, L=513, refinement order 41,L=1025.
+Four evaluation scrambles 0..3, independent normalized ordered
+GHK reference four scrambles 100..103, 2^14 nodes/runner at n32,
+2^13 at n64. GHK includes all ordering/factorization, CV prep
+includes field + roots separately; times per scramble, RMSE over
+all coordinates and scrambles, SD pooled between-scramble SD,
+medmax median max coordinate error. Ref not exact; reference
+pooled SD 8.10e-6,3.10e-5,8.03e-6,2.46e-5 in case order;
+max spread 6.79e-5,2.33e-4,5.20e-5,1.57e-4. Large n
+reference uncertainty is substantial. All estimates in table
+positive and mass defect <=4.5e-16. Benchmark completed four
+cases before environment timeout, diffuse only separately below.
+
+| n/case | method log2 | prep s | run s | RMSE | medmax | scramble SD | trace integrand var |
+|---|---|---:|---:|---:|---:|---:|---:|
+|32 spike|GHK 10|0|.08959|1.117e-4|4.035e-4|1.244e-4|–|
+||GHK 12|0|.23742|2.420e-5|9.705e-5|2.550e-5|–|
+||rank0 CV 13|.00409|.03625|1.485e-4|4.374e-4|1.332e-4|.08033|
+||rank0 CV 15|.00409|.13709|8.218e-5|2.593e-4|8.494e-5|.08029|
+||rank1 CV 13|.01287|.03154|5.050e-5|1.177e-4|4.853e-5|.003186|
+||rank1 CV 15|.01287|.12072|2.403e-5|6.385e-5|2.308e-5|.003204|
+|64 spike|GHK 10|0|.37166|1.227e-4|3.107e-4|1.267e-4|–|
+||GHK 12|0|.97422|5.036e-5|1.528e-4|5.141e-5|–|
+||rank0 CV 13|.00607|.07274|1.419e-4|4.467e-4|1.443e-4|.05352|
+||rank0 CV 15|.00607|.24311|6.487e-5|2.050e-4|6.409e-5|.05356|
+||rank1 CV 13|.02893|.07622|4.295e-5|1.325e-4|4.174e-5|.003240|
+||rank1 CV 15|.02893|.25085|2.297e-5|6.472e-5|1.961e-5|.003227|
+|32 weak|GHK 12|0|.22599|1.989e-5|6.661e-5|1.920e-5|–|
+||rank0 CV 15|.00144|.11945|2.412e-5|8.661e-5|2.556e-5|.003306|
+||rank1 CV 15|.01277|.12159|2.089e-5|7.543e-5|2.215e-5|.002815|
+|32 Wishart|GHK 12|0|.23808|6.074e-5|1.929e-4|5.787e-5|–|
+||rank0 CV 15|.00112|.12942|4.921e-4|1.200e-3|5.074e-4|.50193|
+||rank1 CV 15|.01307|.13035|5.058e-4|1.222e-3|5.299e-4|.45709|
+
+Backbone refinement max diff at rank1 spike n32/n64 respectively
+1.061e-6,1.037e-6; rank0 near machine precision. Rank1 backbone
+alone RMSE 1.039e-3 and 6.612e-4, so the correction is substantial.
+Root residual squared falls 6.9945->.3010 (n32) and
+25.4066->.6490 (n64). Rank1 improves substantially over rank0 on
+spiked dense cases and reaches similar/lower differences at
+roughly half/third the GHK time (including prep), but no universal
+claim; Wishart is much worse. Weak no-spike has little benefit
+from added rank. In a separate same-fixture comparison at m15
+with previous diagonal CV (fraction .5 on full C, 4096 batch)
+versus new rank1 (fraction .8 on contrast), excluding p0 price
+and all prep, four scrambles:
+
+| n/case | prior diagonal SD | rank1 SD | prior trace variance | rank1 trace variance |
+|---|---:|---:|---:|---:|
+|32 spike|8.123e-5|2.308e-5|.068745|.003204|
+|64 spike|1.087e-4|1.961e-5|.116789|.003227|
+|32 diffuse|4.407e-4|4.092e-4|.254058|.283191|
+
+Run s .146/.137, .258/.262, .130/.133 respectively. The
+comparison changes both d and QMC coordinate basis, so does not
+isolate the effect of backbone rank vs the prior diagonal estimator;
+the rank0 vs rank1 comparison above holds d and basis fixed.
+Diffuse negative result: trace variance actually increases.
+No new PR, existing draft only; no compiled comparison or
+independent large-n accuracy certificate.
+
+**Next experiment.** Fit the existing heterogeneous factor grammar
+as a control rather than replace it: choose D0,V from main's
+projected fit, pack a common positive diagonal d_i feasible in
+both contrast covariances (previous heterogeneous coordinate
+ascent), then use contrast-space Procrustes residual root
+coupling. Compare with spectral arm on heteroscedastic spiked
+and localized near-singular matrices. A further promising
+direction for poor backbones: deterministic first-order
+Gaussian covariance derivative from shared field and an exact
+likelihood-ratio remainder; investigate second-order residual
+variance and near-singular likelihood-ratio instability before
+benchmarking. Need compiled GHK and independent accurate
+references before production promotion. General performance
+objective remains open.
