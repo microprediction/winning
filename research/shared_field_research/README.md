@@ -2668,3 +2668,215 @@ do not claim tensor quadrature at rank n is practical.
 Existing draft #1093 updated, research only, no production
 API changes. The rank-two exact class is demonstrated, while
 general arbitrary-PSD competitive performance remains open.
+
+
+## 2026-11-27 — Localized negative modes: real positive triad-block survival
+
+Main rechecked via GitHub: CLAUDE.md (AGENTS absent), README,
+factor/structures.py (Blocks explicitly rank-one plus diagonal,
+Nested and Tree scalar leaf loadings), factor/core.py (fit_covariance
+promotes positive residual eigenvectors; win_probabilities_factor
+uses shared cavities), factor/races.py (_fit_cov and GHK route),
+methods/native.py, bench/runner.py, research/general_sigma/NOTES.md,
+papers/general_inversion/CLAIMS.md. PR #1093 open/draft, base
+898a9f685bec35f88f6eeef10227bd6d302d7f83 at inspection. Recent
+PRs unrelated. Prior signed_field.py, signed_rank2.py and
+envelope.py inspected. This is not a new dense fitting algorithm,
+nor a claim that block independence or Gaussian CDFs are novel.
+
+**Exact broader block grammar and derivation.** Partition the
+contestants into independent blocks B of size 1, 2 or 3, with
+arbitrary supplied PSD covariances C_B, positive marginal variances,
+no perfectly correlated pair in a block (conservative refusal
+including possible permanent ties). An ordinary low-rank positive
+factor V V' can be added by outer conditioning; implemented rank 1.
+For every i in B, let g_i(t)=f_i(t) P(X_j>t for j in B minus i |
+X_i=t). Gaussian conditioning gives at most a bivariate CDF,
+which is computed using Owen's T (or analytic singular limit).
+All g_i are nonnegative, are densities of the block winning
+threshold marked by the winner, and sum to G_B(t), the density
+of the block minimum. Hence
+
+  S_B(t)=integral_t^infty G_B(u) du,
+  p_i=integral_R g_i(t) prod_(A != B) S_A(t) dt.
+
+No Fourier inversion, no cancellation between oscillatory terms,
+no per-winner large-dimensional MVN integrals. The essential
+reuse is integrating the boundary insertions once to construct
+the survival of each block, instead of pricing the block CDF
+separately at every t, then the original multiplicative cavity
+over blocks. Prefix/suffix products avoid division by zero.
+A block of size 3 with all three off-diagonals strictly negative
+cannot be rank-one plus diagonal: product of the three offdiag
+entries in a rank-one representation is nonnegative. In particular,
+B independent equal-scale equicorrelated triples with rho=-1/2
+have B exact null modes. Differences of group-indicator null
+vectors are centered and force every independent D_i=0 in any
+exact positive-factor contrast representation when B>=2, since
+a'Da + ||V'a||^2=0. Then rank(V) >= 2B; no low positive-factor
+rank shortcut. These localized negative modes require no global
+Fourier axis. At least three fixed blocks also forbid a nontrivial
+contrast-equivalent change of covariance that preserves zero
+off-block entries: 1a'+a1' with cross-block a_i+a_j=0 implies a=0.
+The earlier bounded-width precision method covers nondegenerate
+independent triples too; here the boundary formula is a simpler
+alternative with no state tensor and works at exact rank-two
+singularity. This is a useful special-purpose extension, not a
+claim to supersede every existing tree/precision representation.
+
+**Implementation / convergence.** triad_field.py. Conditional
+standardized upper bounds are affine in t; for r=+/-1 use
+Phi(min(h,k)) or max(0,Phi(h)-Phi(-k)), with symmetry for tails.
+For |r|<1 use Owen's T formula for the bivariate CDF, including
+explicit threshold-zero cases. Cancellation in the real CDF
+formula still limits absolute/relative accuracy for very tiny
+probabilities; checks CDF bounds, clips roundoff excursions,
+does NOT normalize the race vector. Initial implementation
+had a wrong sign-quadrant coefficient (1/4 instead of 1/2);
+caught by direct adaptive CDF check and corrected before commit.
+Reject invalid blocks and perfectly correlated pairs, no ridge.
+Small negative block eigenvalues at the floating point boundary
+are tolerated (32 eps in correlation scale), and computed
+conditional correlation rounded to [-1,1] within a tolerance.
+Very near-perfect pairs may be numerically unresolved; not a
+certified floating-point method.
+
+On a common performance mesh, evaluate g at endpoints and
+quarter points of each panel. Integrate each half-panel by
+positive Simpson weights, and accumulate these integrals
+backwards to get S_B at endpoints/midpoints. Apply Simpson
+again to g_i times the product of other block survivals. This
+keeps the quadrature nonnegative without assuming a smooth
+interpolated primitive is positive. Add mesh breakpoints where
+conditional thresholds cross zero or where the singular wedge
+changes (h=k or h=-k); add +/-{.5,1,2,4,8} times transition
+width if narrow compared to the nominal mesh spacing.
+The latter addresses near-singular smoothed kinks, but mesh
+counts and error need not be monotone in the base panel count.
+Cost O(n L) and storage O(n L) for L ACTUAL panels; fixed size
+block preprocessing O(n), sorting knots O((L+n) log(L+n));
+there can be O(n) additional knots, so worst-case O(n(L_base+n))
+rather than claiming global linear time at fixed base resolution.
+Global positive rank-one adds Q outer nodes, each with its own
+conditional mesh; no preprocessing amortization in timings.
+
+With positive pairwise conditional variance, there are no
+permanent ties, even with a rank-two singular triple. All
+boundary densities are continuous (piecewise smooth at singular
+wedge changes). On fixed finite domain the maximum mesh size
+tends to zero as panels increases, so the positive composite
+rules converge, and the finite product and integrals converge
+to the truncated shared field. Use lo=min_i(mu_i-pad*s_i),
+hi=max_B min_(i in B)(mu_i+pad*s_i), so every block's
+omitted upper-tail mass <=Phi(-pad). Union bound below lo
+<=n Phi(-pad), above hi <=Phi(-pad). Removing other block
+upper-tail masses changes any share by <=B Phi(-pad), using
+telescoping bounded products and integral g_i<=1. Thus per-share
+domain error <=(n+B+1)Phi(-pad), distinct from discretization.
+Take pad and panels to infinity in a diagonal sequence. For
+global positive factor, condition on factor, integrate true
+bounded continuous p_i(f) against standard Gaussian, and
+refine the GH order (positive Gauss-Hermite measures converge
+weakly to Gaussian by moment determinacy); for each finite
+order refine inner meshes. No structural or sampling error;
+finite-resolution diagnostics and floating-point error are
+not certificates. Scope excludes exact perfect-pair ties
+rather than silently defining a different dead-heat rule.
+Arbitrary PSD outside this structure not solved.
+
+**Evidence.** Owen (1956), Ann. Math. Stat. 27:1075-1090,
+DOI 10.1214/aoms/1177728074, and Plackett (1954), Biometrika
+41:351-360, DOI 10.1093/biomet/41.3-4.351, bibliographic/publisher
+records checked. Established bivariate CDF and reduction formulas,
+not a priority claim. Genz SOV is the independent stochastic
+comparator. Eight standalone tests passed (0.66s), NumPy 2.3.5,
+SciPy 1.17.0, single-thread local. Bivariate CDF against direct
+adaptive integral, zero threshold and r=+/-1 endpoints; 3-runner
+asymmetric contrast integral at rho=-.5,-.49999,.35 (atol 4e-9);
+four-runner independent arcsine trivariate orthant formula
+with hetero singular triple and singleton (atol 2e-9), and with
+global positive factor (atol 2e-8); shift/scale/permutation,
+factor common-shock invariance, nonnegative raw mass, sixty
+exact-singular symmetric runners (atol 1e-8), invalid/possible
+tie cases refused. Not full repository CI or fastrace.
+
+Commands in this directory (one thread for all):
+  export OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+  python -m pytest -q test_triad.py
+  python -u bench_triad.py 30 near
+  python -u bench_triad.py 30 hetero
+  python -u bench_triad.py 30 mixed
+  python -u bench_triad.py 60 near
+  python -u bench_triad.py 120 singular --no-genz
+  python -u bench_triad.py 30 dense
+
+Seed 90213: means N(0,.5^2), hetero sd uniform [.75,1.25]
+or geometric [.12,1.6] within each triple. Near rho=-.49999,
+exact singular rho=-.5, mixed random 3x3 Wishart+.4I standardized
+with mixed-sign correlations. Dense additionally seed 90314
+global loading N(0,.25^2). Refined deterministic reference
+4096 vs 8192 base panels, dense 512/25 vs 1024/31 (panels/GH).
+Reference differences not independent accuracy certificates.
+Compiled SciPy _qmvn (Genz permuted Cholesky, CBC lattice,
+8 randomized batches per winner, four seeds 0..3) normalized
+for comparison. Full vector, all preparation and mesh generation
+included in field timing, Genz per-winner prep included; no
+amortization. RMSE pooled across runners/scrambles; relmax
+median per scramble for reference p>1e-4. Representative actual
+measured results:
+
+| case | method | sec | RMSE vs refined | max/median max | relmax | scramble SD |
+|---|---|---:|---:|---:|---:|---:|
+|30 near|field 128|.03375|3.02e-8|7.47e-8|3.03e-6|–|
+||field 256|.04032|9.43e-10|2.78e-9|1.01e-7|–|
+||Genz 2048|.21437|2.08e-4|8.00e-4|.02674|2.10e-4|
+||Genz 8192|.55992|9.51e-5|3.57e-4|.00795|7.88e-5|
+|30 hetero|field 256|.05899|2.45e-8|1.05e-7|9.20e-5|–|
+||field 1024|.09775|7.69e-10|2.41e-9|3.14e-8|–|
+||Genz 2048|.21319|2.07e-5|8.74e-5|.00372|2.09e-5|
+||Genz 8192|.54884|1.09e-5|4.77e-5|.00198|1.24e-5|
+|30 mixed|field 128|.01531|7.50e-8|2.05e-7|6.24e-6|–|
+||field 256|.02411|1.41e-9|3.57e-9|2.07e-7|–|
+||Genz 2048|.27322|3.69e-5|1.21e-4|.00424|3.54e-5|
+||Genz 8192|.68769|1.77e-5|7.29e-5|.00119|1.60e-5|
+|60 near|field 256|.11628|8.36e-10|3.20e-9|3.51e-8|–|
+||Genz 2048|1.23185|1.64e-4|6.67e-4|.03217|1.69e-4|
+|120 singular|field 256|.02219|2.06e-9|1.17e-8|1.28e-7|–|
+||field 512|.03123|1.10e-10|6.26e-10|6.93e-9|–|
+|30 dense|field 128/11|.44680|3.91e-8|1.13e-7|6.64e-6|–|
+||field 256/15|.64530|2.10e-9|6.26e-9|6.05e-7|–|
+||Genz 2048|.20973|2.14e-4|9.00e-4|.01699|1.57e-4|
+||Genz 8192|.53913|7.58e-5|2.36e-4|.00690|8.20e-5|
+
+Refinement max differences in case order 30 near, hetero, mixed,
+60 near,120 singular,30 dense: 4.44e-10,1.33e-10,7.33e-15,
+3.70e-10,2.25e-13,2.13e-10. Reference raw mass defects
+3.08e-10,2.28e-9,5.33e-15,7.73e-10,2.51e-13,4.41e-9.
+At 256 base panels raw mass defects 1.80e-8,8.33e-8,3.21e-8,
+2.61e-8,1.20e-7 and dense 256/15 3.68e-8. All shares nonnegative,
+but no tail relative claim for heterogeneous minimum ~1.39e-47.
+60 Genz 8192 timed out, no timing or accuracy reported. No
+Genz comparison for 120 exact singular, only symmetry small
+reference and refinement asymmetric fixture. 30 dense is slower
+than coarse Genz but much smaller disagreement with refined
+field at comparable budget. 30 near coarse 64 used 1014 actual
+panels vs 518 at 128 (sharp-knot inclusion); 120 singular
+64 used 2768 vs 432 at 128, partly due rounding conditional
+r to just inside +/-1. Nonmonotone cost is real, no uniform
+speedup assertion. Original Fourier sparse fixtures with
+support 4/5/8 not directly covered here; this is a stable
+special-case alternative rather than a fix to Fourier
+inversion itself. Earlier independent-block width-2
+implementation not timed against triad solver this run.
+No production interface changes, existing draft PR updated.
+
+**Next:** generalize localized blocks to size four through
+deterministic trivariate boundary CDFs (e.g. Plackett reduction
+or one conditional Gaussian quadrature). Investigate direct
+low-rank geometry for singular blocks, and hybrid complex
+survival for one global diffuse negative constraint with
+small correlated local blocks. Separate local adaptive meshes
+and positive interpolation could remove O(n^2) shared-knot
+worst case. A general dense convergent estimator and comparison
+with fastrace remain open. Do not pretend that increasing
+block size without bound makes the local orthant cost practical.
