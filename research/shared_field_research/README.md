@@ -2993,3 +2993,161 @@ at moderate budgets; extend g_i to triples by a one-dimensional
 conditional complex quadrature, or use direct complex CDF formula.
 Also investigate positive factors outside the hybrid and independent
 validation in larger dimensions. 
+
+
+## Iteration 12: trivariate blocks with a global negative mode; reusable observation quadrature
+
+Main still at 898a9f685bec35f88f6eeef10227bd6d302d7f83 according to PR base.
+Read main CLAUDE.md (root AGENTS.md absent), README, factor/races.py and
+blocks.py and general_sigma/NOTES.md; dense degraded fits go to GHK,
+positive block engine is conditional on cluster factors, residual rank
+ladder already exists. Reviewed prior hybrid_pair.py, test_hybrid.py and
+bench_hybrid.py; recent shared-field PR search showed our existing draft
+1093 and no obvious competing triple Fourier implementation. No production
+files modified. This is an extension of the previous exact hybrid grammar,
+NOT the universal covariance goal.
+
+Let C be block diagonal with SPD blocks of sizes 1--3, c=C beta,
+beta'C beta<=1. The target C-cc' is unchanged. For a triple winner i at
+performance t, write the residual two-vector after conditioning on X_i=t
+as L E, with E standard normal in R^2, and let h=L' beta_rest,
+a=||h||. Rotate E so its first coordinate z is parallel to h; then
+L E = v z + w y with independent standard normal z,y and observation
+residual a z. The two inequalities v_j z + w_j y > d_j(t)
+give an interval [ell(t,z),u(t,z)] for y (hard condition if w_j=0).
+The complex boundary density is the marginal density at t times
+exp(ik c_i(t-mu_i)/C_ii) times
+
+    integral phi(z) exp(ik a z) [Phi(u)-Phi(ell)]_+ dz.
+
+If a=0 any rotation works. This is exact; no complex bivariate CDF
+needed. Use the real interval probability and a stable survival-CDF
+difference when both bounds positive. At most one kink occurs when
+two affine bounds cross, at z=(d1*w2-d2*w1)/(v1*w2-v2*w1).
+The first implementation uses separate GL nodes per t row, split at
+this kink and around step transitions. The improved method uses a
+common z grid, composite 4-point GL with 4*nz cells and BLAS product
+of the real t-by-z weight matrix and complex z-by-frequency phase
+matrix. Remove the one panel containing the moving kink and replace
+by split quadrature for that row. A sharp step (|w_j|<.06|v_j| or
+zero) falls back to row-dependent rule. This is the key new reuse:
+complex phases computed once per boundary instead of at every t.
+No claim that the factorization itself is new Gaussian conditioning.
+Reuse previous reverse Simpson primitive for block survivals and
+prefix/suffix products. For fixed local block size, O(n L Qz Qk)
+arithmetic at actual performance panel count L; common-grid method
+uses BLAS plus O(n L Qk) kink replacements; fallback may use more
+memory O(L Qz Qk) for one contestant at a time. Full frequency batch
+helps but raises peak memory; batch as appropriate. No amortized
+preparation in measured timings. Adaptive knots can make L much
+larger than requested base panels.
+
+Second candidate: a Price/Plackett differential equation for the
+complex truncated characteristic function T(r)=E_r[exp(i(aY+bZ))
+1{Y>h,Z>j}]. Distributional mixed derivative gives
+T'(r)=-ab T(r)+B(r), where B is the corner density times phase
+plus ia times the Z=j edge transform and ib times the Y=h edge
+transform. Each edge uses one univariate truncated characteristic
+function. Thus T(r)=exp(-ab(r-s0))*T(s0)+ integral_s0^r
+exp(-ab(r-s))*B(s)ds. Choose s0=0 if ab*r>=0, otherwise sign(r),
+using the analytic degenerate one-dimensional interval at +/-1.
+Then the integrating factor never exceeds 1 (frequencies in a
+single boundary have common product sign); r=sin(theta) cancels
+the corner density Jacobian singularity. This is an exact formula,
+but fixed angular order can miss narrow transitions near endpoints.
+It was slower than the common-grid rotation in the tested case.
+Price (1958) and Voigtlaender (2021), DOI
+10.1007/s10959-020-01017-w (distributional generalization),
+Plackett (1954), DOI 10.1093/biomet/41.3-4.351, checked publisher
+abstracts. No novelty claim for Gaussian covariance differentiation.
+
+Convergence: same frequency bound as iteration 11 (at least three
+active blocks at zero observation noise); no permanent ties in that
+scope, because a two-contestant contrast cannot span the observation
+on three independent blocks. Local singular C refused by Cholesky;
+no ridge. Near-boundary variance excess repaired only within roundoff.
+The inner z truncation in rotation methods changes the integrated
+boundary transform by <=2 Phi(-zpad) per runner, and a reconstructed
+block survival by <=2 |B| Phi(-zpad). Exact truncated transforms have
+modulus <= the corresponding unweighted probability (integrated
+over their boundary-defined subevent), hence telescoping products
+gives extra per-share bound sqrt(2/pi)*K*2n Phi(-zpad) on finite
+frequency interval [0,K]. This is separate from performance and
+frequency truncation, not a quadrature certificate. For fixed finite
+windows refine inner z quadrature then t and frequency quadrature;
+piecewise smooth interval probabilities and finite domains imply
+convergence by bounded integration. Move cutoffs outward in a
+diagonal sequence with K Phi(-pad) and K Phi(-zpad) ->0, and
+frequency bound ->0. No structural approximation or sampling error
+in the field. Complex cancellation may produce negative tiny values;
+no clipping or normalization. The reference code does not itself
+report all these truncation bounds yet. Finite precision and
+near-singular conditional Cholesky remain limitations.
+
+Measured on local NumPy/SciPy 1.17.0 (single BLAS thread) using
+separate modules, consolidated equivalent functions and tests
+committed as triple_fourier.py and test_triple_fourier.py; the
+consolidated remote checkout has not been executed as a full repo
+suite. Direct local checks: eight Price sign/correlation cases
+(r=+/- .4,.9; a=1.4,b=+/-2.3, h=.2,j=-.6) against scalar adaptive
+conditional integral, max 1.39e-16; four-contestant independent
+trivariate arcsine reference, max error 1.24e-10 at 256/64/32/24
+(panels/nk/K/nz); 12-contestant exactly singular symmetry error
+3.08e-9; 24 mixed/hetero shift, scale and reversal of blocks and
+within-block contestants combined, max 1.11e-16. Positive raw shares
+on reported fixtures. No common-shock API test.
+
+Reproduce in this directory:
+  export OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+  python -m pytest -q test_triple_fourier.py
+  python -u test_triple_fourier.py 24 mixed
+  python -u test_triple_fourier.py 24 hetero
+  python -u test_triple_fourier.py 36 mixed --no-genz
+  python -u test_triple_fourier.py 24 hard --no-genz
+
+Seed 34: 8/12 triples drawn as Wishart+.3I standardized, mixed signs;
+heterogeneous scales uniform [.5,1.5]. Means N(0,.4^2), global
+observation variance 1-1e-5. Full vector normalized compiled SciPy
+_qmvn Genz/SOV with greedy permutation and CBC lattice, 8 batches
+per winner, 4 evaluation seeds 0..3 and reference 4 seeds 100..103
+at 32768 points per winner. Reference pooled between-scramble SD
+9.78e-6 mixed and 1.85e-5 hetero; uncertainty dominates field error
+comparisons. Actual timings from local prototypes:
+case | method | seconds | RMSE vs mean Genz ref | pooled scramble SD
+24 mixed | Genz 2048 | .1274 | 7.96e-5 | 8.20e-5
+24 mixed | Genz 8192 | .3419 | 3.08e-5 | 2.81e-5
+24 mixed | row rotation 96/28/14/10 batch8 | 2.6568 | 5.58e-6 | -
+24 mixed | row rotation 192/40/20/14 batch8 | 6.3064 | 5.28e-6 | -
+24 mixed | Price 96/28/14/16 batch8 | 4.1086 | 5.29e-6 | -
+24 mixed | fast 96/28/14/10 batch28 | .5735 | 5.29e-6 | -
+24 mixed | fast 192/40/20/14 batch40 | 1.0638 | 5.28e-6 | -
+24 hetero | Genz 2048 | .1199 | 1.00e-4 | 1.05e-4
+24 hetero | Genz 8192 | .3261 | 5.11e-5 | 4.17e-5
+24 hetero | fast 96/28/14/10 batch28 | .7465 | 9.04e-6 | -
+24 hetero | fast 192/40/20/14 batch40 | .7712 | 9.04e-6 | -
+
+Fast maximum disagreement vs stochastic reference ~1.30e-5 mixed,
+2.13e-5 hetero; max relative for p>1e-4 .000575/.000476.
+Fast coarse/fine maximum differences 1.04e-7 (mixed), 9.09e-8
+(hetero), 3.62e-6 (36 mixed; .986s vs 1.767s). This is refinement,
+not independent certification. Raw mass defects coarse/fine
+3.55e-7/2.55e-7 mixed, 6.76e-7/1.65e-7 hetero, 1.40e-6/2.61e-7
+36 mixed. Fast vs row reference at fine resolution had max
+5.93e-8 mixed, but 1.14e-6 hetero (row reference itself had
+mass defect 1.04e-6). Both require better convergence diagnostics.
+Hard triple fixture (rho=-.49995) did not finish during combined
+benchmark before timeout; no robustness or speed claim. 36 did
+not get independent Genz comparison. The fast method is much
+faster than the original triple prototype but slower than coarse
+Genz; accuracy advantage at matched runtime remains suggestive
+not established, since reference is noisy and budgets not matched.
+No production deployment claim. Existing PR already open; preserve
+these additions on its research branch, do not open duplicate.
+
+Next: cache real quadrature weights across frequency batches,
+trim performance knots whose boundary densities are negligible,
+and tackle near-singular local blocks by reducing to their
+intrinsic rank, rather than brute mesh escalation. The Price ODE
+is a possible general recursive complex CDF tool but not yet the
+fast choice. Automatic signed covariance decomposition, fully
+general PSD, compiled fastrace comparison and full CI remain open.
