@@ -3151,3 +3151,161 @@ intrinsic rank, rather than brute mesh escalation. The Price ODE
 is a possible general recursive complex CDF tool but not yet the
 fast choice. Automatic signed covariance decomposition, fully
 general PSD, compiled fastrace comparison and full CI remain open.
+
+
+## Iteration 13: intrinsic-rank local blocks and endpoint continuation
+
+Re-read main README, CLAUDE.md (root AGENTS.md absent), factor/races.py,
+factor/blocks.py and research/general_sigma/NOTES.md. Current code
+still prices positive private factors and routes degraded dense fits to
+GHK; its dense fallback has a ridge for failed Cholesky. This experiment
+does not change that API. PR 1093 is open on this research branch;
+reviewed prior triple_fourier.py and test_triple_fourier.py and searched
+recent shared-field PRs. No competing intrinsic-root implementation found.
+Dutt (1973), DOI 10.1093/biomet/60.3.637, and Genz/Trinh (2016),
+DOI 10.1007/978-3-319-33507-0_13 publisher abstracts checked; these
+establish Fourier and bivariate conditioning precedents, not novelty
+of either. The contribution is use of exact local root geometry in
+the shared all-winner boundary field.
+
+Write independent local X_B=mu_B+R_B Z_B, allowing rectangular roots
+with 1--3 rows and full column rank. Let h_B=R_B' beta_B. Observe
+U=sum h_B' Z_B+sqrt(1-sum||h_B||^2)*epsilon=0, so target
+C-C beta beta' C, C=blockdiag(R_B R_B'). Conditional on X_i=t,
+take an orthogonal basis Q with first column parallel to row R_i.
+The conditional residual root is L=R_rest Q[:,1:], computed without
+subtracting nearly equal covariance matrices. Its SVD gives independent
+dominant and minor directions v z+w y, with score a z+b y, plus the
+usual deterministic regression score. For given y the two inequalities
+v_j z+w_j y>d_j(t) restrict z to an interval (ell(y),u(y)).
+The boundary transform is exactly
+  integral phi(y) exp(i k b y) [F(ell(y),ka)-F(u(y),ka)] dy
+where F is the univariate truncated characteristic function. In exact
+rank-two triples there is NO y at all: use just the interval transform.
+This removes the entire local quadrature dimension, even though
+the target may have arbitrarily many null modes and dense correlations.
+Reflect left-tail intervals to avoid subtracting two total masses.
+Use explicit rectangular roots, not a rank threshold to discard small
+positive eigenvalues; numerical rank validation refuses unresolved roots.
+Reject proportional local rows (even if their means differ) and zero
+marginal variances rather than silently choose a tie rule. At zero
+observation noise require three active independent blocks, which makes
+every two-runner contrast nondegenerate in this scope. No ridge; only
+roundoff-level rescaling if the observation variance is just above one.
+
+For full-rank near-singular triples, an alternative to quadrature over
+y is continuation from the nearest rank-one endpoint of the Price ODE
+from iteration 12. Let r=s cos(theta), s=sign(r), q=sin(theta), solve
+[v/q_j, w/q_j]' (A,B) = (a,b) where q_j is marginal conditional sd
+(not sin(theta) here), then multiply A,B by frequency k. The derivative
+in theta uses -s times the corner and q-weighted edge terms. The factor
+exp(s A B (delta(theta_end)-delta(theta))) uses delta=2 sin(theta/2)^2.
+Computing the conditional thresholds via j-s*h+s*delta*h avoids
+subtracting nearly equal correlations. Split theta near |j-s*h|.
+Refuse the endpoint route when its integrating factor exceeds exp(2)
+and use direct minor-axis quadrature instead. Initial prototype
+incorrectly projected the observation score onto the standardized
+residuals rather than solving the linear system; mass defect .26
+exposed that error, fixed before commit. Direct quadrature over the
+minor axis was also much too slow on the 24-runner hard fixture; the
+first unoptimized run timed out. The corrected endpoint route works
+but is still slower than Genz; no production recommendation.
+
+The same shared prefix/suffix cavity and reverse primitive as iterations
+11--12 apply. Cost O(n L Q) for exact rank-two triples at actual mesh
+count L and Q frequencies, no local quadrature; full rank O(n L Q J)
+where J is actual local nodes (angular or minor-axis). Memory O(n L
+batch), plus local temporary arrays for full-rank minor integration.
+Preprocessing is O(n) for fixed block sizes, knot sorting adds a log
+factor; the mesh may have O(n) additional knots, so L is not fixed
+independent of n. Convergence follows the earlier block Fourier bound
+(the proof uses only the variance of the scalar block score, not
+invertibility of its root). For fixed finite K,pad, refine performance,
+frequency and, where applicable, local quadrature. Piecewise continuous
+boundary functions are integrable; at a rank-two triple's moving
+interval endpoint they are continuous, including where the interval
+vanishes. Then enlarge K,pad so K Phi(-pad)->0 and frequency bound
+vanishes. Direct minor-axis truncation adds at most 2 Phi(-pad) per
+boundary integrated over t and the earlier telescoping product bound.
+Endpoint angular integral has no minor truncation. No structural or
+sampling error within this grammar; finite-frequency and performance
+truncation and quadrature distinct from floating-point cancellation.
+No formal finite-resolution certification or arbitrary-matrix claim.
+
+Local tests: 5 passed (1.10 s, NumPy 2.3.5, SciPy 1.17.0, one thread).
+Interval CF vs scalar adaptive integration; exact local singular
+4-contestant trivariate arcsine reference (512 panels, atol 5e-9;
+256 panels missed that tolerance by reaching 1.90e-8); simultaneous
+global and local singularity symmetry/mass; joint translation, scale,
+block and within-block permutation; near-singular Price endpoint
+against scalar adaptive integral at six points (max 1.80e-9 at
+angular order 64). No full repository suite or common-shock API test.
+The remote source has equivalent arithmetic to the locally tested
+prototype; no production files changed.
+
+Reproduce from this directory:
+  export OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+  python -m pytest -q test_intrinsic_fourier.py
+  python -u test_intrinsic_fourier.py 24 exact
+  python -u test_intrinsic_fourier.py 24 exact --root-reference
+  python -u test_intrinsic_fourier.py 60 exact --root-reference
+  python -u test_intrinsic_fourier.py 24 hard
+
+Seed 184, rank-two local equilateral root (cos theta,sin theta) for
+each triple; hard adds 1e-5 common variance to each local block
+(and rescales the other two directions). Means N(0,.4^2), global
+observation variance 1-1e-5. Exact local rank 16 at n=24 and rank 40
+at n=60; dense mixed-sign cross-block dependence after conditioning.
+Four Genz evaluations, seed 0..3, normalized, compiled SciPy _qmvn
+with greedy Cholesky permutation/CBC lattice and eight batches per
+winner, prep included; reference seeds 100..103 at 32768 points per
+winner. Independent root sampling reference (four scrambled Sobol
+sets, 2^18 each, seeds 0..3) uses y=Z-h(h'Z+sqrt(noise)*epsilon),
+which has exact conditional latent covariance without ridge.
+No amortization. Final optimized exact rank measurements:
+case | method | seconds | RMSE vs mean Genz ref | pooled scramble SD
+24 exact | Genz 2048 | .1262 | 3.558e-4 | 3.382e-4
+24 exact | Genz 8192 | .3340 | 1.787e-4 | 1.722e-4
+24 exact | field 96/28/14/6 | .1262 | 4.994e-5 | -
+24 exact | field 192/40/20/8 | .2440 | 4.994e-5 | -
+24 exact | field 384/56/28/8 | .5158 | 4.994e-5 | -
+Genz reference SD 8.19e-5 (mean uncertainty roughly 4.09e-5);
+thus field RMSE against this reference is noise-limited. At matched
+.126 s budget the field agrees much better with independent Genz
+reference than low-budget Genz. Median-relative metric not computed;
+max relative difference for reference p>1e-4 is .00255 (noise-limited).
+Field raw mass defect 5.57e-8/6.64e-9/3.55e-9. Successive refinement
+max differences 2.00e-8 and 1.14e-9 (before pruning empty intervals;
+arithmetic unchanged). All shares positive, minimum .0018591.
+
+Independent root reference, earlier unpruned implementation:
+24 exact | field coarse/fine .193/.915 s | RMSE 7.69e-5
+60 exact | field coarse/middle/fine .595/1.211/2.557 s | RMSE 8.09e-5
+Root reference pooled SD 1.65e-4/1.62e-4; refined 60 field differences
+7.16e-8 then 4.38e-9, mass defects 1.17e-6/6.86e-8/1.91e-9.
+60 exact low-budget Genz timings 1.068/2.600 s (2048/8192),
+pooled SD 2.83e-4/1.13e-4; higher-budget Genz reference timed out,
+so no matched-accuracy claim at 60. These refinement comparisons
+are not independent accuracy certificates.
+
+24 hard (corrected endpoint, before final empty-interval pruning):
+Genz 2048 .1204 s RMSE 3.58e-4, SD 3.40e-4;
+Genz 8192 .3378 s RMSE 1.80e-4, SD 1.76e-4;
+field 64/24/12/4 3.031 s RMSE 5.07e-5, raw mass defect 6.45e-6;
+field 128/32/16/6 7.241 s RMSE 5.07e-5, mass defect 1.85e-7.
+Reference SD 8.05e-5. Refinement max difference 6.29e-7.
+The final integrating-factor guard may change full-rank timings if
+activated; these are not a competitive result. Need robust performance
+for near-rank-deficient but nonsingular local blocks and heterogeneous
+scales, strong observation along minor directions, very small shares,
+and arbitrary PSD. Next useful experiment: Taylor-expand the analytic
+dominant-axis interval endpoints in the minor coordinate, split at
+their crossing, integrate the complex truncated Gaussian moments
+analytically; then refine polynomial order to recover exact transform
+on finite windows. It may remove local quadrature work for small
+minor modes without discarding them. Alternatively, exploit roots of
+rank two for larger blocks: conditional residual dimension one no
+matter block size, so intersect all other inequalities to form one
+interval. This latter extension is particularly promising, although
+all-winner local boundary construction would naively be O(b^2) for
+block size b. Investigate planar lower-envelope geometry to avoid that.
