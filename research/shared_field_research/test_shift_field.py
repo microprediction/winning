@@ -96,6 +96,35 @@ def test_arbitrary_triples():
     np.testing.assert_allclose(p,q,atol=2e-7,rtol=0)
 
 
+def test_rank_three_singular_blocks():
+    m,R,s,b,C,root=fixture(30,5,.5); b/=np.linalg.norm(root.T@b)
+    p=field(m,R,s,b,M=1024,nk=32,cutoff=16)
+    q=field(m,R,s,b,M=2048,nk=40,cutoff=20)
+    assert p.min()>0 and abs(p.sum()-1)<1e-7
+    np.testing.assert_allclose(p,q,atol=4e-9,rtol=0)
+
+
+def extra_benchmarks():
+    for n,b,sigma,singular in [(60,3,.5,False),(30,5,.5,True)]:
+        m,R,s,beta,C,root=fixture(n,b,sigma)
+        if singular: beta/=np.linalg.norm(root.T@beta)
+        vals=[]
+        for M,Q,K in [(512,24,12),(1024,32,16),(2048,40,20)]:
+            t=time.perf_counter(); p=field(m,R,s,beta,M=M,nk=Q,cutoff=K); vals.append(p)
+            print(n,'field',M,time.perf_counter()-t,p.sum()-1,p.min(),None if len(vals)==1 else max(abs(p-vals[-2])),flush=True)
+        ref=vals[-1]; print('rmse',[np.sqrt(np.mean((p-ref)**2)) for p in vals],flush=True)
+        if not singular:
+            for budget in [2048,8192]:
+                t=time.perf_counter(); p=np.array([genz(m,C,budget,i) for i in range(4)])
+                print('genz',budget,(time.perf_counter()-t)/4,np.sqrt(np.mean((p-ref)**2)),np.sqrt(np.mean(p.var(axis=0,ddof=1))),np.sqrt(np.mean((p.mean(0)-ref)**2)),flush=True)
+        else:
+            h=root.T@beta; ps=[]
+            for seed in range(4):
+                z=ndtri(qmc.Sobol(len(h),scramble=True,seed=seed+100).random_base2(19)); y=z-(z@h)[:,None]*h
+                ps.append(np.bincount(np.argmin(y@root.T+m,axis=1),minlength=n)/len(y))
+            ps=np.array(ps); print('root SD',np.sqrt(np.mean(ps.var(axis=0,ddof=1))),'mean RMSE',np.sqrt(np.mean((ps.mean(0)-ref)**2)))
+
+
 def bench(n,b,sigma):
     bench_fixture(fixture(n,b,sigma))
 
@@ -117,4 +146,5 @@ if __name__=='__main__':
     if sys.argv[1]=='random':
         for kind,data in random_fixtures():
             print(kind,flush=True); bench_fixture(data)
+    elif sys.argv[1]=='extra': extra_benchmarks()
     else: bench(int(sys.argv[1]),int(sys.argv[2]),float(sys.argv[3]))
