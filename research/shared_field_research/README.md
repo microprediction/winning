@@ -3314,3 +3314,23 @@ block size b. Investigate planar lower-envelope geometry to avoid that.
 ## Iteration 14: sparse planar hull cavities for arbitrary-size rank-two blocks
 
 See [full derivation, experiments, reproduction commands, limitations and next steps](iteration14_planar.md). New `planar_field.py` and `test_planar_field.py`: arbitrary-size exact rank-two blocks with a scalar negative global mode, convex-hull neighbor pruning and affine envelopes. Five standalone tests pass, independent 13-way cell reference agrees to 7.19e-10. At 301 runners in one regular polygon, 90,300 directed constraints reduced to 602, with 2.88x measured speedup; dense 32/64 benchmarks and independent randomized root checks recorded in the linked note. No general PSD or production claim.
+
+
+## Iteration 15: common-shift convolution with knot-split active spectra
+
+See [derivation, reproducible tests and results](iteration15_shift_spectrum.md).
+New shift_field.py and test_shift_field.py: any generic trivariate root
+rotates into two contrast directions plus an independent common shift;
+large rank-three blocks with planar contrasts also fit. The shift is
+integrated by an exact complex Gaussian Fourier multiplier, not another
+local quadrature axis. Naive FFT aliases sharp planar knots; integrating
+only active Fourier coefficients on knot-split panels resolves that for
+broad shifts. Seven standalone tests passed; four-way independent arcsine
+reference max error 4.68e-11. 24 random full-rank triples and a global
+near-null mode: .280 s and 5.18e-8 RMSE vs refined field; compiled Genz
+.332 s and 4.05e-5 RMSE (four randomizations). At 60 contestants, .465 s
+and 5.85e-9 refinement RMSE vs Genz 1.203 s and 1.02e-4. These are
+refinement comparisons, not independent accuracy certificates; independent
+stochastic checks noise-limited. Narrow shifts remain alias-sensitive and
+can yield tiny negative shares. No ridge, structural fit, or production
+changes. General PSD remains open.
