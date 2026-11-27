@@ -1,0 +1,141 @@
+20 seeds per (class, n, scale, spread); spreads (0.5, 1.0, 2.0); default solver settings
+class            n scale  round trip: conv  sweeps med/max  worst resid  worst |mu err|  min p   | free: conv  sweeps med/max  worst resid   seconds
+independent      2     -   60/60    20 / 22   1.0e-08  8.4e-09  8.0e-11 |  60/60    20 / 22   9.9e-09  2
+independent      3     -   31/60    56 / 60   2.2e+00  1.0e+00  2.1e-09 |  31/60    58 / 60   1.2e-01  6
+independent      4     -   40/60    40 / 60   2.1e+00  1.1e+00  3.9e-10 |  54/60    31 / 60   1.4e-04  5
+independent      5     -   42/60    30 / 60   2.2e+00  1.1e+00  9.2e-11 |  57/60    27 / 60   4.6e-08  4
+independent      8     -   46/60    24 / 60   9.5e-03  8.5e-03  6.5e-12 |  60/60    17 / 47   9.9e-09  3
+independent     12     -   52/60    19 / 60   8.2e-02  4.4e-02  1.7e-20 |  60/60    13 / 24   9.7e-09  3
+independent     20     -   59/60    15 / 60   4.9e-04  4.4e-04  1.4e-27 |  60/60    10 / 14   9.5e-09  2
+
+not converged or raised: 128
+  free       class='independent' n=3 scale=0.25 spread=0.5 replicate=0: resid 1.4e-05 after 60 sweeps, min target 4.7e-02
+  free       class='independent' n=3 scale=0.25 spread=0.5 replicate=1: resid 5.2e-06 after 60 sweeps, min target 6.4e-02
+  round trip class='independent' n=3 scale=0.25 spread=0.5 replicate=2: resid 7.9e-06 after 60 sweeps, min p 7.1e-02
+  free       class='independent' n=3 scale=0.25 spread=0.5 replicate=2: resid 2.7e-07 after 60 sweeps, min target 7.2e-02
+  round trip class='independent' n=3 scale=0.25 spread=0.5 replicate=3: resid 2.6e-07 after 60 sweeps, min p 7.3e-02
+  free       class='independent' n=3 scale=0.25 spread=0.5 replicate=3: resid 2.3e-05 after 60 sweeps, min target 4.7e-02
+  free       class='independent' n=3 scale=0.25 spread=0.5 replicate=4: resid 3.8e-07 after 60 sweeps, min target 7.2e-02
+  round trip class='independent' n=3 scale=0.25 spread=0.5 replicate=5: resid 2.5e-08 after 60 sweeps, min p 1.3e-01
+  free       class='independent' n=3 scale=0.25 spread=0.5 replicate=6: resid 8.3e-07 after 60 sweeps, min target 8.8e-02
+  free       class='independent' n=3 scale=0.25 spread=0.5 replicate=7: resid 3.7e-06 after 60 sweeps, min target 6.7e-02
+  round trip class='independent' n=3 scale=0.25 spread=0.5 replicate=8: resid 2.6e-07 after 60 sweeps, min p 1.1e-01
+  free       class='independent' n=3 scale=0.25 spread=0.5 replicate=10: resid 3.3e-02 after 60 sweeps, min target 8.9e-03
+  free       class='independent' n=3 scale=0.25 spread=0.5 replicate=11: resid 6.8e-07 after 60 sweeps, min target 1.1e-01
+  round trip class='independent' n=3 scale=0.25 spread=0.5 replicate=12: resid 9.8e-08 after 60 sweeps, min p 1.2e-01
+  free       class='independent' n=3 scale=0.25 spread=0.5 replicate=13: resid 3.3e-05 after 60 sweeps, min target 4.3e-02
+  free       class='independent' n=3 scale=0.25 spread=0.5 replicate=18: resid 8.6e-04 after 60 sweeps, min target 2.5e-02
+  free       class='independent' n=3 scale=0.25 spread=1.0 replicate=0: resid 8.0e-06 after 60 sweeps, min target 9.4e-02
+  round trip class='independent' n=3 scale=0.25 spread=1.0 replicate=1: resid 3.3e-05 after 60 sweeps, min p 4.0e-02
+  free       class='independent' n=3 scale=0.25 spread=1.0 replicate=1: resid 2.2e-07 after 60 sweeps, min target 6.7e-02
+  round trip class='independent' n=3 scale=0.25 spread=1.0 replicate=3: resid 1.7e-06 after 60 sweeps, min p 5.5e-02
+  round trip class='independent' n=3 scale=0.25 spread=1.0 replicate=4: resid 3.8e-05 after 60 sweeps, min p 5.6e-02
+  free       class='independent' n=3 scale=0.25 spread=1.0 replicate=4: resid 9.0e-05 after 60 sweeps, min target 5.9e-02
+  round trip class='independent' n=3 scale=0.25 spread=1.0 replicate=5: resid 2.9e-07 after 60 sweeps, min p 1.1e-01
+  free       class='independent' n=3 scale=0.25 spread=1.0 replicate=5: resid 2.3e-04 after 60 sweeps, min target 7.0e-02
+  round trip class='independent' n=3 scale=0.25 spread=1.0 replicate=7: resid 2.8e-04 after 60 sweeps, min p 3.1e-02
+  round trip class='independent' n=3 scale=0.25 spread=1.0 replicate=8: resid 2.0e-07 after 60 sweeps, min p 5.8e-02
+  round trip class='independent' n=3 scale=0.25 spread=1.0 replicate=9: resid 1.4e-05 after 60 sweeps, min p 5.1e-02
+  round trip class='independent' n=3 scale=0.25 spread=1.0 replicate=10: resid 3.9e-03 after 60 sweeps, min p 1.6e-02
+  free       class='independent' n=3 scale=0.25 spread=1.0 replicate=11: resid 6.7e-08 after 60 sweeps, min target 1.2e-01
+  round trip class='independent' n=3 scale=0.25 spread=1.0 replicate=13: resid 2.1e-05 after 60 sweeps, min p 7.5e-02
+  free       class='independent' n=3 scale=0.25 spread=1.0 replicate=14: resid 1.3e-07 after 60 sweeps, min target 7.4e-02
+  round trip class='independent' n=3 scale=0.25 spread=1.0 replicate=15: resid 1.4e-04 after 60 sweeps, min p 2.8e-02
+  free       class='independent' n=3 scale=0.25 spread=1.0 replicate=15: resid 9.0e-08 after 60 sweeps, min target 1.1e-01
+  round trip class='independent' n=3 scale=0.25 spread=1.0 replicate=16: resid 1.7e-04 after 60 sweeps, min p 3.0e-02
+  round trip class='independent' n=3 scale=0.25 spread=1.0 replicate=17: resid 1.2e-02 after 60 sweeps, min p 1.2e-02
+  free       class='independent' n=3 scale=0.25 spread=1.0 replicate=17: resid 4.2e-06 after 60 sweeps, min target 5.7e-02
+  round trip class='independent' n=3 scale=0.25 spread=1.0 replicate=19: resid 9.5e-04 after 60 sweeps, min p 4.7e-02
+  round trip class='independent' n=3 scale=0.25 spread=2.0 replicate=1: resid 1.6e+00 after 60 sweeps, min p 4.3e-04
+  free       class='independent' n=3 scale=0.25 spread=2.0 replicate=1: resid 1.2e-01 after 60 sweeps, min target 4.2e-03
+  round trip class='independent' n=3 scale=0.25 spread=2.0 replicate=2: resid 1.3e-01 after 60 sweeps, min p 5.6e-03
+  free       class='independent' n=3 scale=0.25 spread=2.0 replicate=3: resid 1.7e-03 after 60 sweeps, min target 2.9e-02
+  round trip class='independent' n=3 scale=0.25 spread=2.0 replicate=4: resid 9.0e-01 after 60 sweeps, min p 8.5e-03
+  round trip class='independent' n=3 scale=0.25 spread=2.0 replicate=5: resid 7.6e-06 after 60 sweeps, min p 5.8e-02
+  round trip class='independent' n=3 scale=0.25 spread=2.0 replicate=6: resid 1.4e-01 after 60 sweeps, min p 3.1e-03
+  free       class='independent' n=3 scale=0.25 spread=2.0 replicate=6: resid 2.0e-05 after 60 sweeps, min target 5.7e-02
+  round trip class='independent' n=3 scale=0.25 spread=2.0 replicate=8: resid 9.3e-04 after 60 sweeps, min p 3.2e-02
+  free       class='independent' n=3 scale=0.25 spread=2.0 replicate=8: resid 1.8e-05 after 60 sweeps, min target 4.8e-02
+  free       class='independent' n=3 scale=0.25 spread=2.0 replicate=9: resid 1.1e-05 after 60 sweeps, min target 7.0e-02
+  round trip class='independent' n=3 scale=0.25 spread=2.0 replicate=10: resid 1.1e-01 after 60 sweeps, min p 8.9e-03
+  free       class='independent' n=3 scale=0.25 spread=2.0 replicate=11: resid 6.5e-06 after 60 sweeps, min target 6.4e-02
+  round trip class='independent' n=3 scale=0.25 spread=2.0 replicate=12: resid 1.8e-07 after 60 sweeps, min p 1.0e-01
+  round trip class='independent' n=3 scale=0.25 spread=2.0 replicate=15: resid 2.1e+00 after 60 sweeps, min p 4.0e-06
+  free       class='independent' n=3 scale=0.25 spread=2.0 replicate=15: resid 3.4e-08 after 60 sweeps, min target 1.4e-01
+  round trip class='independent' n=3 scale=0.25 spread=2.0 replicate=16: resid 2.2e+00 after 60 sweeps, min p 2.0e-03
+  free       class='independent' n=3 scale=0.25 spread=2.0 replicate=16: resid 7.0e-08 after 60 sweeps, min target 1.5e-01
+  round trip class='independent' n=3 scale=0.25 spread=2.0 replicate=17: resid 2.6e-02 after 60 sweeps, min p 9.2e-03
+  free       class='independent' n=3 scale=0.25 spread=2.0 replicate=18: resid 3.9e-03 after 60 sweeps, min target 1.5e-02
+  free       class='independent' n=3 scale=0.25 spread=2.0 replicate=19: resid 1.2e-07 after 60 sweeps, min target 1.1e-01
+  round trip class='independent' n=4 scale=0.25 spread=0.5 replicate=5: resid 4.9e-08 after 60 sweeps, min p 2.8e-02
+  free       class='independent' n=4 scale=0.25 spread=0.5 replicate=5: resid 2.6e-08 after 60 sweeps, min target 3.6e-03
+  round trip class='independent' n=4 scale=0.25 spread=0.5 replicate=14: resid 2.9e-08 after 60 sweeps, min p 2.9e-02
+  round trip class='independent' n=4 scale=0.25 spread=1.0 replicate=1: resid 1.8e-05 after 60 sweeps, min p 4.5e-03
+  round trip class='independent' n=4 scale=0.25 spread=1.0 replicate=4: resid 3.9e-06 after 60 sweeps, min p 9.0e-03
+  free       class='independent' n=4 scale=0.25 spread=1.0 replicate=6: resid 3.6e-05 after 60 sweeps, min target 1.5e-02
+  round trip class='independent' n=4 scale=0.25 spread=1.0 replicate=10: resid 5.6e-03 after 60 sweeps, min p 6.2e-03
+  round trip class='independent' n=4 scale=0.25 spread=1.0 replicate=14: resid 3.8e-06 after 60 sweeps, min p 1.1e-02
+  round trip class='independent' n=4 scale=0.25 spread=1.0 replicate=16: resid 6.7e-03 after 60 sweeps, min p 1.7e-04
+  free       class='independent' n=4 scale=0.25 spread=1.0 replicate=19: resid 1.1e-05 after 60 sweeps, min target 3.6e-02
+  round trip class='independent' n=4 scale=0.25 spread=2.0 replicate=0: resid 4.9e-01 after 60 sweeps, min p 1.3e-06
+  round trip class='independent' n=4 scale=0.25 spread=2.0 replicate=2: resid 6.7e-02 after 60 sweeps, min p 9.1e-07
+  round trip class='independent' n=4 scale=0.25 spread=2.0 replicate=3: resid 9.2e-01 after 60 sweeps, min p 3.7e-05
+  free       class='independent' n=4 scale=0.25 spread=2.0 replicate=3: resid 4.0e-07 after 60 sweeps, min target 2.4e-02
+  round trip class='independent' n=4 scale=0.25 spread=2.0 replicate=4: resid 1.4e+00 after 60 sweeps, min p 5.2e-04
+  round trip class='independent' n=4 scale=0.25 spread=2.0 replicate=5: resid 2.2e-03 after 60 sweeps, min p 3.9e-10
+  round trip class='independent' n=4 scale=0.25 spread=2.0 replicate=7: resid 6.0e-07 after 60 sweeps, min p 2.9e-02
+  round trip class='independent' n=4 scale=0.25 spread=2.0 replicate=8: resid 6.3e-06 after 60 sweeps, min p 1.3e-02
+  round trip class='independent' n=4 scale=0.25 spread=2.0 replicate=9: resid 7.9e-08 after 60 sweeps, min p 1.5e-04
+  round trip class='independent' n=4 scale=0.25 spread=2.0 replicate=12: resid 4.9e-07 after 60 sweeps, min p 1.8e-03
+  round trip class='independent' n=4 scale=0.25 spread=2.0 replicate=14: resid 2.9e-03 after 60 sweeps, min p 9.4e-06
+  round trip class='independent' n=4 scale=0.25 spread=2.0 replicate=15: resid 1.3e-01 after 60 sweeps, min p 3.0e-03
+  round trip class='independent' n=4 scale=0.25 spread=2.0 replicate=16: resid 1.2e-01 after 60 sweeps, min p 6.7e-04
+  free       class='independent' n=4 scale=0.25 spread=2.0 replicate=16: resid 2.4e-06 after 60 sweeps, min target 2.2e-02
+  round trip class='independent' n=4 scale=0.25 spread=2.0 replicate=17: resid 2.1e+00 after 60 sweeps, min p 4.1e-06
+  free       class='independent' n=4 scale=0.25 spread=2.0 replicate=18: resid 1.4e-04 after 60 sweeps, min target 2.0e-02
+  free       class='independent' n=5 scale=0.25 spread=0.5 replicate=1: resid 4.6e-08 after 60 sweeps, min target 1.9e-02
+  round trip class='independent' n=5 scale=0.25 spread=1.0 replicate=0: resid 1.4e-07 after 60 sweeps, min p 3.8e-04
+  round trip class='independent' n=5 scale=0.25 spread=1.0 replicate=1: resid 2.5e-05 after 60 sweeps, min p 5.0e-03
+  round trip class='independent' n=5 scale=0.25 spread=1.0 replicate=3: resid 1.0e-06 after 60 sweeps, min p 1.3e-03
+  free       class='independent' n=5 scale=0.25 spread=1.0 replicate=4: resid 1.5e-08 after 60 sweeps, min target 5.1e-03
+  free       class='independent' n=5 scale=0.25 spread=1.0 replicate=8: resid 1.9e-08 after 60 sweeps, min target 8.2e-03
+  round trip class='independent' n=5 scale=0.25 spread=1.0 replicate=19: resid 8.1e-05 after 60 sweeps, min p 3.9e-03
+  round trip class='independent' n=5 scale=0.25 spread=2.0 replicate=0: resid 1.0e-03 after 60 sweeps, min p 1.5e-03
+  round trip class='independent' n=5 scale=0.25 spread=2.0 replicate=1: resid 2.2e+00 after 60 sweeps, min p 2.0e-07
+  round trip class='independent' n=5 scale=0.25 spread=2.0 replicate=2: resid 3.3e-02 after 60 sweeps, min p 1.6e-03
+  round trip class='independent' n=5 scale=0.25 spread=2.0 replicate=3: resid 1.6e-04 after 60 sweeps, min p 3.5e-05
+  round trip class='independent' n=5 scale=0.25 spread=2.0 replicate=4: resid 5.9e-08 after 60 sweeps, min p 3.8e-03
+  round trip class='independent' n=5 scale=0.25 spread=2.0 replicate=5: resid 2.4e-01 after 60 sweeps, min p 3.5e-07
+  round trip class='independent' n=5 scale=0.25 spread=2.0 replicate=6: resid 1.5e-04 after 60 sweeps, min p 4.0e-04
+  round trip class='independent' n=5 scale=0.25 spread=2.0 replicate=8: resid 5.4e-01 after 60 sweeps, min p 9.2e-11
+  round trip class='independent' n=5 scale=0.25 spread=2.0 replicate=9: resid 2.0e+00 after 60 sweeps, min p 7.0e-08
+  round trip class='independent' n=5 scale=0.25 spread=2.0 replicate=10: resid 2.8e-04 after 60 sweeps, min p 1.1e-03
+  round trip class='independent' n=5 scale=0.25 spread=2.0 replicate=11: resid 3.0e-08 after 60 sweeps, min p 1.6e-02
+  round trip class='independent' n=5 scale=0.25 spread=2.0 replicate=12: resid 1.2e-07 after 60 sweeps, min p 3.4e-04
+  round trip class='independent' n=5 scale=0.25 spread=2.0 replicate=13: resid 7.0e-05 after 60 sweeps, min p 2.5e-04
+  round trip class='independent' n=5 scale=0.25 spread=2.0 replicate=15: resid 2.0e-03 after 60 sweeps, min p 1.0e-05
+  round trip class='independent' n=8 scale=0.25 spread=1.0 replicate=1: resid 6.3e-07 after 60 sweeps, min p 8.1e-05
+  round trip class='independent' n=8 scale=0.25 spread=2.0 replicate=1: resid 2.8e-06 after 60 sweeps, min p 2.3e-06
+  round trip class='independent' n=8 scale=0.25 spread=2.0 replicate=3: resid 1.9e-06 after 60 sweeps, min p 2.9e-08
+  round trip class='independent' n=8 scale=0.25 spread=2.0 replicate=4: resid 1.6e-06 after 60 sweeps, min p 9.6e-09
+  round trip class='independent' n=8 scale=0.25 spread=2.0 replicate=6: resid 4.8e-04 after 60 sweeps, min p 1.3e-08
+  round trip class='independent' n=8 scale=0.25 spread=2.0 replicate=7: resid 4.3e-05 after 60 sweeps, min p 5.7e-05
+  round trip class='independent' n=8 scale=0.25 spread=2.0 replicate=8: resid 3.7e-04 after 60 sweeps, min p 8.2e-08
+  round trip class='independent' n=8 scale=0.25 spread=2.0 replicate=11: resid 6.0e-04 after 60 sweeps, min p 7.9e-08
+  round trip class='independent' n=8 scale=0.25 spread=2.0 replicate=12: resid 5.5e-08 after 60 sweeps, min p 1.4e-10
+  round trip class='independent' n=8 scale=0.25 spread=2.0 replicate=15: resid 2.9e-03 after 60 sweeps, min p 5.4e-05
+  round trip class='independent' n=8 scale=0.25 spread=2.0 replicate=16: resid 9.5e-03 after 60 sweeps, min p 3.1e-09
+  round trip class='independent' n=8 scale=0.25 spread=2.0 replicate=17: resid 1.2e-05 after 60 sweeps, min p 3.9e-05
+  round trip class='independent' n=8 scale=0.25 spread=2.0 replicate=18: resid 7.8e-07 after 60 sweeps, min p 2.7e-07
+  round trip class='independent' n=8 scale=0.25 spread=2.0 replicate=19: resid 3.7e-06 after 60 sweeps, min p 4.2e-04
+  round trip class='independent' n=12 scale=0.25 spread=2.0 replicate=0: resid 7.3e-07 after 60 sweeps, min p 1.8e-05
+  round trip class='independent' n=12 scale=0.25 spread=2.0 replicate=2: resid 3.8e-06 after 60 sweeps, min p 2.0e-07
+  round trip class='independent' n=12 scale=0.25 spread=2.0 replicate=4: resid 4.6e-08 after 60 sweeps, min p 5.1e-08
+  round trip class='independent' n=12 scale=0.25 spread=2.0 replicate=6: resid 8.2e-02 after 60 sweeps, min p 2.4e-06
+  round trip class='independent' n=12 scale=0.25 spread=2.0 replicate=11: resid 1.6e-06 after 60 sweeps, min p 7.8e-15
+  round trip class='independent' n=12 scale=0.25 spread=2.0 replicate=14: resid 3.1e-08 after 60 sweeps, min p 1.7e-20
+  round trip class='independent' n=12 scale=0.25 spread=2.0 replicate=18: resid 3.4e-05 after 60 sweeps, min p 3.8e-09
+  round trip class='independent' n=12 scale=0.25 spread=2.0 replicate=19: resid 1.0e-05 after 60 sweeps, min p 4.4e-11
+  round trip class='independent' n=20 scale=0.25 spread=2.0 replicate=19: resid 4.9e-04 after 60 sweeps, min p 1.3e-15
+
+totals: round trip 330/420 converged; free target 382/420 converged

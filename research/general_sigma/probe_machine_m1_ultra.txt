@@ -1,0 +1,94 @@
+macOS-27.2.1-arm64-arm-64bit arm numpy 2.5.4
+{
+  "Compilers": {
+    "c": {
+      "name": "clang",
+      "linker": "ld64",
+      "version": "15.0.0",
+      "commands": "cc"
+    },
+    "cython": {
+      "name": "cython",
+      "linker": "cython",
+      "version": "3.3.0",
+      "commands": "cython"
+    },
+    "c++": {
+      "name": "clang",
+      "linker": "ld64",
+      "version": "15.0.0",
+      "commands": "c++"
+    }
+  },
+  "Machine Information": {
+    "host": {
+      "cpu": "aarch64",
+      "family": "aarch64",
+      "endian": "little",
+      "system": "darwin"
+    },
+    "build": {
+      "cpu": "aarch64",
+      "family": "aarch64",
+      "endian": "little",
+      "system": "darwin"
+    }
+  },
+  "Build Dependencies": {
+    "blas": {
+      "name": "accelerate",
+      "found": true,
+      "version": "unknown",
+      "detection method": "system",
+      "include directory": "unknown",
+      "lib directory": "unknown",
+      "openblas configuration": "unknown",
+      "pc file directory": "unknown"
+    },
+    "lapack": {
+      "name": "accelerate",
+      "found": true,
+      "version": "unknown",
+      "detection method": "system",
+      "include directory": "unknown",
+      "lib directory": "unknown",
+      "openblas configuration": "unknown",
+      "pc file directory": "unknown"
+    }
+  },
+  "Python Information": {
+    "path": "/private/var/folders/s6/5hzmn6lx4dz5nxs7k_0slzph0000gn/T/build-env-b5_gj3sx/bin/python",
+    "version": "3.12"
+  },
+  "SIMD Extensions": {
+    "baseline": [
+      "NEON",
+      "NEON_FP16",
+      "NEON_VFPV4",
+      "ASIMD"
+    ],
+    "found": [
+      "ASIMDHP",
+      "ASIMDDP"
+    ],
+    "not found": [
+      "ASIMDFHM"
+    ]
+  }
+}
+ensemble               C-hash    MC-hash   raw-hash  proj-hash  TV raw      TV projected
+lkj                    77ec3992  bdaf5984  775d2795  d22390e0   2.050000e-02  1.741170e-02
+wishart                ef90c655  0927df34  f42af45f  ebadef74   1.085433e-02  1.105188e-02
+residuals              58069fec  140d5874  c0da3e92  eda75c43   6.117065e-02  2.896806e-02
+walk                   9a9a57b5  6b245591  2c7f2fba  7bb01295   2.237948e-02  1.769384e-02
+animals                32d961ba  77b97d96  a029dcb3  8b7addec   2.552002e-02  1.191660e-02
+onion                  576250cc  4a0f8901  7ce203c6  cd84510d   2.070920e-02  1.502558e-02
+vine                   c120beef  0220f1af  a15b5fb2  f877661e   1.643967e-02  1.229963e-02
+archakov_hansen        32638898  5c5b9a1a  7f9b7d25  cebe2b6b   4.093605e-02  3.792300e-02
+spectrum:marchenko_pastur db033f19  6a0f866e  7e535790  e73aaa1b   1.163888e-02  1.215441e-02
+spectrum:spiked        ce26478d  2ab92427  561f7086  6b526c16   1.394051e-02  1.245544e-02
+factor:30              2f176ede  0f881056  6ebb3bc6  84b3516a   3.666767e-03  3.102304e-03
+hierarchical           c5c21368  b2234cb8  0b0bc2ad  32b551a5   5.003134e-03  4.062752e-03
+block_equicorr         d3709fc2  1a977e89  d3e05a59  a32de549   2.594262e-02  2.300826e-03
+ar1                    a64d888e  e01e5837  9bad7103  54ec65b1   7.104668e-02  5.888174e-02
+sparse_precision       884b6099  82283e1b  d9348aa7  68b3718c   6.011440e-03  7.286029e-03

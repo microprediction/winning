@@ -1,0 +1,78 @@
+20 seeds per (class, n, scale, spread); spreads (0.5, 1.0, 2.0); default solver settings
+class            n scale  round trip: conv  sweeps med/max  worst resid  worst |mu err|  min p   | free: conv  sweeps med/max  worst resid   seconds
+tree             2  0.25   60/60    22 / 25   9.8e-09  6.8e-09  1.6e-03 |  60/60    22 / 25   9.9e-09  5
+tree             2   0.5   60/60    30 / 59   9.9e-09  8.6e-09  1.1e-05 |  60/60    29 / 59   1.0e-08  8
+tree             2     1   59/60    10 / 120  1.7e-05  1.4e-05  1.1e-05 |  59/60    10 / 120  1.6e-04  6
+tree             2     2   59/60    17 / 120  1.0e-08  8.6e-09  9.7e-03 |  60/60    17 / 105  9.9e-09  9
+tree             3  0.25   60/60    13 / 41   9.8e-09  9.8e-09  1.7e-06 |  60/60    14 / 24   9.9e-09  9
+tree             3   0.5   60/60    16 / 43   1.0e-08  9.2e-09  3.5e-06 |  60/60    17 / 42   1.0e-08  11
+tree             3     1   58/60    26 / 120  1.2e-06  8.5e-07  4.4e-06 |  57/60    24 / 120  3.0e-04  12
+tree             3     2   59/60    21 / 120  7.1e-05  4.4e-05  1.1e-05 |  59/60    29 / 120  3.0e-05  12
+tree             4  0.25   60/60    13 / 37   9.7e-09  6.2e-09  6.2e-10 |  60/60    12 / 16   9.9e-09  5
+tree             4   0.5   60/60    13 / 34   1.0e-08  8.8e-09  3.8e-13 |  60/60    12 / 25   9.6e-09  5
+tree             4     1   60/60    21 / 80   9.5e-09  8.6e-09  9.2e-07 |  59/60    23 / 120  2.0e-07  11
+tree             4     2   58/60    26 / 120  1.0e-06  8.5e-07  3.6e-06 |  59/60    26 / 120  2.2e-05  17
+tree             5  0.25   60/60    13 / 21   9.8e-09  6.0e-09  6.9e-13 |  60/60    13 / 16   9.7e-09  8
+tree             5   0.5   60/60    13 / 35   9.6e-09  7.0e-09  5.9e-08 |  60/60    13 / 18   9.9e-09  7
+tree             5     1   59/60    17 / 120  4.1e-07  1.4e-07  1.6e-07 |  59/60    17 / 120  1.7e-06  14
+tree             5     2   59/60    31 / 120  2.7e-06  1.7e-06  1.1e-12 |  57/60    35 / 120  1.8e-05  34
+tree             8  0.25   60/60    16 / 22   9.5e-09  5.0e-09  9.3e-17 |  60/60    15 / 18   1.0e-08  16
+tree             8   0.5   60/60    15 / 20   9.8e-09  4.8e-09  1.3e-11 |  60/60    14 / 16   9.8e-09  13
+tree             8     1   58/60    15 / 120  1.4e-04  7.9e-05  7.1e-10 |  60/60    15 / 55   9.6e-09  26
+tree             8     2   56/60    37 / 120  5.9e-05  3.2e-05  1.3e-07 |  58/60    39 / 120  1.4e-03  60
+tree            12  0.25   60/60    17 / 22   1.0e-08  4.6e-09  1.5e-14 |  60/60    16 / 18   9.8e-09  23
+tree            12   0.5   60/60    15 / 20   9.6e-09  5.8e-09  5.5e-12 |  60/60    15 / 17   9.9e-09  9
+tree            12     1   60/60    16 / 105  9.6e-09  9.0e-09  1.9e-16 |  60/60    15 / 22   9.9e-09  12
+tree            12     2   57/60    40 / 120  6.1e-05  4.3e-05  5.4e-11 |  55/60    41 / 120  9.5e-05  35
+tree            20  0.25   60/60    18 / 29   9.4e-09  2.6e-09  2.1e-26 |  60/60    17 / 18   9.7e-09  22
+tree            20   0.5   60/60    16 / 23   9.9e-09  4.9e-09  8.7e-21 |  60/60    16 / 17   1.0e-08  19
+tree            20     1   60/60    17 / 82   9.9e-09  8.0e-09  2.5e-11 |  60/60    16 / 18   9.8e-09  24
+tree            20     2   54/60    42 / 120  8.5e-03  5.4e-03  2.5e-14 |  58/60    41 / 120  8.9e-04  78
+
+not converged or raised: 44
+  round trip class='tree' n=2 scale=1.0 spread=0.5 replicate=4: resid 1.7e-05 after 120 sweeps, min p 4.6e-01
+  free       class='tree' n=2 scale=1.0 spread=2.0 replicate=5: resid 1.6e-04 after 120 sweeps, min target 4.8e-01
+  round trip class='tree' n=2 scale=2.0 spread=1.0 replicate=3: resid 1.0e-08 after 120 sweeps, min p 4.8e-01
+  free       class='tree' n=3 scale=1.0 spread=0.5 replicate=0: resid 3.0e-04 after 120 sweeps, min target 2.6e-01
+  free       class='tree' n=3 scale=1.0 spread=0.5 replicate=2: resid 5.0e-06 after 120 sweeps, min target 2.0e-01
+  round trip class='tree' n=3 scale=1.0 spread=0.5 replicate=8: resid 1.2e-06 after 120 sweeps, min p 3.3e-01
+  round trip class='tree' n=3 scale=1.0 spread=0.5 replicate=18: resid 2.2e-07 after 120 sweeps, min p 2.7e-01
+  free       class='tree' n=3 scale=1.0 spread=1.0 replicate=7: resid 7.3e-08 after 120 sweeps, min target 1.3e-01
+  free       class='tree' n=3 scale=2.0 spread=0.5 replicate=4: resid 3.0e-05 after 120 sweeps, min target 6.3e-02
+  round trip class='tree' n=3 scale=2.0 spread=0.5 replicate=8: resid 7.1e-05 after 120 sweeps, min p 2.3e-01
+  free       class='tree' n=4 scale=1.0 spread=0.5 replicate=13: resid 2.0e-07 after 120 sweeps, min target 2.7e-02
+  round trip class='tree' n=4 scale=2.0 spread=0.5 replicate=2: resid 2.0e-07 after 120 sweeps, min p 1.5e-01
+  round trip class='tree' n=4 scale=2.0 spread=0.5 replicate=3: resid 1.0e-06 after 120 sweeps, min p 2.2e-01
+  free       class='tree' n=4 scale=2.0 spread=2.0 replicate=1: resid 2.2e-05 after 120 sweeps, min target 7.0e-02
+  round trip class='tree' n=5 scale=1.0 spread=2.0 replicate=9: resid 4.1e-07 after 120 sweeps, min p 5.0e-02
+  free       class='tree' n=5 scale=1.0 spread=2.0 replicate=12: resid 1.7e-06 after 120 sweeps, min target 1.1e-02
+  round trip class='tree' n=5 scale=2.0 spread=0.5 replicate=7: resid 2.7e-06 after 120 sweeps, min p 7.4e-02
+  free       class='tree' n=5 scale=2.0 spread=0.5 replicate=16: resid 3.1e-08 after 120 sweeps, min target 6.3e-02
+  free       class='tree' n=5 scale=2.0 spread=1.0 replicate=3: resid 4.1e-08 after 120 sweeps, min target 6.6e-03
+  free       class='tree' n=5 scale=2.0 spread=2.0 replicate=10: resid 1.8e-05 after 120 sweeps, min target 2.4e-02
+  round trip class='tree' n=8 scale=1.0 spread=2.0 replicate=2: resid 3.7e-05 after 120 sweeps, min p 6.6e-04
+  round trip class='tree' n=8 scale=1.0 spread=2.0 replicate=11: resid 1.4e-04 after 120 sweeps, min p 6.1e-04
+  round trip class='tree' n=8 scale=2.0 spread=0.5 replicate=6: resid 5.9e-05 after 120 sweeps, min p 1.3e-02
+  round trip class='tree' n=8 scale=2.0 spread=0.5 replicate=8: resid 1.7e-05 after 120 sweeps, min p 5.4e-02
+  free       class='tree' n=8 scale=2.0 spread=0.5 replicate=8: resid 1.1e-03 after 120 sweeps, min target 7.7e-03
+  round trip class='tree' n=8 scale=2.0 spread=0.5 replicate=10: resid 1.4e-06 after 120 sweeps, min p 2.6e-02
+  round trip class='tree' n=8 scale=2.0 spread=0.5 replicate=17: resid 2.4e-08 after 120 sweeps, min p 2.6e-02
+  free       class='tree' n=8 scale=2.0 spread=2.0 replicate=10: resid 1.4e-03 after 120 sweeps, min target 1.4e-02
+  free       class='tree' n=12 scale=2.0 spread=0.5 replicate=0: resid 2.3e-08 after 120 sweeps, min target 1.4e-02
+  free       class='tree' n=12 scale=2.0 spread=0.5 replicate=9: resid 4.9e-07 after 120 sweeps, min target 3.7e-03
+  free       class='tree' n=12 scale=2.0 spread=0.5 replicate=11: resid 9.5e-05 after 120 sweeps, min target 1.4e-02
+  free       class='tree' n=12 scale=2.0 spread=0.5 replicate=12: resid 2.6e-06 after 120 sweeps, min target 1.1e-02
+  round trip class='tree' n=12 scale=2.0 spread=0.5 replicate=16: resid 6.1e-05 after 120 sweeps, min p 1.8e-02
+  round trip class='tree' n=12 scale=2.0 spread=1.0 replicate=3: resid 1.5e-08 after 120 sweeps, min p 1.5e-03
+  free       class='tree' n=12 scale=2.0 spread=1.0 replicate=5: resid 1.3e-08 after 120 sweeps, min target 1.2e-02
+  round trip class='tree' n=12 scale=2.0 spread=2.0 replicate=5: resid 1.1e-06 after 120 sweeps, min p 5.3e-05
+  free       class='tree' n=20 scale=2.0 spread=0.5 replicate=2: resid 8.9e-04 after 120 sweeps, min target 1.0e-04
+  round trip class='tree' n=20 scale=2.0 spread=0.5 replicate=5: resid 4.3e-07 after 120 sweeps, min p 5.5e-03
+  round trip class='tree' n=20 scale=2.0 spread=0.5 replicate=8: resid 8.5e-03 after 120 sweeps, min p 6.1e-03
+  round trip class='tree' n=20 scale=2.0 spread=0.5 replicate=10: resid 7.0e-08 after 120 sweeps, min p 9.9e-03
+  free       class='tree' n=20 scale=2.0 spread=0.5 replicate=13: resid 8.4e-07 after 120 sweeps, min target 3.3e-03
+  round trip class='tree' n=20 scale=2.0 spread=2.0 replicate=1: resid 5.4e-04 after 120 sweeps, min p 2.8e-05
+  round trip class='tree' n=20 scale=2.0 spread=2.0 replicate=8: resid 9.2e-05 after 120 sweeps, min p 1.6e-06
+  round trip class='tree' n=20 scale=2.0 spread=2.0 replicate=10: resid 1.0e-07 after 120 sweeps, min p 2.5e-14
+
+totals: round trip 1656/1680 converged; free target 1660/1680 converged

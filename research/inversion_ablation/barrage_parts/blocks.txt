@@ -1,0 +1,58 @@
+20 seeds per (class, n, scale, spread); spreads (0.5, 1.0, 2.0); default solver settings
+class            n scale  round trip: conv  sweeps med/max  worst resid  worst |mu err|  min p   | free: conv  sweeps med/max  worst resid   seconds
+blocks           2  0.25   60/60    22 / 25   9.7e-09  9.5e-09  8.9e-06 |  60/60    22 / 25   1.0e-08  8
+blocks           2   0.5   60/60    27 / 48   9.9e-09  8.7e-09  5.6e-05 |  60/60    28 / 57   1.0e-08  11
+blocks           2     1   58/60    30 / 120  1.6e-05  1.5e-05  4.0e-06 |  59/60    31 / 120  5.1e-08  20
+blocks           2     2   60/60    13 / 97   9.8e-09  1.2e-08  7.0e-17 |  60/60    13 / 66   9.9e-09  13
+blocks           3  0.25   60/60    13 / 22   9.5e-09  9.2e-09  1.0e-07 |  60/60    14 / 22   9.5e-09  7
+blocks           3   0.5   60/60    14 / 35   9.8e-09  1.1e-08  6.5e-05 |  60/60    16 / 36   9.5e-09  8
+blocks           3     1   60/60    21 / 53   9.9e-09  9.8e-09  2.6e-07 |  60/60    24 / 106  1.0e-08  14
+blocks           3     2   58/60    25 / 120  1.9e-04  1.1e-04  3.2e-06 |  59/60    33 / 120  6.2e-08  20
+blocks           4  0.25   60/60    14 / 40   9.8e-09  8.5e-09  4.9e-11 |  60/60    12 / 18   9.9e-09  11
+blocks           4   0.5   60/60    13 / 25   9.8e-09  8.9e-09  5.7e-05 |  60/60    12 / 22   1.0e-08  8
+blocks           4     1   60/60    17 / 61   1.0e-08  8.7e-09  1.8e-08 |  59/60    17 / 120  1.0e-08  16
+blocks           4     2   60/60    31 / 95   9.9e-09  1.9e-08  3.4e-10 |  58/60    30 / 120  3.6e-04  33
+blocks           5  0.25   60/60    14 / 22   9.4e-09  5.3e-09  2.5e-15 |  60/60    14 / 17   9.6e-09  15
+blocks           5   0.5   60/60    14 / 40   9.8e-09  6.1e-09  1.7e-14 |  60/60    13 / 18   9.7e-09  13
+blocks           5     1   60/60    15 / 44   1.0e-08  9.6e-09  9.8e-08 |  60/60    14 / 74   9.9e-09  22
+blocks           5     2   59/60    32 / 120  1.1e-05  8.8e-06  1.4e-06 |  60/60    36 / 88   1.0e-08  51
+blocks           8  0.25   60/60    16 / 21   9.7e-09  4.9e-09  1.1e-10 |  60/60    15 / 18   9.7e-09  24
+blocks           8   0.5   60/60    16 / 22   1.0e-08  5.1e-09  2.7e-15 |  60/60    15 / 17   9.9e-09  17
+blocks           8     1   60/60    15 / 51   1.0e-08  8.8e-09  5.3e-10 |  60/60    16 / 71   9.7e-09  12
+blocks           8     2   59/60    40 / 120  6.3e-08  3.0e-08  9.4e-12 |  57/60    40 / 120  3.0e-07  28
+blocks          12  0.25   60/60    17 / 24   9.6e-09  3.4e-09  1.6e-13 |  60/60    16 / 18   9.7e-09  15
+blocks          12   0.5   60/60    17 / 26   9.8e-09  5.0e-09  3.0e-14 |  60/60    16 / 18   9.6e-09  17
+blocks          12     1   60/60    17 / 19   1.0e-08  8.5e-09  1.0e-10 |  60/60    17 / 19   1.0e-08  13
+blocks          12     2   56/60    41 / 120  5.5e-05  2.2e-05  3.9e-11 |  59/60    39 / 120  4.8e-07  51
+blocks          20  0.25   60/60    19 / 27   1.0e-08  2.8e-09  4.5e-22 |  60/60    17 / 19   9.8e-09  25
+blocks          20   0.5   60/60    18 / 31   1.0e-08  3.7e-09  7.5e-15 |  60/60    17 / 19   9.9e-09  23
+blocks          20     1   60/60    18 / 32   9.9e-09  5.7e-09  3.6e-19 |  60/60    17 / 19   9.7e-09  22
+blocks          20     2   56/60    43 / 120  1.2e-05  6.0e-06  3.2e-13 |  59/60    30 / 120  3.6e-05  52
+
+not converged or raised: 24
+  round trip class='blocks' n=2 scale=1.0 spread=0.5 replicate=19: resid 4.9e-07 after 120 sweeps, min p 4.3e-01
+  round trip class='blocks' n=2 scale=1.0 spread=1.0 replicate=13: resid 1.6e-05 after 120 sweeps, min p 4.8e-01
+  free       class='blocks' n=2 scale=1.0 spread=2.0 replicate=9: resid 5.1e-08 after 120 sweeps, min target 4.5e-01
+  free       class='blocks' n=3 scale=2.0 spread=0.5 replicate=8: resid 6.2e-08 after 120 sweeps, min target 1.7e-01
+  round trip class='blocks' n=3 scale=2.0 spread=0.5 replicate=9: resid 1.9e-04 after 120 sweeps, min p 2.1e-01
+  round trip class='blocks' n=3 scale=2.0 spread=0.5 replicate=18: resid 5.2e-05 after 120 sweeps, min p 2.0e-01
+  free       class='blocks' n=4 scale=1.0 spread=1.0 replicate=17: resid 1.0e-08 after 120 sweeps, min target 5.2e-03
+  free       class='blocks' n=4 scale=2.0 spread=1.0 replicate=7: resid 1.1e-07 after 120 sweeps, min target 4.0e-02
+  free       class='blocks' n=4 scale=2.0 spread=2.0 replicate=10: resid 3.6e-04 after 120 sweeps, min target 4.0e-02
+  round trip class='blocks' n=5 scale=2.0 spread=0.5 replicate=15: resid 1.1e-05 after 120 sweeps, min p 4.3e-02
+  free       class='blocks' n=8 scale=2.0 spread=0.5 replicate=7: resid 3.0e-07 after 120 sweeps, min target 2.1e-02
+  free       class='blocks' n=8 scale=2.0 spread=0.5 replicate=16: resid 1.2e-08 after 120 sweeps, min target 4.7e-03
+  round trip class='blocks' n=8 scale=2.0 spread=2.0 replicate=1: resid 6.3e-08 after 120 sweeps, min p 9.4e-12
+  free       class='blocks' n=8 scale=2.0 spread=2.0 replicate=9: resid 1.8e-07 after 120 sweeps, min target 1.3e-02
+  free       class='blocks' n=12 scale=2.0 spread=0.5 replicate=3: resid 4.8e-07 after 120 sweeps, min target 4.4e-03
+  round trip class='blocks' n=12 scale=2.0 spread=0.5 replicate=15: resid 2.1e-07 after 120 sweeps, min p 1.9e-02
+  round trip class='blocks' n=12 scale=2.0 spread=0.5 replicate=16: resid 5.5e-05 after 120 sweeps, min p 3.1e-03
+  round trip class='blocks' n=12 scale=2.0 spread=0.5 replicate=19: resid 4.0e-05 after 120 sweeps, min p 1.9e-02
+  round trip class='blocks' n=12 scale=2.0 spread=2.0 replicate=16: resid 2.6e-05 after 120 sweeps, min p 3.9e-11
+  round trip class='blocks' n=20 scale=2.0 spread=0.5 replicate=7: resid 1.2e-05 after 120 sweeps, min p 3.1e-04
+  free       class='blocks' n=20 scale=2.0 spread=0.5 replicate=7: resid 3.6e-05 after 120 sweeps, min target 1.7e-03
+  round trip class='blocks' n=20 scale=2.0 spread=0.5 replicate=13: resid 2.2e-08 after 120 sweeps, min p 7.2e-04
+  round trip class='blocks' n=20 scale=2.0 spread=2.0 replicate=10: resid 6.7e-08 after 120 sweeps, min p 3.2e-12
+  round trip class='blocks' n=20 scale=2.0 spread=2.0 replicate=17: resid 2.7e-07 after 120 sweeps, min p 4.2e-10
+
+totals: round trip 1666/1680 converged; free target 1670/1680 converged

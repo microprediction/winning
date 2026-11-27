@@ -59,7 +59,7 @@ with open(f"{out}/inversion_scaling.csv", "w", newline="") as f:
 
 def human(t):
     if t < 60:
-        return f"{t:.1f} s" if t < 10 else f"{t:.0f} s"
+        return f"{t:.1f} s" if t < 10 else f"{int(t + 0.5)} s"
     if t < 3600:
         return f"{t / 60:.1f} min" if t < 600 else f"{t / 60:.0f} min"
     return f"{t / 3600:.1f} h"

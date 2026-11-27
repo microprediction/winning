@@ -1,0 +1,74 @@
+20 seeds per (class, n, scale, spread); spreads (0.5, 1.0, 2.0); default solver settings
+class            n scale  round trip: conv  sweeps med/max  worst resid  worst |mu err|  min p   | free: conv  sweeps med/max  worst resid   seconds
+nested           2  0.25   60/60    21 / 25   1.0e-08  7.7e-09  6.8e-06 |  60/60    22 / 26   9.9e-09  98
+nested           2   0.5   60/60    27 / 56   9.9e-09  7.8e-09  2.3e-09 |  60/60    29 / 45   9.8e-09  248
+nested           2     1   55/60    34 / 120  2.6e-03  2.5e-03  3.1e-06 |  58/60    15 / 120  1.4e-06  271
+nested           2     2   59/60    16 / 120  9.8e-07  2.9e-07  1.8e-05 |  60/60    15 / 43   9.8e-09  165
+nested           3  0.25   60/60    15 / 27   9.9e-09  7.7e-09  3.5e-23 |  60/60    14 / 20   9.9e-09  102
+nested           3   0.5   60/60    15 / 27   1.0e-08  8.3e-09  3.5e-06 |  60/60    14 / 31   9.8e-09  181
+nested           3     1   58/60    23 / 120  2.3e-05  1.3e-05  3.0e-08 |  59/60    24 / 120  6.5e-06  330
+nested           3     2   59/60    25 / 120  2.6e-08  2.4e-08  2.4e-04 |  59/60    27 / 120  1.6e-05  388
+nested           4  0.25   60/60    13 / 20   9.9e-09  6.5e-09  8.9e-12 |  60/60    12 / 19   1.0e-08  198
+nested           4   0.5   60/60    14 / 35   1.0e-08  8.0e-09  7.5e-07 |  60/60    12 / 22   9.6e-09  218
+nested           4     1   60/60    18 / 52   9.9e-09  1.1e-08  2.6e-10 |  60/60    17 / 78   9.8e-09  39
+nested           4     2   58/60    28 / 120  6.4e-04  4.2e-04  1.4e-08 |  58/60    32 / 120  3.7e-03  83
+nested           5  0.25   60/60    15 / 24   9.8e-09  6.6e-09  1.6e-11 |  60/60    14 / 17   9.9e-09  34
+nested           5   0.5   60/60    14 / 31   1.0e-08  7.0e-09  6.8e-08 |  60/60    13 / 20   9.8e-09  29
+nested           5     1   60/60    15 / 55   9.9e-09  9.7e-09  2.1e-08 |  60/60    15 / 71   1.0e-08  39
+nested           5     2   58/60    32 / 120  3.2e-07  1.2e-07  3.1e-08 |  59/60    39 / 120  4.4e-05  88
+nested           8  0.25   60/60    16 / 20   9.6e-09  4.9e-09  5.7e-10 |  60/60    15 / 17   1.0e-08  77
+nested           8   0.5   60/60    15 / 20   9.9e-09  5.3e-09  2.4e-16 |  60/60    15 / 17   1.0e-08  91
+nested           8     1   60/60    15 / 41   9.9e-09  8.0e-09  7.7e-13 |  60/60    15 / 28   9.9e-09  47
+nested           8     2   59/60    39 / 120  1.4e-07  7.3e-08  4.0e-07 |  58/60    40 / 120  4.2e-05  100
+nested          12  0.25   60/60    17 / 22   1.0e-08  3.4e-09  1.2e-14 |  60/60    16 / 18   9.9e-09  39
+nested          12   0.5   60/60    16 / 22   8.5e-09  4.0e-09  2.2e-14 |  60/60    16 / 17   9.9e-09  37
+nested          12     1   60/60    16 / 29   9.9e-09  7.8e-09  3.1e-12 |  60/60    17 / 19   1.0e-08  39
+nested          12     2   57/60    42 / 120  6.6e-07  3.4e-07  5.1e-08 |  53/60    42 / 120  1.5e-04  138
+nested          20  0.25   60/60    19 / 25   9.9e-09  3.3e-09  2.9e-21 |  60/60    17 / 19   9.8e-09  75
+nested          20   0.5   60/60    18 / 24   1.0e-08  4.3e-09  9.1e-23 |  60/60    17 / 19   1.0e-08  80
+nested          20     1   60/60    17 / 53   9.8e-09  8.1e-09  1.1e-17 |  60/60    17 / 18   9.9e-09  115
+nested          20     2   57/60    41 / 120  4.0e-06  1.4e-06  3.4e-16 |  56/60    31 / 120  6.9e-05  467
+
+not converged or raised: 40
+  round trip class='nested' n=2 scale=1.0 spread=0.5 replicate=15: resid 2.6e-03 after 120 sweeps, min p 4.9e-01
+  round trip class='nested' n=2 scale=1.0 spread=1.0 replicate=6: resid 1.3e-05 after 120 sweeps, min p 4.6e-01
+  round trip class='nested' n=2 scale=1.0 spread=1.0 replicate=7: resid 1.4e-06 after 120 sweeps, min p 4.3e-01
+  free       class='nested' n=2 scale=1.0 spread=1.0 replicate=7: resid 1.4e-06 after 120 sweeps, min target 4.2e-01
+  free       class='nested' n=2 scale=1.0 spread=1.0 replicate=10: resid 1.1e-08 after 120 sweeps, min target 3.6e-01
+  round trip class='nested' n=2 scale=1.0 spread=1.0 replicate=14: resid 4.7e-06 after 120 sweeps, min p 4.7e-01
+  round trip class='nested' n=2 scale=1.0 spread=2.0 replicate=6: resid 9.9e-08 after 120 sweeps, min p 4.3e-01
+  round trip class='nested' n=2 scale=2.0 spread=2.0 replicate=5: resid 9.8e-07 after 120 sweeps, min p 3.1e-03
+  round trip class='nested' n=3 scale=1.0 spread=0.5 replicate=1: resid 1.4e-08 after 120 sweeps, min p 2.9e-01
+  round trip class='nested' n=3 scale=1.0 spread=1.0 replicate=5: resid 2.3e-05 after 120 sweeps, min p 2.1e-01
+  free       class='nested' n=3 scale=1.0 spread=1.0 replicate=19: resid 6.5e-06 after 120 sweeps, min target 1.7e-01
+  round trip class='nested' n=3 scale=2.0 spread=1.0 replicate=9: resid 2.6e-08 after 120 sweeps, min p 3.4e-02
+  free       class='nested' n=3 scale=2.0 spread=2.0 replicate=14: resid 1.6e-05 after 120 sweeps, min target 2.4e-01
+  round trip class='nested' n=4 scale=2.0 spread=0.5 replicate=6: resid 6.4e-04 after 120 sweeps, min p 1.8e-01
+  round trip class='nested' n=4 scale=2.0 spread=0.5 replicate=16: resid 2.0e-08 after 120 sweeps, min p 4.1e-02
+  free       class='nested' n=4 scale=2.0 spread=1.0 replicate=9: resid 3.8e-08 after 120 sweeps, min target 1.1e-01
+  free       class='nested' n=4 scale=2.0 spread=1.0 replicate=14: resid 3.7e-03 after 120 sweeps, min target 1.3e-01
+  free       class='nested' n=5 scale=2.0 spread=0.5 replicate=8: resid 4.4e-05 after 120 sweeps, min target 5.6e-02
+  round trip class='nested' n=5 scale=2.0 spread=0.5 replicate=14: resid 5.2e-08 after 120 sweeps, min p 1.1e-01
+  round trip class='nested' n=5 scale=2.0 spread=1.0 replicate=10: resid 3.2e-07 after 120 sweeps, min p 2.7e-02
+  round trip class='nested' n=8 scale=2.0 spread=0.5 replicate=2: resid 1.4e-07 after 120 sweeps, min p 8.3e-03
+  free       class='nested' n=8 scale=2.0 spread=0.5 replicate=2: resid 4.2e-05 after 120 sweeps, min target 9.2e-03
+  free       class='nested' n=8 scale=2.0 spread=1.0 replicate=13: resid 2.9e-05 after 120 sweeps, min target 5.7e-02
+  free       class='nested' n=12 scale=2.0 spread=0.5 replicate=0: resid 4.8e-05 after 120 sweeps, min target 1.3e-02
+  round trip class='nested' n=12 scale=2.0 spread=0.5 replicate=12: resid 7.1e-08 after 120 sweeps, min p 1.7e-02
+  round trip class='nested' n=12 scale=2.0 spread=0.5 replicate=14: resid 6.6e-07 after 120 sweeps, min p 3.2e-02
+  free       class='nested' n=12 scale=2.0 spread=0.5 replicate=15: resid 5.0e-07 after 120 sweeps, min target 3.9e-03
+  free       class='nested' n=12 scale=2.0 spread=1.0 replicate=6: resid 2.0e-06 after 120 sweeps, min target 8.2e-03
+  round trip class='nested' n=12 scale=2.0 spread=1.0 replicate=12: resid 6.3e-08 after 120 sweeps, min p 3.3e-05
+  free       class='nested' n=12 scale=2.0 spread=1.0 replicate=13: resid 8.8e-06 after 120 sweeps, min target 7.5e-03
+  free       class='nested' n=12 scale=2.0 spread=2.0 replicate=6: resid 1.0e-05 after 120 sweeps, min target 1.4e-03
+  free       class='nested' n=12 scale=2.0 spread=2.0 replicate=8: resid 1.5e-04 after 120 sweeps, min target 1.9e-04
+  free       class='nested' n=12 scale=2.0 spread=2.0 replicate=9: resid 1.5e-06 after 120 sweeps, min target 9.0e-03
+  free       class='nested' n=20 scale=2.0 spread=1.0 replicate=0: resid 6.0e-07 after 120 sweeps, min target 2.3e-03
+  free       class='nested' n=20 scale=2.0 spread=1.0 replicate=13: resid 6.9e-05 after 120 sweeps, min target 7.7e-05
+  free       class='nested' n=20 scale=2.0 spread=2.0 replicate=4: resid 5.2e-05 after 120 sweeps, min target 6.5e-05
+  free       class='nested' n=20 scale=2.0 spread=2.0 replicate=5: resid 1.7e-08 after 120 sweeps, min target 1.6e-03
+  round trip class='nested' n=20 scale=2.0 spread=2.0 replicate=8: resid 1.5e-07 after 120 sweeps, min p 9.4e-09
+  round trip class='nested' n=20 scale=2.0 spread=2.0 replicate=12: resid 1.9e-06 after 120 sweeps, min p 1.2e-06
+  round trip class='nested' n=20 scale=2.0 spread=2.0 replicate=15: resid 4.0e-06 after 120 sweeps, min p 5.5e-10
+
+totals: round trip 1660/1680 converged; free target 1660/1680 converged

@@ -20,7 +20,7 @@
 Including Softmax and Multinomial Probit}
 \author{Peter Cotton\thanks{\texttt{peter.cotton@microprediction.com}. Code and
 reproduction manifest: see \S\ref{sec:avail}.}}
-\date{Original version: 1 September 2026\\ This version: 25 November 2026}
+\date{Original version: 1 September 2026\\ This version: 27 November 2026}
 
 \begin{document}
 \maketitle
@@ -553,7 +553,7 @@ so one computation answers both questions.
 
 The second is a removal counterfactual: the probability that $j$ wins
 once $i$ is taken out of the field. In the continuum this is one more
-division, since deleting $i$ simply drops $S_i$ from the product. However, numerically, to continue our theme, care is required. Suppose the lattice is placed where the
+division, since deleting $i$ simply drops $S_i$ from the product. However, numerically, to continue our theme, care is required. The lattice is placed where the
 \emph{original} winner finishes, but the survivors of a deletion need not
 finish there. So, for example if we remove a dominant favorite, the race is decided where the original runner-up would have finished and it is entirely possible that the winner-bulk lattice would not reach that zone.\footnote{
 Take $\mu=(-20,0,1)$ with unit variances, so the first contestant wins
@@ -665,8 +665,8 @@ $(-2.9,0)$, $(2.9,0.01)$, $(2.9,-0.01)$ at unit $D$ has raw
 maximum $2.90$, under the threshold, while its true pairwise sharpness
 is $4.10$; a dispatcher trusting the raw norm stays with Gauss--Hermite
 there and ships a total-variation error of $6.1\times10^{-3}$ against
-the analytic three-runner orthant probabilities
-(\texttt{tests/test\_bases.py}). With the $\sqrt2$ the uncentered rows do
+the analytic three-runner orthant probabilities (the shipped rule is
+pinned by \texttt{tests/test\_bases.py}). With the $\sqrt2$ the uncentered rows do
 satisfy the bound, since the triangle inequality needs no centering, but
 they are not invariant to a common loading shift $V\to V+\mathbf{1}c^{\top}$,
 which leaves the race unchanged; centering makes the dispatch depend on
@@ -1073,7 +1073,7 @@ hazards clipped as \S\ref{sec:lattice} describes). Forming all $n^{2}$
 entries is possible, but it is a choice with $\Omega(n^{2})$ cost in
 output alone, and nothing downstream requires it.
 
-\paragraph{Numerical considerations} In keeping with our
+\paragraph{Numerical considerations.} In keeping with our
 previous lattice remarks we delineate four objects. The first is the continuum
 derivative, equation~\eqref{eq:tie}, the exact derivative of the integral
 that defines $p$. The second is that formula evaluated by quadrature on a
@@ -1411,8 +1411,8 @@ this clipped iteration finds the inverse.
 
 \subsection{Rationale for defaulting to a diagonal solver}
 
-The solver's convergence, as implemented, stands on empirical evidence, which is strong on the
-benchmark families but not universal. We can try to break the algorithm and construct strongly
+The solver's convergence, as implemented, stands on empirical evidence
+and is not universal. We can try to break the algorithm and construct strongly
 correlated fields on which the damped iteration stalls at a residual
 near $10^{-4}$ instead of converging: at $n=200$, rank-two loadings drawn
 $N(0,1.6^2)$ against idiosyncratic variances in $[0.15,0.25]$, priced on
@@ -1450,15 +1450,46 @@ idiosyncratic variances are smaller than any it draws. The
 million-contestant runs of \S\ref{sec:num} are closest to its independent
 cell and to its rank-one factor cell at scale $0.5$, and are single runs.
 
+Small fields fail more often
+(\texttt{run\_low\_dimension\_barrage.py}, in the same directory). That
+barrage has $n$ from $2$ to $20$ and adds trees and nested fields to the
+four grammars, with clusters of two. Abilities are $N(0,s^2)$ for $s$ of
+$0.5$, $1$ and $2$, with twenty seeded fields per cell. Each field gives
+a round trip and a second target drawn from a flat Dirichlet law.
+
+Of $17{,}640$ inversions, $1{,}285$ do not reach the tolerance within
+the sweep cap. The independent and factor grammars account for $1{,}177$
+of their $7{,}560$, and blocks, trees and nested fields for $108$ of
+$10{,}080$. Among the independent and factor inversions, $584$ of
+$1{,}080$ fail at $n=3$, $15$ of $1{,}080$ at $n=20$ and none at $n=2$.
+The solver reports every failure.
+
+The cause in the independent and factor grammars is oscillation. For
+$n>2$ their iteration takes the full diagonal step. When two contestants
+hold most of the probability, the residual alternates in sign as it does
+at $n=2$, where the code multiplies the step by $0.7$. With the cap
+raised to $2{,}000$ sweeps, $81$ of the $1{,}177$ still fail
+(\texttt{run\_low\_dimension\_damped.py}).
+
+A step rule that is not in the shipped code removes these failures in
+our tests. Each contestant has its own step multiplier, halved when its
+residual changes sign and raised by half, up to one, when it does not.
+On $55{,}440$ small-field inversions with new seeds and a wider
+range of abilities and targets, the shipped rules
+fail $4{,}522$ times and this rule once, at $61$ sweeps
+(\texttt{run\_sign\_rule\_barrage.py}). On independent fields of $100$
+to $100{,}000$ contestants it took four or five more sweeps than the
+shipped rule, so it is not the default.
+
 A matrix-free Newton--Krylov solver using the exact grid Jacobian--vector product is
 provided also but is work in progress. Naively assembled it lost badly to the damped diagonal iteration.\footnote{
-$370$ seconds without converging against $3.5$ seconds converged at
+$370$ seconds without converging against $4$ seconds converged at
 $n=200$ (\texttt{research/experiments/exp23\_newton\_cg}).} Assembled properly (log-residual system symmetrized by the
 $\sqrt{p}$ scaling and using integration-by-parts form of the product,
 conjugate gradients preconditioned by the own-slopes and also a null vector
 projected out) it
-does converge on the benchmark fields ($9.6\times10^{-10}$, but at roughly
-sixty times the wall clock). On the constructed stall case it
+does converge on the benchmark fields (to a residual of
+$9.6\times10^{-10}$, at roughly sixty times the wall clock). On the constructed stall case it
 diverges where the diagonal iteration stalls.
 
 So, for this reason the diagonal iteration
@@ -1957,7 +1988,7 @@ uses named in the introduction (demand estimation, handicapping,
 portfolio weights read as choice probabilities) are not demonstrated on
 real data here. A real-data application is future work.
 
-\paragraph{Hardware and timing.} Every time in this paper was measured on
+\paragraph{Hardware and timing.} Every time in this paper, except those of Appendix~\ref{app:scaling}, was measured on
 one Apple Mac Studio (M3 Ultra: twenty performance and eight efficiency
 cores, 96 GB), in the pinned environment of the replication package, with
 BLAS limited to one thread and the machine otherwise quiet: load below a
@@ -1978,7 +2009,7 @@ nodes and a lattice of the same size the two computations are algebraically
 identical, and the measurement
 confirms it: at $n=200$, rank~2, the per-alternative
 version agrees with the shared field to total variation
-$3\times10^{-15}$ and costs $1{,}270$ times as much ($17.5$\,s against
+$3\times10^{-15}$ and costs about $1{,}270$ times as much ($17.5$\,s against
 $14$\,ms; the committed \texttt{bench.py bm}). The ratio is of two programs, a NumPy loop against a compiled kernel, so it
 overstates the saving from sharing alone, which is the factor of $n$ in
 the operation count. What differs between the arms is not the
@@ -2119,7 +2150,7 @@ down to $2\times10^{-12}$ (\texttt{selfconv.py}). GHK error
 contracts as $O(R^{-1/2})$. Its measured complete-vector cost grows
 superquadratically from $n=200$ to $1000$ at $R=10^3$, where the log-log
 slope is $2.9$; from $n=10$ to $200$ at $R=10^4$ the slope is $1.9$
-(\texttt{bench.py law}). The lattice is deterministic under Gauss--Hermite nodes and
+(\texttt{bench.py law} and \texttt{bench.py ghk}). The lattice is deterministic under Gauss--Hermite nodes and
 seeded-reproducible under scrambled Sobol, supplies smooth matrix-free
 derivatives free of simulation noise, and prices the tails of the table
 above to the reference's noise floor, a log-error of $0.11$ to $0.15$ at
@@ -2398,7 +2429,7 @@ to a command come from code shipped at the tag: forward pricing,
 Jacobians and the diagonal inversion for the independent, factor, block,
 nested and tree grammars, and the dense-covariance fit.
 
-Five reported figures describe earlier code and cannot be produced by
+Five reported results describe earlier code and cannot be produced by
 the shipped package. They are the $5\times10^{-3}$ lost to a normal
 envelope for the lattice window (\S\ref{sec:lattice}); the lattice mass
 of $3\times10^{-28}$ when a favorite is removed on the winner's grid
@@ -2413,7 +2444,7 @@ rule (\S\ref{sec:factor}) and the absolute diagonal floor's example
 (\S\ref{sec:general}).
 
 Three items the text mentions are in
-progress and back no reported result other than their own description:
+progress:
 the Newton--Krylov solver (\S\ref{sec:jac}), quadrature escalation in
 the block, nested and tree kernels (\S\ref{sec:blocks}), and return of
 the merit function $W(\mu)$ from a field pass (\S\ref{sec:jac}).
@@ -2707,11 +2738,11 @@ in parentheses.
 $n$ & independent & factor & blocks & tree & nested \\
 \midrule
 $10{,}000$ & $1.0$ ($8$) & $8.2$ ($33$) & $5.2$ ($23$) & $4.6$ ($18$) & $43$ ($24$) \\
-$20{,}000$ & $2.2$ ($9$) & $19$ ($36$) & $10$ ($23$) & $11$ ($21$) & $84$ ($24$) \\
+$20{,}000$ & $2.2$ ($9$) & $19$ ($36$) & $11$ ($23$) & $11$ ($21$) & $84$ ($24$) \\
 $50{,}000$ & $6.1$ ($10$) & $42$ ($34$) & $29$ ($25$) & $28$ ($21$) & $234$ ($26$) \\
 $100{,}000$ & $12$ ($10$) & $91$ ($36$) & $60$ ($26$) & $54$ ($20$) & $500$ ($27$) \\
 $200{,}000$ & $27$ ($11$) & $225$ ($41$) & $131$ ($28$) & $100$ ($19$) & $1{,}015$ ($28$) \\
-$500{,}000$ & $67$ ($11$) & $526$ ($41$) & $324$ ($28$) & $245$ ($19$) & $2{,}522$ ($28$) \\
+$500{,}000$ & $67$ ($11$) & $527$ ($41$) & $324$ ($28$) & $245$ ($19$) & $2{,}522$ ($28$) \\
 $1{,}000{,}000$ & $134$ ($11$) & $1{,}141$ ($39$) & $715$ ($30$) & $542$ ($20$) & $5{,}733$ ($30$) \\
 $2{,}000{,}000$ & $294$ ($12$) & $2{,}883$ ($46$) & $1{,}746$ ($31$) & $1{,}091$ ($21$) & $15{,}440$ ($31$) \\
 \bottomrule

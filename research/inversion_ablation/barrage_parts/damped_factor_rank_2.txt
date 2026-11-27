@@ -1,0 +1,9 @@
+20 seeds per (class, n, scale, spread); round-trip and free targets
+class            n  runs  shipped: fail@60  fail@2000 | damped 0.7: fail@60  fail@2000  sweeps med/max
+factor rank 2    2   480               0          0 |                 0          0      20 / 22
+factor rank 2    3   480             253         17 |                 0          0      13 / 22
+factor rank 2    4   480             129          5 |                 0          0      14 / 33
+factor rank 2    5   480              70          3 |                 0          0      17 / 38
+factor rank 2    8   480              25          0 |                 0          0      20 / 52
+factor rank 2   12   480              16          1 |                 1          0      22 / 68
+factor rank 2   20   480               5          0 |                12          0      26 / 81

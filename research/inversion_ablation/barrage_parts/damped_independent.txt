@@ -1,0 +1,9 @@
+20 seeds per (class, n, scale, spread); round-trip and free targets
+class            n  runs  shipped: fail@60  fail@2000 | damped 0.7: fail@60  fail@2000  sweeps med/max
+independent      2   120               0          0 |                 0          0      20 / 22
+independent      3   120              58          4 |                 0          0      13 / 20
+independent      4   120              26          4 |                 0          0      13 / 22
+independent      5   120              21          3 |                 0          0      14 / 21
+independent      8   120              14          0 |                 0          0      16 / 21
+independent     12   120               8          0 |                 0          0      17 / 25
+independent     20   120               1          0 |                 0          0      18 / 28

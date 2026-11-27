@@ -1,0 +1,585 @@
+20 seeds per (class, n, scale, spread); spreads (0.5, 1.0, 2.0); default solver settings
+class            n scale  round trip: conv  sweeps med/max  worst resid  worst |mu err|  min p   | free: conv  sweeps med/max  worst resid   seconds
+factor rank 1    2  0.25   60/60    20 / 22   9.6e-09  8.9e-09  8.9e-05 |  60/60    20 / 22   1.0e-08  5
+factor rank 1    2   0.5   60/60    20 / 22   1.0e-08  8.0e-09  1.6e-05 |  60/60    20 / 22   1.0e-08  5
+factor rank 1    2     1   60/60    20 / 22   1.0e-08  1.5e-08  2.1e-05 |  60/60    20 / 22   1.0e-08  5
+factor rank 1    2     2   60/60    20 / 22   9.7e-09  2.5e-08  1.2e-03 |  60/60    20 / 22   9.8e-09  6
+factor rank 1    3  0.25   36/60    51 / 60   1.3e+00  1.0e+00  5.0e-11 |  24/60    60 / 60   1.7e+00  22
+factor rank 1    3   0.5   25/60    60 / 60   1.8e+00  1.2e+00  2.0e-08 |  24/60    60 / 60   4.6e-02  19
+factor rank 1    3     1   36/60    53 / 60   2.9e+00  1.1e+00  1.4e-10 |  20/60    60 / 60   1.4e+00  16
+factor rank 1    3     2   23/60    60 / 60   3.3e+00  1.2e+00  2.7e-11 |  19/60    60 / 60   1.4e+00  21
+factor rank 1    4  0.25   39/60    31 / 60   1.6e+00  1.3e+00  6.7e-14 |  49/60    35 / 60   1.3e-03  19
+factor rank 1    4   0.5   43/60    35 / 60   2.4e+00  1.1e+00  1.1e-08 |  45/60    44 / 60   6.9e-02  19
+factor rank 1    4     1   45/60    46 / 60   3.6e+00  1.3e+00  1.0e-09 |  46/60    40 / 60   2.0e-05  27
+factor rank 1    4     2   41/60    42 / 60   7.8e-01  5.9e-01  6.8e-07 |  37/60    54 / 60   6.0e-02  40
+factor rank 1    5  0.25   48/60    29 / 60   3.8e-01  1.1e-01  2.1e-15 |  60/60    26 / 54   1.0e-08  30
+factor rank 1    5   0.5   45/60    29 / 60   1.7e+00  1.2e+00  2.7e-11 |  59/60    27 / 60   1.2e-08  27
+factor rank 1    5     1   44/60    39 / 60   2.2e+00  1.3e+00  1.1e-06 |  56/60    31 / 60   5.5e-06  37
+factor rank 1    5     2   49/60    38 / 60   9.6e-02  7.4e-02  1.6e-12 |  43/60    40 / 60   6.6e-05  27
+factor rank 1    8  0.25   55/60    21 / 60   3.3e-03  9.8e-04  8.5e-11 |  60/60    18 / 29   9.8e-09  10
+factor rank 1    8   0.5   48/60    23 / 60   3.1e-03  1.5e-03  1.4e-13 |  60/60    18 / 32   1.0e-08  9
+factor rank 1    8     1   55/60    27 / 60   7.8e-01  2.7e-01  1.2e-08 |  60/60    21 / 41   9.9e-09  14
+factor rank 1    8     2   52/60    32 / 60   7.1e-02  2.5e-02  1.9e-10 |  60/60    27 / 51   1.0e-08  26
+factor rank 1   12  0.25   49/60    17 / 60   3.8e-02  1.5e-02  5.3e-25 |  60/60    14 / 23   9.7e-09  11
+factor rank 1   12   0.5   53/60    17 / 60   1.4e-02  5.6e-03  3.8e-17 |  60/60    15 / 25   1.0e-08  15
+factor rank 1   12     1   56/60    22 / 60   3.6e-04  1.2e-04  3.8e-16 |  60/60    18 / 28   1.0e-08  22
+factor rank 1   12     2   54/60    31 / 60   2.6e-02  6.9e-03  6.5e-22 |  60/60    29 / 43   1.0e-08  42
+factor rank 1   20  0.25   56/60    14 / 60   3.3e-04  1.7e-04  4.9e-25 |  60/60    11 / 14   9.9e-09  14
+factor rank 1   20   0.5   58/60    16 / 60   2.1e-03  4.7e-04  1.9e-23 |  60/60    13 / 19   9.5e-09  15
+factor rank 1   20     1   59/60    21 / 60   5.8e-07  1.2e-07  1.5e-25 |  60/60    21 / 30   1.0e-08  24
+factor rank 1   20     2   58/60    36 / 60   3.9e-06  6.4e-07  5.1e-31 |  60/60    36 / 53   1.0e-08  45
+
+not converged or raised: 551
+  free       class='factor rank 1' n=3 scale=0.25 spread=0.5 replicate=0: resid 1.4e-07 after 60 sweeps, min target 8.4e-02
+  free       class='factor rank 1' n=3 scale=0.25 spread=0.5 replicate=3: resid 6.5e-06 after 60 sweeps, min target 8.3e-02
+  free       class='factor rank 1' n=3 scale=0.25 spread=0.5 replicate=4: resid 4.9e-03 after 60 sweeps, min target 1.9e-02
+  free       class='factor rank 1' n=3 scale=0.25 spread=0.5 replicate=5: resid 1.8e-08 after 60 sweeps, min target 1.2e-01
+  free       class='factor rank 1' n=3 scale=0.25 spread=0.5 replicate=7: resid 1.6e-07 after 60 sweeps, min target 3.4e-03
+  free       class='factor rank 1' n=3 scale=0.25 spread=0.5 replicate=8: resid 3.8e-07 after 60 sweeps, min target 1.1e-01
+  round trip class='factor rank 1' n=3 scale=0.25 spread=0.5 replicate=10: resid 2.5e-04 after 60 sweeps, min p 3.0e-02
+  free       class='factor rank 1' n=3 scale=0.25 spread=0.5 replicate=11: resid 6.1e-08 after 60 sweeps, min target 1.6e-01
+  free       class='factor rank 1' n=3 scale=0.25 spread=0.5 replicate=12: resid 2.3e-05 after 60 sweeps, min target 4.5e-02
+  free       class='factor rank 1' n=3 scale=0.25 spread=0.5 replicate=14: resid 8.5e-03 after 60 sweeps, min target 1.7e-02
+  round trip class='factor rank 1' n=3 scale=0.25 spread=0.5 replicate=15: resid 8.6e-08 after 60 sweeps, min p 7.7e-02
+  free       class='factor rank 1' n=3 scale=0.25 spread=0.5 replicate=15: resid 1.1e-07 after 60 sweeps, min target 7.4e-02
+  round trip class='factor rank 1' n=3 scale=0.25 spread=1.0 replicate=0: resid 1.4e-07 after 60 sweeps, min p 1.0e-01
+  free       class='factor rank 1' n=3 scale=0.25 spread=1.0 replicate=0: resid 1.7e-06 after 60 sweeps, min target 6.9e-02
+  free       class='factor rank 1' n=3 scale=0.25 spread=1.0 replicate=1: resid 2.0e-08 after 60 sweeps, min target 1.4e-01
+  free       class='factor rank 1' n=3 scale=0.25 spread=1.0 replicate=2: resid 6.6e-07 after 60 sweeps, min target 1.3e-01
+  free       class='factor rank 1' n=3 scale=0.25 spread=1.0 replicate=4: resid 1.7e+00 after 60 sweeps, min target 1.5e-03
+  free       class='factor rank 1' n=3 scale=0.25 spread=1.0 replicate=5: resid 8.2e-07 after 60 sweeps, min target 7.9e-02
+  free       class='factor rank 1' n=3 scale=0.25 spread=1.0 replicate=6: resid 5.9e-04 after 60 sweeps, min target 3.3e-02
+  round trip class='factor rank 1' n=3 scale=0.25 spread=1.0 replicate=7: resid 1.1e-02 after 60 sweeps, min p 1.1e-02
+  free       class='factor rank 1' n=3 scale=0.25 spread=1.0 replicate=7: resid 1.3e-08 after 60 sweeps, min target 1.4e-01
+  free       class='factor rank 1' n=3 scale=0.25 spread=1.0 replicate=8: resid 2.2e-07 after 60 sweeps, min target 1.2e-01
+  round trip class='factor rank 1' n=3 scale=0.25 spread=1.0 replicate=10: resid 6.2e-03 after 60 sweeps, min p 1.6e-02
+  round trip class='factor rank 1' n=3 scale=0.25 spread=1.0 replicate=11: resid 2.4e-06 after 60 sweeps, min p 8.8e-02
+  round trip class='factor rank 1' n=3 scale=0.25 spread=1.0 replicate=12: resid 4.8e-04 after 60 sweeps, min p 4.1e-02
+  free       class='factor rank 1' n=3 scale=0.25 spread=1.0 replicate=12: resid 4.0e-06 after 60 sweeps, min target 5.5e-02
+  free       class='factor rank 1' n=3 scale=0.25 spread=1.0 replicate=13: resid 9.0e-03 after 60 sweeps, min target 1.8e-02
+  free       class='factor rank 1' n=3 scale=0.25 spread=1.0 replicate=14: resid 1.3e-07 after 60 sweeps, min target 6.9e-02
+  round trip class='factor rank 1' n=3 scale=0.25 spread=1.0 replicate=15: resid 5.5e-04 after 60 sweeps, min p 5.8e-02
+  free       class='factor rank 1' n=3 scale=0.25 spread=1.0 replicate=15: resid 2.0e-03 after 60 sweeps, min target 2.7e-02
+  free       class='factor rank 1' n=3 scale=0.25 spread=1.0 replicate=16: resid 3.7e-06 after 60 sweeps, min target 4.6e-02
+  round trip class='factor rank 1' n=3 scale=0.25 spread=1.0 replicate=17: resid 7.3e-05 after 60 sweeps, min p 3.6e-02
+  free       class='factor rank 1' n=3 scale=0.25 spread=1.0 replicate=17: resid 7.7e-06 after 60 sweeps, min target 1.0e-01
+  round trip class='factor rank 1' n=3 scale=0.25 spread=1.0 replicate=18: resid 2.8e-06 after 60 sweeps, min p 9.5e-02
+  free       class='factor rank 1' n=3 scale=0.25 spread=1.0 replicate=18: resid 1.7e-05 after 60 sweeps, min target 4.4e-02
+  round trip class='factor rank 1' n=3 scale=0.25 spread=1.0 replicate=19: resid 1.2e-07 after 60 sweeps, min p 7.7e-02
+  free       class='factor rank 1' n=3 scale=0.25 spread=1.0 replicate=19: resid 4.1e-07 after 60 sweeps, min target 9.6e-02
+  round trip class='factor rank 1' n=3 scale=0.25 spread=2.0 replicate=0: resid 2.2e-04 after 60 sweeps, min p 1.0e-06
+  round trip class='factor rank 1' n=3 scale=0.25 spread=2.0 replicate=1: resid 1.8e-08 after 60 sweeps, min p 1.3e-01
+  free       class='factor rank 1' n=3 scale=0.25 spread=2.0 replicate=1: resid 6.6e-06 after 60 sweeps, min target 6.6e-02
+  round trip class='factor rank 1' n=3 scale=0.25 spread=2.0 replicate=4: resid 1.1e-04 after 60 sweeps, min p 4.6e-02
+  free       class='factor rank 1' n=3 scale=0.25 spread=2.0 replicate=4: resid 1.7e-07 after 60 sweeps, min target 1.3e-01
+  free       class='factor rank 1' n=3 scale=0.25 spread=2.0 replicate=5: resid 8.4e-08 after 60 sweeps, min target 6.8e-02
+  round trip class='factor rank 1' n=3 scale=0.25 spread=2.0 replicate=6: resid 2.1e-07 after 60 sweeps, min p 1.2e-01
+  free       class='factor rank 1' n=3 scale=0.25 spread=2.0 replicate=6: resid 1.8e-04 after 60 sweeps, min target 1.5e-02
+  round trip class='factor rank 1' n=3 scale=0.25 spread=2.0 replicate=7: resid 1.3e+00 after 60 sweeps, min p 5.9e-05
+  free       class='factor rank 1' n=3 scale=0.25 spread=2.0 replicate=7: resid 9.2e-03 after 60 sweeps, min target 8.1e-03
+  round trip class='factor rank 1' n=3 scale=0.25 spread=2.0 replicate=8: resid 3.3e-03 after 60 sweeps, min p 1.2e-02
+  round trip class='factor rank 1' n=3 scale=0.25 spread=2.0 replicate=9: resid 1.1e-06 after 60 sweeps, min p 9.4e-02
+  round trip class='factor rank 1' n=3 scale=0.25 spread=2.0 replicate=10: resid 1.3e+00 after 60 sweeps, min p 6.9e-05
+  free       class='factor rank 1' n=3 scale=0.25 spread=2.0 replicate=10: resid 3.1e-08 after 60 sweeps, min target 1.0e-01
+  round trip class='factor rank 1' n=3 scale=0.25 spread=2.0 replicate=12: resid 2.5e-01 after 60 sweeps, min p 3.3e-04
+  round trip class='factor rank 1' n=3 scale=0.25 spread=2.0 replicate=14: resid 1.2e-01 after 60 sweeps, min p 6.3e-04
+  free       class='factor rank 1' n=3 scale=0.25 spread=2.0 replicate=14: resid 5.9e-07 after 60 sweeps, min target 1.6e-03
+  round trip class='factor rank 1' n=3 scale=0.25 spread=2.0 replicate=15: resid 1.5e-02 after 60 sweeps, min p 1.1e-02
+  free       class='factor rank 1' n=3 scale=0.25 spread=2.0 replicate=15: resid 5.3e-07 after 60 sweeps, min target 1.2e-01
+  round trip class='factor rank 1' n=3 scale=0.25 spread=2.0 replicate=16: resid 2.2e-01 after 60 sweeps, min p 9.7e-04
+  round trip class='factor rank 1' n=3 scale=0.25 spread=2.0 replicate=17: resid 2.2e-06 after 60 sweeps, min p 7.3e-02
+  free       class='factor rank 1' n=3 scale=0.25 spread=2.0 replicate=18: resid 1.7e-07 after 60 sweeps, min target 1.1e-01
+  free       class='factor rank 1' n=3 scale=0.25 spread=2.0 replicate=19: resid 1.2e-04 after 60 sweeps, min target 5.1e-02
+  free       class='factor rank 1' n=3 scale=0.5 spread=0.5 replicate=0: resid 4.6e-02 after 60 sweeps, min target 1.4e-03
+  free       class='factor rank 1' n=3 scale=0.5 spread=0.5 replicate=2: resid 2.4e-05 after 60 sweeps, min target 6.2e-02
+  round trip class='factor rank 1' n=3 scale=0.5 spread=0.5 replicate=3: resid 5.4e-04 after 60 sweeps, min p 4.1e-02
+  free       class='factor rank 1' n=3 scale=0.5 spread=0.5 replicate=4: resid 5.6e-07 after 60 sweeps, min target 8.0e-02
+  free       class='factor rank 1' n=3 scale=0.5 spread=0.5 replicate=5: resid 1.2e-06 after 60 sweeps, min target 1.3e-01
+  round trip class='factor rank 1' n=3 scale=0.5 spread=0.5 replicate=7: resid 4.7e-06 after 60 sweeps, min p 8.3e-02
+  free       class='factor rank 1' n=3 scale=0.5 spread=0.5 replicate=10: resid 3.7e-02 after 60 sweeps, min target 4.4e-02
+  free       class='factor rank 1' n=3 scale=0.5 spread=0.5 replicate=11: resid 1.3e-03 after 60 sweeps, min target 5.9e-02
+  free       class='factor rank 1' n=3 scale=0.5 spread=0.5 replicate=13: resid 1.6e-08 after 60 sweeps, min target 1.0e-01
+  round trip class='factor rank 1' n=3 scale=0.5 spread=0.5 replicate=14: resid 2.2e-08 after 60 sweeps, min p 1.4e-01
+  free       class='factor rank 1' n=3 scale=0.5 spread=0.5 replicate=14: resid 7.5e-07 after 60 sweeps, min target 5.3e-02
+  round trip class='factor rank 1' n=3 scale=0.5 spread=0.5 replicate=15: resid 8.1e-06 after 60 sweeps, min p 6.0e-02
+  round trip class='factor rank 1' n=3 scale=0.5 spread=0.5 replicate=16: resid 2.5e-03 after 60 sweeps, min p 2.7e-02
+  free       class='factor rank 1' n=3 scale=0.5 spread=0.5 replicate=16: resid 1.6e-03 after 60 sweeps, min target 3.6e-02
+  free       class='factor rank 1' n=3 scale=0.5 spread=0.5 replicate=18: resid 1.6e-07 after 60 sweeps, min target 9.0e-02
+  round trip class='factor rank 1' n=3 scale=0.5 spread=0.5 replicate=19: resid 6.0e-08 after 60 sweeps, min p 1.1e-01
+  round trip class='factor rank 1' n=3 scale=0.5 spread=1.0 replicate=0: resid 2.3e-07 after 60 sweeps, min p 6.5e-02
+  free       class='factor rank 1' n=3 scale=0.5 spread=1.0 replicate=0: resid 1.2e-05 after 60 sweeps, min target 1.3e-01
+  round trip class='factor rank 1' n=3 scale=0.5 spread=1.0 replicate=1: resid 7.4e-07 after 60 sweeps, min p 7.1e-02
+  free       class='factor rank 1' n=3 scale=0.5 spread=1.0 replicate=1: resid 4.1e-06 after 60 sweeps, min target 7.4e-02
+  round trip class='factor rank 1' n=3 scale=0.5 spread=1.0 replicate=2: resid 5.2e-08 after 60 sweeps, min p 6.2e-02
+  round trip class='factor rank 1' n=3 scale=0.5 spread=1.0 replicate=3: resid 3.0e-02 after 60 sweeps, min p 1.6e-02
+  free       class='factor rank 1' n=3 scale=0.5 spread=1.0 replicate=3: resid 1.4e-06 after 60 sweeps, min target 1.3e-01
+  round trip class='factor rank 1' n=3 scale=0.5 spread=1.0 replicate=4: resid 7.3e-04 after 60 sweeps, min p 2.4e-02
+  round trip class='factor rank 1' n=3 scale=0.5 spread=1.0 replicate=6: resid 2.4e-05 after 60 sweeps, min p 2.8e-02
+  free       class='factor rank 1' n=3 scale=0.5 spread=1.0 replicate=6: resid 3.8e-05 after 60 sweeps, min target 2.1e-02
+  round trip class='factor rank 1' n=3 scale=0.5 spread=1.0 replicate=7: resid 1.8e-04 after 60 sweeps, min p 3.4e-02
+  free       class='factor rank 1' n=3 scale=0.5 spread=1.0 replicate=7: resid 1.1e-03 after 60 sweeps, min target 2.5e-02
+  round trip class='factor rank 1' n=3 scale=0.5 spread=1.0 replicate=8: resid 3.7e-04 after 60 sweeps, min p 6.2e-03
+  free       class='factor rank 1' n=3 scale=0.5 spread=1.0 replicate=8: resid 2.2e-08 after 60 sweeps, min target 1.2e-01
+  round trip class='factor rank 1' n=3 scale=0.5 spread=1.0 replicate=9: resid 8.8e-08 after 60 sweeps, min p 3.5e-02
+  free       class='factor rank 1' n=3 scale=0.5 spread=1.0 replicate=9: resid 5.8e-04 after 60 sweeps, min target 1.8e-01
+  round trip class='factor rank 1' n=3 scale=0.5 spread=1.0 replicate=11: resid 7.3e-04 after 60 sweeps, min p 5.9e-03
+  free       class='factor rank 1' n=3 scale=0.5 spread=1.0 replicate=11: resid 2.6e-03 after 60 sweeps, min target 3.8e-03
+  round trip class='factor rank 1' n=3 scale=0.5 spread=1.0 replicate=12: resid 1.9e-06 after 60 sweeps, min p 5.8e-02
+  free       class='factor rank 1' n=3 scale=0.5 spread=1.0 replicate=13: resid 4.5e-03 after 60 sweeps, min target 2.3e-03
+  free       class='factor rank 1' n=3 scale=0.5 spread=1.0 replicate=14: resid 2.5e-03 after 60 sweeps, min target 6.5e-02
+  round trip class='factor rank 1' n=3 scale=0.5 spread=1.0 replicate=15: resid 2.1e-03 after 60 sweeps, min p 2.6e-02
+  free       class='factor rank 1' n=3 scale=0.5 spread=1.0 replicate=15: resid 1.5e-07 after 60 sweeps, min target 6.0e-02
+  round trip class='factor rank 1' n=3 scale=0.5 spread=1.0 replicate=16: resid 6.9e-08 after 60 sweeps, min p 1.1e-01
+  round trip class='factor rank 1' n=3 scale=0.5 spread=1.0 replicate=17: resid 5.8e-01 after 60 sweeps, min p 3.8e-03
+  free       class='factor rank 1' n=3 scale=0.5 spread=1.0 replicate=19: resid 5.9e-05 after 60 sweeps, min target 3.7e-02
+  round trip class='factor rank 1' n=3 scale=0.5 spread=2.0 replicate=0: resid 1.8e+00 after 60 sweeps, min p 4.5e-04
+  free       class='factor rank 1' n=3 scale=0.5 spread=2.0 replicate=0: resid 1.8e-02 after 60 sweeps, min target 1.2e-02
+  round trip class='factor rank 1' n=3 scale=0.5 spread=2.0 replicate=1: resid 1.4e+00 after 60 sweeps, min p 2.0e-08
+  free       class='factor rank 1' n=3 scale=0.5 spread=2.0 replicate=1: resid 1.4e-04 after 60 sweeps, min target 5.0e-02
+  round trip class='factor rank 1' n=3 scale=0.5 spread=2.0 replicate=2: resid 1.3e-03 after 60 sweeps, min p 3.6e-02
+  round trip class='factor rank 1' n=3 scale=0.5 spread=2.0 replicate=3: resid 2.2e-06 after 60 sweeps, min p 5.5e-02
+  free       class='factor rank 1' n=3 scale=0.5 spread=2.0 replicate=3: resid 2.8e-05 after 60 sweeps, min target 5.1e-02
+  free       class='factor rank 1' n=3 scale=0.5 spread=2.0 replicate=4: resid 5.7e-04 after 60 sweeps, min target 3.0e-02
+  free       class='factor rank 1' n=3 scale=0.5 spread=2.0 replicate=5: resid 1.6e-05 after 60 sweeps, min target 6.2e-02
+  round trip class='factor rank 1' n=3 scale=0.5 spread=2.0 replicate=6: resid 2.9e-01 after 60 sweeps, min p 2.7e-03
+  free       class='factor rank 1' n=3 scale=0.5 spread=2.0 replicate=6: resid 1.0e-05 after 60 sweeps, min target 1.2e-01
+  round trip class='factor rank 1' n=3 scale=0.5 spread=2.0 replicate=7: resid 2.5e-07 after 60 sweeps, min p 9.3e-02
+  round trip class='factor rank 1' n=3 scale=0.5 spread=2.0 replicate=8: resid 1.3e+00 after 60 sweeps, min p 1.0e-03
+  round trip class='factor rank 1' n=3 scale=0.5 spread=2.0 replicate=9: resid 2.4e-07 after 60 sweeps, min p 8.0e-03
+  free       class='factor rank 1' n=3 scale=0.5 spread=2.0 replicate=9: resid 1.6e-06 after 60 sweeps, min target 7.4e-02
+  round trip class='factor rank 1' n=3 scale=0.5 spread=2.0 replicate=10: resid 1.2e-02 after 60 sweeps, min p 3.3e-05
+  free       class='factor rank 1' n=3 scale=0.5 spread=2.0 replicate=10: resid 7.1e-03 after 60 sweeps, min target 1.7e-02
+  round trip class='factor rank 1' n=3 scale=0.5 spread=2.0 replicate=11: resid 5.3e-07 after 60 sweeps, min p 6.7e-02
+  free       class='factor rank 1' n=3 scale=0.5 spread=2.0 replicate=11: resid 3.5e-05 after 60 sweeps, min target 1.0e-01
+  free       class='factor rank 1' n=3 scale=0.5 spread=2.0 replicate=12: resid 9.2e-08 after 60 sweeps, min target 1.3e-01
+  round trip class='factor rank 1' n=3 scale=0.5 spread=2.0 replicate=14: resid 1.5e+00 after 60 sweeps, min p 1.7e-03
+  free       class='factor rank 1' n=3 scale=0.5 spread=2.0 replicate=14: resid 2.8e-02 after 60 sweeps, min target 1.3e-02
+  round trip class='factor rank 1' n=3 scale=0.5 spread=2.0 replicate=15: resid 7.8e-03 after 60 sweeps, min p 1.4e-02
+  free       class='factor rank 1' n=3 scale=0.5 spread=2.0 replicate=15: resid 2.4e-02 after 60 sweeps, min target 3.3e-03
+  round trip class='factor rank 1' n=3 scale=0.5 spread=2.0 replicate=16: resid 2.3e-04 after 60 sweeps, min p 3.5e-02
+  round trip class='factor rank 1' n=3 scale=0.5 spread=2.0 replicate=18: resid 1.0e-01 after 60 sweeps, min p 2.7e-03
+  free       class='factor rank 1' n=3 scale=0.5 spread=2.0 replicate=18: resid 2.7e-02 after 60 sweeps, min target 7.6e-03
+  round trip class='factor rank 1' n=3 scale=0.5 spread=2.0 replicate=19: resid 2.3e-01 after 60 sweeps, min p 3.0e-05
+  free       class='factor rank 1' n=3 scale=0.5 spread=2.0 replicate=19: resid 1.6e-04 after 60 sweeps, min target 4.6e-02
+  free       class='factor rank 1' n=3 scale=1.0 spread=0.5 replicate=0: resid 2.8e-07 after 60 sweeps, min target 6.9e-02
+  free       class='factor rank 1' n=3 scale=1.0 spread=0.5 replicate=1: resid 1.3e-02 after 60 sweeps, min target 2.0e-02
+  free       class='factor rank 1' n=3 scale=1.0 spread=0.5 replicate=2: resid 1.5e-07 after 60 sweeps, min target 1.1e-01
+  free       class='factor rank 1' n=3 scale=1.0 spread=0.5 replicate=3: resid 1.1e-05 after 60 sweeps, min target 5.7e-02
+  free       class='factor rank 1' n=3 scale=1.0 spread=0.5 replicate=4: resid 1.6e-06 after 60 sweeps, min target 7.6e-02
+  free       class='factor rank 1' n=3 scale=1.0 spread=0.5 replicate=5: resid 1.4e-06 after 60 sweeps, min target 1.6e-01
+  free       class='factor rank 1' n=3 scale=1.0 spread=0.5 replicate=6: resid 4.4e-02 after 60 sweeps, min target 6.2e-02
+  free       class='factor rank 1' n=3 scale=1.0 spread=0.5 replicate=7: resid 2.3e-02 after 60 sweeps, min target 3.8e-02
+  free       class='factor rank 1' n=3 scale=1.0 spread=0.5 replicate=8: resid 1.3e-04 after 60 sweeps, min target 3.7e-02
+  round trip class='factor rank 1' n=3 scale=1.0 spread=0.5 replicate=9: resid 5.1e-05 after 60 sweeps, min p 2.6e-02
+  free       class='factor rank 1' n=3 scale=1.0 spread=0.5 replicate=9: resid 6.1e-03 after 60 sweeps, min target 1.2e-02
+  round trip class='factor rank 1' n=3 scale=1.0 spread=0.5 replicate=10: resid 1.4e-07 after 60 sweeps, min p 1.2e-01
+  free       class='factor rank 1' n=3 scale=1.0 spread=0.5 replicate=12: resid 1.6e-02 after 60 sweeps, min target 5.7e-02
+  free       class='factor rank 1' n=3 scale=1.0 spread=0.5 replicate=13: resid 5.6e-04 after 60 sweeps, min target 1.1e-02
+  round trip class='factor rank 1' n=3 scale=1.0 spread=0.5 replicate=14: resid 2.8e-06 after 60 sweeps, min p 1.3e-01
+  free       class='factor rank 1' n=3 scale=1.0 spread=0.5 replicate=14: resid 8.0e-02 after 60 sweeps, min target 1.0e-02
+  free       class='factor rank 1' n=3 scale=1.0 spread=0.5 replicate=15: resid 4.4e-07 after 60 sweeps, min target 2.1e-01
+  free       class='factor rank 1' n=3 scale=1.0 spread=0.5 replicate=16: resid 3.4e-08 after 60 sweeps, min target 6.8e-02
+  round trip class='factor rank 1' n=3 scale=1.0 spread=0.5 replicate=19: resid 3.4e-07 after 60 sweeps, min p 1.5e-01
+  round trip class='factor rank 1' n=3 scale=1.0 spread=1.0 replicate=0: resid 5.2e-04 after 60 sweeps, min p 1.1e-01
+  round trip class='factor rank 1' n=3 scale=1.0 spread=1.0 replicate=1: resid 4.0e-05 after 60 sweeps, min p 2.6e-01
+  free       class='factor rank 1' n=3 scale=1.0 spread=1.0 replicate=1: resid 2.0e-07 after 60 sweeps, min target 2.5e-01
+  round trip class='factor rank 1' n=3 scale=1.0 spread=1.0 replicate=3: resid 5.7e-08 after 60 sweeps, min p 8.3e-02
+  round trip class='factor rank 1' n=3 scale=1.0 spread=1.0 replicate=6: resid 2.9e-06 after 60 sweeps, min p 2.3e-01
+  round trip class='factor rank 1' n=3 scale=1.0 spread=1.0 replicate=7: resid 1.7e-07 after 60 sweeps, min p 1.6e-01
+  free       class='factor rank 1' n=3 scale=1.0 spread=1.0 replicate=7: resid 4.8e-02 after 60 sweeps, min target 1.0e-02
+  free       class='factor rank 1' n=3 scale=1.0 spread=1.0 replicate=8: resid 6.1e-06 after 60 sweeps, min target 2.4e-01
+  free       class='factor rank 1' n=3 scale=1.0 spread=1.0 replicate=9: resid 1.9e-06 after 60 sweeps, min target 1.8e-01
+  round trip class='factor rank 1' n=3 scale=1.0 spread=1.0 replicate=10: resid 3.2e-08 after 60 sweeps, min p 1.7e-01
+  free       class='factor rank 1' n=3 scale=1.0 spread=1.0 replicate=10: resid 7.1e-04 after 60 sweeps, min target 7.0e-02
+  round trip class='factor rank 1' n=3 scale=1.0 spread=1.0 replicate=11: resid 2.0e-07 after 60 sweeps, min p 6.4e-02
+  round trip class='factor rank 1' n=3 scale=1.0 spread=1.0 replicate=12: resid 1.2e-07 after 60 sweeps, min p 3.1e-01
+  free       class='factor rank 1' n=3 scale=1.0 spread=1.0 replicate=12: resid 8.6e-04 after 60 sweeps, min target 9.8e-02
+  free       class='factor rank 1' n=3 scale=1.0 spread=1.0 replicate=13: resid 3.2e-02 after 60 sweeps, min target 4.1e-03
+  round trip class='factor rank 1' n=3 scale=1.0 spread=1.0 replicate=14: resid 5.5e-08 after 60 sweeps, min p 1.4e-01
+  free       class='factor rank 1' n=3 scale=1.0 spread=1.0 replicate=14: resid 1.3e-04 after 60 sweeps, min target 9.4e-02
+  round trip class='factor rank 1' n=3 scale=1.0 spread=1.0 replicate=16: resid 3.1e-04 after 60 sweeps, min p 2.9e-02
+  free       class='factor rank 1' n=3 scale=1.0 spread=1.0 replicate=16: resid 3.1e-06 after 60 sweeps, min target 5.6e-02
+  round trip class='factor rank 1' n=3 scale=1.0 spread=1.0 replicate=17: resid 3.0e-07 after 60 sweeps, min p 7.9e-02
+  free       class='factor rank 1' n=3 scale=1.0 spread=1.0 replicate=17: resid 1.3e-06 after 60 sweeps, min target 4.6e-02
+  free       class='factor rank 1' n=3 scale=1.0 spread=1.0 replicate=18: resid 2.4e-06 after 60 sweeps, min target 8.1e-02
+  free       class='factor rank 1' n=3 scale=1.0 spread=1.0 replicate=19: resid 2.0e-08 after 60 sweeps, min target 1.5e-02
+  free       class='factor rank 1' n=3 scale=1.0 spread=2.0 replicate=0: resid 2.2e-08 after 60 sweeps, min target 1.1e-01
+  round trip class='factor rank 1' n=3 scale=1.0 spread=2.0 replicate=3: resid 1.4e+00 after 60 sweeps, min p 3.0e-03
+  free       class='factor rank 1' n=3 scale=1.0 spread=2.0 replicate=3: resid 7.5e-06 after 60 sweeps, min target 7.1e-02
+  round trip class='factor rank 1' n=3 scale=1.0 spread=2.0 replicate=4: resid 9.6e-03 after 60 sweeps, min p 9.5e-03
+  free       class='factor rank 1' n=3 scale=1.0 spread=2.0 replicate=4: resid 1.4e+00 after 60 sweeps, min target 2.9e-03
+  free       class='factor rank 1' n=3 scale=1.0 spread=2.0 replicate=5: resid 2.9e-07 after 60 sweeps, min target 9.5e-02
+  round trip class='factor rank 1' n=3 scale=1.0 spread=2.0 replicate=6: resid 4.1e-04 after 60 sweeps, min p 1.9e-02
+  free       class='factor rank 1' n=3 scale=1.0 spread=2.0 replicate=6: resid 4.7e-02 after 60 sweeps, min target 6.3e-03
+  round trip class='factor rank 1' n=3 scale=1.0 spread=2.0 replicate=8: resid 2.8e-07 after 60 sweeps, min p 1.2e-01
+  free       class='factor rank 1' n=3 scale=1.0 spread=2.0 replicate=9: resid 2.1e-07 after 60 sweeps, min target 5.7e-02
+  free       class='factor rank 1' n=3 scale=1.0 spread=2.0 replicate=10: resid 3.2e-07 after 60 sweeps, min target 7.5e-02
+  round trip class='factor rank 1' n=3 scale=1.0 spread=2.0 replicate=11: resid 4.9e-04 after 60 sweeps, min p 2.8e-02
+  free       class='factor rank 1' n=3 scale=1.0 spread=2.0 replicate=11: resid 2.0e-04 after 60 sweeps, min target 6.7e-02
+  round trip class='factor rank 1' n=3 scale=1.0 spread=2.0 replicate=12: resid 2.9e+00 after 60 sweeps, min p 5.2e-04
+  round trip class='factor rank 1' n=3 scale=1.0 spread=2.0 replicate=13: resid 3.8e-08 after 60 sweeps, min p 1.6e-01
+  free       class='factor rank 1' n=3 scale=1.0 spread=2.0 replicate=13: resid 1.0e-08 after 60 sweeps, min target 7.0e-02
+  round trip class='factor rank 1' n=3 scale=1.0 spread=2.0 replicate=15: resid 1.3e+00 after 60 sweeps, min p 7.0e-04
+  free       class='factor rank 1' n=3 scale=1.0 spread=2.0 replicate=15: resid 9.1e-05 after 60 sweeps, min target 4.6e-02
+  free       class='factor rank 1' n=3 scale=1.0 spread=2.0 replicate=16: resid 6.5e-03 after 60 sweeps, min target 8.3e-02
+  round trip class='factor rank 1' n=3 scale=1.0 spread=2.0 replicate=17: resid 1.3e+00 after 60 sweeps, min p 1.1e-05
+  free       class='factor rank 1' n=3 scale=1.0 spread=2.0 replicate=17: resid 2.4e-08 after 60 sweeps, min target 2.3e-01
+  free       class='factor rank 1' n=3 scale=1.0 spread=2.0 replicate=18: resid 2.4e-04 after 60 sweeps, min target 2.5e-02
+  free       class='factor rank 1' n=3 scale=2.0 spread=0.5 replicate=0: resid 8.7e-07 after 60 sweeps, min target 1.7e-01
+  round trip class='factor rank 1' n=3 scale=2.0 spread=0.5 replicate=1: resid 7.6e-08 after 60 sweeps, min p 2.0e-01
+  free       class='factor rank 1' n=3 scale=2.0 spread=0.5 replicate=1: resid 8.7e-04 after 60 sweeps, min target 2.3e-01
+  round trip class='factor rank 1' n=3 scale=2.0 spread=0.5 replicate=4: resid 3.6e-07 after 60 sweeps, min p 1.8e-01
+  round trip class='factor rank 1' n=3 scale=2.0 spread=0.5 replicate=5: resid 8.7e-08 after 60 sweeps, min p 3.0e-02
+  free       class='factor rank 1' n=3 scale=2.0 spread=0.5 replicate=5: resid 1.5e-02 after 60 sweeps, min target 1.9e-02
+  free       class='factor rank 1' n=3 scale=2.0 spread=0.5 replicate=6: resid 2.9e-05 after 60 sweeps, min target 2.2e-02
+  round trip class='factor rank 1' n=3 scale=2.0 spread=0.5 replicate=8: resid 3.9e-07 after 60 sweeps, min p 2.8e-01
+  free       class='factor rank 1' n=3 scale=2.0 spread=0.5 replicate=8: resid 1.5e-01 after 60 sweeps, min target 1.6e-02
+  free       class='factor rank 1' n=3 scale=2.0 spread=0.5 replicate=9: resid 1.1e-05 after 60 sweeps, min target 1.4e-01
+  free       class='factor rank 1' n=3 scale=2.0 spread=0.5 replicate=10: resid 5.2e-01 after 60 sweeps, min target 8.8e-02
+  round trip class='factor rank 1' n=3 scale=2.0 spread=0.5 replicate=11: resid 3.5e-06 after 60 sweeps, min p 6.5e-02
+  round trip class='factor rank 1' n=3 scale=2.0 spread=0.5 replicate=14: resid 3.6e-07 after 60 sweeps, min p 2.3e-01
+  free       class='factor rank 1' n=3 scale=2.0 spread=0.5 replicate=14: resid 4.1e-04 after 60 sweeps, min target 1.9e-01
+  free       class='factor rank 1' n=3 scale=2.0 spread=0.5 replicate=16: resid 9.3e-08 after 60 sweeps, min target 2.1e-01
+  free       class='factor rank 1' n=3 scale=2.0 spread=0.5 replicate=17: resid 2.8e-07 after 60 sweeps, min target 9.1e-02
+  free       class='factor rank 1' n=3 scale=2.0 spread=0.5 replicate=18: resid 1.0e-01 after 60 sweeps, min target 3.1e-02
+  round trip class='factor rank 1' n=3 scale=2.0 spread=0.5 replicate=19: resid 6.4e-07 after 60 sweeps, min p 2.5e-01
+  free       class='factor rank 1' n=3 scale=2.0 spread=0.5 replicate=19: resid 2.3e-01 after 60 sweeps, min target 1.4e-01
+  round trip class='factor rank 1' n=3 scale=2.0 spread=1.0 replicate=0: resid 2.4e-05 after 60 sweeps, min p 1.3e-01
+  free       class='factor rank 1' n=3 scale=2.0 spread=1.0 replicate=0: resid 1.4e-06 after 60 sweeps, min target 3.2e-01
+  free       class='factor rank 1' n=3 scale=2.0 spread=1.0 replicate=1: resid 1.0e-04 after 60 sweeps, min target 3.0e-02
+  free       class='factor rank 1' n=3 scale=2.0 spread=1.0 replicate=2: resid 3.1e-06 after 60 sweeps, min target 9.0e-02
+  round trip class='factor rank 1' n=3 scale=2.0 spread=1.0 replicate=4: resid 1.4e-07 after 60 sweeps, min p 1.9e-01
+  free       class='factor rank 1' n=3 scale=2.0 spread=1.0 replicate=4: resid 5.7e-08 after 60 sweeps, min target 2.0e-01
+  round trip class='factor rank 1' n=3 scale=2.0 spread=1.0 replicate=5: resid 1.5e-05 after 60 sweeps, min p 1.0e-01
+  free       class='factor rank 1' n=3 scale=2.0 spread=1.0 replicate=5: resid 2.1e-07 after 60 sweeps, min target 2.9e-02
+  free       class='factor rank 1' n=3 scale=2.0 spread=1.0 replicate=6: resid 1.6e-05 after 60 sweeps, min target 3.9e-02
+  free       class='factor rank 1' n=3 scale=2.0 spread=1.0 replicate=8: resid 2.1e-04 after 60 sweeps, min target 7.4e-02
+  round trip class='factor rank 1' n=3 scale=2.0 spread=1.0 replicate=9: resid 1.1e-02 after 60 sweeps, min p 1.3e-02
+  round trip class='factor rank 1' n=3 scale=2.0 spread=1.0 replicate=10: resid 1.0e-05 after 60 sweeps, min p 1.4e-01
+  round trip class='factor rank 1' n=3 scale=2.0 spread=1.0 replicate=12: resid 1.2e-06 after 60 sweeps, min p 1.7e-01
+  round trip class='factor rank 1' n=3 scale=2.0 spread=1.0 replicate=13: resid 8.5e-07 after 60 sweeps, min p 2.1e-01
+  round trip class='factor rank 1' n=3 scale=2.0 spread=1.0 replicate=14: resid 1.2e-03 after 60 sweeps, min p 6.7e-02
+  round trip class='factor rank 1' n=3 scale=2.0 spread=1.0 replicate=15: resid 3.3e-02 after 60 sweeps, min p 2.4e-03
+  round trip class='factor rank 1' n=3 scale=2.0 spread=1.0 replicate=16: resid 5.9e-07 after 60 sweeps, min p 1.6e-01
+  free       class='factor rank 1' n=3 scale=2.0 spread=1.0 replicate=16: resid 2.4e-01 after 60 sweeps, min target 4.1e-02
+  free       class='factor rank 1' n=3 scale=2.0 spread=1.0 replicate=17: resid 1.2e-07 after 60 sweeps, min target 8.1e-03
+  round trip class='factor rank 1' n=3 scale=2.0 spread=1.0 replicate=18: resid 1.1e-05 after 60 sweeps, min p 2.7e-01
+  free       class='factor rank 1' n=3 scale=2.0 spread=1.0 replicate=18: resid 9.4e-01 after 60 sweeps, min target 1.6e-01
+  round trip class='factor rank 1' n=3 scale=2.0 spread=1.0 replicate=19: resid 9.5e-07 after 60 sweeps, min p 3.4e-02
+  free       class='factor rank 1' n=3 scale=2.0 spread=1.0 replicate=19: resid 3.1e-04 after 60 sweeps, min target 1.5e-01
+  round trip class='factor rank 1' n=3 scale=2.0 spread=2.0 replicate=0: resid 8.1e-04 after 60 sweeps, min p 6.9e-02
+  free       class='factor rank 1' n=3 scale=2.0 spread=2.0 replicate=0: resid 1.3e+00 after 60 sweeps, min target 1.4e-02
+  round trip class='factor rank 1' n=3 scale=2.0 spread=2.0 replicate=1: resid 3.3e+00 after 60 sweeps, min p 6.8e-05
+  free       class='factor rank 1' n=3 scale=2.0 spread=2.0 replicate=1: resid 7.4e-08 after 60 sweeps, min target 2.4e-01
+  free       class='factor rank 1' n=3 scale=2.0 spread=2.0 replicate=2: resid 1.6e-02 after 60 sweeps, min target 2.1e-02
+  free       class='factor rank 1' n=3 scale=2.0 spread=2.0 replicate=3: resid 4.0e-07 after 60 sweeps, min target 6.0e-02
+  round trip class='factor rank 1' n=3 scale=2.0 spread=2.0 replicate=4: resid 7.3e-01 after 60 sweeps, min p 1.3e-02
+  free       class='factor rank 1' n=3 scale=2.0 spread=2.0 replicate=4: resid 9.1e-02 after 60 sweeps, min target 6.6e-03
+  round trip class='factor rank 1' n=3 scale=2.0 spread=2.0 replicate=5: resid 1.0e-01 after 60 sweeps, min p 1.9e-01
+  free       class='factor rank 1' n=3 scale=2.0 spread=2.0 replicate=5: resid 4.1e-07 after 60 sweeps, min target 2.0e-01
+  round trip class='factor rank 1' n=3 scale=2.0 spread=2.0 replicate=6: resid 1.2e-05 after 60 sweeps, min p 2.3e-01
+  free       class='factor rank 1' n=3 scale=2.0 spread=2.0 replicate=6: resid 3.6e-06 after 60 sweeps, min target 2.3e-01
+  round trip class='factor rank 1' n=3 scale=2.0 spread=2.0 replicate=7: resid 8.4e-01 after 60 sweeps, min p 1.5e-01
+  free       class='factor rank 1' n=3 scale=2.0 spread=2.0 replicate=7: resid 8.3e-01 after 60 sweeps, min target 1.2e-01
+  round trip class='factor rank 1' n=3 scale=2.0 spread=2.0 replicate=8: resid 1.9e-05 after 60 sweeps, min p 9.4e-02
+  free       class='factor rank 1' n=3 scale=2.0 spread=2.0 replicate=8: resid 1.4e+00 after 60 sweeps, min target 1.1e-01
+  round trip class='factor rank 1' n=3 scale=2.0 spread=2.0 replicate=9: resid 1.2e-03 after 60 sweeps, min p 1.5e-01
+  free       class='factor rank 1' n=3 scale=2.0 spread=2.0 replicate=9: resid 8.4e-07 after 60 sweeps, min target 6.1e-02
+  round trip class='factor rank 1' n=3 scale=2.0 spread=2.0 replicate=10: resid 2.7e-02 after 60 sweeps, min p 1.3e-03
+  free       class='factor rank 1' n=3 scale=2.0 spread=2.0 replicate=10: resid 3.0e-02 after 60 sweeps, min target 2.9e-02
+  round trip class='factor rank 1' n=3 scale=2.0 spread=2.0 replicate=11: resid 1.2e-02 after 60 sweeps, min p 7.2e-06
+  free       class='factor rank 1' n=3 scale=2.0 spread=2.0 replicate=11: resid 3.9e-07 after 60 sweeps, min target 8.1e-02
+  round trip class='factor rank 1' n=3 scale=2.0 spread=2.0 replicate=12: resid 3.1e-03 after 60 sweeps, min p 1.9e-01
+  round trip class='factor rank 1' n=3 scale=2.0 spread=2.0 replicate=13: resid 1.4e-03 after 60 sweeps, min p 2.2e-02
+  round trip class='factor rank 1' n=3 scale=2.0 spread=2.0 replicate=14: resid 3.8e-07 after 60 sweeps, min p 2.2e-02
+  free       class='factor rank 1' n=3 scale=2.0 spread=2.0 replicate=14: resid 8.6e-03 after 60 sweeps, min target 1.6e-01
+  round trip class='factor rank 1' n=3 scale=2.0 spread=2.0 replicate=15: resid 2.1e-04 after 60 sweeps, min p 4.8e-02
+  free       class='factor rank 1' n=3 scale=2.0 spread=2.0 replicate=15: resid 5.4e-02 after 60 sweeps, min target 1.2e-02
+  round trip class='factor rank 1' n=3 scale=2.0 spread=2.0 replicate=16: resid 2.9e-05 after 60 sweeps, min p 5.4e-02
+  free       class='factor rank 1' n=3 scale=2.0 spread=2.0 replicate=16: resid 2.6e-06 after 60 sweeps, min target 6.6e-02
+  round trip class='factor rank 1' n=3 scale=2.0 spread=2.0 replicate=17: resid 2.4e-05 after 60 sweeps, min p 4.4e-02
+  free       class='factor rank 1' n=3 scale=2.0 spread=2.0 replicate=17: resid 2.0e-05 after 60 sweeps, min target 1.6e-01
+  round trip class='factor rank 1' n=3 scale=2.0 spread=2.0 replicate=18: resid 9.7e-01 after 60 sweeps, min p 2.8e-03
+  free       class='factor rank 1' n=3 scale=2.0 spread=2.0 replicate=18: resid 1.2e-01 after 60 sweeps, min target 1.5e-02
+  round trip class='factor rank 1' n=3 scale=2.0 spread=2.0 replicate=19: resid 2.2e-01 after 60 sweeps, min p 3.1e-03
+  free       class='factor rank 1' n=3 scale=2.0 spread=2.0 replicate=19: resid 1.5e-05 after 60 sweeps, min target 1.5e-01
+  free       class='factor rank 1' n=4 scale=0.25 spread=0.5 replicate=4: resid 1.2e-08 after 60 sweeps, min target 1.8e-02
+  free       class='factor rank 1' n=4 scale=0.25 spread=0.5 replicate=5: resid 1.5e-08 after 60 sweeps, min target 5.8e-03
+  free       class='factor rank 1' n=4 scale=0.25 spread=0.5 replicate=15: resid 8.6e-08 after 60 sweeps, min target 2.7e-02
+  free       class='factor rank 1' n=4 scale=0.25 spread=0.5 replicate=16: resid 1.3e-03 after 60 sweeps, min target 1.1e-02
+  free       class='factor rank 1' n=4 scale=0.25 spread=0.5 replicate=19: resid 4.0e-08 after 60 sweeps, min target 9.4e-03
+  round trip class='factor rank 1' n=4 scale=0.25 spread=1.0 replicate=1: resid 6.7e-06 after 60 sweeps, min p 1.3e-02
+  round trip class='factor rank 1' n=4 scale=0.25 spread=1.0 replicate=2: resid 2.5e-08 after 60 sweeps, min p 1.6e-02
+  round trip class='factor rank 1' n=4 scale=0.25 spread=1.0 replicate=3: resid 1.5e-05 after 60 sweeps, min p 3.9e-03
+  round trip class='factor rank 1' n=4 scale=0.25 spread=1.0 replicate=4: resid 1.6e-02 after 60 sweeps, min p 4.4e-03
+  free       class='factor rank 1' n=4 scale=0.25 spread=1.0 replicate=6: resid 1.1e-04 after 60 sweeps, min target 1.9e-03
+  round trip class='factor rank 1' n=4 scale=0.25 spread=1.0 replicate=7: resid 1.5e-02 after 60 sweeps, min p 7.2e-04
+  round trip class='factor rank 1' n=4 scale=0.25 spread=1.0 replicate=9: resid 4.0e-05 after 60 sweeps, min p 1.1e-03
+  free       class='factor rank 1' n=4 scale=0.25 spread=1.0 replicate=10: resid 6.2e-07 after 60 sweeps, min target 2.9e-02
+  round trip class='factor rank 1' n=4 scale=0.25 spread=1.0 replicate=11: resid 6.5e-05 after 60 sweeps, min p 1.6e-03
+  round trip class='factor rank 1' n=4 scale=0.25 spread=1.0 replicate=18: resid 3.5e-03 after 60 sweeps, min p 1.6e-02
+  free       class='factor rank 1' n=4 scale=0.25 spread=1.0 replicate=18: resid 1.3e-04 after 60 sweeps, min target 3.2e-02
+  round trip class='factor rank 1' n=4 scale=0.25 spread=2.0 replicate=1: resid 3.4e-07 after 60 sweeps, min p 1.9e-02
+  round trip class='factor rank 1' n=4 scale=0.25 spread=2.0 replicate=2: resid 5.2e-03 after 60 sweeps, min p 2.9e-04
+  round trip class='factor rank 1' n=4 scale=0.25 spread=2.0 replicate=3: resid 2.7e-05 after 60 sweeps, min p 1.8e-02
+  free       class='factor rank 1' n=4 scale=0.25 spread=2.0 replicate=4: resid 7.8e-04 after 60 sweeps, min target 6.7e-03
+  round trip class='factor rank 1' n=4 scale=0.25 spread=2.0 replicate=5: resid 1.2e-07 after 60 sweeps, min p 1.4e-04
+  round trip class='factor rank 1' n=4 scale=0.25 spread=2.0 replicate=7: resid 4.9e-08 after 60 sweeps, min p 4.9e-02
+  round trip class='factor rank 1' n=4 scale=0.25 spread=2.0 replicate=8: resid 1.4e+00 after 60 sweeps, min p 6.7e-14
+  round trip class='factor rank 1' n=4 scale=0.25 spread=2.0 replicate=11: resid 1.6e+00 after 60 sweeps, min p 4.1e-05
+  round trip class='factor rank 1' n=4 scale=0.25 spread=2.0 replicate=13: resid 5.1e-01 after 60 sweeps, min p 5.0e-06
+  round trip class='factor rank 1' n=4 scale=0.25 spread=2.0 replicate=14: resid 1.4e-02 after 60 sweeps, min p 2.1e-04
+  free       class='factor rank 1' n=4 scale=0.25 spread=2.0 replicate=14: resid 3.1e-04 after 60 sweeps, min target 9.7e-04
+  round trip class='factor rank 1' n=4 scale=0.25 spread=2.0 replicate=15: resid 1.6e-06 after 60 sweeps, min p 1.6e-02
+  round trip class='factor rank 1' n=4 scale=0.25 spread=2.0 replicate=16: resid 7.9e-01 after 60 sweeps, min p 6.0e-06
+  round trip class='factor rank 1' n=4 scale=0.25 spread=2.0 replicate=17: resid 4.5e-08 after 60 sweeps, min p 5.6e-05
+  free       class='factor rank 1' n=4 scale=0.25 spread=2.0 replicate=17: resid 3.0e-08 after 60 sweeps, min target 2.8e-02
+  round trip class='factor rank 1' n=4 scale=0.25 spread=2.0 replicate=19: resid 4.5e-03 after 60 sweeps, min p 2.8e-11
+  free       class='factor rank 1' n=4 scale=0.5 spread=0.5 replicate=5: resid 1.0e-05 after 60 sweeps, min target 2.3e-02
+  free       class='factor rank 1' n=4 scale=0.5 spread=0.5 replicate=6: resid 1.5e-06 after 60 sweeps, min target 7.8e-03
+  free       class='factor rank 1' n=4 scale=0.5 spread=0.5 replicate=11: resid 3.3e-04 after 60 sweeps, min target 1.3e-02
+  free       class='factor rank 1' n=4 scale=0.5 spread=0.5 replicate=12: resid 3.2e-07 after 60 sweeps, min target 8.1e-03
+  free       class='factor rank 1' n=4 scale=0.5 spread=0.5 replicate=15: resid 3.5e-06 after 60 sweeps, min target 3.5e-03
+  free       class='factor rank 1' n=4 scale=0.5 spread=0.5 replicate=18: resid 3.6e-06 after 60 sweeps, min target 2.7e-02
+  free       class='factor rank 1' n=4 scale=0.5 spread=0.5 replicate=19: resid 1.8e-06 after 60 sweeps, min target 3.2e-02
+  round trip class='factor rank 1' n=4 scale=0.5 spread=1.0 replicate=0: resid 1.4e-06 after 60 sweeps, min p 2.8e-02
+  free       class='factor rank 1' n=4 scale=0.5 spread=1.0 replicate=2: resid 3.9e-07 after 60 sweeps, min target 1.1e-02
+  round trip class='factor rank 1' n=4 scale=0.5 spread=1.0 replicate=8: resid 8.5e-05 after 60 sweeps, min p 1.2e-02
+  round trip class='factor rank 1' n=4 scale=0.5 spread=1.0 replicate=9: resid 3.5e-07 after 60 sweeps, min p 1.2e-02
+  round trip class='factor rank 1' n=4 scale=0.5 spread=1.0 replicate=11: resid 6.9e-07 after 60 sweeps, min p 3.6e-02
+  free       class='factor rank 1' n=4 scale=0.5 spread=1.0 replicate=12: resid 8.0e-06 after 60 sweeps, min target 1.2e-02
+  free       class='factor rank 1' n=4 scale=0.5 spread=1.0 replicate=13: resid 1.4e-08 after 60 sweeps, min target 1.8e-02
+  round trip class='factor rank 1' n=4 scale=0.5 spread=2.0 replicate=0: resid 2.1e-08 after 60 sweeps, min p 3.6e-03
+  round trip class='factor rank 1' n=4 scale=0.5 spread=2.0 replicate=2: resid 4.6e-07 after 60 sweeps, min p 2.6e-03
+  round trip class='factor rank 1' n=4 scale=0.5 spread=2.0 replicate=4: resid 7.1e-08 after 60 sweeps, min p 3.4e-02
+  round trip class='factor rank 1' n=4 scale=0.5 spread=2.0 replicate=5: resid 5.4e-06 after 60 sweeps, min p 5.6e-04
+  round trip class='factor rank 1' n=4 scale=0.5 spread=2.0 replicate=6: resid 1.4e-01 after 60 sweeps, min p 3.8e-07
+  round trip class='factor rank 1' n=4 scale=0.5 spread=2.0 replicate=7: resid 1.8e-05 after 60 sweeps, min p 1.7e-04
+  free       class='factor rank 1' n=4 scale=0.5 spread=2.0 replicate=9: resid 6.6e-04 after 60 sweeps, min target 1.1e-02
+  round trip class='factor rank 1' n=4 scale=0.5 spread=2.0 replicate=10: resid 1.0e-08 after 60 sweeps, min p 4.3e-02
+  round trip class='factor rank 1' n=4 scale=0.5 spread=2.0 replicate=12: resid 1.0e-01 after 60 sweeps, min p 3.7e-04
+  round trip class='factor rank 1' n=4 scale=0.5 spread=2.0 replicate=13: resid 5.8e-07 after 60 sweeps, min p 5.1e-03
+  free       class='factor rank 1' n=4 scale=0.5 spread=2.0 replicate=13: resid 6.9e-02 after 60 sweeps, min target 4.3e-03
+  free       class='factor rank 1' n=4 scale=0.5 spread=2.0 replicate=14: resid 1.4e-08 after 60 sweeps, min target 3.8e-02
+  round trip class='factor rank 1' n=4 scale=0.5 spread=2.0 replicate=15: resid 2.4e+00 after 60 sweeps, min p 9.9e-06
+  free       class='factor rank 1' n=4 scale=0.5 spread=2.0 replicate=15: resid 2.8e-06 after 60 sweeps, min target 3.6e-03
+  free       class='factor rank 1' n=4 scale=0.5 spread=2.0 replicate=16: resid 8.2e-07 after 60 sweeps, min target 4.5e-02
+  round trip class='factor rank 1' n=4 scale=0.5 spread=2.0 replicate=17: resid 4.0e-02 after 60 sweeps, min p 1.2e-03
+  round trip class='factor rank 1' n=4 scale=0.5 spread=2.0 replicate=18: resid 6.1e-06 after 60 sweeps, min p 2.2e-02
+  round trip class='factor rank 1' n=4 scale=0.5 spread=2.0 replicate=19: resid 9.3e-04 after 60 sweeps, min p 2.2e-03
+  free       class='factor rank 1' n=4 scale=1.0 spread=0.5 replicate=11: resid 4.2e-08 after 60 sweeps, min target 4.8e-02
+  free       class='factor rank 1' n=4 scale=1.0 spread=0.5 replicate=13: resid 7.5e-07 after 60 sweeps, min target 3.4e-02
+  free       class='factor rank 1' n=4 scale=1.0 spread=0.5 replicate=15: resid 8.4e-08 after 60 sweeps, min target 1.6e-02
+  free       class='factor rank 1' n=4 scale=1.0 spread=1.0 replicate=1: resid 8.8e-08 after 60 sweeps, min target 2.5e-02
+  free       class='factor rank 1' n=4 scale=1.0 spread=1.0 replicate=4: resid 3.5e-06 after 60 sweeps, min target 1.3e-02
+  round trip class='factor rank 1' n=4 scale=1.0 spread=1.0 replicate=5: resid 2.6e-04 after 60 sweeps, min p 3.1e-02
+  round trip class='factor rank 1' n=4 scale=1.0 spread=1.0 replicate=7: resid 2.2e-08 after 60 sweeps, min p 1.3e-02
+  free       class='factor rank 1' n=4 scale=1.0 spread=1.0 replicate=8: resid 1.3e-08 after 60 sweeps, min target 4.2e-02
+  round trip class='factor rank 1' n=4 scale=1.0 spread=1.0 replicate=9: resid 2.1e-07 after 60 sweeps, min p 1.8e-02
+  round trip class='factor rank 1' n=4 scale=1.0 spread=1.0 replicate=10: resid 9.0e-06 after 60 sweeps, min p 5.3e-03
+  round trip class='factor rank 1' n=4 scale=1.0 spread=1.0 replicate=11: resid 1.2e-05 after 60 sweeps, min p 2.5e-03
+  free       class='factor rank 1' n=4 scale=1.0 spread=1.0 replicate=12: resid 4.2e-06 after 60 sweeps, min target 1.8e-02
+  free       class='factor rank 1' n=4 scale=1.0 spread=1.0 replicate=16: resid 4.9e-08 after 60 sweeps, min target 9.3e-02
+  free       class='factor rank 1' n=4 scale=1.0 spread=1.0 replicate=18: resid 1.9e-05 after 60 sweeps, min target 6.2e-03
+  free       class='factor rank 1' n=4 scale=1.0 spread=2.0 replicate=2: resid 2.0e-05 after 60 sweeps, min target 1.5e-02
+  round trip class='factor rank 1' n=4 scale=1.0 spread=2.0 replicate=4: resid 1.2e-03 after 60 sweeps, min p 1.1e-05
+  free       class='factor rank 1' n=4 scale=1.0 spread=2.0 replicate=5: resid 3.3e-08 after 60 sweeps, min target 2.8e-03
+  round trip class='factor rank 1' n=4 scale=1.0 spread=2.0 replicate=6: resid 1.6e+00 after 60 sweeps, min p 2.4e-04
+  round trip class='factor rank 1' n=4 scale=1.0 spread=2.0 replicate=7: resid 3.6e+00 after 60 sweeps, min p 4.5e-05
+  round trip class='factor rank 1' n=4 scale=1.0 spread=2.0 replicate=8: resid 1.2e-03 after 60 sweeps, min p 3.0e-05
+  round trip class='factor rank 1' n=4 scale=1.0 spread=2.0 replicate=10: resid 3.6e-04 after 60 sweeps, min p 2.2e-03
+  free       class='factor rank 1' n=4 scale=1.0 spread=2.0 replicate=10: resid 1.2e-08 after 60 sweeps, min target 8.8e-02
+  round trip class='factor rank 1' n=4 scale=1.0 spread=2.0 replicate=11: resid 7.7e-04 after 60 sweeps, min p 1.0e-09
+  round trip class='factor rank 1' n=4 scale=1.0 spread=2.0 replicate=12: resid 5.8e-06 after 60 sweeps, min p 3.7e-04
+  round trip class='factor rank 1' n=4 scale=1.0 spread=2.0 replicate=14: resid 1.2e-06 after 60 sweeps, min p 3.2e-04
+  round trip class='factor rank 1' n=4 scale=1.0 spread=2.0 replicate=15: resid 2.3e-06 after 60 sweeps, min p 2.4e-02
+  free       class='factor rank 1' n=4 scale=1.0 spread=2.0 replicate=16: resid 1.3e-05 after 60 sweeps, min target 6.5e-04
+  free       class='factor rank 1' n=4 scale=1.0 spread=2.0 replicate=18: resid 3.4e-07 after 60 sweeps, min target 7.7e-02
+  round trip class='factor rank 1' n=4 scale=1.0 spread=2.0 replicate=19: resid 1.9e-06 after 60 sweeps, min p 7.6e-02
+  free       class='factor rank 1' n=4 scale=2.0 spread=0.5 replicate=0: resid 4.1e-04 after 60 sweeps, min target 9.2e-03
+  free       class='factor rank 1' n=4 scale=2.0 spread=0.5 replicate=10: resid 1.4e-07 after 60 sweeps, min target 1.7e-02
+  free       class='factor rank 1' n=4 scale=2.0 spread=0.5 replicate=14: resid 3.0e-08 after 60 sweeps, min target 5.1e-02
+  free       class='factor rank 1' n=4 scale=2.0 spread=0.5 replicate=15: resid 5.2e-07 after 60 sweeps, min target 4.4e-02
+  free       class='factor rank 1' n=4 scale=2.0 spread=0.5 replicate=18: resid 1.3e-03 after 60 sweeps, min target 2.2e-03
+  round trip class='factor rank 1' n=4 scale=2.0 spread=1.0 replicate=0: resid 1.0e-07 after 60 sweeps, min p 8.4e-02
+  free       class='factor rank 1' n=4 scale=2.0 spread=1.0 replicate=0: resid 2.8e-06 after 60 sweeps, min target 2.9e-02
+  free       class='factor rank 1' n=4 scale=2.0 spread=1.0 replicate=1: resid 2.8e-08 after 60 sweeps, min target 2.0e-02
+  free       class='factor rank 1' n=4 scale=2.0 spread=1.0 replicate=5: resid 1.4e-06 after 60 sweeps, min target 1.7e-03
+  round trip class='factor rank 1' n=4 scale=2.0 spread=1.0 replicate=6: resid 1.0e-08 after 60 sweeps, min p 1.2e-01
+  round trip class='factor rank 1' n=4 scale=2.0 spread=1.0 replicate=9: resid 1.0e-03 after 60 sweeps, min p 2.7e-03
+  free       class='factor rank 1' n=4 scale=2.0 spread=1.0 replicate=10: resid 2.1e-04 after 60 sweeps, min target 1.3e-02
+  round trip class='factor rank 1' n=4 scale=2.0 spread=1.0 replicate=11: resid 6.3e-06 after 60 sweeps, min p 1.9e-02
+  free       class='factor rank 1' n=4 scale=2.0 spread=1.0 replicate=12: resid 1.2e-06 after 60 sweeps, min target 4.1e-02
+  free       class='factor rank 1' n=4 scale=2.0 spread=1.0 replicate=14: resid 3.0e-04 after 60 sweeps, min target 3.0e-03
+  free       class='factor rank 1' n=4 scale=2.0 spread=1.0 replicate=16: resid 2.9e-05 after 60 sweeps, min target 5.9e-02
+  round trip class='factor rank 1' n=4 scale=2.0 spread=1.0 replicate=17: resid 6.9e-02 after 60 sweeps, min p 2.2e-03
+  free       class='factor rank 1' n=4 scale=2.0 spread=1.0 replicate=17: resid 6.0e-02 after 60 sweeps, min target 1.5e-02
+  free       class='factor rank 1' n=4 scale=2.0 spread=1.0 replicate=18: resid 4.6e-06 after 60 sweeps, min target 2.3e-02
+  round trip class='factor rank 1' n=4 scale=2.0 spread=1.0 replicate=19: resid 6.9e-04 after 60 sweeps, min p 1.7e-02
+  round trip class='factor rank 1' n=4 scale=2.0 spread=2.0 replicate=0: resid 2.8e-04 after 60 sweeps, min p 5.0e-05
+  round trip class='factor rank 1' n=4 scale=2.0 spread=2.0 replicate=1: resid 1.4e-06 after 60 sweeps, min p 8.9e-04
+  round trip class='factor rank 1' n=4 scale=2.0 spread=2.0 replicate=2: resid 3.7e-05 after 60 sweeps, min p 1.3e-02
+  round trip class='factor rank 1' n=4 scale=2.0 spread=2.0 replicate=3: resid 2.2e-02 after 60 sweeps, min p 2.4e-04
+  free       class='factor rank 1' n=4 scale=2.0 spread=2.0 replicate=4: resid 3.8e-08 after 60 sweeps, min target 1.3e-01
+  round trip class='factor rank 1' n=4 scale=2.0 spread=2.0 replicate=5: resid 7.8e-05 after 60 sweeps, min p 1.2e-02
+  round trip class='factor rank 1' n=4 scale=2.0 spread=2.0 replicate=7: resid 1.3e-01 after 60 sweeps, min p 4.5e-06
+  free       class='factor rank 1' n=4 scale=2.0 spread=2.0 replicate=8: resid 1.2e-03 after 60 sweeps, min target 9.5e-02
+  round trip class='factor rank 1' n=4 scale=2.0 spread=2.0 replicate=9: resid 7.8e-01 after 60 sweeps, min p 4.0e-04
+  free       class='factor rank 1' n=4 scale=2.0 spread=2.0 replicate=10: resid 1.7e-05 after 60 sweeps, min target 5.6e-02
+  round trip class='factor rank 1' n=4 scale=2.0 spread=2.0 replicate=11: resid 1.2e-07 after 60 sweeps, min p 5.0e-02
+  free       class='factor rank 1' n=4 scale=2.0 spread=2.0 replicate=11: resid 8.7e-07 after 60 sweeps, min target 3.2e-02
+  round trip class='factor rank 1' n=4 scale=2.0 spread=2.0 replicate=12: resid 1.6e-08 after 60 sweeps, min p 3.7e-02
+  round trip class='factor rank 1' n=4 scale=2.0 spread=2.0 replicate=14: resid 1.3e-01 after 60 sweeps, min p 5.3e-06
+  free       class='factor rank 1' n=4 scale=2.0 spread=2.0 replicate=14: resid 5.6e-06 after 60 sweeps, min target 3.3e-02
+  round trip class='factor rank 1' n=4 scale=2.0 spread=2.0 replicate=15: resid 7.4e-05 after 60 sweeps, min p 2.5e-03
+  free       class='factor rank 1' n=4 scale=2.0 spread=2.0 replicate=15: resid 1.5e-04 after 60 sweeps, min target 3.2e-02
+  free       class='factor rank 1' n=4 scale=2.0 spread=2.0 replicate=17: resid 3.3e-06 after 60 sweeps, min target 3.4e-02
+  round trip class='factor rank 1' n=4 scale=2.0 spread=2.0 replicate=18: resid 6.0e-05 after 60 sweeps, min p 3.2e-03
+  free       class='factor rank 1' n=4 scale=2.0 spread=2.0 replicate=18: resid 4.8e-06 after 60 sweeps, min target 2.0e-02
+  round trip class='factor rank 1' n=4 scale=2.0 spread=2.0 replicate=19: resid 3.3e-01 after 60 sweeps, min p 1.2e-03
+  free       class='factor rank 1' n=4 scale=2.0 spread=2.0 replicate=19: resid 2.0e-05 after 60 sweeps, min target 3.3e-02
+  round trip class='factor rank 1' n=5 scale=0.25 spread=2.0 replicate=0: resid 6.0e-02 after 60 sweeps, min p 4.3e-07
+  round trip class='factor rank 1' n=5 scale=0.25 spread=2.0 replicate=1: resid 4.2e-05 after 60 sweeps, min p 1.7e-04
+  round trip class='factor rank 1' n=5 scale=0.25 spread=2.0 replicate=2: resid 5.2e-08 after 60 sweeps, min p 1.3e-02
+  round trip class='factor rank 1' n=5 scale=0.25 spread=2.0 replicate=3: resid 3.2e-08 after 60 sweeps, min p 5.6e-08
+  round trip class='factor rank 1' n=5 scale=0.25 spread=2.0 replicate=5: resid 7.7e-02 after 60 sweeps, min p 6.7e-05
+  round trip class='factor rank 1' n=5 scale=0.25 spread=2.0 replicate=8: resid 2.8e-03 after 60 sweeps, min p 3.8e-09
+  round trip class='factor rank 1' n=5 scale=0.25 spread=2.0 replicate=10: resid 1.1e-02 after 60 sweeps, min p 6.5e-06
+  round trip class='factor rank 1' n=5 scale=0.25 spread=2.0 replicate=12: resid 7.7e-04 after 60 sweeps, min p 6.4e-05
+  round trip class='factor rank 1' n=5 scale=0.25 spread=2.0 replicate=14: resid 1.1e-01 after 60 sweeps, min p 2.1e-15
+  round trip class='factor rank 1' n=5 scale=0.25 spread=2.0 replicate=15: resid 1.1e-01 after 60 sweeps, min p 9.7e-07
+  round trip class='factor rank 1' n=5 scale=0.25 spread=2.0 replicate=17: resid 3.8e-01 after 60 sweeps, min p 1.8e-07
+  round trip class='factor rank 1' n=5 scale=0.25 spread=2.0 replicate=18: resid 3.3e-06 after 60 sweeps, min p 2.3e-05
+  free       class='factor rank 1' n=5 scale=0.5 spread=1.0 replicate=1: resid 1.2e-08 after 60 sweeps, min target 2.5e-02
+  round trip class='factor rank 1' n=5 scale=0.5 spread=1.0 replicate=3: resid 1.6e-08 after 60 sweeps, min p 7.0e-04
+  round trip class='factor rank 1' n=5 scale=0.5 spread=1.0 replicate=5: resid 2.5e-06 after 60 sweeps, min p 1.6e-02
+  round trip class='factor rank 1' n=5 scale=0.5 spread=2.0 replicate=0: resid 6.7e-04 after 60 sweeps, min p 6.6e-06
+  round trip class='factor rank 1' n=5 scale=0.5 spread=2.0 replicate=1: resid 2.4e-06 after 60 sweeps, min p 1.3e-10
+  round trip class='factor rank 1' n=5 scale=0.5 spread=2.0 replicate=2: resid 1.8e-04 after 60 sweeps, min p 8.0e-05
+  round trip class='factor rank 1' n=5 scale=0.5 spread=2.0 replicate=3: resid 1.6e-02 after 60 sweeps, min p 8.7e-04
+  round trip class='factor rank 1' n=5 scale=0.5 spread=2.0 replicate=5: resid 1.7e+00 after 60 sweeps, min p 2.7e-11
+  round trip class='factor rank 1' n=5 scale=0.5 spread=2.0 replicate=8: resid 1.1e-05 after 60 sweeps, min p 2.5e-04
+  round trip class='factor rank 1' n=5 scale=0.5 spread=2.0 replicate=10: resid 1.4e-08 after 60 sweeps, min p 1.2e-02
+  round trip class='factor rank 1' n=5 scale=0.5 spread=2.0 replicate=12: resid 5.0e-04 after 60 sweeps, min p 5.6e-08
+  round trip class='factor rank 1' n=5 scale=0.5 spread=2.0 replicate=14: resid 1.4e-07 after 60 sweeps, min p 5.4e-07
+  round trip class='factor rank 1' n=5 scale=0.5 spread=2.0 replicate=15: resid 5.2e-04 after 60 sweeps, min p 3.4e-03
+  round trip class='factor rank 1' n=5 scale=0.5 spread=2.0 replicate=16: resid 5.6e-04 after 60 sweeps, min p 9.2e-08
+  round trip class='factor rank 1' n=5 scale=0.5 spread=2.0 replicate=17: resid 7.6e-06 after 60 sweeps, min p 1.7e-04
+  round trip class='factor rank 1' n=5 scale=0.5 spread=2.0 replicate=19: resid 4.5e-02 after 60 sweeps, min p 9.5e-04
+  round trip class='factor rank 1' n=5 scale=1.0 spread=1.0 replicate=0: resid 3.0e-07 after 60 sweeps, min p 2.7e-02
+  round trip class='factor rank 1' n=5 scale=1.0 spread=1.0 replicate=7: resid 1.2e-07 after 60 sweeps, min p 4.4e-04
+  free       class='factor rank 1' n=5 scale=1.0 spread=1.0 replicate=7: resid 5.5e-06 after 60 sweeps, min target 3.0e-02
+  free       class='factor rank 1' n=5 scale=1.0 spread=1.0 replicate=13: resid 1.7e-07 after 60 sweeps, min target 9.7e-05
+  round trip class='factor rank 1' n=5 scale=1.0 spread=1.0 replicate=18: resid 8.7e-08 after 60 sweeps, min p 6.0e-03
+  round trip class='factor rank 1' n=5 scale=1.0 spread=2.0 replicate=0: resid 6.2e-08 after 60 sweeps, min p 1.0e-02
+  round trip class='factor rank 1' n=5 scale=1.0 spread=2.0 replicate=1: resid 7.1e-03 after 60 sweeps, min p 1.7e-04
+  round trip class='factor rank 1' n=5 scale=1.0 spread=2.0 replicate=3: resid 2.2e-02 after 60 sweeps, min p 9.3e-06
+  round trip class='factor rank 1' n=5 scale=1.0 spread=2.0 replicate=4: resid 8.2e-01 after 60 sweeps, min p 1.5e-03
+  round trip class='factor rank 1' n=5 scale=1.0 spread=2.0 replicate=5: resid 2.2e+00 after 60 sweeps, min p 1.2e-03
+  round trip class='factor rank 1' n=5 scale=1.0 spread=2.0 replicate=6: resid 8.8e-08 after 60 sweeps, min p 1.1e-06
+  round trip class='factor rank 1' n=5 scale=1.0 spread=2.0 replicate=8: resid 3.1e-03 after 60 sweeps, min p 1.1e-05
+  round trip class='factor rank 1' n=5 scale=1.0 spread=2.0 replicate=11: resid 3.6e-05 after 60 sweeps, min p 4.3e-03
+  round trip class='factor rank 1' n=5 scale=1.0 spread=2.0 replicate=12: resid 5.5e-03 after 60 sweeps, min p 4.8e-04
+  free       class='factor rank 1' n=5 scale=1.0 spread=2.0 replicate=12: resid 1.9e-08 after 60 sweeps, min target 1.9e-02
+  round trip class='factor rank 1' n=5 scale=1.0 spread=2.0 replicate=13: resid 1.0e-02 after 60 sweeps, min p 1.3e-03
+  round trip class='factor rank 1' n=5 scale=1.0 spread=2.0 replicate=14: resid 2.3e-07 after 60 sweeps, min p 2.4e-03
+  round trip class='factor rank 1' n=5 scale=1.0 spread=2.0 replicate=16: resid 2.7e-08 after 60 sweeps, min p 2.3e-03
+  round trip class='factor rank 1' n=5 scale=1.0 spread=2.0 replicate=19: resid 2.3e-01 after 60 sweeps, min p 1.3e-03
+  free       class='factor rank 1' n=5 scale=1.0 spread=2.0 replicate=19: resid 2.7e-07 after 60 sweeps, min target 1.5e-02
+  free       class='factor rank 1' n=5 scale=2.0 spread=0.5 replicate=11: resid 2.9e-07 after 60 sweeps, min target 1.0e-02
+  free       class='factor rank 1' n=5 scale=2.0 spread=0.5 replicate=14: resid 4.8e-06 after 60 sweeps, min target 1.3e-02
+  free       class='factor rank 1' n=5 scale=2.0 spread=0.5 replicate=15: resid 6.3e-08 after 60 sweeps, min target 1.1e-02
+  free       class='factor rank 1' n=5 scale=2.0 spread=0.5 replicate=19: resid 2.9e-07 after 60 sweeps, min target 6.1e-03
+  free       class='factor rank 1' n=5 scale=2.0 spread=1.0 replicate=3: resid 7.4e-06 after 60 sweeps, min target 1.5e-02
+  free       class='factor rank 1' n=5 scale=2.0 spread=1.0 replicate=4: resid 4.6e-08 after 60 sweeps, min target 1.4e-02
+  free       class='factor rank 1' n=5 scale=2.0 spread=1.0 replicate=9: resid 2.2e-05 after 60 sweeps, min target 3.5e-02
+  free       class='factor rank 1' n=5 scale=2.0 spread=1.0 replicate=10: resid 6.9e-07 after 60 sweeps, min target 4.0e-02
+  free       class='factor rank 1' n=5 scale=2.0 spread=1.0 replicate=11: resid 2.9e-08 after 60 sweeps, min target 4.0e-02
+  free       class='factor rank 1' n=5 scale=2.0 spread=1.0 replicate=12: resid 3.8e-07 after 60 sweeps, min target 2.5e-02
+  free       class='factor rank 1' n=5 scale=2.0 spread=1.0 replicate=13: resid 7.4e-08 after 60 sweeps, min target 5.4e-04
+  free       class='factor rank 1' n=5 scale=2.0 spread=1.0 replicate=18: resid 6.6e-05 after 60 sweeps, min target 4.3e-03
+  round trip class='factor rank 1' n=5 scale=2.0 spread=2.0 replicate=2: resid 1.1e-07 after 60 sweeps, min p 3.0e-03
+  round trip class='factor rank 1' n=5 scale=2.0 spread=2.0 replicate=3: resid 2.8e-07 after 60 sweeps, min p 1.8e-05
+  free       class='factor rank 1' n=5 scale=2.0 spread=2.0 replicate=4: resid 1.9e-08 after 60 sweeps, min target 6.2e-02
+  round trip class='factor rank 1' n=5 scale=2.0 spread=2.0 replicate=7: resid 1.8e-03 after 60 sweeps, min p 5.1e-04
+  round trip class='factor rank 1' n=5 scale=2.0 spread=2.0 replicate=8: resid 9.6e-02 after 60 sweeps, min p 1.2e-04
+  round trip class='factor rank 1' n=5 scale=2.0 spread=2.0 replicate=9: resid 2.4e-07 after 60 sweeps, min p 2.7e-02
+  round trip class='factor rank 1' n=5 scale=2.0 spread=2.0 replicate=10: resid 6.6e-04 after 60 sweeps, min p 4.8e-05
+  free       class='factor rank 1' n=5 scale=2.0 spread=2.0 replicate=11: resid 3.8e-07 after 60 sweeps, min target 1.2e-02
+  free       class='factor rank 1' n=5 scale=2.0 spread=2.0 replicate=13: resid 2.3e-05 after 60 sweeps, min target 2.1e-03
+  round trip class='factor rank 1' n=5 scale=2.0 spread=2.0 replicate=14: resid 3.0e-02 after 60 sweeps, min p 8.9e-07
+  round trip class='factor rank 1' n=5 scale=2.0 spread=2.0 replicate=15: resid 5.0e-07 after 60 sweeps, min p 1.0e-03
+  round trip class='factor rank 1' n=5 scale=2.0 spread=2.0 replicate=16: resid 1.8e-04 after 60 sweeps, min p 8.1e-06
+  free       class='factor rank 1' n=5 scale=2.0 spread=2.0 replicate=16: resid 1.6e-08 after 60 sweeps, min target 3.8e-02
+  round trip class='factor rank 1' n=5 scale=2.0 spread=2.0 replicate=17: resid 1.2e-06 after 60 sweeps, min p 2.5e-05
+  free       class='factor rank 1' n=5 scale=2.0 spread=2.0 replicate=18: resid 2.3e-06 after 60 sweeps, min target 1.8e-02
+  round trip class='factor rank 1' n=5 scale=2.0 spread=2.0 replicate=19: resid 9.5e-04 after 60 sweeps, min p 6.8e-03
+  round trip class='factor rank 1' n=8 scale=0.25 spread=2.0 replicate=3: resid 1.7e-04 after 60 sweeps, min p 1.8e-09
+  round trip class='factor rank 1' n=8 scale=0.25 spread=2.0 replicate=6: resid 3.3e-03 after 60 sweeps, min p 2.6e-09
+  round trip class='factor rank 1' n=8 scale=0.25 spread=2.0 replicate=10: resid 9.3e-05 after 60 sweeps, min p 5.1e-05
+  round trip class='factor rank 1' n=8 scale=0.25 spread=2.0 replicate=11: resid 1.3e-04 after 60 sweeps, min p 1.3e-05
+  round trip class='factor rank 1' n=8 scale=0.25 spread=2.0 replicate=12: resid 1.4e-07 after 60 sweeps, min p 1.2e-07
+  round trip class='factor rank 1' n=8 scale=0.5 spread=1.0 replicate=12: resid 6.7e-07 after 60 sweeps, min p 9.2e-04
+  round trip class='factor rank 1' n=8 scale=0.5 spread=2.0 replicate=2: resid 1.8e-06 after 60 sweeps, min p 5.5e-04
+  round trip class='factor rank 1' n=8 scale=0.5 spread=2.0 replicate=3: resid 1.6e-08 after 60 sweeps, min p 5.4e-04
+  round trip class='factor rank 1' n=8 scale=0.5 spread=2.0 replicate=5: resid 6.3e-05 after 60 sweeps, min p 1.6e-06
+  round trip class='factor rank 1' n=8 scale=0.5 spread=2.0 replicate=7: resid 6.5e-04 after 60 sweeps, min p 1.4e-13
+  round trip class='factor rank 1' n=8 scale=0.5 spread=2.0 replicate=10: resid 3.1e-03 after 60 sweeps, min p 9.7e-11
+  round trip class='factor rank 1' n=8 scale=0.5 spread=2.0 replicate=12: resid 3.7e-04 after 60 sweeps, min p 1.8e-06
+  round trip class='factor rank 1' n=8 scale=0.5 spread=2.0 replicate=13: resid 4.9e-08 after 60 sweeps, min p 2.6e-05
+  round trip class='factor rank 1' n=8 scale=0.5 spread=2.0 replicate=14: resid 7.0e-04 after 60 sweeps, min p 6.6e-07
+  round trip class='factor rank 1' n=8 scale=0.5 spread=2.0 replicate=16: resid 1.4e-08 after 60 sweeps, min p 4.3e-05
+  round trip class='factor rank 1' n=8 scale=0.5 spread=2.0 replicate=17: resid 8.6e-06 after 60 sweeps, min p 2.9e-06
+  round trip class='factor rank 1' n=8 scale=0.5 spread=2.0 replicate=18: resid 1.2e-03 after 60 sweeps, min p 6.4e-06
+  round trip class='factor rank 1' n=8 scale=1.0 spread=2.0 replicate=9: resid 1.1e-03 after 60 sweeps, min p 5.9e-08
+  round trip class='factor rank 1' n=8 scale=1.0 spread=2.0 replicate=10: resid 8.5e-04 after 60 sweeps, min p 2.4e-03
+  round trip class='factor rank 1' n=8 scale=1.0 spread=2.0 replicate=12: resid 9.0e-07 after 60 sweeps, min p 1.2e-04
+  round trip class='factor rank 1' n=8 scale=1.0 spread=2.0 replicate=16: resid 1.5e-03 after 60 sweeps, min p 1.1e-05
+  round trip class='factor rank 1' n=8 scale=1.0 spread=2.0 replicate=17: resid 7.8e-01 after 60 sweeps, min p 2.2e-08
+  round trip class='factor rank 1' n=8 scale=2.0 spread=0.5 replicate=15: resid 7.7e-08 after 60 sweeps, min p 5.2e-03
+  round trip class='factor rank 1' n=8 scale=2.0 spread=2.0 replicate=1: resid 7.1e-02 after 60 sweeps, min p 1.9e-10
+  round trip class='factor rank 1' n=8 scale=2.0 spread=2.0 replicate=2: resid 1.8e-07 after 60 sweeps, min p 1.2e-03
+  round trip class='factor rank 1' n=8 scale=2.0 spread=2.0 replicate=7: resid 4.6e-05 after 60 sweeps, min p 1.3e-06
+  round trip class='factor rank 1' n=8 scale=2.0 spread=2.0 replicate=11: resid 4.6e-07 after 60 sweeps, min p 3.3e-05
+  round trip class='factor rank 1' n=8 scale=2.0 spread=2.0 replicate=15: resid 4.5e-07 after 60 sweeps, min p 2.7e-07
+  round trip class='factor rank 1' n=8 scale=2.0 spread=2.0 replicate=16: resid 2.5e-07 after 60 sweeps, min p 3.6e-05
+  round trip class='factor rank 1' n=8 scale=2.0 spread=2.0 replicate=18: resid 3.4e-02 after 60 sweeps, min p 4.1e-07
+  round trip class='factor rank 1' n=12 scale=0.25 spread=1.0 replicate=18: resid 1.9e-08 after 60 sweeps, min p 1.3e-04
+  round trip class='factor rank 1' n=12 scale=0.25 spread=2.0 replicate=0: resid 7.6e-05 after 60 sweeps, min p 1.1e-07
+  round trip class='factor rank 1' n=12 scale=0.25 spread=2.0 replicate=1: resid 8.4e-06 after 60 sweeps, min p 1.3e-09
+  round trip class='factor rank 1' n=12 scale=0.25 spread=2.0 replicate=4: resid 8.2e-05 after 60 sweeps, min p 1.6e-10
+  round trip class='factor rank 1' n=12 scale=0.25 spread=2.0 replicate=5: resid 1.0e-06 after 60 sweeps, min p 4.2e-07
+  round trip class='factor rank 1' n=12 scale=0.25 spread=2.0 replicate=6: resid 6.4e-08 after 60 sweeps, min p 6.5e-12
+  round trip class='factor rank 1' n=12 scale=0.25 spread=2.0 replicate=7: resid 1.6e-06 after 60 sweeps, min p 7.3e-10
+  round trip class='factor rank 1' n=12 scale=0.25 spread=2.0 replicate=8: resid 1.2e-06 after 60 sweeps, min p 5.4e-11
+  round trip class='factor rank 1' n=12 scale=0.25 spread=2.0 replicate=12: resid 3.2e-07 after 60 sweeps, min p 2.8e-13
+  round trip class='factor rank 1' n=12 scale=0.25 spread=2.0 replicate=15: resid 1.5e-07 after 60 sweeps, min p 5.3e-25
+  round trip class='factor rank 1' n=12 scale=0.25 spread=2.0 replicate=18: resid 3.8e-02 after 60 sweeps, min p 1.2e-10
+  round trip class='factor rank 1' n=12 scale=0.5 spread=2.0 replicate=0: resid 6.1e-04 after 60 sweeps, min p 3.8e-17
+  round trip class='factor rank 1' n=12 scale=0.5 spread=2.0 replicate=2: resid 1.7e-07 after 60 sweeps, min p 1.1e-07
+  round trip class='factor rank 1' n=12 scale=0.5 spread=2.0 replicate=5: resid 4.9e-08 after 60 sweeps, min p 4.7e-10
+  round trip class='factor rank 1' n=12 scale=0.5 spread=2.0 replicate=6: resid 2.8e-06 after 60 sweeps, min p 1.3e-09
+  round trip class='factor rank 1' n=12 scale=0.5 spread=2.0 replicate=7: resid 6.5e-08 after 60 sweeps, min p 8.1e-11
+  round trip class='factor rank 1' n=12 scale=0.5 spread=2.0 replicate=8: resid 1.4e-02 after 60 sweeps, min p 9.8e-12
+  round trip class='factor rank 1' n=12 scale=0.5 spread=2.0 replicate=10: resid 3.8e-07 after 60 sweeps, min p 1.3e-11
+  round trip class='factor rank 1' n=12 scale=1.0 spread=2.0 replicate=3: resid 5.9e-08 after 60 sweeps, min p 6.6e-08
+  round trip class='factor rank 1' n=12 scale=1.0 spread=2.0 replicate=12: resid 3.6e-04 after 60 sweeps, min p 3.6e-09
+  round trip class='factor rank 1' n=12 scale=1.0 spread=2.0 replicate=14: resid 2.1e-08 after 60 sweeps, min p 1.1e-11
+  round trip class='factor rank 1' n=12 scale=1.0 spread=2.0 replicate=19: resid 1.7e-06 after 60 sweeps, min p 2.5e-09
+  round trip class='factor rank 1' n=12 scale=2.0 spread=2.0 replicate=0: resid 1.2e-07 after 60 sweeps, min p 9.2e-09
+  round trip class='factor rank 1' n=12 scale=2.0 spread=2.0 replicate=2: resid 5.5e-06 after 60 sweeps, min p 6.5e-22
+  round trip class='factor rank 1' n=12 scale=2.0 spread=2.0 replicate=5: resid 2.1e-06 after 60 sweeps, min p 1.4e-05
+  round trip class='factor rank 1' n=12 scale=2.0 spread=2.0 replicate=11: resid 2.6e-02 after 60 sweeps, min p 6.5e-16
+  round trip class='factor rank 1' n=12 scale=2.0 spread=2.0 replicate=15: resid 6.8e-04 after 60 sweeps, min p 1.6e-14
+  round trip class='factor rank 1' n=12 scale=2.0 spread=2.0 replicate=16: resid 1.3e-08 after 60 sweeps, min p 7.5e-08
+  round trip class='factor rank 1' n=20 scale=0.25 spread=1.0 replicate=11: resid 1.3e-07 after 60 sweeps, min p 7.3e-07
+  round trip class='factor rank 1' n=20 scale=0.25 spread=2.0 replicate=0: resid 5.9e-05 after 60 sweeps, min p 2.9e-13
+  round trip class='factor rank 1' n=20 scale=0.25 spread=2.0 replicate=10: resid 4.2e-08 after 60 sweeps, min p 1.3e-15
+  round trip class='factor rank 1' n=20 scale=0.25 spread=2.0 replicate=17: resid 3.3e-04 after 60 sweeps, min p 4.9e-25
+  round trip class='factor rank 1' n=20 scale=0.5 spread=2.0 replicate=2: resid 2.1e-03 after 60 sweeps, min p 1.9e-23
+  round trip class='factor rank 1' n=20 scale=0.5 spread=2.0 replicate=17: resid 7.4e-05 after 60 sweeps, min p 7.0e-14
+  round trip class='factor rank 1' n=20 scale=1.0 spread=2.0 replicate=11: resid 5.8e-07 after 60 sweeps, min p 2.4e-25
+  round trip class='factor rank 1' n=20 scale=2.0 spread=2.0 replicate=7: resid 1.1e-08 after 60 sweeps, min p 2.2e-13
+  round trip class='factor rank 1' n=20 scale=2.0 spread=2.0 replicate=8: resid 3.9e-06 after 60 sweeps, min p 3.8e-13
+
+totals: round trip 1367/1680 converged; free target 1442/1680 converged
