@@ -1,26 +1,84 @@
-# Reproducing this paper
+# Reproducing "Scalable Inversion of Contests with Correlated Performances"
 
-The paper's numbers were produced at repository tag **`paper-r12`**
-(package version 1.4.0 plus the reproduction fixes). To regenerate them:
+The tables in `main.tex` and most numbers in its text are produced by a
+committed, seeded script in this repository. `MANIFEST.md` records each
+one's command, seed and log line, and its last section lists the in-text
+measurements that no committed command regenerates. `CLAIMS.md` is the
+history of those mappings through review.
+
+## One command
 
 ```sh
-git checkout paper-r12
+git clone https://github.com/microprediction/winning && cd winning
+git checkout paper-r14      # paper-r12 plus the manifest and the revision's analyses
 cd docs/latex_src/general_inversion
-make env && make          # accuracy claims, ~15 minutes
-make full                 # long runs and the R referees
-make timings              # wall clock, on a quiet machine
+make env      # Python 3.12 virtualenv at the repository root (needs uv)
+make          # the accuracy claims, about 15 minutes
 ```
 
-At that tag the paper's directory is `docs/latex_src/general_inversion/`,
-where `REPRODUCE.md` gives the pinned environment, the determinism notes
-and the known limits, and `CLAIMS.md` maps every claim to its `make`
-target. The scripts in this directory and under `research/` on `main`
-track the current package and can differ from the tag in the last digits.
+`make full` adds the long accuracy runs (ensemble battery, kernel table,
+estimation tables, the R referees, the large-n benchmarks): several hours.
+`make timings` re-measures every wall-clock figure; see below.
 
-`MANIFEST.md` in this directory records the provenance of the paper's
-tables and numbers: command, seed and log line where a committed command
-produces them, and a list of the measurements that none regenerates. The analyses added in the journal
-revision (`selfconv.py` here, `research/general_sigma/paired_ensembles4.py`,
-`research/inversion_ablation/run_convergence_battery.py`) run against the
-`paper-r12` package; the branch `paper/inversion-r13` carries them on
-top of that tag.
+Logs land in `out/<target>.log`; each target also prints its last lines.
+
+## Environment
+
+- **Python.** `requirements.lock` pins every package (Python 3.12). The
+  `winning` package itself is this repository at the tag, installed
+  editable; `fastrace` 0.1.2 supplies the compiled kernels used by the
+  GHK comparator and the large-n benchmarks.
+- **R** (only for `make referee-r` and `make botev-tree`). Measured with
+  R 4.6.1, mvtnorm 1.4.2, TruncatedNormal 2.3, jsonlite 2.0.0. The default
+  `make referee` replays the committed R output (`referee_out.json`) instead.
+- **Threads.** Every target runs with one BLAS thread
+  (`OMP_NUM_THREADS=1` and friends) so results do not depend on core count.
+
+## Determinism
+
+- All scripts seed NumPy generators explicitly; the R referees call
+  `set.seed`. On one machine the accuracy figures regenerate exactly in
+  the pinned environment, apart from the sources of variation below.
+- **Wall-clock-matched estimators.** The "frequency, matched time" rows of
+  the against-the-field table draw as many samples as fit in the lattice's
+  run time, so their errors vary with machine speed. They draw from their
+  own random stream, so nothing else in the table depends on them.
+- **Dense fits across machines.** NumPy and SciPy on macOS use the
+  operating system's Accelerate library, and four seeded runs that fit a
+  dense covariance gave different second digits on two machines:
+  `make ensembles` (with `paired_ensembles4.py`), `make kernel`,
+  `make split-referee` and `make large-n`. The paper prints the values
+  from an Apple M1 Ultra under macOS 27.2 (logs
+  `research/general_sigma/log_*_m1_ultra_2026-11-26.txt`, and
+  `results_ensembles4.csv`). The earlier logs in that directory are from
+  the M3 Ultra under macOS 26.2. On the M1 Ultra the runs repeat exactly.
+  `research/general_sigma/probe_machine.py` prints a hash of each stage
+  for comparing two machines.
+- **Genz in SciPy** (`bench.py alt`) is randomized internally and unseeded
+  by its API; its TV agrees with the lattice at the reference's noise in
+  every run, but the last digit moves. (`genz200` calls R's `mvtnorm`, which
+  is seeded.)
+
+## Timings
+
+Times are from one Apple Mac Studio (M3 Ultra, 28 cores, 96 GB), single-threaded BLAS; the lattice kernels use one core and the Rust GHK comparator uses all free cores. The paper's
+timing claims are ratios (lattice against GHK, Genz, simulation); absolute
+seconds will differ on other hardware. `make timings` runs `retime.py`, which
+re-measures every wall-clock figure, prints it beside the paper's value, and
+refuses to measure on a machine whose load average is high (`--force`
+overrides and says so in the output). The logs behind every time in the
+paper are in `timings_2026-11-11/`.
+
+## Known limits
+
+- `fuzz_races.py` reports three `hopeless_others` flags (largest 3.4e-4) on
+  rank-1 fields at sharpness about 4.4, where Gauss-Hermite's factor
+  quadrature error is itself of that size (checked against a 120-node,
+  40,001-point referee). Adding a hopeless runner re-centres the loadings and
+  so changes the node order; both answers sit within the factor-strength
+  boundary the paper states. The flag is the battery's 1e-5 tolerance, not a
+  claim of the paper.
+- The fixed-15-node "loses up to 5%" figure was found by the fuzz battery
+  before the adaptive rule existed (`research/fuzz/log_fuzz2000.txt`).
+  `make fixed-rule` reproduces it on the shipped code by forcing the old
+  fixed rule: 4.79e-2 TV at seed 11540, against 3.8e-3 for the default.
