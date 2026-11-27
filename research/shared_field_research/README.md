@@ -3352,3 +3352,8 @@ against refined field, not independently certified errors. Coarse mass
 defects and negligible negative tails persist; broad shifts better served
 by iteration 15's spectral method. No new covariance class or general PSD
 claim. No production dispatch changes.
+
+
+## Iteration 17: signed observation contrast gauge
+
+See [derivation, benchmarks, tests and limitations](iteration17_contrast_gauge.md). New gauge_field.py and test_gauge_field.py. Project negative observation loadings away from the latent common-shift direction: preserves every contrast exactly and increases observation noise in PSD order. Formerly refused non-tied exactly singular two-sparse rank-one case now prices to 1.82e-14 against an independent four-way orthant formula. Five standalone tests pass. At n=32 pair, observation noise increases 1e-6 to .06207; 24-frequency-node RMSE vs refined field drops 6.65e-8 to 1.40e-11 at .042 vs .048 s; compiled Genz 2048 .403 s and 6.52e-5 RMSE. n=64 pair also tested. Centered modes see no benefit; sparse loadings may become dense; no independent large-dimensional error certificate. No ridge, production dispatch, or arbitrary PSD solution. Next integrate gauge into multiple negative modes and hybrid block fields.
