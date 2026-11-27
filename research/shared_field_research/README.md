@@ -3309,3 +3309,8 @@ matter block size, so intersect all other inequalities to form one
 interval. This latter extension is particularly promising, although
 all-winner local boundary construction would naively be O(b^2) for
 block size b. Investigate planar lower-envelope geometry to avoid that.
+
+
+## Iteration 14: sparse planar hull cavities for arbitrary-size rank-two blocks
+
+See [full derivation, experiments, reproduction commands, limitations and next steps](iteration14_planar.md). New `planar_field.py` and `test_planar_field.py`: arbitrary-size exact rank-two blocks with a scalar negative global mode, convex-hull neighbor pruning and affine envelopes. Five standalone tests pass, independent 13-way cell reference agrees to 7.19e-10. At 301 runners in one regular polygon, 90,300 directed constraints reduced to 602, with 2.88x measured speedup; dense 32/64 benchmarks and independent randomized root checks recorded in the linked note. No general PSD or production claim.
