@@ -2243,3 +2243,221 @@ second-order deterministic score on the well-conditioned
 residual, and compare against compiled GHK. Need honest
 relative-error reporting for nonvanishing probabilities and
 full singular tie dispatcher before production integration.
+
+
+## 2026-11-27 — Negative factors by a complex shared survival field
+
+Rechecked current main README, CLAUDE.md, papers/general_inversion/CLAIMS.md,
+winning/factor/core.py (fit_covariance and win_probabilities_factor),
+factor/races.py (cov fit/degraded dense dispatch and actual shared
+log-survival cavity), methods/native.py, and benchmark runner/shape tests.
+AGENTS.md absent. Main still uses positive factor columns, block clustering,
+residual eigendirection promotion and diagonal matching/flooring; the
+degraded Gaussian race can use GHK. This is NOT fitting dense covariance
+to the existing grammar. Open PR #1093 is still the isolated research
+branch, and the other open PRs do not implement negative factors.
+No production dispatch or API changes. This is the first prototype in
+this log to use Fourier inversion for a negative covariance mode.
+
+**Exact class and derivation.** Let D=diag(s_i^2), s_i>0, and
+a in R^n with a'a<=1. The target covariance is
+C=D^(1/2)(I-aa')D^(1/2), or additionally +vv' (positive ordinary
+factor). With independent Y_i~N(0,1) and E~N(0,1-a'a), define
+U=a'Y+E. U~N(0,1). Conditional on U=0, X=mu+D^(1/2)Y
+has exactly covariance C and the stated mean. E can be identically
+zero: no ridge or covariance fit. For a threshold t, put
+z_j=(t-mu_j)/s_j and
+F_j(z,k)=integral_z^infty phi(y) exp(i*k*a_j*y) dy.
+Fourier inversion of the density of U at zero, after fixing
+winner i at t and requiring all other contestants >t, gives
+
+ p_i = sqrt(2/pi) integral_R dt integral_0^infty dk
+       exp(-(1-a'a) k^2/2) Re[
+       phi(z_i)/s_i * exp(i*k*a_i*z_i) * product_(j!=i) F_j(z_j,k)].
+
+The joint density insertion follows by independence before conditioning;
+divide by phi(0) to condition; conjugate symmetry halves the Fourier
+domain. At each (t,k) this is precisely the independent survival product
+with a complex-valued survival and boundary insertion. Compute all
+cavities with prefix and suffix products, not division by possibly zero
+complex factors. F_j is evaluated via scipy.special.wofz in the upper
+half plane: for z>=0, F=.5 exp(-z^2/2+i*b*z) w((b+i*z)/sqrt(2)),
+b=k*a_j; for z<0 use exp(-b^2/2)-F(-z,-b). Thus no exponentially
+large negative-half-plane wofz calls. The Fourier axis has a fixed
+natural scale even as a'a->1, unlike a Gaussian likelihood concentrated
+on a thin hyperplane. Complexity O(n L K) for L performance and K
+frequency nodes; batch storage O(n K batch). No per-winner multivariate
+orthant integrals, no eigensolve for supplied parameters; includes node
+construction. Positive factors are combined by the SAME outer
+Gaussian integration as existing factor races (mixed_field implements
+one positive factor, with the common loading removed). Complexity
+O(Q n L K), Q outer nodes. Not yet production integration or a dense
+parameter fitter.
+
+**Convergence and singularity.** If a'a<1, Fourier inversion and
+Fubini hold by Gaussian damping. At a'a=1, if at least three a_j
+are nonzero, at least two nonzero a_j remain after any winner insertion.
+Integration by parts bounds |F_j|<=min(1,sqrt(2/pi)/|k a_j|)
+uniformly in z. Therefore the product is integrable in k at
+infinity, and integrating the bound over t uses integral f_i=1.
+Conditioning on U=0 at this singular limit is valid by continuous
+densities of the remaining weighted truncated sum. Every pair
+contrast has strictly positive variance since its two-sparse vector
+(s_i e_i-s_j e_j) cannot be parallel to a with >=3 nonzero
+coordinates. Hence even singular C in this class has zero probability
+of ties and prices the exact original race. A sparse singular case
+with <=2 nonzero coefficients is explicitly refused (also within
+8 machine eps of the boundary), not silently regularized. For a
+normalized input rounding just above unit norm by <=8 eps, renormalize
+to unit norm; larger invalid norms rejected. General permanent-tie
+handling and arbitrary PSD matrices are not claimed by this
+prototype. Main classic dead-heat calculus and the earlier hard
+exact-root equal-credit fallback remain separate.
+
+For fixed finite cutoffs, Gauss-Legendre converges for the continuous
+integrand in t and k; then send both cutoffs to infinity, with enough
+nodes at each cutoff (e.g. a diagonal sequence of accuracies).
+No structural or sampling error. Truncation and numerical
+quadrature are separate. In particular the finite performance
+window [min(mu-pad*s),min(mu+pad*s)] omits at most
+(n+1) Phi(-pad) total race mass by union bound and marginal
+conditional variance <=s_i^2. For Fourier truncation at K0,
+take r_j=max(1,K0 |a_j|/sqrt(2/pi)), let q count r_j>1
+excluding i, and use the bound sqrt(2/pi)*K0*prod_(j!=i)(1/r_j)/(q-1)
+when q>=2. For noise>0 also use erfc(K0*sqrt(noise/2))/sqrt(noise).
+Take the smaller bound, plus the performance tail bound.
+tail_bounds implements these conservative real-arithmetic bounds;
+not a floating-point certificate or a quadrature error bound.
+For fixed rank r negative update, A has n rows and r columns,
+A'A<=I, U=A'Y+N(0,I-A'A), and replace ka_j with k'A_j
+and Fourier integral with r-dimensional inversion. For strictly
+positive observation-noise covariance, Gaussian damping suffices;
+at singular noise additional directional integrability conditions
+are needed, not simply total count of nonzero rows. Cost exponential
+in r for tensor quadrature, linear in n per node. Not implemented
+in this iteration. Independent positive factors can be combined
+by conditioning whenever the negative residual is itself PSD.
+
+Why this is a genuinely different grammar: e.g. take equal s
+and centered a with every coordinate nonzero and a'a=1.
+For any exact contrast representation P(diag(d)+VV')P,
+the centered null vector a forces sum d_i a_i^2=0, hence
+d_i=0 for all i; positive factors alone must then span
+n-2 contrast dimensions. Our one negative factor prices the
+same race with one Fourier axis, including the singular endpoint.
+At small positive noise, the prior diagonal packing obstruction
+returns for positive smoothing. This construction bypasses it
+rather than making a better approximate factor fit. The Gaussian
+conditioning and Fourier inversion themselves are classical;
+see Steck (1962), Biometrika 49:433–445,
+doi:10.1093/biomet/49.3-4.433 (equicorrelated orthants; abstract
+record only), Sun (1988), doi:10.1080/03610928808829845 (orthant
+Fourier reduction), Genz (1992), doi:10.1080/10618600.1992.10477010
+(separation-of-variables), Cong et al. arXiv:1607.04751 (efficient
+simulation for low-rank covariance downdates/precision updates).
+The investigated combination is the all-winner Fourier cavity and
+low negative rank in the existing field; no priority claim.
+
+**Experiments.** signed_field.py, test_signed.py, bench_signed.py.
+Local identical standalone code on SciPy 1.17.0; not full repo
+CI, no installed winning or fastrace. Five tests passed in 1.83s:
+CF against direct complex adaptive integration (20 points),
+four-runner zero-mean trivariate contrast arcsine orthant formula
+at residual eigenvalues .3, 1e-5 and exactly zero (max absolute
+errors 5.42e-13, 5.52e-13, 5.51e-13; centered a=(1,2,-1,-2)/sqrt(10),
+unit s), independent adaptive field with nonzero means and
+heterogeneous s, shift/scale/sign/permutation invariance, positive
+factor common-shock invariance and mixed-sign-factor orthant
+reference (atol 1e-10), non-PSD/singular sparse refusal.
+Initial test with four heterogeneous s and nearly singular
+observation, cutoff 256 and 160 t nodes was ~1.75e-6 from
+exact orthant, not a passing fine-accuracy test; increased
+performance refinement needed for oscillations, and do not
+infer dense-case accuracy from this small sparse-ish case.
+The final mixed orthant test uses nonzero noise .3.
+
+Reproduce from this directory:
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 python -m pytest -q -s test_signed.py
+and same environment python -u bench_signed.py [--large].
+Seed 812; mu~N(0,.4^2), centered Gaussian a normalized so a'a=1-1e-5,
+unit s; hetero s=geomspace(.12,1.6,n), sparse only 4 nonzero a,
+mixed additional v~N(0,.3^2). All target matrices PSD, dense
+mixed-sign off-diagonals in diffuse, hetero and mixed cases.
+Bench references use same deterministic field at (L,K,K0)=(256,120,96)
+and compare with (192,80,48); positive factor orders 41 and 31.
+Differences versus this refined field are not independent error
+certificates. Independent compiled Genz/SOV baseline from
+SciPy 1.17 _qmvnt._qmvn uses permuted Cholesky, CBC lattice
+and compiled _qmvn_inner; 8 randomized batches per runner,
+4 seeds 0..3, raw covariance contrast per runner, normalized
+full vector for fair comparison. Includes all per-runner
+preparation and lattice construction (may be internally cached);
+no fastrace comparison. All field timings include construction,
+no prep amortization required. RMSE over all contestants and
+scrambles, max and relative max are medians over scrambles
+(relative only on reference p>1e-4); SD pooled between-scramble.
+Single-thread runtime per complete vector. Field settings
+96/24/12/15 and 128/48/24/21 respectively (last GH order for
+mixed only). First run timed out before completing n128
+compiled comparator; reran hetero, sparse, mixed separately at
+2048. Do not report incomplete 8192 results for those.
+
+| case | method | sec | RMSE vs refined | med max | med relmax | scramble SD |
+|---|---|---:|---:|---:|---:|---:|
+|32 diffuse|field coarse|.02086|7.45e-12|1.25e-11|4.44e-10|–|
+||field fine|.05439|4.09e-15|1.00e-14|1.25e-13|–|
+||compiled Genz 2048|.32314|1.09e-4|3.31e-4|.01407|1.16e-4|
+||compiled Genz 8192|.78386|3.48e-5|9.22e-5|.00459|3.28e-5|
+|64 diffuse|field coarse|.04059|2.10e-10|3.58e-10|4.13e-8|–|
+||field fine|.10341|8.20e-15|1.22e-14|1.30e-11|–|
+||compiled Genz 2048|2.02806|9.89e-5|3.55e-4|.04451|9.85e-5|
+||compiled Genz 8192|4.37633|3.26e-5|1.10e-4|.01222|3.36e-5|
+|32 hetero|field coarse|.02159|2.03e-8|1.08e-7|9.24e-5|–|
+||field fine|.05130|1.02e-11|4.82e-11|7.87e-9|–|
+||compiled Genz 2048|.32386|6.73e-6|1.87e-5|.00416|6.88e-6|
+|32 sparse|field coarse|.01240|1.08e-7|4.13e-7|2.57e-5|–|
+||field fine|.03084|3.06e-8|1.49e-7|5.08e-6|–|
+||compiled Genz 2048|.33157|1.00e-4|3.21e-4|.01153|1.03e-4|
+|32 mixed|field coarse|.30752|1.63e-10|5.88e-10|2.73e-8|–|
+||field fine|1.18627|6.04e-13|1.98e-12|1.30e-10|–|
+||compiled Genz 2048|.31296|9.29e-5|2.83e-4|.01222|9.68e-5|
+
+Refinement max differences: 2.51e-14, 2.17e-14, 5.43e-14,
+1.42e-8, 2.42e-14 in case order. Coarse field mass defects
+2.13e-10,1.19e-8,7.08e-8,2.11e-10,3.08e-11; fine
+1.0e-14,3.25e-13,6.12e-11,1.03e-14,8.88e-15.
+All positive in diffuse, hetero (minimum ~1.33e-22), mixed.
+Sparse negative coarse min -4.14e-7 and refined min -1.20e-9,
+so this is NOT a reliable rare-share evaluator; mass alone
+is not a diagnostic. Fourier truncation bound at K0=12 is
+9.92e-11 (n32 diffuse/hetero/mixed), 1.04e-12 (n64 diffuse),
+but .273 for sparse; at K0=24 the first three are ~5.07e-18,
+n64 ~7.34e-18, sparse .0533. Sparse needs separate fallback
+or explicit failure/refinement rather than normalization/clipping.
+At n128 an earlier standalone field run (96/24/12) took .0792s
+and differed by 7.76e-9 max from 256/256/96; (128/48/24)
+took .2008s, 1.83e-12 max difference; no compiled comparison
+at n128. Singular exact-zero observation noise n32/n64
+unit sd refinements also stable: 128/128/32 vs 192/192/64
+max diff 2.46e-14 and 4.01e-14; no independent high-dimensional
+singular certificate. The positive+negative factor extension
+is slower than the pure-negative field but produces much
+smaller refinement differences at roughly the same budget
+as compiled Genz in the n32 fixture. Independent closed form
+and compiled baseline corroborate the new formula; larger-n
+accuracy numbers are refinement, not exact error guarantees.
+
+**Next experiment:** move to rank two negative modes with
+mixed positive/negative factor grammar, aiming for an adaptive
+low-rank Fourier rule rather than tensor explosion. The real
+mathematical issue is cancellation when the conditional event
+is rare or the negative loadings are localized. Try contour
+tilting of each Fourier integral by the conditional truncated
+sum saddlepoint (reuse shared tilted field and cavity, possibly
+one saddlepoint per t rather than per runner); derive a stable
+tail bound and check sparse fixtures. Need a dispatcher with
+explicit accuracy diagnostics or a stable exact-root fallback,
+and a dense signed-decomposition fit before production API.
+General arbitrary-PSD performance remains open, but this is
+a substantiated exact broader matrix class under route 1.
+Existing research draft #1093 updated; no speculative new PR.
