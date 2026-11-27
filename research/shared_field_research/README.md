@@ -2880,3 +2880,116 @@ and positive interpolation could remove O(n^2) shared-knot
 worst case. A general dense convergent estimator and comparison
 with fastrace remain open. Do not pretend that increasing
 block size without bound makes the local orthant cost practical.
+
+
+## Iteration 11: block-Fourier hybrid (one diffuse negative mode on correlated pairs)
+
+At main 898a9f685bec35f88f6eeef10227bd6d302d7f83 the actual
+blocks.py conditions on positive cluster factors; races.py _fit_cov
+routes degraded dense normal fits to GHK. test_cov_routes_to_ghk
+confirms the distinction. PR 1093 remains open/draft. AGENTS.md not
+present at root. No production interface changes.
+
+For SPD independent blocks C_B of size 1 or 2, let C=blockdiag(C_B),
+U=beta'(X-mu)+sqrt(1-beta'C beta)*epsilon, var(U)=1.
+The target covariance given U=0 is C-cc', c=C beta. No approximation.
+This represents local positive/negative dependence and a global
+negative mode, at the cost of just one frequency axis. For each
+block define S_B(t,k)=E[exp(ik U_B) 1{all X_B>t}], U_B=beta_B'(X_B-mu_B).
+Let g_i(t,k) be the boundary density with the same complex weight.
+For a pair, condition on X_i=t: U_B has deterministic part
+c_i(t-mu_i)/C_ii and random part beta_j q Y, where q is the
+conditional SD of X_j. Thus g_i is marginal normal density times
+exp(ik c_i(t-mu_i)/C_ii) times the truncated characteristic function
+F((t-E[X_j|X_i=t])/q,k beta_j q). Singleton is the same without F.
+Reconstruct S_B by reverse integrating sum_i g_i over performance.
+Fourier inversion at U=0 gives p_i=sqrt(2/pi) int_0^infty
+exp(-noise*k^2/2) Re int g_i prod_{A != B} S_A dt dk.
+Prefix/suffix cavities avoid division by complex near-zero quantities.
+
+Useful general bound: condition on the Gaussian residual of X_B given
+U_B. The truncation event then restricts the scalar U_B to an interval
+(possibly empty, unbounded or all R); by integration by parts the
+absolute truncated Gaussian Fourier transform is <= min(1,
+sqrt(2/pi)/(k sd(U_B))). This holds for ANY Gaussian block, not just
+pairs. Therefore if >=3 blocks have nonzero U_B variance, the product
+outside any winning block supplies >=2 factors of 1/k and inversion
+is absolutely convergent even with no observation noise. For the
+frequency bound at K use active r_B=max(1,K sd(U_B)/sqrt(2/pi))
+and integrate the power-law bound from K to infinity, or use the
+Gaussian observation noise bound, whichever is smaller. A positive
+observation noise also suffices without 3 blocks. In exact singular
+case a two-contestant contrast cannot be proportional to the
+observation vector when it has nonzero variance on 3 independent
+blocks; hence no permanent ties in scope. Refuse singular local
+blocks and sparse singular constraints rather than invent a tie rule.
+Repair only observation variance excess within roundoff, no ridge.
+
+Finite performance window: omitted race winner tail <=(n+1)Phi(-pad)
+since target marginal variances are no larger than base. Omitting
+the upper tail when reconstructing each S_B changes it by at most
+Phi(-pad), in modulus. Telescoping products and integrating
+|g_i|<=f_i gives extra finite-frequency bound
+sqrt(2/pi)*K*(B-1)*Phi(-pad). Bounds in exact arithmetic only; not
+quadrature bounds. On finite rectangle composite Simpson and
+Gauss-Legendre converge by continuity; choose K,pad increasing
+with K Phi(-pad) -> 0 and refine quadrature for each finite rectangle.
+No sampling error or structural error. Cost O(n L Q) for actual
+panels L and frequency nodes Q; memory O(n L batch). Added local
+knot refinement can make L larger than base request. Complex
+quadrature can return negative tiny shares; no clipping/normalization.
+The block-level decay bound also suggests generalization to arbitrary
+small correlated blocks if their complex boundary densities can be
+evaluated cheaply. Dutt (1973), Biometrika 60:637–645, uses Fourier
+transforms for MVN integration; Sun (1988), DOI
+10.1080/03610928808829845, gives orthant reductions. Genz (1992),
+DOI 10.1080/10618600.1992.10477010, describes SOV. Bibliographic
+abstracts checked; no priority assertion for Fourier conditioning.
+
+Standalone implementation hybrid_pair.py; test_hybrid.py (4 passed
+in 1.07 s; independent four-runner trivariate arcsine reference at
+eps=.2, exact singular symmetric 16-runner case, 12-runner
+heterogeneous near-null shift/scale/permutation, invalid inputs).
+No full repo CI, no common-shock API test, no fastrace comparison.
+
+Commands in research/shared_field_research:
+  export OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+  python -m pytest -q test_hybrid.py
+  python -u bench_hybrid.py 32 mixed
+  python -u bench_hybrid.py 32 hetero
+  python -u bench_hybrid.py 64 singular
+  python -u bench_hybrid.py 32 hard
+
+Seed 2026: alternating local correlation signs with magnitude .65-.9,
+global observation beta normalized to variance 1-1e-5, means N(0,.4^2),
+hetero sd uniform [.7,1.3]. Full-vector normalized SciPy _qmvn
+compiled SOV with greedy permuted Cholesky and CBC lattice, 8 batches
+per contestant, 4 seeds 0..3. Preparation included; no amortization.
+Reference deterministic (1024,96,32) vs (1536,112,40) base panels,
+frequency order, cutoff: max differences 1.75e-12 and 2.40e-12.
+Not an independent large-dimensional certificate. Measured results:
+case | method | seconds | RMSE vs refined | med max | med relmax p>1e-4 | pooled scramble SD
+32 mixed | field 96/24/10 | .1656 | 3.94e-7 | 9.53e-7 | 1.16e-5 | -
+32 mixed | field 192/32/14 | .1757 | 1.36e-9 | 2.99e-9 | 7.86e-8 | -
+32 mixed | field 384/48/20 | .5343 | 2.88e-11 | 5.79e-11 | 2.32e-9 | -
+32 mixed | Genz 2048 | .2489 | 8.09e-5 | 2.26e-4 | .01069 | 8.43e-5
+32 mixed | Genz 8192 | .6650 | 2.85e-5 | 8.45e-5 | .00227 | 2.81e-5
+32 hetero | field 96/24/10 | .1669 | 2.24e-7 | 5.95e-7 | 3.13e-5 | -
+32 hetero | field 192/32/14 | .1744 | 3.42e-9 | 1.02e-8 | 5.59e-7 | -
+32 hetero | field 384/48/20 | .5090 | 2.63e-10 | 8.22e-10 | 2.29e-8 | -
+32 hetero | Genz 2048 | .2499 | 1.02e-4 | 3.58e-4 | .00913 | 1.04e-4
+32 hetero | Genz 8192 | .6346 | 3.08e-5 | 8.43e-5 | .00239 | 3.26e-5
+
+At 192/32/14, mass defects 3.55e-8 and 3.22e-8; omitted-frequency
+bounds 1.26e-7 and 4.26e-8 respectively, not bounds on quadrature.
+All reported shares positive; reference minimum .000523 and .000100.
+Fine reference times 4.51 and 4.74 s. Combined benchmark invocation
+timed out during the 64 singular case, no result there or hard case.
+Do not infer favorable performance for severe local near-singularity,
+localized global loadings, or arbitrary covariance. The exact grammar
+is useful, but automatic decomposition and production integration
+remain open. Next: stress localized observation and very sharp pairs
+at moderate budgets; extend g_i to triples by a one-dimensional
+conditional complex quadrature, or use direct complex CDF formula.
+Also investigate positive factors outside the hybrid and independent
+validation in larger dimensions. 
