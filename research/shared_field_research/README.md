@@ -1374,3 +1374,150 @@ pilot (the sum of individual conditional credits has expectation
 one), and compare full-vector error including rare shares. For
 singular laws require explicit exact support and tie semantics.
 The arbitrary-matrix performance objective remains open.
+
+
+## 2026-11-26 — Multi-companion sparse cavities: cancel several small eigenmodes
+
+Current main README, CLAUDE.md, factor/races.py (including _race_dense
+and fit_covariance routing), methods/native.py inspected via GitHub;
+AGENTS.md not found. Existing PR #1093 confirmed in open-PR search;
+no separate open cavity PR found. Earlier diagonal splitting, envelope
+and single-companion experiments remain in this log. No changes to
+production or main. This iteration is not an alternative covariance
+fit: all contrast eigenvalues are retained.
+
+For contrast basis B and exact root A=H sqrt(lambda), set
+F=H / sqrt(lambda), where H=B U contains orthonormal contrast
+eigenvectors. For contestant i and k distinct companions J excluding
+i, minimize ||F_i + a' F_J||^2, equivalently a=-Q_JJ^{-1} Q_Ji
+for Q=F F'. Solve the least-squares problem directly rather than
+forming the squared-condition-number normal equations. Put s=1/||v||
+and w=s v, v=F_i+a'F_J. Then A w=s P(e_i+sum_j a_j e_j), so
+preintegration in this unit latent direction changes only i and
+J modulo a common shift. Conditional on the orthogonal latent
+residual, displacement relative to a sampled performance is
+N(-s z'w,s^2). The interval is bounded above by the smallest
+performance outside {i} union J minus x_i, and by the inequalities
+(1-a_j) r <= x_j-x_i. Negative coefficients of r produce lower
+bounds; zero coefficients require the fixed comparison. The k+2
+smallest sampled performances suffice for every complement minimum.
+One shared draw and score matrix serve all contestants. Current
+broadcast cap search is O(n k^2) per draw; a membership/rank
+implementation could reduce this. Dense products still cost O(n^2)
+per draw; eigensystem O(n^3); per-i pivoted QR and least squares
+are extra preprocessing. No rare-tail or compiled speed claim.
+
+**Multiple near-null modes theorem.** For C=P-(1-eps) U U' on
+contrast space, U centered with r orthonormal columns, choose k=r.
+The rows of U excluding i span R^r: their sum equals -U_i, so
+removing i cannot reduce rank. Thus some r companion rows J are
+invertible and a solving U_J' a=-U_i exists for every i. The
+resulting direction is orthogonal to all r near-null modes, and
+its precision energy is ||P(e_i+sum a_j e_j)||^2, independent of eps.
+The optimized energy is no larger. In particular, take a globally
+maximum-absolute-determinant r-row submatrix of U. For any i
+outside these r rows, Cramer's rule bounds every coefficient of
+a in absolute value by 1 (else replacing a selected row increases
+the determinant). Hence at least n-r entrants admit s >=
+1/sqrt(1+r), uniformly as eps decreases. For the other r entrants,
+choose a separate full-rank companion set; the bound need not be
+as good. This is an existence guarantee, not a bound for arbitrary
+pivoted QR. The prototype selects the k smallest-eigenmode rows
+by pivoted QR excluding i (or greedily orthogonalizes F rows);
+then optimizes energy with all eigenmodes retained. k<r in general
+cannot cancel all r dangerous modes. The eigenmode selector is a
+heuristic for spectra without a clear gap. Preintegration and
+constrained subspaces are prior art (Liu/Owen 2023,
+doi:10.1137/22M1479129; Liu 2024, doi:10.1137/23M1548918);
+volume subset selection is established (Osinsky 2023,
+doi:10.1002/nla.2525). The race-specific sparse direction and
+shared complement minima are the experiment, not those techniques.
+
+For SPD contrasts each column is an exact conditional probability,
+unbiased under iid/ideal uniform randomized nodes and strongly
+consistent under iid. Bounded a.e.-continuous integrands also
+converge under ideal equidistributed Sobol refinement. No quadrature
+or structural bias in exact arithmetic; floating point factorization,
+finite Sobol bits and rare intervals impose floors. Different
+conditioning sigma fields imply finite-sample mass defects, not
+a simplex vector. No renormalization. For truly singular inputs
+the prototype explicitly refuses; an exact-root generalization
+must constrain directions to its support, coalesce permanent
+identical rows and means with equal credit, and use direct exact-root
+credit if no admissible sparse direction exists. Not implemented;
+no arbitrary PSD intake or GHK dominance claim.
+
+### Experiments
+
+multi_cavity.py, bench_multi_cavity.py, test_multi_cavity.py.
+Local standalone copies (same GHK comparator copied from fetched
+bench_markov_tree.py) passed 5 tests in 0.74 s: dense line geometry
+vs shared minima, independent three-way adaptive quadrature,
+3/6-mode smoothing, shift/scale of sample credits, singular refusal.
+No whole-repo CI or compiled GHK comparison. To reproduce from
+this directory use OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1
+python -m pytest -q test_multi_cavity.py and the same environment
+with python -u bench_multi_cavity.py.
+
+Seed 812, means N(0,.4^2), centered Gaussian QR modes, eps=1e-5.
+Wishart GG'/n+.05 I; hetero .04 to 1.5 row scales and weak dense
+base. Four test scrambles 0..3; reference mean of ordered log
+GHK scrambles 100..102, 8192 points/entrant at n32 and 4096 at n64.
+RMSE pooled over all entries and scrambles; max is median of
+per-scramble max absolute difference. These are differences from
+noisy references, NOT exact errors. Mean single-thread seconds;
+GHK includes preparation, cavity preparation separately 0.0017
+to 0.0067 s. GHK comparator uses greedy conditional ordering and
+Sobol nodes. No postnormalization.
+
+| n/case | k/mode/log2 draws | median s | seconds | RMSE | medmax |
+|---|---|---:|---:|---:|---:|
+|32 null3|GHK 10|—|.0871|1.872e-4|6.887e-4|
+||1 greedy 14|.0494|.0601|8.405e-4|2.188e-3|
+||3 pivot 14|.8185|.0668|2.376e-4|6.665e-4|
+||3 greedy 14|.7459|.0709|2.987e-4|8.493e-4|
+||6 pivot 14|.8740|.0979|2.235e-4|5.988e-4|
+||3 pivot 16|.8185|.2783|1.236e-4|3.283e-4|
+|64 null3|GHK 10|—|.3601|1.192e-4|3.264e-4|
+||1 greedy 14|.1306|.1179|6.505e-4|1.942e-3|
+||3 pivot 14|.8193|.1338|2.888e-4|6.870e-4|
+||3 greedy 14|.7853|.1384|3.086e-4|1.039e-3|
+||6 pivot 14|.8783|.2076|2.474e-4|6.334e-4|
+||3 pivot 16|.8193|.5686|9.425e-5|3.134e-4|
+|32 null6|GHK 10|—|.0933|2.211e-4|7.218e-4|
+||1 greedy 14|.0137|.0496|8.517e-4|2.454e-3|
+||3 pivot 14|.0115|.0648|8.403e-4|2.279e-3|
+||3 greedy 14|.0689|.0740|7.821e-4|2.164e-3|
+||6 pivot 14|.7447|.1013|2.562e-4|6.335e-4|
+||3 pivot 16|.0115|.2551|3.921e-4|1.010e-3|
+|32 wishart|GHK 10|—|.0954|1.229e-4|3.831e-4|
+||1 greedy 14|.6065|.0505|3.664e-4|9.440e-4|
+||3 pivot 14|.5956|.0666|3.716e-4|1.161e-3|
+||3 greedy 14|.7148|.0708|3.080e-4|8.437e-4|
+||6 pivot 14|.6288|.0983|3.407e-4|1.016e-3|
+||3 pivot 16|.5956|.2686|1.265e-4|3.034e-4|
+|32 hetero|GHK 10|—|.0888|6.280e-6|2.187e-5|
+||1 greedy 14|.2687|.0475|1.026e-4|4.075e-4|
+||3 pivot 14|.2690|.0641|1.213e-4|5.207e-4|
+||3 greedy 14|.2697|.0640|9.995e-5|3.463e-4|
+||6 pivot 14|.2713|.1023|1.195e-4|4.541e-4|
+||3 pivot 16|.2690|.2602|5.654e-5|2.818e-4|
+
+Reference max spreads in order 3.516e-4, 1.982e-4, 4.075e-4,
+1.346e-4, 8.082e-6. Worst raw cavity mass defect .019998 (64 null3,
+3 pivot 14), GHK .006043. The improvement in smoothing is real,
+but the measured GHK errors are comparable or better at similar
+time; particularly poor on hetero and generic Wishart. No new
+standalone PR; preserved in existing research PR #1093.
+
+Next: do not optimize conditional SD alone, since that is not
+equivalent to smoothing the actual winner event. Test per-entrant
+directions using pilot near-tie contrasts and a fixed sparse
+support; consider mass control variate with independent pilot
+rather than discarding mass defects. A more distinct approach is
+an unbiased correction around an exact shared-field structured
+backbone using common random numbers and control variates:
+choose the coupling to minimize changes of the winner label,
+not Frobenius covariance residual. This might be more fruitful
+than adding yet more companions. The arbitrary-matrix performance
+objective remains open.
