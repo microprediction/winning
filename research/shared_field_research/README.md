@@ -1521,3 +1521,211 @@ choose the coupling to minimize changes of the winner label,
 not Frobenius covariance residual. This might be more fruitful
 than adding yet more companions. The arbitrary-matrix performance
 objective remains open.
+
+
+## 2026-11-26 — Paired smooth shared-field residuals
+
+Current main README, CLAUDE.md, factor/races.py (dense fit and
+GHK routing), methods/native.py (including contrast construction and
+its fallback ridge), and current PRs checked. AGENTS.md not found.
+Search also found general_inversion/main.tex's dense grammar plus
+residual-factor route and #1064/#1067 fitting work. This experiment
+does not replace covariance by that fit: it prices a cheap independent
+backbone and estimates a correction to the *original* dense law.
+Existing draft PR #1093 is the only working PR; no production change.
+
+### Derivation
+
+For SPD C, take d = .5 lambda_min(C), C0=diag(C), and factor
+C-dI=A A', C0-dI=A0 A0'. The independent backbone is deliberately
+simple; A0 is diagonal. Couple X=mu+A Z+sqrt(d) E and
+X0=mu+A0 Z+sqrt(d) E with independent standard normal Z,E shared
+between models. Let R be the symmetric root of C-dI; choose the
+right orthogonal rotation A=R O by SVD of R A0, O=U V'.
+This minimizes E||A Z-A0 Z||^2, NOT winner-switch probability.
+For each race retain its own minimum T,T0, and form conditional
+credits H_i = h_i(T)/sum_j h_j(T) with h_i the independent Gaussian
+hazard given Z. Compute
+
+    p_hat = p0 + mean(H(X,Z) - H(X0,Z)).
+
+p0 is obtained by deterministic common survival-field quadrature:
+integrate exp(sum log S_j - log S_i + log f_i) simultaneously for
+all i. The prototype uses quad_vec with breakpoints and two infinite
+tails, not the production lattice; no claim that quadrature error
+estimates are certified. In exact arithmetic E H=p(C), E H0=p(C0),
+by factoring the shared minimum density. Thus the correction is
+unbiased with exact p0 under iid draws or ideal uniformly scrambled
+nodes. It is NOT a Rao-Blackwellization of the paired hard difference
+under a *single* joint conditioning field, so do not claim automatic
+variance dominance of that difference. It is the difference of two
+separately smoothed credits.
+
+Why smoothing matters: let delta=(A-A0)Z. The minima differ by at
+most ||delta||_infty when sharing E. Hence the standardized hazard
+arguments differ by at most 2||delta||_infty/sqrt(d).
+The derivative of log Gaussian hazard at z is phi(z)/Phi(-z)-z,
+positive and bounded by a constant plus |z| (for positive z the
+standard normal Mills ratio bounds it; for negative z use
+h(z)<=h(0)). Softmax is globally Lipschitz. For fixed n, means,
+uniformly bounded covariance and d bounded away from zero, the
+squared norm of the credit difference has expectation
+O(||A-A0||_F^2): apply the derivative bound along the line segment,
+then Cauchy-Schwarz and Gaussian fourth moments to delta and the
+standardized minima. This is a local second-order variance bound,
+not a dimension-uniform or QMC rate guarantee. The analogous hard
+difference has squared norm 2 on a winner flip (when no ties) and
+zero otherwise, so its second moment is 2 P(flip). Both the numerical
+results and the bound indicate an advantage for weak residuals
+with substantial common independent variance. For small d or poor
+backbone there is no such guarantee. Common random numbers and
+control variates are classical (Glasserman & Yao 1992,
+doi:10.1287/mnsc.38.6.884); Gaussian preintegration is established
+(Liu & Owen 2023, doi:10.1137/22M1479129). The experiment combines
+shared minimum hazards and a deterministically priced shared
+field as a smooth control variate; no priority claim.
+
+Preparation O(n^3) for eigensystem and SVD, plus backbone pricing.
+Each draw uses one dense multiply O(n^2), then two O(n) survival
+credit vectors. Covariance preparation is reusable for changes in
+mu; p0 must be recomputed for changed mu. Fixed backbone introduces
+no structural approximation error; refine both sample count 2^m
+and p0 quadrature separately. With exact p0, iid convergence is
+almost sure by bounded credits; ideal equidistributed Sobol
+converges since the bounded integrands are continuous except
+measure-zero boundaries (including cube edges). Finite bit/FP
+floors remain. A supplied exact covariance root, including singular,
+can instead use hard_root_correction with equal tie credit for exact
+identical rows and means, zero-padding the roots to common latent
+dimension. That bounded integrand has discontinuities only on
+finitely many nontrivial affine equality hyperplanes (permanent
+ties are treated as a single equal-credit group); same convergence.
+It is not a competitive dense performance solution for singular
+cases. No silent ridge, tolerance ties or eigenvalue deletion.
+The SPD prepare routine explicitly refuses singular input; it
+does not implement contrast-space root intake. Equal credit agrees
+with the classic dead-heat convention; the main factor Gaussian
+engine does not promise Dirac ties. Target law invariant under
+permutation/common shift/common shock/positive scale; fixed Sobol
+coordinates, choice of backbone and smoothing can change finite
+sample estimates under permutation or common shock. Shift/scale
+tested at fixed nodes. Contrast-space canonicalization remains
+to do. Signed correction preserves total mass (up to p0 quadrature)
+but can yield negative coordinates at finite m; optional Euclidean
+simplex projection ensures nonnegative normalized output, is
+consistent and cannot increase L2 error to the true simplex
+vector, but introduces bias. Do not silently apply it.
+
+### Experiments
+
+coupled.py, test_coupled.py, bench_coupled.py. Local standalone
+copies passed seven tests in .94s (root reconstruction, zero
+residual, exact binary, independently integrated bivariate orthants
+for 3 entrants, shift/scale, singular refusal, exact-root permanent
+tie and simplex projection). No full suite, compiled GHK, or
+production factor-lattice comparison. Run from this directory:
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 python -m pytest -q test_coupled.py
+and same environment python -u bench_coupled.py [--refined].
+Seed 812, means N(0,.4^2), W=GG'/n, C=I+.04W (weak) or
+I+.25W (moderate), Wishart W+.05I, diffuse I-.99999 uu' with
+random centered unit u, hetero rescales the moderate matrix by
+geomspace(.04,1.5). Mixed-sign off-diagonals; all full rank.
+Four evaluation scrambles 0..3. First reference mean of
+three log-domain ordered GHK scrambles 100..102, 8192 points
+per entrant at n32 and 4096 at n64. RMSE pooled across
+all contestants/scrambles, medmax median worst coordinate.
+Times mean per scramble, GHK includes ordering/factorization;
+CV prep includes baseline field and root setup, separately
+.032,.059,.065,.030,.028,.028s in table order. No postnormalization
+in this table; all differences against stochastic references.
+
+| n/case | method log2 points | sec | RMSE | medmax |
+|---|---|---:|---:|---:|
+|32 weak|GHK 10|.09069|1.056e-4|1.431e-4|
+||hard 14|.03106|1.033e-3|3.112e-3|
+||hard CV 14|.03163|3.147e-4|7.602e-4|
+||smooth 14|.05280|1.383e-4|4.133e-4|
+||smooth CV 14|.07654|1.479e-5|4.208e-5|
+||smooth CV 16|.27843|6.649e-6|2.025e-5|
+|64 weak|GHK 10|.36916|1.240e-4|1.918e-4|
+||hard 14|.05975|6.389e-4|1.732e-3|
+||hard CV 14|.06036|2.224e-4|7.105e-4|
+||smooth 14|.10900|9.487e-5|2.977e-4|
+||smooth CV 14|.15833|2.956e-5|5.944e-5|
+||smooth CV 16|.54115|2.812e-5|4.601e-5|
+|64 moderate|GHK 10|.38892|1.342e-4|2.257e-4|
+||hard CV 14|.08423|4.815e-4|1.297e-3|
+||smooth 14|.10201|1.184e-4|3.505e-4|
+||smooth CV 14|.14034|6.251e-5|1.939e-4|
+||smooth CV 16|.52680|4.266e-5|1.040e-4|
+|32 diffuse|GHK 10|.08861|1.170e-4|2.531e-4|
+||smooth CV 14|.07791|6.752e-4|2.079e-3|
+||smooth CV 16|.28342|3.414e-4|8.071e-4|
+|32 hetero|GHK 10|.09039|6.607e-6|2.536e-5|
+||smooth CV 14|.09005|2.043e-4|5.252e-4|
+||smooth CV 16|.33111|8.585e-5|2.637e-4|
+|32 Wishart|GHK 10|.09127|1.229e-4|3.831e-4|
+||smooth CV 14|.07915|6.584e-4|1.879e-3|
+||smooth CV 16|.30880|2.974e-4|8.442e-4|
+
+Reference max spread respectively 8.865e-5,2.452e-4,2.527e-4,
+1.152e-4,8.548e-6,1.346e-4. Reference mass 1.000015,
+1.001626,1.002105,1.000258,.9999992,1.000129. CV mass within
+5e-16 in these runs. Negative finite-sample CV in hetero:
+min -3.908e-5 at m14, -7.077e-6 at m16; rare GHK share
+1.94e-90, so CV is not a rare-tail solution. Other cases positive
+at the tested budgets. At n32 weak, empirical trace variance
+of hard, hard CV, smooth, smooth CV respectively .94746,.05191,
+.18163,.0003738 (m14), paired winner flip .02596. At n64 weak,
+smooth .15833 versus CV .0003418. At n64 moderate, .20001
+versus .0089429. On diffuse near-singularity smooth CV variance
+.2520 and Wishart .4621; coupling is not enough.
+
+Because GHK reference uncertainty obscured the favorable cases,
+second experiment (--refined) used four independent 2^18 smooth
+CV scrambles 1000..1003 as reference (same method, NOT an
+independent accuracy certificate), compared raw and normalized
+GHK at higher budgets. n32 and n64 weak completed; moderate
+timed out after reference only (spread 8.10e-5).
+CV reference max spread n32 9.16e-6, n64 1.48e-5; backbone
+alone RMSE 1.396e-4 and 4.474e-5, respectively, against that
+reference. Thus the correction does meaningful work rather
+than simply returning independent shares.
+
+| n | method log2 | sec | RMSE vs refined CV | medmax | pooled between-scramble SD |
+|---|---|---:|---:|---:|---:|
+|32|GHK normalized 10|.0963|6.423e-5|2.008e-4|7.406e-5|
+|32|GHK normalized 12|.2431|1.078e-5|3.919e-5|1.201e-5|
+|32|smooth CV 14|.0810|1.508e-5|3.901e-5|1.446e-5|
+|32|smooth CV 16|.2908|7.019e-6|1.981e-5|7.151e-6|
+|64|GHK normalized 10|.3637|7.860e-5|3.908e-4|9.025e-5|
+|64|GHK normalized 12|1.0041|3.203e-5|4.646e-5|3.022e-5|
+|64|smooth CV 14|.1688|9.700e-6|3.562e-5|1.010e-5|
+|64|smooth CV 16|.6122|4.415e-6|1.602e-5|4.379e-6|
+
+Even including the .059s initial backbone cost, weak n64
+is promising against normalized Python GHK; the independent
+scramble SD gives evidence not relying on a possibly favorable
+reference. n32 is a more modest gain. No universal superiority;
+near-null, hetero and Wishart are negative results. Full rank
+does not imply a useful independent backbone. No independent
+large-scale certificate, no compiled comparison, and no
+finite nonnegativity without optional projection.
+
+### Next experiment
+
+Replace diagonal backbone by existing tree/factor/block price
+with a *shared positive diagonal split on both laws*. The
+same pair of hazard credits then applies exactly conditional
+on each coupled factor root. Work in contrast coordinates and
+fit the diagonal/backbone by pairwise variograms (not full
+covariance Frobenius) to cancel irrelevant common shocks.
+Optimize the shared diagonal or coupling against pilot
+variance of the smooth residual, not raw winner flips. Explore
+the previously implemented heterogeneous split for ill-conditioned
+localized modes, and for diffuse modes try shared sparse
+preintegration instead of diagonal smoothing. Use an independently
+priced low-rank structured model for the backbone, and compare
+with compiled GHK before promoting the result. Preserve negative
+cases as adversarial tests. The universal performance objective
+remains open; this is the strongest weak-residual result to date.
