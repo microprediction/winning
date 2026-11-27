@@ -1898,3 +1898,172 @@ variance and near-singular likelihood-ratio instability before
 benchmarking. Need compiled GHK and independent accurate
 references before production promotion. General performance
 objective remains open.
+
+
+## 2026-11-26 — All-winner covariance-score likelihood remainder
+
+Current main README, CLAUDE.md, factor/core.py (shared product,
+win_probabilities_factor and fit_covariance), factor/races.py (dense
+fit routing), methods/native.py (log GHK), paper index and recent PRs
+rechecked. AGENTS.md absent. Open #1093 is the existing research
+PR; no overlapping open estimator PR found. This continues the
+spectral backbone iteration's first-order covariance correction,
+not the existing dense fit or residual-factor approximation.
+No production changes. Standalone local prototype, not full CI.
+
+**Derivation.** For SPD on contrasts choose P=I-11'/n and
+C*=PCP + tr(PCP)/(n-1) 11'/n. This adds noise only to the
+unidentifiable common direction, not to contrasts. Let
+D=diag(C*), R=D^(-1/2) C* D^(-1/2), K=R-I. Price the independent
+backbone with mean mu and diagonal D. Under it, let T be the
+minimum, z_j=(T-mu_j)/sqrt(D_j), and h_i(T) the normalized hazard
+share. Conditional on T and winner i, standardized performance
+i is z_i, and all others are independent standard normals
+truncated below z_j. Generate one shared vector y of such
+truncated normals and replace coordinate i by z_i to form y^(i).
+This gives the correct marginal conditional law for every i
+even though the n conditional samples are coupled.
+
+For the density ratio L=det(R)^(-1/2) exp(.5 y'(I-R^-1)y),
+the covariance path I+alpha K has score at alpha=0
+S=.5(y'Ky-tr K). Then
+
+    p_i = p0_i + d_i + E[h_i(T) (L(y^(i))-1-S(y^(i)))],
+
+where d_i=E_0[1_{winner=i} S] is a deterministic directional
+covariance derivative. Compute it in the same survival field:
+with m_j=phi(z_j)/Phi(-z_j), v_j=1+z_j m_j-m_j^2,
+delta_i=z_i-m_i,
+
+    E[S|T,i] = .5*(m'Km + diag(K)'v - tr K
+                 + 2 delta_i (Km)_i + K_ii(delta_i^2-v_i)).
+    d_i = integral f_i(t) prod_(j!=i) S_j(t) E[S|t,i] dt.
+
+All candidates share the same dense matvec and quadratic
+form at each t. The stochastic L and S evaluations likewise
+use two matvecs on y then O(n) single-coordinate updates,
+rather than n different quadratic forms. Prep O(n^3), deterministic
+field O(n^2 L), O(n^2) per all-winner correction sample. Prep is
+amortizable across mu except field price and derivative.
+No structural approximation error; derivative is exactly
+subtracted from and restored to the likelihood correction,
+not a truncation of the target model. Integrate field using
+quad_vec over infinite tails and finite breakpoints; not certified.
+Refine its tolerance independently of sample count.
+
+For fixed n and small K, ||L-1-S||_(L2(P0))=O(||K||_F^2)
+by Taylor expansion in a neighborhood of I (Gaussian polynomial
+moments times a uniformly integrable exponential envelope).
+For each component h_i^2<=h_i, so summing its second moment
+over i is bounded by E_0[(L-1-S)^2]; hence correction trace
+variance O(||K||_F^4), vs O(||K||_F^2) for the first-order
+unsubtracted correction. This is a local fixed-dimension bound,
+not a universal QMC convergence rate. Exact criterion for
+E_0[L^2]<infty is lambda_max(R)<2, by integrating Gaussian
+quadratic exponent 2R^-1-I. Outside this regime the raw
+likelihood correction can have infinite variance; subtraction
+of a quadratic score cannot repair it. Even within it the
+determinant factors may make variance large, especially
+near singularity. Iid strong consistency holds on SPD
+contrasts by integrability of L and score even without finite
+variance. Ideal uniformly scrambled nodes give unbiased sample
+averages (exact field); no unqualified deterministic QMC
+convergence assertion for unbounded integrands. Finite bit
+uniform and floating-point limits remain. The earlier exact-root
+hard correction supplies the singular/permanent-tie fallback
+with equal dead-heat credit; no silent ridge. This prototype
+does not reliably detect nearly singular inputs at machine
+precision or implement that fallback itself. Common-shock,
+shift and scale invariance tested; finite sample permutation
+equivariance not claimed, deterministic field equivariance tested.
+Unlike paired hazards, raw LR corrections do not preserve mass
+or nonnegativity. Can project to simplex consistently with
+finite-sample bias; no projection in the results below.
+
+Covariance differentiation itself is classical (Plackett 1954,
+doi:10.1093/biomet/41.3-4.351; Gassmann 2003,
+doi:10.1198/1061860032283). Likelihood score/control variates
+are established, e.g. Capriotti 2008 arXiv:0808.2332.
+The investigated combination is a single shared truncated draw
+for all winner-conditioned likelihoods, rank-one quadratic
+updates, and deterministic covariance score from the existing
+conditional survival product. No priority claim.
+
+**Experiments.** score_field.py, test_score_field.py,
+bench_score.py. Local equivalent standalone files, tests
+3 passed in .78s: independent adaptive bivariate orthant
+reference and central covariance derivative, zero residual,
+common shift/shock/scale and field permutation invariance.
+Committed code adds a basic input check, benchmark imports
+the previously verified ordered GHK instead of the identical
+local copy. No production lattice or compiled GHK tested.
+Run from this directory:
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 python -m pytest -q test_score_field.py
+and same environment python -u bench_score.py.
+Seed 812, mu~N(0,.4^2), W=GG'/n; weak I+.04 W, moderate
+I+.25 W, Wishart W+.05I, diffuse I-.99999 uu' centered
+normalized u, hetero rescaled weak by geomspace(.1,1.5,n).
+Four test scrambles 0..3, reference mean of four independent
+normalized ordered QMC-GHK scrambles 100..103 (2^13 points
+per runner at n32, 2^12 at n64). Reference uncertainty material.
+Mean per-scramble seconds; GHK includes prep, LR prep separately
+.0238,.0161,.0149,.0151,.016,.0177 seconds in case order.
+Reported RMSE across runners and scrambles, pooled between-
+scramble SD, trace integrand variance. LR0 and LR1 computed
+together in same call, so reported runtime includes both.
+Numbers are differences against noisy references, not exact errors.
+
+| n/case | method log2 | sec | RMSE | scramble SD | trace var |
+|---|---|---:|---:|---:|---:|
+|32 weak|GHK 12|.2575|1.051e-5|1.196e-5|–|
+||LR0 12|.0220|2.715e-5|2.944e-5|.0011763|
+||LR1 12|.0220|9.732e-6|9.667e-6|.00001513|
+||LR0 14|.0591|1.192e-5|1.222e-5|.0011887|
+||LR1 14|.0591|4.500e-6|4.146e-6|.00001606|
+|64 weak|GHK 12|1.0388|2.649e-5|3.035e-5|–|
+||LR0 14|.1173|1.928e-5|6.412e-6|.0013829|
+||LR1 14|.1173|1.892e-5|4.259e-6|.00002936|
+|32 moderate|GHK 12|.2273|1.195e-5|1.315e-5|–|
+||LR0 14|.0575|1.421e-4|1.380e-4|.048831|
+||LR1 14|.0575|1.378e-4|1.286e-4|.018158|
+|32 Wishart|GHK 12|.2402|6.110e-5|5.535e-5|–|
+||LR1 14|.0653|.03731|.03688|660.29|
+|32 diffuse|GHK 12|.2343|2.272e-5|1.896e-5|–|
+||LR1 14|.0552|.004150|.003801|11.8298|
+|32 hetero|GHK 12|.2356|1.562e-6|1.660e-6|–|
+||LR1 14|.0592|.01157|.01290|86.915|
+
+Reference pooled SD respectively 7.738e-6,1.994e-5,9.355e-6,
+3.150e-5,1.358e-5,5.584e-7. Eigenvalue ranges of R:
+[.9570,1.0994], [.9587,1.0943], [.7841,1.5201],
+[.0555,3.6486], [1.123e-5,1.2517], [.2867,7.5341].
+First-order deterministic price alone RMSE respectively
+3.357e-6,2.061e-5,6.580e-5,.001537,.0001885,.0001216;
+for weak cases correction may not be distinguishable from
+reference noise. LR1 m14 worst mass defect respectively
+.0001044,.0003183,.003658,.3976,.04058,.2850; weak positive
+at these budgets; hetero negative estimates (min -5.77e-6).
+Weak trace variance reduction LR0/LR1 ~74x and 47x;
+weak n32 time including prep .0829s vs .2575s GHK, and
+n64 .1334s vs 1.0388s GHK. Weak reference noise prevents
+precise accuracy claims; between-scramble SD corroborates
+variance gain. Raw mass error means the previous paired-hazard
+estimator may remain preferable. The moderate case is already
+worse and near-null, Wishart, hetero are catastrophic. The
+hetero gauge itself induces an unnecessarily strong common
+component in standardized coordinates. No universal performance
+claim; no independent large-n certificate or compiled comparator.
+
+**Next experiment:** condition on low-rank common factors
+in both laws and do the likelihood remainder only on their
+residual covariance (choose factor backbone such that residual
+R spectrum close to I, with target exact). First-order score
+formula survives unchanged at each factor node. For mass,
+subtract p0 times the sampled residual mass (zero expectation)
+as an exact linear control variate; use held-out pilot for
+alternative coefficients, and distinguish from normalization.
+Also consider integrating deterministic second-order score via
+truncated fourth moments, but only after addressing spectral
+importance-weight degeneracy. Avoid repeated small-perturbation
+experiments on the same fixture without testing hetero and
+Wishart. Existing #1093 research branch only.
