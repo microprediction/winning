@@ -2067,3 +2067,179 @@ truncated fourth moments, but only after addressing spectral
 importance-weight degeneracy. Avoid repeated small-perturbation
 experiments on the same fixture without testing hetero and
 Wishart. Existing #1093 research branch only.
+
+
+## 2026-11-27 — Whitened contrast lift and factor-conditional score remainder
+
+Current main README, CLAUDE.md, factor/core.py, factor/races.py,
+methods/native.py and research/general_sigma/NOTES.md rechecked;
+AGENTS.md absent. The existing projected factor fit and residual
+ladder are prior work, not claimed here. Draft #1093 still open;
+main base 898a9f685bec35f88f6eeef10227bd6d302d7f83 at inspection.
+Recent shared-field PR search included #1061 (adaptive ranking
+quadrature), #1055 (sharp tree warnings); no competing correction
+PR identified. No production changes. This continues the previous
+score-field iteration, with a better common-direction gauge and
+factor conditioning; not merely a dense fit.
+
+**Exact lift.** Let P=I-11'/n and A=P C P. For positive diagonal
+preconditioner D, put w=D^(-1/2)1/||D^(-1/2)1||, H=I-ww',
+and W=H D^(-1/2) A D^(-1/2) H + ww'. Then
+C*=D^(1/2) W D^(1/2) has exactly the original contrast covariance:
+P D^(1/2) H=P D^(1/2), H D^(1/2) P=D^(1/2) P, and
+P D^(1/2)w=0. This is a choice-equivalent lift, not a ridge.
+If A=P diag(d) P and D=diag(d)>0, W=I exactly. The initial d
+solves the diagonal equations of P diag(d) P:
+d_i=(A_ii-tr(A)/(n(n-1)))/(1-2/n), n>2. A positivity floor
+only chooses coordinates, never changes A. This fixes the
+artificial standardized correlation caused by the previous
+isotropic common-direction lift on heterogeneous independent races.
+
+For rank r, eigen-decompose W on w-perpendicular; remove from the
+r largest eigenvalues their positive excess above the median
+of the remaining eigenvalues. Map the corresponding loadings V
+back through D^(1/2). The residual E=C*-VV' is SPD on the full
+space for SPD contrasts. Re-estimate d from diag(P E P) using
+the same equation, damp 1/2 and repeat 12 sweeps. This is a
+heuristic preconditioner/fit, not a claimed new factor-analysis
+algorithm or guaranteed optimum. Every sweep retains the complete
+residual E; hence the iteration count causes no structural error.
+It is the whitened quotient lift and subsequent correction that
+matter. It can in principle use main's fitted diagonal instead.
+
+**Conditional correction.** Set S=diag(sqrt(diag E)), R=S^-1 E S^-1,
+K=R-I. Conditional on F~N(0,I_r), the original Gaussian has means
+mu+VF and standardized residual law N(0,R). The independent
+proposal has the same means and N(0,I) residual. Apply the previous
+all-winner score-field formulas conditional on F; integrate p0
+and dp over F by Gauss-Hermite, then sample F as the first r
+coordinates of the scrambled Sobol correction. Each residual
+likelihood is exact. Write H_i for the conditional hazard share,
+Y^(i) for the winner-conditioned truncated Gaussian draw, and
+b_i=H_i[L(Y^(i))-1-score(Y^(i))]. E sum_i b_i=0 (by conditioning
+on F and summing winner events). For fixed vector c with sum c=1,
+replace b by b-c sum b; this is a zero-expectation linear
+control variate, not ratio normalization. We use c=p0/sum(p0)
+and enforce the deterministic field's known unit mass with the
+same vector (only numerical quadrature error). This preserves
+mass samplewise without changing the exact target; does not
+guarantee nonnegative prices. Exact-arithmetic iid SLLN applies
+on SPD contrasts, even for unstable likelihoods; finite variance
+requires max eig(R)<2 and can be enormous near min eig(R)=0.
+For fixed n and R near I the previous fourth-order variance
+bound still holds, including after the bounded linear projection.
+Ideal uniform scrambles are unbiased for the stochastic term,
+but no deterministic QMC rate asserted. Independent refinement:
+increase GH order, tighten threshold tolerance, increase sample
+count. No structural approximation. Singular or numerically
+near-singular contrasts explicitly refused; earlier exact-root
+hard correction (equal dead-heat credit, no ridge) is needed for
+a general dispatcher. This prototype does not implement it.
+
+Prep O(sweeps*n^3) dense, field O(order^r * L*n^2) for L
+threshold evaluations, correction O(n^2+nr) per all-winner
+sample. Prep reusable across abilities; field and correction
+are not. No claim of universal speed. Factor conditioning
+and Gaussian likelihood scores are classical; previous log's
+Plackett and Capriotti citations apply. Related general
+orthant methods: Ridgway (2016), arXiv:1411.1314, SMC rather
+than this shared-field conditional derivative; Fasano and
+Denti (2025), doi:10.1093/biomet/asaf060, expectation propagation.
+No novelty priority claim.
+
+**Experiments.** factor_score.py; run from this directory:
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 python factor_score.py --test
+and same environment python -u factor_score.py --bench.
+Local equivalent functions executed with threadpoolctl=1; committed
+file imports identical moments and ordered GHK from existing
+research scripts instead of local copies. Standalone assertions
+passed: reconstruction on spike, heterospike, Wishart, diffuse
+(max tolerance 1e-12), deterministic field common shift/shock/
+scale and permutation (atol 1e-10), singular refusal, residual
+Frobenius <.3 on heterospike, samplewise mass and positivity on
+4-runner mixed-sign nontrivial zero-mean exact orthant reference
+(trivariate arcsine formula, max error 2.587e-6, m16 seed41).
+Three-runner bivariate adaptive orthant reference also matched
+to 2.22e-16, but that fixture admits exact diagonal quotient
+so it is not a nontrivial correction test. No full CI or
+production factor engine run. The committed entry point adds
+basic validation. Finite-sample permutation equivariance not
+claimed (factor eigenspace sign and Sobol coordinates).
+
+Seed 812; weak I+.04 GG'/n, spike adds vv' (v~N(0,.65^2)),
+hetero scales by geomspace(.1,1.5,n), heterospike both,
+Wishart GG'/n+.05I, diffuse I-.99999 uu' with centered
+unit u. Mixed signs. Four eval seeds 0..3, refs mean of four
+independent normalized greedily ordered log-QMC-GHK scrambles
+100..103, m13 at n32, m12 at n64. GHK test m12 (4096 per
+runner), includes its ordering. GH21, quad_vec tol1e-10;
+GH41 refinement largest differences 1.26e-7 (32 spike),
+7.75e-7 (64 spike), 3.88e-9 (heterospike), <1e-16 (hetero),
+2.66e-9 (Wishart), 7.14e-12 (diffuse). These are convergence
+checks not rigorous certificates. Times per scramble; LR
+run computes LR0, LR1 and mass control jointly. Prep includes
+factor fit and deterministic field; excludes refinement.
+RMSE against stochastic reference, SD pooled between-scramble,
+medmax median per-scramble max absolute difference. Masscv
+all mass defects <=1.2e-15. Negative estimates in Wishart;
+all other listed 12-sweep cases positive, tails down to ~1e-27.
+Reference SD material: 1.18e-5,2.84e-5,2.35e-6,5.58e-7,
+3.15e-5,1.36e-5 in case order.
+
+| n/case | method m | prep s | run s | RMSE | SD | medmax |
+|---|---|---:|---:|---:|---:|---:|
+|32 spike|GHK12|included|.253|2.56e-5|2.35e-5|1.18e-4|
+||masscv14|.045|.062|1.00e-5|9.33e-6|3.30e-5|
+||masscv16|.045|.220|6.18e-6|2.76e-6|3.14e-5|
+|64 spike|GHK12|included|1.035|4.61e-5|4.61e-5|1.68e-4|
+||masscv14|.068|.131|2.37e-5|3.64e-6|7.78e-5|
+||masscv16|.068|.473|2.29e-5|2.31e-6|7.86e-5|
+|32 heterospike|GHK12|included|.257|4.07e-6|3.11e-6|1.47e-5|
+||masscv14|.056|.068|6.79e-6|6.54e-6|1.71e-5|
+||masscv16|.056|.230|5.19e-6|3.68e-6|1.38e-5|
+|32 hetero|GHK12|included|.234|1.56e-6|1.66e-6|5.80e-6|
+||masscv14|.047|.064|4.49e-6|4.86e-6|1.50e-5|
+||masscv16|.047|.227|1.47e-6|1.54e-6|4.25e-6|
+|32 Wishart|GHK12|included|.249|6.11e-5|5.53e-5|1.82e-4|
+||masscv14|.038|.065|4.55e-2|4.40e-2|6.04e-2|
+|32 diffuse|GHK12|included|.257|2.27e-5|1.90e-5|7.07e-5|
+||masscv14|.039|.065|4.07e-3|3.25e-3|1.22e-2|
+
+The preconditioner sweeps are crucial: n32 spike residual R
+range [.726,1.538] -> [.958,1.097], Frobenius K .736 -> .202;
+n64 spike [.835,1.586] -> [.959,1.093]; heterospike
+[.713,1.475] -> [.955,1.100]. Rank1 zero-sweep masscv14
+trace variance .009762 (spike) and .006637 (heterospike);
+12-sweep .00002020 and .00002440 (~483x,272x). Rank0
+spike had max eig 5.890 and trace var 36.92. Hetero rank0
+whitened lift already has range [.957,1.101] vs previous
+isotropic lift [.287,7.534]; finite variance regained but
+not a speed win over GHK. 40 sweeps scarcely changed
+spike/heterospike eigen ranges vs 12. At m14, 12-sweep
+unsubtracted LR0 / raw score LR1 / masscv trace variances
+respectively .002675/.00003112/.00002020 (32 spike);
+.002324/.00004712/.00002791 (64 spike);
+.004123/.00005190/.00002440 (heterospike);
+.002456/.00002456/.000009003 (hetero).
+Wishart max eig 3.331 (infinite theoretical second moment);
+diffuse min eig 1.308e-5 (finite but large variance). Negative
+results confirm that simply conditioning on top modes does not
+solve diffuse near-null modes. n64 reference noise dominates
+the new estimator's between-scramble SD; no exact error claim.
+No compiled comparator, no independent large-n certificate.
+No new PR; existing draft branch updated.
+
+**Next useful experiment:** stop tuning positive factors for
+negative spectral modes. A finite-variance defensive proposal
+can be constructed as a mixture of the exact target and
+structured backbone, with bounded likelihood weights, but
+winner-conditioned independent truncated draws no longer
+sample that mixture directly. Explore combining a shared-field
+control with target draws using multiple importance sampling,
+or exact low-rank *precision* perturbations (negative covariance
+modes) via the Fourier/conditional Gaussian representation;
+test variance versus the earlier sparse cavities. Also test
+second-order deterministic score on the well-conditioned
+residual, and compare against compiled GHK. Need honest
+relative-error reporting for nonvanishing probabilities and
+full singular tie dispatcher before production integration.
