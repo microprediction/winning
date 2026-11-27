@@ -72,8 +72,36 @@ def test_arcsine():
     np.testing.assert_allclose(p,ref,atol=2e-10,rtol=0)
 
 
+def random_fixtures(n=24):
+    rng=np.random.default_rng(926)
+    for kind in ['arbitrary','near']:
+        roots=[]; shifts=[]
+        for _ in range(n//3):
+            if kind=='arbitrary': A=rng.normal(size=(3,3))
+            else:
+                u,_=np.linalg.qr(rng.normal(size=(3,3))); A=u@np.diag([1.3,.8,.003])
+            R,s=decompose(A); roots.append(R); shifts.append(s)
+            np.testing.assert_allclose(R@R.T+s*s,A@A.T,atol=1e-13)
+        m=rng.normal(0,.5,n); beta=rng.normal(size=n)
+        root=block_diag(*[np.c_[r,np.full(len(r),s)] for r,s in zip(roots,shifts)])
+        h=root.T@beta; beta*=np.sqrt((1-1e-8)/(h@h)); C=root@root.T; c=C@beta
+        yield kind,(m,roots,shifts,beta,C-np.outer(c,c),root)
+
+
+def test_arbitrary_triples():
+    _,(m,R,s,b,C,root)=next(random_fixtures())
+    p=field(m,R,s,b,M=1024,nk=32,cutoff=16)
+    q=field(m,R,s,b,M=2048,nk=40,cutoff=20,local_order=12)
+    assert np.min(p)>0 and abs(p.sum()-1)<1e-6
+    np.testing.assert_allclose(p,q,atol=2e-7,rtol=0)
+
+
 def bench(n,b,sigma):
-    m,R,s,beta,C,root=fixture(n,b,sigma); ref=None; vals=[]
+    bench_fixture(fixture(n,b,sigma))
+
+
+def bench_fixture(data):
+    m,R,s,beta,C,root=data; n=len(m); ref=None; vals=[]
     for M,Q,K in [(512,24,12),(1024,32,16),(2048,40,20),(4096,48,24),(8192,56,28)]:
         t=time.perf_counter(); p=field(m,R,s,beta,M=M,nk=Q,cutoff=K); print('field',M,Q,K,time.perf_counter()-t,'mass',p.sum()-1,'min',p.min(),'diff',None if ref is None else max(abs(p-ref)),flush=True); ref=p; vals.append(p)
     print("field RMSE",[np.sqrt(np.mean((v-ref)**2)) for v in vals],"max relative",[np.max(abs(v-ref)[ref>1e-4]/ref[ref>1e-4]) for v in vals],flush=True)
@@ -85,4 +113,8 @@ def bench(n,b,sigma):
         ps.append(np.bincount(np.argmin(y@root.T+m,axis=1),minlength=n)/len(y))
     p=np.array(ps); print('root',(time.perf_counter()-t)/4,'SD',np.sqrt(np.mean(p.var(axis=0,ddof=1))),'mean rmse',np.sqrt(np.mean((p.mean(0)-ref)**2)),flush=True)
 
-if __name__=='__main__': bench(int(sys.argv[1]),int(sys.argv[2]),float(sys.argv[3]))
+if __name__=='__main__':
+    if sys.argv[1]=='random':
+        for kind,data in random_fixtures():
+            print(kind,flush=True); bench_fixture(data)
+    else: bench(int(sys.argv[1]),int(sys.argv[2]),float(sys.argv[3]))
