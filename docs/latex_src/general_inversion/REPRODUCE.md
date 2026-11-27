@@ -37,12 +37,23 @@ Logs land in `out/<target>.log`; each target also prints its last lines.
 ## Determinism
 
 - All scripts seed NumPy generators explicitly; the R referees call
-  `set.seed`. Accuracy figures regenerate exactly on the pinned environment,
-  apart from the two sources of variation below.
+  `set.seed`. On one machine the accuracy figures regenerate exactly in
+  the pinned environment, apart from the sources of variation below.
 - **Wall-clock-matched estimators.** The "frequency, matched time" rows of
   the against-the-field table draw as many samples as fit in the lattice's
   run time, so their errors vary with machine speed. They draw from their
   own random stream, so nothing else in the table depends on them.
+- **Dense fits across machines.** NumPy and SciPy on macOS use the
+  operating system's Accelerate library, and four seeded runs that fit a
+  dense covariance gave different second digits on two machines:
+  `make ensembles` (with `paired_ensembles4.py`), `make kernel`,
+  `make split-referee` and `make large-n`. The paper prints the values
+  from an Apple M1 Ultra under macOS 27.2 (logs
+  `research/general_sigma/log_*_m1_ultra_2026-11-26.txt`, and
+  `results_ensembles4.csv`). The earlier logs in that directory are from
+  the M3 Ultra under macOS 26.2. On the M1 Ultra the runs repeat exactly.
+  `research/general_sigma/probe_machine.py` prints a hash of each stage
+  for comparing two machines.
 - **Genz in SciPy** (`bench.py alt`) is randomized internally and unseeded
   by its API; its TV agrees with the lattice at the reference's noise in
   every run, but the last digit moves. (`genz200` calls R's `mvtnorm`, which

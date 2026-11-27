@@ -1,0 +1,19 @@
+ensemble                        n  med(raw-ident)  95% HL interval          ident wins  p 2-sided  Holm
+animals                        20  +1.42e-02      [+9.84e-03, +1.66e-02]  20/20       1.9e-06    2.9e-05
+ar1                            20  -2.21e-04      [-4.37e-03, +1.02e-02]  10/20       7.3e-01    1.0e+00
+archakov_hansen                20  +1.26e-02      [+9.25e-03, +1.71e-02]  19/20       3.8e-06    3.8e-05
+block_equicorr                 20  +1.72e-02      [+1.03e-02, +3.42e-02]  20/20       1.9e-06    2.9e-05
+factor:30                      20  +5.13e-04      [+2.84e-04, +7.76e-04]  18/20       4.8e-05    4.3e-04
+hierarchical                   20  -1.89e-04      [-1.28e-03, +4.36e-04]   9/20       5.0e-01    1.0e+00
+lkj                            20  +2.86e-03      [+2.11e-03, +3.83e-03]  20/20       1.9e-06    2.9e-05
+onion                          20  +3.47e-03      [+1.77e-03, +4.08e-03]  17/20       6.3e-05    5.0e-04
+residuals                      20  +1.47e-02      [+1.05e-02, +2.08e-02]  18/20       8.2e-05    5.7e-04
+sparse_precision               20  -1.60e-03      [-1.94e-03, -1.39e-03]   0/20       1.9e-06    2.9e-05
+spectrum:marchenko_pastur      20  +7.04e-04      [+3.80e-04, +1.75e-03]  15/20       2.7e-03    1.4e-02
+spectrum:spiked                20  +7.52e-04      [-9.52e-05, +1.45e-03]  13/20       8.3e-02    3.3e-01
+vine                           20  +3.12e-03      [+2.65e-03, +4.21e-03]  20/20       1.9e-06    2.9e-05
+walk                           20  +2.52e-03      [+1.15e-03, +3.42e-03]  16/20       5.9e-04    3.5e-03
+wishart                        20  +8.85e-04      [-1.04e-04, +1.59e-03]  13/20       9.0e-02    3.3e-01
+
+ensembles 15; rows skipped 0
+identified better: 10 at unadjusted 0.05, 10 at Holm 0.05; raw better at Holm 0.05: 1

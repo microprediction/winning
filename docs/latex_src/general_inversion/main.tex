@@ -1792,7 +1792,7 @@ seconds ($1.0$ of them the fit) against $18.5$ for a $10^6$-draw
 simulation, and agrees with it at its noise floor on the resolved bulk.
 
 The tail is harder to check, and we are careful about what the check
-establishes. For the $82$ percent of the $1{,}563$ alternatives priced below $10^{-5}$
+establishes. For the $81$ percent of the $1{,}566$ alternatives priced below $10^{-5}$
 that take no simulation win, agreement is unverifiable entry by entry. Worse, that set is
 selected by the same simulation that would have to certify it, so a
 fixed-set binomial bound does not apply to it.
@@ -1810,15 +1810,15 @@ On a dense $n=2000$ correlation with three global factors (loadings
 $N(0,0.25)$), a forty-block layer (loading $0.45$) and idiosyncratic
 variances in $[0.5,1.5]$, normalized to unit diagonal
 (\texttt{run\_split\_referee.py}), priced at sorted standard-normal
-abilities scaled by $1.2$, a wide field where $63.6$ percent of
+abilities scaled by $1.2$, a wide field where $64.5$ percent of
 alternatives take no win in the first million paths, the model puts
-$1.13\times10^{-4}$ of mass on that set. The second million paths place
-$111$ wins in it, a $95$ percent interval of
-$[9.13\times10^{-5},1.34\times10^{-4}]$. The model's mass is inside it.
+$1.15\times10^{-4}$ of mass on that set. The second million paths place
+$102$ wins in it, a $95$ percent interval of
+$[8.32\times10^{-5},1.24\times10^{-4}]$. The model's mass is inside it.
 
 Scored on the second half alone, so that no statistic is evaluated on the
 draws that selected its own target, full-vector total variation is
-$4.4\times10^{-3}$ against a split-half noise floor of $5.4\times10^{-3}$:
+$4.7\times10^{-3}$ against a split-half noise floor of $6.0\times10^{-3}$:
 at the referee's own resolution. Tail exactness at small $n$ still comes
 from the Botev referee, which prices individual orthant probabilities
 rather than counting wins.
@@ -1840,14 +1840,14 @@ $p$-value (\texttt{paired\_ensembles4.py}).
 
 The comparison is descriptive: fifteen tests are reported, and the last
 column gives the Holm adjustment for readers who want one. The identified
-arm is better on eleven of fifteen ensembles at an unadjusted $0.05$ and
-on ten after adjustment (the spiked spectrum drops out). It is
-indistinguishable on AR(1), hierarchical and Wishart, and
+arm is better on ten of fifteen ensembles, at an unadjusted $0.05$ and
+after adjustment alike. It is indistinguishable on AR(1), hierarchical,
+the spiked spectrum and Wishart, and
 worse on one: on sparse-precision graphical covariances the raw arm wins
 on all twenty seeds ($5.1\times10^{-3}$ against $6.8\times10^{-3}$ at the
 median). The largest gain is on block equicorrelation, where the
 identified arm is eight times better at the median ($2.5\times10^{-3}$
-against $2.0\times10^{-2}$), with a worst seed of $3.2\times10^{-3}$
+against $2.0\times10^{-2}$), with a worst seed of $3.1\times10^{-3}$
 against the raw arm's $0.16$: the raw eigenfit spends its rank on a
 near-common component, as the identification argument predicts.
 
@@ -1857,21 +1857,21 @@ near-common component, as the identification argument predicts.
 \toprule
 ensemble & median diff. & HL interval & wins & $p$ & Holm \\
 \midrule
-animals & $1.4\times10^{-2}$ & $[1.1,\,1.7]\times10^{-2}$ & $20$ & $2\times10^{-6}$ & $3\times10^{-5}$\\
-AR(1) & $-2.3\times10^{-4}$ & $[-4.3,\,10]\times10^{-3}$ & $10$ & $0.73$ & $0.73$\\
-Archakov--Hansen & $1.3\times10^{-2}$ & $[0.97,\,1.7]\times10^{-2}$ & $19$ & $6\times10^{-6}$ & $6\times10^{-5}$\\
-block equicorrelation & $1.7\times10^{-2}$ & $[1.1,\,3.4]\times10^{-2}$ & $20$ & $2\times10^{-6}$ & $3\times10^{-5}$\\
-factor $+$ sparse links & $7.4\times10^{-4}$ & $[4.7,\,8.6]\times10^{-4}$ & $19$ & $6\times10^{-6}$ & $6\times10^{-5}$\\
-hierarchical & $-3.8\times10^{-4}$ & $[-11,\,3.9]\times10^{-4}$ & $8$ & $0.28$ & $0.55$\\
+animals & $1.4\times10^{-2}$ & $[0.98,\,1.7]\times10^{-2}$ & $20$ & $2\times10^{-6}$ & $3\times10^{-5}$\\
+AR(1) & $-2.2\times10^{-4}$ & $[-4.4,\,10]\times10^{-3}$ & $10$ & $0.73$ & $1.0$\\
+Archakov--Hansen & $1.3\times10^{-2}$ & $[0.92,\,1.7]\times10^{-2}$ & $19$ & $4\times10^{-6}$ & $4\times10^{-5}$\\
+block equicorrelation & $1.7\times10^{-2}$ & $[1.0,\,3.4]\times10^{-2}$ & $20$ & $2\times10^{-6}$ & $3\times10^{-5}$\\
+factor $+$ sparse links & $5.1\times10^{-4}$ & $[2.8,\,7.8]\times10^{-4}$ & $18$ & $5\times10^{-5}$ & $4\times10^{-4}$\\
+hierarchical & $-1.9\times10^{-4}$ & $[-13,\,4.4]\times10^{-4}$ & $9$ & $0.50$ & $1.0$\\
 LKJ & $2.9\times10^{-3}$ & $[2.1,\,3.8]\times10^{-3}$ & $20$ & $2\times10^{-6}$ & $3\times10^{-5}$\\
-onion & $3.5\times10^{-3}$ & $[1.8,\,4.1]\times10^{-3}$ & $17$ & $6\times10^{-5}$ & $4\times10^{-4}$\\
-residuals (dense-strong) & $1.5\times10^{-2}$ & $[1.2,\,2.2]\times10^{-2}$ & $18$ & $5\times10^{-5}$ & $4\times10^{-4}$\\
-sparse-precision graphical & $-1.6\times10^{-3}$ & $[-2.0,\,-1.4]\times10^{-3}$ & $0$ & $2\times10^{-6}$ & $3\times10^{-5}$\\
-Marchenko--Pastur spectrum & $7.0\times10^{-4}$ & $[3.6,\,17]\times10^{-4}$ & $15$ & $4\times10^{-3}$ & $0.018$\\
-spiked spectrum & $1.0\times10^{-3}$ & $[0.062,\,1.5]\times10^{-3}$ & $15$ & $0.044$ & $0.18$\\
-vine & $3.2\times10^{-3}$ & $[2.6,\,4.3]\times10^{-3}$ & $20$ & $2\times10^{-6}$ & $3\times10^{-5}$\\
-elliptope walk & $2.5\times10^{-3}$ & $[1.1,\,3.4]\times10^{-3}$ & $16$ & $6\times10^{-4}$ & $4\times10^{-3}$\\
-Wishart & $8.8\times10^{-4}$ & $[-0.91,\,16]\times10^{-4}$ & $13$ & $0.090$ & $0.27$\\
+onion & $3.5\times10^{-3}$ & $[1.8,\,4.1]\times10^{-3}$ & $17$ & $6\times10^{-5}$ & $5\times10^{-4}$\\
+residuals (dense-strong) & $1.5\times10^{-2}$ & $[1.1,\,2.1]\times10^{-2}$ & $18$ & $8\times10^{-5}$ & $6\times10^{-4}$\\
+sparse-precision graphical & $-1.6\times10^{-3}$ & $[-1.9,\,-1.4]\times10^{-3}$ & $0$ & $2\times10^{-6}$ & $3\times10^{-5}$\\
+Marchenko--Pastur spectrum & $7.0\times10^{-4}$ & $[3.8,\,18]\times10^{-4}$ & $15$ & $3\times10^{-3}$ & $0.014$\\
+spiked spectrum & $7.5\times10^{-4}$ & $[-0.095,\,1.4]\times10^{-3}$ & $13$ & $0.083$ & $0.33$\\
+vine & $3.1\times10^{-3}$ & $[2.6,\,4.2]\times10^{-3}$ & $20$ & $2\times10^{-6}$ & $3\times10^{-5}$\\
+elliptope walk & $2.5\times10^{-3}$ & $[1.1,\,3.4]\times10^{-3}$ & $16$ & $6\times10^{-4}$ & $3.5\times10^{-3}$\\
+Wishart & $8.8\times10^{-4}$ & $[-1.0,\,16]\times10^{-4}$ & $13$ & $0.090$ & $0.33$\\
 \bottomrule
 \end{tabular}
 \caption{Raw minus identified total variation, paired over twenty seeds
@@ -1905,10 +1905,10 @@ absolute error on those resolved entries.
 \toprule
 ensemble & med TV & q90 TV & worst TV & med $|p-\hat p|$\\
 \midrule
-block equicorrelation & $2.5\times10^{-3}$ & $3.0\times10^{-3}$ & $3.2\times10^{-3}$ & $1.4\times10^{-5}$\\
-factor $+$ sparse links & $2.9\times10^{-3}$ & $7.2\times10^{-3}$ & $1.5\times10^{-2}$ & $1.9\times10^{-5}$\\
+block equicorrelation & $2.5\times10^{-3}$ & $2.9\times10^{-3}$ & $3.1\times10^{-3}$ & $1.4\times10^{-5}$\\
+factor $+$ sparse links & $3.0\times10^{-3}$ & $6.8\times10^{-3}$ & $1.5\times10^{-2}$ & $1.9\times10^{-5}$\\
 sparse-precision graphical & $6.8\times10^{-3}$ & $7.7\times10^{-3}$ & $8.9\times10^{-3}$ & $1.8\times10^{-5}$\\
-Wishart & $1.2\times10^{-2}$ & $1.3\times10^{-2}$ & $1.4\times10^{-2}$ & $2.6\times10^{-5}$\\
+Wishart & $1.1\times10^{-2}$ & $1.3\times10^{-2}$ & $1.4\times10^{-2}$ & $2.6\times10^{-5}$\\
 residuals (dense-strong) & $3.1\times10^{-2}$ & $3.6\times10^{-2}$ & $6.0\times10^{-2}$ & $3.0\times10^{-4}$\\
 AR(1) & $4.6\times10^{-2}$ & $6.3\times10^{-2}$ & $6.7\times10^{-2}$ & $2.6\times10^{-5}$\\
 \bottomrule
@@ -1940,10 +1940,10 @@ kernel & length scale & med TV, $m{=}5$ & $m{=}12$ & $m{=}5$, $2^{14}$ nodes\\
 \midrule
 RBF & $0.08$ & $3.6\times10^{-2}$ & $3.2\times10^{-2}$ & $3.3\times10^{-2}$\\
 RBF & $0.2$  & $2.3\times10^{-2}$ & $2.9\times10^{-2}$ & $8.9\times10^{-3}$\\
-RBF & $0.4$  & $1.8\times10^{-2}$ & $1.6\times10^{-2}$ & $5.4\times10^{-3}$\\
+RBF & $0.4$  & $1.6\times10^{-2}$ & $1.7\times10^{-2}$ & $5.9\times10^{-3}$\\
 Mat\'ern-$\tfrac32$ & $0.08$ & $2.6\times10^{-2}$ & $2.4\times10^{-2}$ & $2.4\times10^{-2}$\\
 Mat\'ern-$\tfrac32$ & $0.2$  & $2.3\times10^{-2}$ & $2.3\times10^{-2}$ & $1.5\times10^{-2}$\\
-Mat\'ern-$\tfrac32$ & $0.4$  & $1.6\times10^{-2}$ & $1.6\times10^{-2}$ & $7.5\times10^{-3}$\\
+Mat\'ern-$\tfrac32$ & $0.4$  & $1.8\times10^{-2}$ & $1.9\times10^{-2}$ & $7.6\times10^{-3}$\\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -1998,6 +1998,13 @@ across alternatives and uses every free core, so its times, and every
 ratio against it (including the simulated-likelihood columns of the
 estimation tables), favor GHK by up to the core count. Absolute times
 will differ on other hardware.
+
+Four seeded accuracy runs that fit a dense covariance are printed as
+regenerated on a second machine, an Apple M1 Ultra under macOS~27.2 in
+the same pinned environment: Table~\ref{tab:paired} and the ensemble
+table, the kernel table, the split referee, and the dense $n=2000$
+check. On the first machine some of their values differ in the second
+significant digit. The manifest names the logs of both.
 
 \paragraph{The structure-aware per-alternative comparator.} The fairest
 rival is not GHK but this paper's own conditioning run the literature's

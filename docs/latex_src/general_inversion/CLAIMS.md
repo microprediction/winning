@@ -31,7 +31,7 @@ regenerated figure (reason given).
 | Rank 2: tensor GH beats Sobol at equal nodes | `gh-vs-sobol` | `research/factor_nodes/run_gh_vs_sobol.py` | **new script** (was mapped to exp24, which cannot show it); figures added to the paper |
 | Fixed 15-node rule loses up to 5% | `fixed-rule` | `research/fuzz/fixed_rule_loss.py` | match (4.79e-2 at seed 11540), reproduced on shipped code by forcing the old rule |
 | Fuzz battery | `fuzz` | `research/fuzz/fuzz_races.py` | 3 `hopeless_others` flags at sharpness ~4.4, within the stated factor-strength boundary (REPRODUCE.md) |
-| Split-sample referee: 63.6%, 1.13e-4, 111 wins, CI, 4.4e-3 vs 5.4e-3 | `split-referee` | `research/general_sigma/run_split_referee.py` | match |
+| Split-sample referee: 64.5%, 1.15e-4, 102 wins, CI, 4.7e-3 vs 6.0e-3 (M1 Ultra run) | `split-referee` | `research/general_sigma/run_split_referee.py` | match |
 | Multistart: 4e-16, 0.25-0.26, 8e-4 | `multistart` | `research/general_sigma/run_multistart.py` | match |
 | Own-slope vs BLP preconditioning | `blp-ablation` | `research/inversion_ablation/run_blp_ablation.py` | **new** (review request); counts are updates applied: own-slope 16 / 17 / 27, BLP 68-144 at triple scale, no convergence in 500 otherwise |
 | Ensemble accuracy table and arms comparison (20 seeds) | `ensembles` | `research/general_sigma/run_ensembles4.py` | **updated**: table was from an 27 Aug log predating fitter changes, and randomcov's LKJ/residual generators were later fixed (0.2.1). Table, arms paragraph (now: identified arm better on 11/15, worse on sparse precision) and the residuals row regenerated |

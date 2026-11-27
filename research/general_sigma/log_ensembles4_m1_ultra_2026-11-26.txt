@@ -1,0 +1,32 @@
+# regenerated 2026-11-26 at commit 5a742e06 on an Apple M1 Ultra, macOS 27.2, pinned environment (numpy 2.5.4 and scipy 1.18.1 on Accelerate)
+# make ensembles = python run_ensembles4.py
+lkj                        raw       med(TV) 1.69e-02 q90 2.02e-02 worst 2.11e-02 | med(med abs) 3.6e-05
+lkj                        projected med(TV) 1.37e-02 q90 1.61e-02 worst 1.77e-02 | med(med abs) 3.0e-05
+wishart                    raw       med(TV) 1.25e-02 q90 1.40e-02 worst 1.54e-02 | med(med abs) 2.6e-05
+wishart                    projected med(TV) 1.15e-02 q90 1.27e-02 worst 1.36e-02 | med(med abs) 2.6e-05
+residuals                  raw       med(TV) 4.64e-02 q90 6.02e-02 worst 6.12e-02 | med(med abs) 2.5e-04
+residuals                  projected med(TV) 3.11e-02 q90 3.64e-02 worst 6.00e-02 | med(med abs) 3.0e-04
+walk                       raw       med(TV) 1.77e-02 q90 2.11e-02 worst 2.24e-02 | med(med abs) 3.6e-05
+walk                       projected med(TV) 1.62e-02 q90 1.85e-02 worst 1.91e-02 | med(med abs) 3.5e-05
+animals                    raw       med(TV) 2.73e-02 q90 3.57e-02 worst 4.32e-02 | med(med abs) 3.6e-04
+animals                    projected med(TV) 1.41e-02 q90 1.92e-02 worst 2.30e-02 | med(med abs) 2.3e-04
+onion                      raw       med(TV) 1.63e-02 q90 1.90e-02 worst 2.07e-02 | med(med abs) 3.6e-05
+onion                      projected med(TV) 1.33e-02 q90 1.55e-02 worst 1.96e-02 | med(med abs) 3.2e-05
+vine                       raw       med(TV) 1.71e-02 q90 1.96e-02 worst 2.11e-02 | med(med abs) 3.3e-05
+vine                       projected med(TV) 1.37e-02 q90 1.60e-02 worst 1.66e-02 | med(med abs) 3.2e-05
+archakov_hansen            raw       med(TV) 5.15e-02 q90 5.76e-02 worst 6.81e-02 | med(med abs) 1.8e-04
+archakov_hansen            projected med(TV) 3.70e-02 q90 4.11e-02 worst 4.81e-02 | med(med abs) 2.6e-04
+spectrum:marchenko_pastur  raw       med(TV) 1.21e-02 q90 1.34e-02 worst 1.41e-02 | med(med abs) 2.6e-05
+spectrum:marchenko_pastur  projected med(TV) 1.11e-02 q90 1.22e-02 worst 1.25e-02 | med(med abs) 2.5e-05
+spectrum:spiked            raw       med(TV) 1.11e-02 q90 1.35e-02 worst 1.53e-02 | med(med abs) 4.1e-05
+spectrum:spiked            projected med(TV) 1.06e-02 q90 1.25e-02 worst 1.41e-02 | med(med abs) 4.6e-05
+factor:30                  raw       med(TV) 3.33e-03 q90 7.03e-03 worst 1.52e-02 | med(med abs) 1.9e-05
+factor:30                  projected med(TV) 3.01e-03 q90 6.84e-03 worst 1.54e-02 | med(med abs) 1.9e-05
+hierarchical               raw       med(TV) 6.41e-03 q90 8.18e-03 worst 1.72e-02 | med(med abs) 2.1e-05
+hierarchical               projected med(TV) 7.28e-03 q90 8.79e-03 worst 1.42e-02 | med(med abs) 2.1e-05
+block_equicorr             raw       med(TV) 1.98e-02 q90 5.46e-02 worst 1.62e-01 | med(med abs) 4.6e-05
+block_equicorr             projected med(TV) 2.54e-03 q90 2.92e-03 worst 3.09e-03 | med(med abs) 1.4e-05
+ar1                        raw       med(TV) 4.62e-02 q90 8.60e-02 worst 1.65e-01 | med(med abs) 7.5e-05
+ar1                        projected med(TV) 4.64e-02 q90 6.34e-02 worst 6.72e-02 | med(med abs) 2.6e-05
+sparse_precision           raw       med(TV) 5.08e-03 q90 6.07e-03 worst 6.97e-03 | med(med abs) 1.5e-05
+sparse_precision           projected med(TV) 6.79e-03 q90 7.72e-03 worst 8.85e-03 | med(med abs) 1.8e-05

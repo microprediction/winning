@@ -1,0 +1,16 @@
+# regenerated 2026-11-26 at commit 5a742e06 on an Apple M1 Ultra, macOS 27.2, pinned environment (numpy 2.5.4 and scipy 1.18.1 on Accelerate)
+# make split-referee = python run_split_referee.py --n 2000 --draws 2000000
+n=2000  fit 3.11s  price 2.50s  rank 28  sum(p)=1.000000000
+simulation 2,000,000 draws in two halves: 30.0s
+
+zero-win set from half A: 1291/2000 alternatives (64.5%)
+  model mass on Z            1.150e-04
+  half B wins in Z           102 of 1,000,000
+  95% Clopper-Pearson for Z  [8.317e-05, 1.238e-04]
+  model inside the interval  YES
+
+scored on half B only (331 alternatives with >=25 wins):
+  full-vector TV (zeros included)  4.724e-03
+  max  |p - freq| on resolved      5.708e-04
+  median                           9.259e-06
+  half A vs half B TV (noise floor) 5.953e-03

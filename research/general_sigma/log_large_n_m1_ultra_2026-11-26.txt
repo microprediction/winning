@@ -1,0 +1,8 @@
+# regenerated 2026-11-26 at commit 5a742e06 on an Apple M1 Ultra, macOS 27.2, pinned environment (numpy 2.5.4 and scipy 1.18.1 on Accelerate)
+# make large-n = python run_large_n.py
+n=2000 r=48 nodes=2048
+fit 1.8s | one-call 7.4s | MC: chol 0.0s + 1000k draws 43.8s
+bulk TV (one-call vs 1M-draw MC, entries p>1e-3): 9.94e-03
+node self-convergence (2^11 vs 2^13 nodes), max abs: 3.53e-04
+tail (p<1e-5): 1566 runners; MC saw ZERO wins for 81% of them; our node-to-node max relative drift 3260055.6%
+smallest resolved probability, one call: 5.3e-98 (MC floor at 1M draws: 1e-6)
