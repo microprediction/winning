@@ -2461,3 +2461,210 @@ and a dense signed-decomposition fit before production API.
 General arbitrary-PSD performance remains open, but this is
 a substantiated exact broader matrix class under route 1.
 Existing research draft #1093 updated; no speculative new PR.
+
+
+## 2026-11-27 — Two negative factors: polar quadrature and directional tail bounds
+
+Rechecked main README, CLAUDE.md (AGENTS.md absent), factor/core.py
+(fit_covariance, factor cavity), factor/races.py (dense fit and GHK
+dispatch), methods/native.py, bench/runner.py, papers/general_inversion/
+CLAIMS.md and research/general_sigma/NOTES.md. Main base
+898a9f685bec35f88f6eeef10227bd6d302d7f83 at PR inspection. #1093
+still open/draft on this branch; recent open PRs do not overlap.
+The fit/residual promotion ladder is prior work, not this result.
+Continue the negative-factor field of the preceding iteration.
+
+**Exact class.** For A of shape n by r, A'A <= I, s_i>0,
+X=mu+diag(s)Y conditional on U=A'Y+E=0, where Y~N(0,I_n),
+E~N(0,N=I_r-A'A) independently, has covariance
+diag(s)(I-AA')diag(s). U is standard r-variate Gaussian.
+For t the winning threshold, z_i=(t-mu_i)/s_i, use
+
+  p_i=(2*pi)^(-r/2) int_R dt int_R^r dk
+      exp(-k'N k/2) (phi(z_i)/s_i) exp(i z_i k'A_i) prod_(j!=i) F_j(z_j,k'A_j),
+
+where F_j(z,b)=int_z^infty phi(y) exp(i b y)dy. The integral
+is real. As in the rank-one implementation the survival products
+are shared across all i; no division by near-zero complex survival.
+For r=2, write k=rho u(theta), theta in [0,pi], rho>=0.
+Conjugate symmetry and Gaussian density normalization give the
+prefactor 1/pi; the radial Jacobian is rho. The code uses Gauss
+rules per angular sector and radial interval, with cutoff allowed
+to differ per sector. O(n L m a q) for L performance nodes,
+m sectors, a angular and q radial nodes per sector; n-linear
+per node, storage O(n m a q batch). Singular pair validation
+has an O(n log n) leverage screening and worst-case O(n^2)
+pairwise fallback. No dense fitting or covariance approximation.
+Positive factors can mathematically be combined by outer
+conditioning, as before, but this mixed rank-two implementation
+and timing are not yet done.
+
+**A sufficient general-rank singularity theorem.** Suppose every
+r-row submatrix of A has full column rank (full spark), n>2r.
+For any unit u, at most r-1 rows have A_j'u=0. The (r-th)
+smallest absolute projection has strictly positive minimum over
+the compact sphere. After fixing any one winner, at least n-r
+remaining projections are uniformly bounded below by a positive
+constant. Integration by parts gives |F_j| <= min(1,c/|k'A_j|),
+c=sqrt(2/pi), uniformly in z. Consequently the radial tail of
+the absolute integrand is bounded by const*rho^(r-1-(n-r)),
+which is integrable iff n>2r. This proves absolute Fourier
+inversion even when N=0. This is a sufficient condition, not
+necessary; non-full-spark cases can be covered by directional
+bounds below. No contrast can be deterministic in the stated
+full-spark class: a null vector must lie in col(A), and a
+nonzero such vector has at least n-r+1>2 nonzero components.
+Conditional Gaussian means shift continuously with U; since
+there are no ties, the conditional race probabilities are
+continuous at U=0. The absolutely integrable Fourier transform
+of the restricted race measure has continuous density and hence
+prices exactly that conditional law at zero. If n>2r is false
+or the rows are not full spark, no general assertion of failure
+or convergence is made. In r=2 at least n-2 uniform decaying
+factors suffice for n>=5. The test with n=20 regular polygon
+rows is not full spark (opposite rows parallel) but is covered
+by the sector bound and no-tie check.
+
+**Directional tail bound (implemented).** For sector centered
+at u_l, half-width pi/(2m), let delta=2sin(pi/(4m)).
+For any u in sector, |A_j'u| >= b_lj =
+max(0,|A_j'u_l|-delta||A_j||). Let K_l be its radial cutoff,
+r_lj=max(1,K_l b_lj/c) and q_li the number with r_lj>1 excluding i.
+Integrating rho times the product bound gives an omitted-frequency
+bound per winner and sector of
+
+  (1/m) K_l^2 prod_(j!=i)(1/r_lj)/(q_li-2), q_li>2.
+
+Take infinity otherwise; also bound the noise damping by
+ell_l=max(sqrt(lambda_min(N)), ||N^(1/2)u_l|| -
+delta sqrt(lambda_max(N)))^2 (nonnegative by the first term).
+The alternative bound is (1/m) exp(-ell_l K_l^2/2)/ell_l
+when ell_l>0. Take the smaller, then sum across sectors.
+The integration in t of phi(z_i)/s_i is <=1, so this is an
+absolute per-share frequency truncation bound. Add
+(n+1)Phi(-pad) for the omitted performance window, as in rank1.
+Numerical roundoff in evaluating the bound is not certified;
+small eigenvalues within tolerance are treated as zero for
+the bound (not a ridge). Input eigenvalue excess <=16eps can
+be repaired to the PSD boundary, otherwise refuse. For actual
+singular/near-machine-singular inputs, require finite sector
+bounds and refuse possible deterministic pair contrasts; this
+is a conservative scope restriction, not a tie-rule change.
+For fixed domain increase quadrature orders, then expand
+cutoffs/pad and, if necessary, narrow angular sectors.
+This converges to the exact race by the bounds and continuity
+on finite domains; no structural bias, no sampling noise.
+The adaptive cutoff chooser doubles K per sector up to a cap
+and requests <=tol/m per sector. This certifies only the
+omitted-frequency term in real arithmetic, not angular/radial
+or performance discretization, not a floating-point certificate.
+The observed adaptive choice often equals a uniform cutoff and
+did not improve runtime in these isotropic fixtures.
+
+**Experiments.** signed_rank2.py reuses signed_field.truncated_cf.
+Local identical standalone code, NumPy 2.3.5, SciPy 1.17.0, one
+thread; not full repo CI or fastrace. Commands from this folder:
+
+  OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 python -m pytest -q -s test_rank2.py
+  OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 python -u bench_rank2.py diffuse 32
+  OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 python -u bench_rank2.py diffuse 64
+  OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 python -u bench_rank2.py hetero 32
+  OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 python -u bench_rank2.py sparse 32
+
+Five tests passed in 4.67s. Independent zero-mean four-contestant
+trivariate contrast arcsine formula, seed 52, sd (.8,1.2,.95,1.4),
+singular values (.75,.91): initially max error 1.047e-8 at
+96/36/24/2/24; increasing angular nodes to 48 sectors x3,
+112 performance, 40 radial gives max error 7.202e-12 (actual
+refinement, not relaxed test). Independent heterogeneous
+four-runner adaptive one-dimensional integral at A=0 also
+passes. Exact singular n20 circulant covariance with regular
+polygon A (two eigenvalues zero): uniform p_i=1/20 by symmetry,
+max error 6.063e-11; omitted-frequency bound 1.904e-9.
+Seed 812 n24 heterogeneous near-singular: permutation, shift,
+scale and rotation of negative loadings agree at atol 1e-9.
+Invalid PSD and sparse singular ties refused, bounds selection
+verified. Common positive shock invariance follows from race
+contrasts but not separately tested for this wrapper.
+
+Bench seed 812, mu~N(0,.4^2), two centered Gaussian columns
+orthonormalized, both singular values sqrt(1-1e-5); diffuse
+unit sd, hetero sd=geomspace(.12,1.6,n), sparse only 8 nonzero
+rows. Mixed signs and two near-null directions. All field
+timings include preparation and node creation; no amortization.
+Reference (L,radial,sectors,angular,cutoff)=(144,40,28,2,32)
+for diffuse and (160,40,28,2,32) for hetero/sparse, compared
+with (128,32,24,2,24). Reference max refinement discrepancies:
+8.35e-12 (32 diffuse), 9.52e-12 (64 diffuse), 2.71e-10
+(hetero), 4.68e-8 (sparse). These are not independent error
+certificates. Compiled SciPy _qmvn SOV with permuted Cholesky,
+8 randomized batches per winner, four seeds 0..3, normalized
+for comparison, timing includes per-winner preparation.
+A long full benchmark timed out during n64 Genz, so no n64
+Genz timing/accuracy claimed. Hetero/sparse independently
+rerun, only 2048 completed; adaptive cutoff chooser tested
+but not integrated on those reruns. RMSE over contestants and
+scrambles, median maximum and max relative difference on
+p>1e-4, pooled scramble SD. Representative results:
+
+| case | method (L/q/m/a/K) | sec | RMSE vs refined | med max | med relmax | scramble SD |
+|---|---|---:|---:|---:|---:|---:|
+|32 diffuse|64/16/12/1/10|.11724|6.09e-8|1.77e-7|2.44e-5|–|
+||80/20/16/1/12|.25014|1.47e-9|2.91e-9|1.63e-7|–|
+||96/24/24/1/16|.61616|1.27e-11|4.10e-11|5.50e-9|–|
+||Genz 2048|.33896|1.19e-4|3.27e-4|.01276|1.17e-4|
+||Genz 8192|.79307|3.67e-5|9.26e-5|.00355|3.88e-5|
+|64 diffuse|64/16/12/1/10|.22460|5.46e-7|8.08e-7|1.35e-4|–|
+||80/20/16/1/12|.45862|1.09e-8|3.33e-8|2.33e-6|–|
+||96/24/24/1/16|1.07127|2.54e-10|5.10e-10|4.47e-8|–|
+|32 hetero|64/16/12/1/10|.11715|6.18e-6|3.49e-5|.03887|–|
+||96/24/24/1/16|.44851|4.90e-8|2.74e-7|.000305|–|
+||144/32/24/1/16|.92574|9.81e-13|3.30e-12|3.68e-9|–|
+||Genz 2048|.29658|1.03e-5|3.40e-5|.00271|1.05e-5|
+|32 sparse|64/16/12/1/10|.06617|9.34e-8|2.76e-7|.000150|–|
+||96/24/24/1/16|.30014|3.27e-8|1.05e-7|4.70e-5|–|
+||144/32/24/1/16|.58728|3.27e-8|1.05e-7|4.70e-5|–|
+||Genz 2048|.28911|1.55e-4|5.34e-4|.01427|1.71e-4|
+
+32 diffuse coarse omitted-frequency bound 2.11e-5, fine
+9.86e-10; 64 diffuse coarse 1.00e-5, fine 2.59e-13.
+Observed fine 64 difference exceeds frequency bound: expected,
+the latter does not bound quadrature. Raw field mass defects
+at coarse/fine respectively 2.19e-7/1.39e-11 (32 diffuse),
+3.17e-5/1.39e-8 (64 diffuse), 3.71e-5/3.20e-7 (hetero),
+1.27e-6/1.29e-10 (sparse). Sparse fine mass is excellent but
+there is unresolved truncation, illustrating why mass alone
+is insufficient. Sparse adaptive cutoff refused at cap 64,
+rather than assert tolerance; all reported field probabilities
+positive in these four fixtures. Hetero refined minimum
+~2.83e-23; no relative claim there. Initial n5 random centered
+two-near-null fixture was negative (-.0051) at coarse cutoff
+10 despite near-perfect total mass; very slow Fourier decay
+and poor directional bounds (choose_cutoffs refused cap256).
+Not a production-ready universal method. Exact singular
+n32/n64 diffuse field also evaluated at three levels in try2
+exploratory script, mass defects similar to near-null, but
+no independent asymmetrical singular accuracy certificate.
+No full repo or Rust test. Sun (1988), DOI
+10.1080/03610928808829845, and Genz (1992), DOI
+10.1080/10618600.1992.10477010, publisher abstracts checked;
+Fourier reduction and SOV are established. The specific
+contribution is low-negative-rank all-winner product reuse
+and a directional cutoff bound, not priority for inversion.
+
+**Next experiment:** rather than growing a tensor in negative
+rank, exploit an alternative representation for localized
+negative modes. If loadings supported on a small group, use
+an ordinary independent-block survival field with a stable
+low-dimensional orthant solver within that group; its
+boundary densities can be reused for every outside winner.
+For diffuse modes, use angular/radial anisotropic refinement,
+or shared exponential tilt (Lunde, Kleppe, Skaug,
+arXiv:1811.05678) to address cancellation in rare shares.
+For arbitrary matrices, investigate decomposing signed
+spectral residuals into progressively refined exact
+structured backbones plus a provably convergent correction;
+do not claim tensor quadrature at rank n is practical.
+Existing draft #1093 updated, research only, no production
+API changes. The rank-two exact class is demonstrated, while
+general arbitrary-PSD competitive performance remains open.
