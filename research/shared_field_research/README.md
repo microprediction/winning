@@ -3334,3 +3334,21 @@ refinement comparisons, not independent accuracy certificates; independent
 stochastic checks noise-limited. Narrow shifts remain alias-sensitive and
 can yield tiny negative shares. No ridge, structural fit, or production
 changes. General PSD remains open.
+
+
+## Iteration 16: independent knot meshes and polynomial cavity transfers
+
+See [full derivation, reproducible benchmarks and limitations](iteration16_knot_field.md).
+New knot_field.py and test_knot_field.py: conditional common-shift convolution
+on runner-specific knot meshes, then transfer each boundary polynomial and
+its exact primitive to a shared union grid. Avoids pre-convolution FFT aliasing
+for narrow shifts. Five standalone tests pass; independent 4-way orthant
+max error 4.22e-15. At 24 near-singular runners, moderate local meshes reduce
+expensive conditional nodes 219140->40620 and time 2.026->.523 s vs the
+shared-grid-only precursor. Refinement RMSE 9.13e-10, final mass defect
+4.31e-14. At 60 near-singular runners moderate 1.806 s, refinement RMSE
+1.61e-10, Genz 2048 budget 1.147 s and 8.75e-5 RMSE. Genz comparisons
+against refined field, not independently certified errors. Coarse mass
+defects and negligible negative tails persist; broad shifts better served
+by iteration 15's spectral method. No new covariance class or general PSD
+claim. No production dispatch changes.
